@@ -5,7 +5,8 @@
 4 ComfyUI nodes that automate loop timing for full-length music video
 generation with LTX 2.3. The main node (AudioLoopController) reads audio
 duration from the tensor, computes stride from window + overlap, outputs
-start_index / stop signal / seed / stride. No manual constants to keep in sync.
+start_index / stop signal / seed / stride / overlap_frames. No manual
+constants to keep in sync.
 
 ## Architecture
 
@@ -13,7 +14,7 @@ Single file: `nodes.py`. Uses ComfyUI's extension API (`ComfyExtension`,
 `io.ComfyNode`). Entry point: `comfy_entrypoint()`.
 
 4 nodes:
-- `AudioLoopController` -- core: start_index, stop signal, seed, stride
+- `AudioLoopController` -- core: start_index, stop signal, seed, stride, overlap_frames
 - `TimestampPromptSchedule` -- per-iteration prompt from timestamp ranges
 - `AudioLoopPlanner` -- displays iteration timeline for planning
 - `AudioDuration` -- extracts duration/sample_rate from audio tensor
@@ -31,7 +32,8 @@ Helper functions:
   Duration = `waveform.shape[-1] / sample_rate`.
   Note: the comfy_api TypedDict says `sampler_rate` but actual code uses `sample_rate`.
 - Stride is computed internally: `window_seconds - overlap_seconds`.
-  User sets overlap once; stride propagates to other nodes via output.
+  overlap_frames is computed as `round(overlap_seconds * fps)`.
+  User sets overlap once; stride and overlap_frames propagate via outputs.
 - Timestamp parsing regex `_LINE_RE` handles colons in M:SS timestamps
   vs the colon separator between range and prompt.
 - Nodes that need per-iteration evaluation (TimestampPromptSchedule,
