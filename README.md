@@ -40,6 +40,7 @@ just the audio tensor + window/overlap settings.
 | overlap_seconds | FLOAT | Overlap between consecutive windows (default 1.0). Stride = window - overlap. Match to overlap_frames/fps in the extension component. |
 | audio | AUDIO | The audio track |
 | seed | INT | Base seed. Output = seed + current_iteration |
+| fps | INT | Video frame rate (default 25). Used to compute overlap_frames output. |
 
 **Outputs:**
 
@@ -50,9 +51,10 @@ just the audio tensor + window/overlap settings.
 | audio_duration | FLOAT | Informational (total audio length) |
 | iteration_seed | INT | Extension component's noise_seed input |
 | stride_seconds | FLOAT | TimestampPromptSchedule and AudioLoopPlanner |
+| overlap_frames | INT | Extension component's overlap_frames input |
 
 Changing `overlap_seconds` automatically adjusts the stride, stop timing,
-start indices, and iteration count. One value, one place.
+start indices, iteration count, and overlap_frames. One value, one place.
 
 ### Timestamp Prompt Schedule
 
