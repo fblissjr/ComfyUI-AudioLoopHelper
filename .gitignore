@@ -4,5 +4,4 @@ __pycache__
 .history
 .vscode
 .claude
-example_workflows/
 internal/
