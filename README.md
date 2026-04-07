@@ -1,16 +1,21 @@
 # ComfyUI-AudioLoopHelper
 
 **TLDR**: Drop in these nodes to generate full-length music videos with LTX 2.3.
-They handle loop timing, auto-stopping at the audio boundary, per-iteration
-seed variation, and timestamp-based prompt scheduling. No manual iteration
-counting or fragile constants.
+They handle loop timing, auto-stopping at the audio boundary, and per-iteration
+seed variation. No manual iteration counting or fragile constants.
+
+**Note**: Timestamp-based prompt scheduling (TimestampPromptSchedule) is included
+but currently untested and disabled in the example workflow. The example workflow
+uses static conditioning via GetNode base_cond_pos. Prompt scheduling will be
+enabled once tested end-to-end.
 
 Workflow adapted from [kijai's LTX 2.3 long loop extension test](https://github.com/kijai/ComfyUI-NativeLooping_testing/blob/main/ltx23_long_loop_extension_test.json).
 
 Built for use alongside:
 - [ComfyUI-NativeLooping](https://github.com/kijai/ComfyUI-NativeLooping_testing) -- TensorLoopOpen/Close loop mechanism
+- [ComfyUI-LTXVideo](https://github.com/logtd/ComfyUI-LTXVideo) -- LTXVAddLatentGuide, LTXVCropGuides, LTXVPreprocess, spatial upscaler
 - [ComfyUI-VideoHelperSuite](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite) -- video output and batching
-- [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes) -- Set/Get nodes, LTX 2.3 helpers, constants
+- [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes) -- Set/Get nodes, LTX2_NAG, LTXVImgToVideoInplaceKJ, ImageResizeKJv2
 - [ComfyUI-MelBandRoFormer](https://github.com/DrJKL/ComfyUI-MelBandRoFormer) -- vocal separation for improved lip sync
 
 ## Quick start
@@ -57,6 +62,9 @@ Changing `overlap_seconds` automatically adjusts the stride, stop timing,
 start indices, iteration count, and overlap_frames. One value, one place.
 
 ### Timestamp Prompt Schedule
+
+**Status: Untested. Disabled in the example workflow (nodes bypassed).
+Uses static conditioning via GetNode base_cond_pos instead.**
 
 Per-iteration prompt variation based on song timestamps. Write prompts
 for verse, chorus, bridge -- the node picks the right one each iteration.
@@ -163,9 +171,9 @@ Controls how much context the model sees from the previous iteration.
 When you change overlap, the stride auto-adjusts, the stop signal auto-adjusts,
 and the planner output updates. Nothing else to touch.
 
-To match: if you change overlap_seconds here, also change `overlap_frames`
-(node 1514) inside the extension component to `overlap_seconds * fps`.
-Example: overlap_seconds=2.0 at 25fps -> overlap_frames=50.
+The `overlap_frames` output from AudioLoopController feeds directly into
+the extension subgraph -- no manual sync needed. Changing overlap_seconds
+automatically propagates to the frame extraction and trimming logic.
 
 ### window_seconds
 
@@ -180,6 +188,12 @@ LTX 2.3 model's video_end_time parameter.
 
 Changing this also requires updating the `window_size_seconds` FloatConstant
 (node 688) that feeds the extension component's video_end_time.
+
+### Audio trim offset (Node 567 TrimAudioDuration)
+
+The `start_index` on the global audio trim is song-dependent. It skips
+instrumental intro that doesn't contribute to lip sync. Set to 0 for songs
+that start with vocals, or skip a few seconds for instrumental intros.
 
 ### seed
 
@@ -208,5 +222,7 @@ Tips:
 - For smooth visual transitions between prompt sections, keep the core
   subject consistent and vary framing/lighting/energy rather than
   completely changing the scene.
-- The init_image (first frame guide) on the extension component anchors
-  the visual style across all iterations regardless of prompt changes.
+- The init_image anchors the first frame of the first pass via
+  LTXVImgToVideoInplaceKJ. The extension subgraph also uses the
+  init_image as a guide at frame -1 each loop iteration via
+  LTXVAddLatentGuide for continuity.
