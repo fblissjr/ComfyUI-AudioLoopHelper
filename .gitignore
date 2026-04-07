@@ -1,7 +1,10 @@
 __pycache__
-/venv
+.venv/
 *.code-workspace
 .history
 .vscode
 .claude
 internal/
+coderef/
+.pytest_cache
+.venv

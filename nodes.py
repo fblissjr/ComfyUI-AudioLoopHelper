@@ -216,8 +216,15 @@ class AudioLoopController(io.ComfyNode):
 
         start_index = current_iteration * stride
 
+        # Clamp start_index so TrimAudioDuration always has enough audio
+        # for the mel spectrogram (needs >1024 samples). Without this,
+        # the loop body crashes on the final iteration because
+        # TensorLoopClose checks should_stop AFTER the body executes.
+        min_audio_seconds = 0.5  # ~22050 samples at 44.1kHz, well above mel minimum
+        max_start = max(0.0, audio_duration - min_audio_seconds)
+        start_index = min(start_index, max_start)
+
         # Stop if the NEXT iteration would start past the audio.
-        # A partial last window is fine -- TrimAudioDuration clamps to available audio.
         next_start = (current_iteration + 1) * stride
         should_stop = next_start >= audio_duration
 
