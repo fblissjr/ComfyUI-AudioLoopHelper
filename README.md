@@ -142,7 +142,7 @@ Estimated 7 iterations:
 ### Conditioning Blend
 
 Blends two conditionings with a factor. Works with LTX 2.3's Gemma 3
-text encoder (no pooled_output required) and standard CLIP conditioning.
+text encoder including LTX 2.3 Gemma 3 (no pooled_output required).
 
 **Inputs:**
 
@@ -250,7 +250,7 @@ Tips:
 - Use the **Audio Loop Planner** output to see exactly what time range
   each iteration covers, then align your prompts to the song.
 - **Keep the core subject consistent** across all schedule entries. Only
-  vary framing, lighting, and energy. Different subjects = different CLIP
+  vary framing, lighting, and energy. Different subjects = different text
   embeddings = style drift even at CFG 1.0.
 - Use **blend_seconds** (e.g., 5.0) to smooth transitions. This prevents
   the hard conditioning switch that causes style jumps at boundaries.
