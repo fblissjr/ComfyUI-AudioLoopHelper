@@ -89,23 +89,14 @@ to the extension component -- no blending needed.
 
 One prompt for the entire song (simplest):
 ```
-0:00+: a woman singing in a dimly lit basement with colorful Christmas lights
+0:00+: Style: cinematic. A woman in her 30s with dark hair is singing passionately alone in a dimly lit basement workshop. Strings of colorful, mismatched Christmas lights provide a warm glow against damp stone walls. Her voice carries through the small space, resonating with raw emotion. Soft ambient hum of the lights blends with her singing.
 ```
 
-Three sections (verse / chorus / bridge):
+Three sections with shot variation (keep core subject consistent):
 ```
-0:00-0:38: a woman singing in a dimly lit basement, close-up, soft lighting
-0:38-1:15: wide shot of full band playing, bright colorful stage lights, energetic
-1:15+: extreme close-up of singer, emotional performance, warm bokeh
-```
-
-Detailed per-section with bare seconds:
-```
-0-20: opening shot, slow zoom in on singer, dark moody atmosphere
-20-45: singer at microphone, medium shot, Christmas lights twinkling
-45-75: wide shot showing full room, band visible, bright energetic lighting
-75-100: close-up hands on guitar, intercut with singer face
-100+: final verse, slow pull back, soft warm glow, singer silhouette
+0:00-0:38: Style: cinematic. In a medium close-up, a woman in her 30s with dark hair is singing passionately in a dimly lit basement workshop. Christmas lights cast warm colorful reflections on her face. Her voice fills the small space with raw emotion. Soft ambient hum from the lights.
+0:38-1:15: Style: cinematic. A woman in her 30s with dark hair is singing with building energy in a dimly lit basement workshop, static camera, locked off shot. Wide shot reveals the full workshop space, tools on walls, Christmas lights strung across exposed beams. Her voice grows more powerful, echoing off stone walls. The lights buzz softly.
+1:15+: Style: cinematic. In an extreme close-up, a woman in her 30s with dark hair is singing softly in a dimly lit basement. Focus on her face and hands, Christmas light bokeh in background. Her voice is gentle and emotional, almost a whisper. Quiet ambient room tone.
 ```
 
 Format rules:
@@ -281,3 +272,76 @@ Controls how gradually prompt transitions happen.
 The blend_factor ramps linearly from 0 to 1 over `blend_seconds` before
 each timestamp boundary. At 0, only the current prompt's conditioning is
 used. At 1, fully transitioned to the next prompt.
+
+## Prompt writing guide (LTX 2.3)
+
+LTX 2.3 is a distilled model -- CFG is 1.0 by default (NAG handles guidance).
+This means text prompts have less direct influence than in non-distilled models,
+but different conditioning vectors still shift the generation space. Write
+prompts carefully for best results.
+
+### Rules for loop-friendly prompts
+
+1. **Keep the core subject identical across all schedule entries.** Change
+   framing, camera, lighting -- not the person or setting. "A woman in her
+   30s with dark hair singing in a basement workshop" should appear in every
+   entry. This keeps Gemma 3 embeddings close in vector space.
+
+2. **Use active, present-progressive language.** "is singing," "is walking."
+   If no action specified, describe natural movements.
+
+3. **Describe only what changes from the previous section.** Don't re-describe
+   established visual details. Redundant descriptions can cause the model to
+   "restart" the scene.
+
+4. **Include audio descriptions alongside visuals.** LTX 2.3 is audio-video
+   joint. Describe the soundscape: "her voice echoes off stone walls," "soft
+   ambient hum of Christmas lights." Align audio intensity with action tempo.
+
+5. **Start with Style.** `Style: cinematic.` or `Style: realistic.` at the
+   beginning. Omit if the init_image already establishes the style strongly.
+
+6. **No timestamps, scene cuts, or meta-language.** Don't write "The scene
+   opens with..." or "Cut to..." -- just describe what is happening.
+
+7. **Camera motion only when intended.** Don't add camera movement unless you
+   want it. Available motions:
+
+### Camera motion keywords
+
+Append these to your prompt to control camera:
+
+| Keyword | Description |
+|---------|-------------|
+| `static camera, locked off shot` | No camera movement |
+| `dolly in, camera pushing forward` | Smooth forward movement |
+| `dolly out, camera pulling back` | Smooth backward movement |
+| `dolly left, camera tracking left` | Lateral left movement |
+| `dolly right, camera tracking right` | Lateral right movement |
+| `jib up, camera rising up` | Upward crane movement |
+| `jib down, camera lowering down` | Downward crane movement |
+| `focus shift, rack focus` | Changing focal point |
+
+### Negative prompt
+
+Use this as the base negative prompt (node 169 / static negative conditioning):
+
+```
+blurry, out of focus, overexposed, underexposed, low contrast, washed out colors,
+excessive noise, grainy texture, poor lighting, flickering, motion blur, distorted
+proportions, unnatural skin tones, deformed facial features, asymmetrical face,
+missing facial features, extra limbs, disfigured hands, wrong hand count, artifacts
+around text, inconsistent perspective, camera shake, incorrect depth of field
+```
+
+### Example: music video schedule with consistent subject
+
+```
+0:00-0:35: Style: cinematic. In a medium close-up, a woman in her 30s with dark hair is singing passionately in a dimly lit basement workshop. Christmas lights cast warm colorful reflections on her face. Her voice fills the small space. Soft ambient hum from the lights.
+0:35-1:10: Style: cinematic. A woman in her 30s with dark hair is singing with building energy in a dimly lit basement workshop, static camera, locked off shot. Wide shot reveals the full space, tools on walls, Christmas lights across exposed beams. Her voice grows powerful. Lights buzz softly.
+1:10-1:40: Style: cinematic. In an extreme close-up, a woman in her 30s with dark hair is singing softly in a dimly lit basement. Focus on face and hands, Christmas light bokeh in background, focus shift. Her voice is gentle, almost a whisper. Quiet room tone.
+1:40+: Style: cinematic. A woman in her 30s with dark hair is singing in a dimly lit basement workshop, dolly out, camera pulling back. Medium shot, gentle swaying, final verse. Her voice carries with quiet intensity. Christmas lights glow warmly. Soft ambient hum fades.
+```
+
+Note: every entry repeats "a woman in her 30s with dark hair" and "dimly lit
+basement workshop." Only framing, camera, and energy change.
