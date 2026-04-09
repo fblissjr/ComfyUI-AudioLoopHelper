@@ -1,13 +1,9 @@
 # ComfyUI-AudioLoopHelper
 
 **TLDR**: Drop in these nodes to generate full-length music videos with LTX 2.3.
-They handle loop timing, auto-stopping at the audio boundary, and per-iteration
-seed variation. No manual iteration counting or fragile constants.
-
-**Note**: Timestamp-based prompt scheduling (TimestampPromptSchedule) is included
-but currently untested and disabled in the example workflow. The example workflow
-uses static conditioning via GetNode base_cond_pos. Prompt scheduling will be
-enabled once tested end-to-end.
+They handle loop timing, auto-stopping at the audio boundary, per-iteration
+seed variation, timestamp-based prompt scheduling, and smooth conditioning
+blending between prompt transitions. No manual iteration counting or fragile constants.
 
 Workflow adapted from [kijai's LTX 2.3 long loop extension test](https://github.com/kijai/ComfyUI-NativeLooping_testing/blob/main/ltx23_long_loop_extension_test.json).
 
@@ -63,11 +59,9 @@ start indices, iteration count, and overlap_frames. One value, one place.
 
 ### Timestamp Prompt Schedule
 
-**Status: Untested. Disabled in the example workflow (nodes bypassed).
-Uses static conditioning via GetNode base_cond_pos instead.**
-
 Per-iteration prompt variation based on song timestamps. Write prompts
 for verse, chorus, bridge -- the node picks the right one each iteration.
+Supports gradual blending between prompts at transitions via `blend_seconds`.
 
 **Inputs:**
 
@@ -76,13 +70,20 @@ for verse, chorus, bridge -- the node picks the right one each iteration.
 | current_iteration | INT | From TensorLoopOpen |
 | stride_seconds | FLOAT | From AudioLoopController |
 | schedule | STRING | Timestamp-based prompt schedule (see format below) |
+| blend_seconds | FLOAT | Transition duration (default 0 = hard switch). Set to e.g. 5.0 to blend over 5 seconds before each boundary. |
 
 **Outputs:**
 
 | Output | Type | Wire to |
 |--------|------|---------|
-| prompt | STRING | CLIPTextEncode text input (inside the loop body) |
+| prompt | STRING | Text encode -> ConditioningBlend conditioning_a |
+| next_prompt | STRING | Text encode -> ConditioningBlend conditioning_b |
+| blend_factor | FLOAT | ConditioningBlend blend_factor |
 | current_time | FLOAT | Informational (position in audio) |
+
+When `blend_seconds = 0`, `next_prompt` equals `prompt` and `blend_factor` is
+always 0.0. You can wire just `prompt` through a single text encoder directly
+to the extension component -- no blending needed.
 
 **Schedule format:**
 
@@ -145,6 +146,47 @@ Estimated 7 iterations:
   Iter 2:  0:37 - 0:57  (37.8s - 57.6s)
   Iter 3:  0:56 - 1:16  (56.6s - 76.5s)
   ...
+```
+
+### Conditioning Blend
+
+Blends two conditionings with a factor. Works with LTX 2.3's Gemma 3
+text encoder (no pooled_output required) and standard CLIP conditioning.
+
+**Inputs:**
+
+| Input | Type | Description |
+|-------|------|-------------|
+| conditioning_a | CONDITIONING | Current prompt conditioning |
+| conditioning_b | CONDITIONING | Next prompt conditioning |
+| blend_factor | FLOAT | 0.0 = all A, 1.0 = all B. Wire from TimestampPromptSchedule. |
+
+**Outputs:**
+
+| Output | Type | Wire to |
+|--------|------|---------|
+| conditioning | CONDITIONING | Extension component's positive input |
+
+Handles sequence length alignment (zero-pads shorter tensor), attention mask
+combining (OR of both masks), and pooled_output blending when present.
+
+When blend_factor = 0.0, passes conditioning_a through unchanged (no computation).
+
+**Wiring for prompt blending:**
+```
+TimestampPromptSchedule
+  |           |           |
+  prompt   next_prompt  blend_factor
+  |           |           |
+  v           v           |
+Text       Text          |
+Encode     Encode        |
+  |           |           |
+  v           v           v
+ConditioningBlend --------+
+  |
+  v
+Extension #843 positive input
 ```
 
 ### Audio Duration
@@ -216,13 +258,26 @@ iteration boundaries. The node handles the mapping.
 Tips:
 - Use the **Audio Loop Planner** output to see exactly what time range
   each iteration covers, then align your prompts to the song.
-- Prompt changes take effect at the iteration boundary closest to the
-  timestamp. There's no sub-iteration blending -- the entire iteration
-  uses one prompt.
-- For smooth visual transitions between prompt sections, keep the core
-  subject consistent and vary framing/lighting/energy rather than
-  completely changing the scene.
+- **Keep the core subject consistent** across all schedule entries. Only
+  vary framing, lighting, and energy. Different subjects = different CLIP
+  embeddings = style drift even at CFG 1.0.
+- Use **blend_seconds** (e.g., 5.0) to smooth transitions. This prevents
+  the hard conditioning switch that causes style jumps at boundaries.
 - The init_image anchors the first frame of the first pass via
   LTXVImgToVideoInplaceKJ. The extension subgraph also uses the
   init_image as a guide at frame -1 each loop iteration via
   LTXVAddLatentGuide for continuity.
+
+### blend_seconds (TimestampPromptSchedule)
+
+Controls how gradually prompt transitions happen.
+
+| Value | Effect |
+|-------|--------|
+| **0** | **Hard switch (default).** Prompt changes instantly at timestamp boundaries. Can cause style drift. |
+| 3-5 | Gradual blend over 3-5 seconds. Good starting point. |
+| 10+ | Very slow transition. Useful when prompts differ significantly. |
+
+The blend_factor ramps linearly from 0 to 1 over `blend_seconds` before
+each timestamp boundary. At 0, only the current prompt's conditioning is
+used. At 1, fully transitioned to the next prompt.
