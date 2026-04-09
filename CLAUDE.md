@@ -50,6 +50,14 @@ Helper functions:
 - Workflow uses DualCLIPLoader + CLIPTextEncode nodes. Despite the names,
   these are Gemma 3 encoders (loaded via gemma_3_12B + ltx-2.3_text_projection).
   They produce `[tensor, {"attention_mask": ...}]` with no pooled_output.
+- **Conditioning path**: Text encode output MUST go through LTXVConditioning
+  (node 1587, frame_rate=25) before reaching Extension #843 positive input.
+  Without frame_rate metadata, positive conditioning mismatches negative.
+  Path: Text Encode → (ConditioningBlend if blending) → LTXVConditioning → #843.
+- **Blending wiring**: TimestampPromptSchedule outputs STRING, not CONDITIONING.
+  Blending requires two text encode nodes (both from same DualCLIPLoader) inside
+  the loop body: prompt → encode A → conditioning_a, next_prompt → encode B →
+  conditioning_b, blend_factor → ConditioningBlend. Without blending, one encode suffices.
 - Nodes that need per-iteration evaluation (TimestampPromptSchedule,
   ConditioningBlend, text encoders) must be inside the loop body (between
   TensorLoopOpen and TensorLoopClose in the dependency graph) to be cloned
