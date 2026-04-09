@@ -141,8 +141,8 @@ Estimated 7 iterations:
 
 ### Conditioning Blend
 
-Blends two conditionings with a factor. Works with LTX 2.3's Gemma 3
-text encoder including LTX 2.3 Gemma 3 (no pooled_output required).
+Blends two conditionings with a factor. Works with LTX 2.3 Gemma 3
+text encoder (no pooled_output required).
 
 **Inputs:**
 
@@ -162,6 +162,10 @@ Handles sequence length alignment (zero-pads shorter tensor), attention mask
 combining (OR of both masks), and pooled_output blending when present.
 
 When blend_factor = 0.0, passes conditioning_a through unchanged (no computation).
+
+**Note:** LTX 2.3 wraps its Gemma 3 text encoder in ComfyUI's
+"CLIPTextEncode" node for compatibility. Despite the CLIP name, the
+conditioning has no pooled_output. ConditioningBlend handles this correctly.
 
 **Wiring for prompt blending:**
 ```
