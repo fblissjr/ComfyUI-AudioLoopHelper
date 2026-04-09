@@ -458,7 +458,7 @@ class AudioDuration(io.ComfyNode):
 
 class ConditioningBlend(io.ComfyNode):
     """Blends two conditionings with a factor. Works with any text encoder
-    including LTX 2.3's Gemma 3 (no pooled_output required).
+    including LTX 2.3 Gemma 3 (no pooled_output required).
 
     When blend_factor = 0.0, passes conditioning_a through unchanged.
     When blend_factor = 1.0, passes conditioning_b through unchanged.
@@ -475,7 +475,7 @@ class ConditioningBlend(io.ComfyNode):
             category="looping/audio",
             description=(
                 "Blends two conditionings with a factor. Works with LTX Gemma 3 "
-                "and standard CLIP conditioning. Use with TimestampPromptSchedule "
+                "Also compatible with CLIP conditioning. Use with TimestampPromptSchedule "
                 "for smooth prompt transitions."
             ),
             inputs=[
