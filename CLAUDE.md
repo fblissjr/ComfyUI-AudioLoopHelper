@@ -104,6 +104,18 @@ Fixes applied across workflow versions:
   a different approach (per-iteration latent upscale or external post-processing).
 - v0408: AudioLoopController start_index clamp to prevent mel crash on short audio.
 
+## LTX 2.3 prompt format
+
+- LTX 2.3 is distilled -- CFG=1.0 by default (NAG handles guidance, not CFG).
+- Prompts are i2v (image-to-video) style: describe changes from the init_image, not the full scene.
+- Start with `Style: cinematic.` (or omit if init_image establishes style).
+- Use present-progressive verbs: "is singing," "is walking."
+- Include audio descriptions inline with visuals (LTX 2.3 is audio-video joint).
+- No meta-language: no "The scene opens with...", no timestamps, no cuts.
+- Camera motion only when intended. Keywords: `static camera`, `dolly in/out/left/right`, `jib up/down`, `focus shift`.
+- Full system prompts for i2v and t2v: `docs/ltx23_prompt_system_prompts.md`
+- For prompt scheduling: keep core subject identical across all entries, vary only framing/camera/lighting.
+
 ## Dependencies
 
 Companion custom nodes (not imported, just used alongside in workflows):
