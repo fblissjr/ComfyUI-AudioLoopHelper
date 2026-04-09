@@ -13,9 +13,10 @@ overlap_frames. No manual constants to keep in sync.
 Single file: `nodes.py`. Uses ComfyUI's extension API (`ComfyExtension`,
 `io.ComfyNode`). Entry point: `comfy_entrypoint()`.
 
-4 nodes:
+5 nodes:
 - `AudioLoopController` -- core: start_index, should_stop, audio_duration, iteration_seed, stride_seconds, overlap_frames
-- `TimestampPromptSchedule` -- per-iteration prompt from timestamp ranges (untested/disabled in example workflow)
+- `TimestampPromptSchedule` -- per-iteration prompt from timestamp ranges, with blend support
+- `ConditioningBlend` -- lerps two conditioning tensors for smooth prompt transitions (works with LTX Gemma 3 and CLIP)
 - `AudioLoopPlanner` -- displays iteration timeline for planning
 - `AudioDuration` -- extracts duration/sample_rate from audio tensor
 
@@ -25,6 +26,7 @@ Helper functions:
 - `_format_timestamp(seconds)` -- float to "M:SS" (preserves sub-second)
 - `_parse_schedule(schedule)` -- multiline schedule text to entries list
 - `_match_schedule(entries, time)` -- find matching prompt for a timestamp
+- `_match_schedule_with_next(entries, time, blend_seconds)` -- returns (prompt, next_prompt, blend_factor)
 
 ## Key patterns
 
@@ -39,9 +41,15 @@ Helper functions:
   iteration (TensorLoopClose checks should_stop AFTER the body executes).
 - Timestamp parsing regex `_LINE_RE` handles colons in M:SS timestamps
   vs the colon separator between range and prompt.
+- LTX 2.3 uses Gemma 3 text encoder (NOT CLIP). Conditioning format is
+  `[tensor, {"attention_mask": mask}]` with no pooled_output. Standard
+  ConditioningAverage won't work -- use our ConditioningBlend instead.
+- ConditioningBlend handles: sequence length alignment (zero-pads shorter),
+  attention mask combining (OR), optional pooled_output blending (for CLIP compat).
 - Nodes that need per-iteration evaluation (TimestampPromptSchedule,
-  CLIPTextEncode) must be inside the loop body (between TensorLoopOpen
-  and TensorLoopClose in the dependency graph) to be cloned each iteration.
+  ConditioningBlend, text encoders) must be inside the loop body (between
+  TensorLoopOpen and TensorLoopClose in the dependency graph) to be cloned
+  each iteration.
 - AudioLoopPlanner runs once (outside the loop). It uses a closed-form
   formula matching AudioLoopController's stop condition.
 - overlap_frames feeds into the extension subgraph (Node 843) where it
