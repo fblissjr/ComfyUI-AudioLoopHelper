@@ -47,6 +47,9 @@ Helper functions:
   ConditioningAverage won't work -- use our ConditioningBlend instead.
 - ConditioningBlend handles: sequence length alignment (zero-pads shorter),
   attention mask combining (OR), optional pooled_output blending (for CLIP compat).
+- Workflow uses DualCLIPLoader + CLIPTextEncode nodes. Despite the names,
+  these are Gemma 3 encoders (loaded via gemma_3_12B + ltx-2.3_text_projection).
+  They produce `[tensor, {"attention_mask": ...}]` with no pooled_output.
 - Nodes that need per-iteration evaluation (TimestampPromptSchedule,
   ConditioningBlend, text encoders) must be inside the loop body (between
   TensorLoopOpen and TensorLoopClose in the dependency graph) to be cloned
