@@ -84,6 +84,31 @@ Helper functions:
 - **Scrub workflows before open-sourcing:** filenames, absolute paths, UUIDs, image previews, videopreview fullpath/filename, creative prompts, clipspace references.
 - Pyright `reportIncompatibleMethodOverride` on `execute()` methods is a false positive -- standard ComfyUI node API pattern.
 
+## How image guides actually work in LTX 2.3
+
+Guide strength does NOT control how much the image influences style.
+It controls the denoise mask (noise addition), which is only one of three
+layers. Text conditioning operates on a separate, unattenuated pathway:
+
+```
+1. Cross-attention (text → all tokens)  ← ALWAYS FULL STRENGTH, no per-guide control
+2. Self-attention (guide ↔ generated)   ← controlled by attention_strength (default 1.0)
+3. Denoise mask (noise addition)        ← controlled by guide strength (1.0 = no noise)
+```
+
+- strength=1.0 → denoise_mask=0.0 → guide frames spatially frozen
+- BUT cross-attention still pulls style/appearance toward text description
+- Guides are CONCATENATED to the latent sequence (extra frames at the end),
+  not blended at the target index. keyframe_idxs tells RoPE their logical position.
+- This is why changing text causes style drift even at guide strength 1.0:
+  the guide anchors composition, but text controls style via cross-attention.
+- The right fix for style consistency is keeping text aligned (consistent
+  prompts + ConditioningBlend), not increasing guide strength.
+
+Source: ComfyUI-LTXVideo/latents.py (LTXVAddLatentGuide),
+comfy_extras/nodes_lt.py (append_keyframe), comfy/ldm/lightricks/model.py
+(per-reference attention masking).
+
 ## Extension subgraph (Node 843)
 
 The "extension" group node inside the loop contains the per-iteration
