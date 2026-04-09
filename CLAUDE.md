@@ -41,6 +41,7 @@ Helper functions:
   iteration (TensorLoopClose checks should_stop AFTER the body executes).
 - Timestamp parsing regex `_LINE_RE` handles colons in M:SS timestamps
   vs the colon separator between range and prompt.
+- **Prompt changes cause style drift even at CFG 1.0.** Different text = different conditioning vectors = shifted generation space. Use ConditioningBlend with blend_seconds > 0 for gradual transitions, and keep the core subject description consistent across all schedule entries.
 - LTX 2.3 uses Gemma 3 text encoder (NOT CLIP). Conditioning format is
   `[tensor, {"attention_mask": mask}]` with no pooled_output. Standard
   ConditioningAverage won't work -- use our ConditioningBlend instead.
@@ -73,6 +74,11 @@ Helper functions:
   mask=0 keeps the real encoded song. Setting mask=1 tells the sampler to
   regenerate audio from noise, destroying lip sync. Verify mask semantics
   before changing any LTXVAudioVideoMask wiring.
+- **Deleting PrimitiveNodes breaks subgraph wiring.** PrimitiveNodes override widget values via a special mechanism. Delete them first, then rewire the freed inputs from the component input panel.
+- **After changing a node's define_schema(), users must delete and re-add the node in the UI.** JSON slot indices are baked at save time. Editing JSON slot numbers manually is fragile -- ComfyUI routes by slot index, not name.
+- **Removing a subgraph component input shifts all higher slot indices.** Internal links referencing `origin_slot` must be decremented. Miss one and wires silently disconnect.
+- **Always validate workflow JSON after programmatic edits:** `python3 -c "import json; json.load(open('file.json'))"`
+- **Scrub workflows before open-sourcing:** filenames, absolute paths, UUIDs, image previews, videopreview fullpath/filename, creative prompts, clipspace references.
 - Pyright `reportIncompatibleMethodOverride` on `execute()` methods is a false positive -- standard ComfyUI node API pattern.
 
 ## Extension subgraph (Node 843)
