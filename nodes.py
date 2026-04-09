@@ -12,6 +12,7 @@ for generating full-length music videos with LTX 2.3.
 import math
 import re
 
+import torch
 from comfy_api.latest import ComfyExtension, io
 from typing_extensions import override
 
@@ -97,16 +98,51 @@ def _match_schedule(entries: list[tuple[float, float | None, str]], current_time
     result = ""
     for start, end, prompt in entries:
         if end is None:
-            # "start+:" -- matches everything from start onward
             if current_time >= start:
                 result = prompt
         else:
             if start <= current_time <= end:
                 result = prompt
-    # Fallback: use last entry's prompt if nothing matched
     if not result and entries:
         result = entries[-1][2]
     return result
+
+
+def _match_schedule_with_next(
+    entries: list[tuple[float, float | None, str]],
+    current_time: float,
+    blend_seconds: float,
+) -> tuple[str, str, float]:
+    """Find current prompt, next prompt, and blend factor.
+
+    Returns (current_prompt, next_prompt, blend_factor).
+    blend_factor is 0.0 when not near a boundary, and ramps to 1.0
+    at the boundary over blend_seconds.
+    """
+    current_prompt = _match_schedule(entries, current_time)
+
+    if blend_seconds <= 0:
+        return current_prompt, current_prompt, 0.0
+
+    # Find the next boundary: the earliest range start that is after current_time
+    next_boundary = None
+    next_prompt = current_prompt
+    for start, end, prompt in entries:
+        if start > current_time:
+            if next_boundary is None or start < next_boundary:
+                next_boundary = start
+                next_prompt = prompt
+
+    if next_boundary is None:
+        # No upcoming boundary -- we're in the last range
+        return current_prompt, current_prompt, 0.0
+
+    time_to_boundary = next_boundary - current_time
+    if time_to_boundary < blend_seconds:
+        blend_factor = 1.0 - (time_to_boundary / blend_seconds)
+        return current_prompt, next_prompt, blend_factor
+
+    return current_prompt, current_prompt, 0.0
 
 
 class AudioLoopController(io.ComfyNode):
@@ -241,6 +277,10 @@ class TimestampPromptSchedule(io.ComfyNode):
     already know (verse, chorus, bridge). The node computes the current
     audio position from the iteration number and stride, then returns the
     matching prompt.
+
+    When blend_seconds > 0, also outputs the next_prompt and a blend_factor
+    for smooth transitions. Wire both prompts through text encoders into
+    ConditioningBlend for gradual prompt transitions.
     """
 
     @classmethod
@@ -251,7 +291,8 @@ class TimestampPromptSchedule(io.ComfyNode):
             category="looping/audio",
             description=(
                 "Selects a prompt based on the current audio position. "
-                "Write timestamp-based schedules matching your song structure."
+                "Write timestamp-based schedules matching your song structure. "
+                "Supports gradual blending between prompts at transitions."
             ),
             inputs=[
                 io.Int.Input(
@@ -280,9 +321,22 @@ class TimestampPromptSchedule(io.ComfyNode):
                         "Timestamps: M:SS, M:SS.ss, or bare seconds."
                     ),
                 ),
+                io.Float.Input(
+                    "blend_seconds",
+                    default=0.0,
+                    min=0.0,
+                    step=0.5,
+                    tooltip=(
+                        "Transition duration in seconds. 0 = hard switch (default). "
+                        "Set to e.g. 5.0 to blend over ~5 seconds before each boundary. "
+                        "Wire next_prompt and blend_factor to ConditioningBlend."
+                    ),
+                ),
             ],
             outputs=[
                 io.String.Output("prompt", tooltip="The prompt for this iteration's audio position."),
+                io.String.Output("next_prompt", tooltip="The upcoming prompt at the next boundary. Same as prompt when not near a transition."),
+                io.Float.Output("blend_factor", tooltip="0.0 = fully current prompt, ramps to 1.0 at the boundary. Wire to ConditioningBlend."),
                 io.Float.Output("current_time", tooltip="Current position in seconds."),
             ],
         )
@@ -293,11 +347,14 @@ class TimestampPromptSchedule(io.ComfyNode):
         current_iteration: int,
         stride_seconds: float,
         schedule: str,
+        blend_seconds: float,
     ) -> io.NodeOutput:
         current_time = current_iteration * stride_seconds
         entries = _parse_schedule(schedule)
-        prompt = _match_schedule(entries, current_time)
-        return io.NodeOutput(prompt, current_time)
+        prompt, next_prompt, blend_factor = _match_schedule_with_next(
+            entries, current_time, blend_seconds
+        )
+        return io.NodeOutput(prompt, next_prompt, blend_factor, current_time)
 
 
 class AudioLoopPlanner(io.ComfyNode):
@@ -399,12 +456,105 @@ class AudioDuration(io.ComfyNode):
         return io.NodeOutput(float(duration), int(audio["sample_rate"]), int(audio["waveform"].shape[-1]))
 
 
+class ConditioningBlend(io.ComfyNode):
+    """Blends two conditionings with a factor. Works with any text encoder
+    including LTX 2.3's Gemma 3 (no pooled_output required).
+
+    When blend_factor = 0.0, passes conditioning_a through unchanged.
+    When blend_factor = 1.0, passes conditioning_b through unchanged.
+    Values between lerp the conditioning tensors.
+
+    Wire TimestampPromptSchedule's blend_factor here for smooth transitions.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="ConditioningBlend",
+            display_name="Conditioning Blend",
+            category="looping/audio",
+            description=(
+                "Blends two conditionings with a factor. Works with LTX Gemma 3 "
+                "and standard CLIP conditioning. Use with TimestampPromptSchedule "
+                "for smooth prompt transitions."
+            ),
+            inputs=[
+                io.Conditioning.Input("conditioning_a", tooltip="Current prompt conditioning."),
+                io.Conditioning.Input("conditioning_b", tooltip="Next prompt conditioning."),
+                io.Float.Input(
+                    "blend_factor",
+                    default=0.0,
+                    min=0.0,
+                    max=1.0,
+                    step=0.01,
+                    tooltip="0.0 = all A, 1.0 = all B. Wire from TimestampPromptSchedule.",
+                ),
+            ],
+            outputs=[
+                io.Conditioning.Output("conditioning"),
+            ],
+        )
+
+    @classmethod
+    def execute(
+        cls,
+        conditioning_a: list,
+        conditioning_b: list,
+        blend_factor: float,
+    ) -> io.NodeOutput:
+        # Passthrough when no blending needed
+        if blend_factor <= 0.0:
+            return io.NodeOutput(conditioning_a)
+        if blend_factor >= 1.0:
+            return io.NodeOutput(conditioning_b)
+
+        out = []
+        cond_b = conditioning_b[0][0]
+
+        for i in range(len(conditioning_a)):
+            t_a = conditioning_a[i][0]
+            t_b = cond_b
+
+            # Align sequence lengths by zero-padding the shorter one
+            if t_b.shape[1] < t_a.shape[1]:
+                t_b = torch.cat([t_b, torch.zeros((1, t_a.shape[1] - t_b.shape[1], t_b.shape[2]), device=t_b.device)], dim=1)
+            elif t_a.shape[1] < t_b.shape[1]:
+                t_a = torch.cat([t_a, torch.zeros((1, t_b.shape[1] - t_a.shape[1], t_a.shape[2]), device=t_a.device)], dim=1)
+
+            # Lerp the conditioning tensors
+            blended = t_a * (1.0 - blend_factor) + t_b * blend_factor
+
+            # Copy metadata from conditioning_a, blend pooled_output if present
+            opts = conditioning_a[i][1].copy()
+            pooled_a = conditioning_a[i][1].get("pooled_output", None)
+            pooled_b = conditioning_b[0][1].get("pooled_output", None)
+            if pooled_a is not None and pooled_b is not None:
+                opts["pooled_output"] = pooled_a * (1.0 - blend_factor) + pooled_b * blend_factor
+
+            # Combine attention masks (OR -- valid if either is valid)
+            mask_a = conditioning_a[i][1].get("attention_mask", None)
+            mask_b = conditioning_b[0][1].get("attention_mask", None)
+            if mask_a is not None and mask_b is not None:
+                # Pad masks to same length
+                max_len = max(mask_a.shape[-1], mask_b.shape[-1])
+                if mask_a.shape[-1] < max_len:
+                    mask_a = torch.cat([mask_a, torch.zeros((*mask_a.shape[:-1], max_len - mask_a.shape[-1]), device=mask_a.device)], dim=-1)
+                if mask_b.shape[-1] < max_len:
+                    mask_b = torch.cat([mask_b, torch.zeros((*mask_b.shape[:-1], max_len - mask_b.shape[-1]), device=mask_b.device)], dim=-1)
+                opts["attention_mask"] = torch.clamp(mask_a + mask_b, 0, 1)
+
+            out.append([blended, opts])
+
+        return io.NodeOutput(out)
+
+
 class AudioLoopHelperExtension(ComfyExtension):
     @override
     async def get_node_list(self) -> list[type[io.ComfyNode]]:
         return [
             AudioLoopController,
             TimestampPromptSchedule,
+            ConditioningBlend,
             AudioLoopPlanner,
             AudioDuration,
         ]
