@@ -2,7 +2,7 @@
   "id": "00000000-0000-0000-0000-000000000001",
   "revision": 0,
   "last_node_id": 1602,
-  "last_link_id": 2996,
+  "last_link_id": 2997,
   "nodes": [
     {
       "id": 252,
@@ -1744,7 +1744,7 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": null
+          "link": 2997
         },
         {
           "name": "audio",
@@ -2666,7 +2666,8 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            2506
+            2506,
+            2997
           ]
         }
       ],
@@ -4640,6 +4641,14 @@
       1602,
       0,
       "STRING"
+    ],
+    [
+      2997,
+      1318,
+      0,
+      617,
+      0,
+      "IMAGE"
     ]
   ],
   "groups": [
