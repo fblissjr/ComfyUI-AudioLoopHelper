@@ -114,9 +114,13 @@ ScheduleToMultiPrompt node is kept for future use if AV support is added.
 
 - TensorLoopOpen MUST receive the sampled initial render, NOT the raw
   image-embed latent from LTXVImgToVideoInplaceKJ.
-- Correct path: #531 ImgToVideo → #350 ConcatAV → #161 Sampler → #245 SeparateAV → #1539 TensorLoopOpen
-- Wiring TensorLoopOpen directly to #531 skips audio conditioning entirely,
-  causing the loop to start from unsampled frames with ~5s audio offset.
+- LTXVAddLatentGuide APPENDS guide frames to temporal dim (torch.cat dim=2).
+  Sampler output latent has shape [B,C,63+N_guides,H,W], not [B,C,63,H,W].
+  MUST route through LTXVCropGuides (#381) to strip guide padding before
+  passing to TensorLoopOpen or any node that indexes latent frames.
+- Correct path: #531 ImgToVideo → #350 ConcatAV → #161 Sampler → #245 SeparateAV → #381 CropGuides → #1539 TensorLoopOpen
+- Skipping CropGuides causes LTXVSelectLatents to select guide frames
+  instead of real video content, breaking audio-video sync.
 
 ## Resolution and latent volume
 
