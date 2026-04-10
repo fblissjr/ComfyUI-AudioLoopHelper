@@ -100,6 +100,16 @@ For music video workflows that need audio conditioning for lip sync, use
 TensorLoopOpen/Close with the extension subgraph instead.
 ScheduleToMultiPrompt node is kept for future use if AV support is added.
 
+## Video/Audio VAE temporal conversion
+
+- **Video VAE**: First pixel frame → own latent frame, then 8 pixels per latent.
+  Formula: `latent = (pixel - 1) // 8 + 1`. NOT `pixel // 8`.
+  Pixel frames must follow 8n+1 (1, 9, 17, 25, 497...).
+- **Audio VAE**: 25 latents/second, 1D, completely independent of video latent
+  temporal dimension. They live in separate NestedTensor sub-tensors.
+- Using `pixel // 8` instead of `(pixel - 1) // 8 + 1` caused the v0409
+  sync bug: 25 pixels → 3 latent frames (wrong) vs 4 (correct).
+
 ## Subgraph editing
 
 - ALWAYS use WorkflowEditor from `internal/scripts/workflow_utils.py` for
