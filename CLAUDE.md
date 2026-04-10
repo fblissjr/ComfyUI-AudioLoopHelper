@@ -110,6 +110,22 @@ ScheduleToMultiPrompt node is kept for future use if AV support is added.
 - Using `pixel // 8` instead of `(pixel - 1) // 8 + 1` caused the v0409
   sync bug: 25 pixels → 3 latent frames (wrong) vs 4 (correct).
 
+## Resolution and latent volume
+
+- **Latent volume limit**: `(width/32) * (height/32) * ((frames-1)/8 + 1)` should
+  stay below ~15,000-20,000. Exceeding causes artifacts, grid patterns, color loss.
+- **832x480 at 497 frames**: 26*15*63 = 24,570 -- already at the edge. Don't increase
+  resolution without reducing frame count per window.
+- **Higher resolution improves motion/lip-sync/audio quality** but costs more VRAM
+  and risks latent volume overflow. 720p+ with 48-50fps gives smoother motion.
+- **Portrait (vertical) resolutions are unstable** -- keep height < 1600px.
+  Landscape and square work best.
+- **Two-stage approach is the recommended workaround**: generate at lower res (720p),
+  then spatial latent upscale to 1080p+. This is what LTX-Desktop and native LTX-2
+  both do. See `docs/upscale_guide.md` and `internal/analysis/ltx23_gaps_analysis.md`.
+- For our loop workflow: each window is 497 frames at 832x480. Changing resolution
+  requires adjusting window_seconds or temporal_tile_size to stay under the limit.
+
 ## Subgraph editing
 
 - ALWAYS use WorkflowEditor from `internal/scripts/workflow_utils.py` for
