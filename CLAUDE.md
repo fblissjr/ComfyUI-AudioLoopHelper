@@ -100,6 +100,15 @@ For music video workflows that need audio conditioning for lip sync, use
 TensorLoopOpen/Close with the extension subgraph instead.
 ScheduleToMultiPrompt node is kept for future use if AV support is added.
 
+## Subgraph editing
+
+- ALWAYS use WorkflowEditor from `internal/scripts/workflow_utils.py` for
+  subgraph modifications. Manual JSON surgery on subgraphs has failed
+  repeatedly (stale slots, broken links, shifted indices).
+- Use the `/workflow-edit` skill which documents the full API.
+- LTXVSelectLatents operates in LATENT frame space (pixel_frames // 8).
+  25 pixel overlap = 3 latent frames. Use AudioLoopController `overlap_latent_frames` output.
+
 ## How image guides actually work in LTX 2.3
 
 Guide strength does NOT control how much the image influences style.
@@ -244,7 +253,8 @@ Run `internal/scripts/test_workflow_integrity.py` after every programmatic edit.
 
 ## Workflow docs
 
-- `example_workflows/native-audio-looping-music-video_v0408.json` -- current TensorLoop workflow (with subgraph)
+- `example_workflows/native-audio-looping-music-video_v0409_latent.json` -- latent-space loop (no per-iteration VAE round-trip)
+- `example_workflows/native-audio-looping-music-video_v0408.json` -- legacy TensorLoop (per-iteration VAE round-trip)
 - `example_workflows/upscale-loop-output.json` -- separate upscale workflow (when built)
 - `coderef/origiltx23_long_loop_extension_test.json` -- original pre-scheduler workflow
 - `coderef/RuneXX_LTX-2.3-Workflows/` -- reference LTX 2.3 workflows (3-pass upscale pattern)
@@ -255,4 +265,6 @@ Run `internal/scripts/test_workflow_integrity.py` after every programmatic edit.
 - `docs/upscale_guide.md` -- upscale workflow build guide
 - `docs/ltxv_looping_sampler_settings.md` -- LTXVLoopingSampler reference (VIDEO-ONLY, no AV latent support)
 - `docs/latent_loop_build_guide.md` -- build guide for LTXVLoopingSampler (video-only, not for music video)
+- `docs/subgraph_latent_rework_guide.md` -- how the latent rework was done
+- `internal/analysis/ltx23_gaps_analysis.md` -- capability gaps across LTX-Desktop, LTX-2, ComfyUI-LTXVideo
 - `internal/postmortem_v0408_session.md` -- debugging history (6 issues with fixes)
