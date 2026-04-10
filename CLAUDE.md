@@ -110,6 +110,14 @@ ScheduleToMultiPrompt node is kept for future use if AV support is added.
 - Using `pixel // 8` instead of `(pixel - 1) // 8 + 1` caused the v0409
   sync bug: 25 pixels → 3 latent frames (wrong) vs 4 (correct).
 
+## Initial render path (critical for sync)
+
+- TensorLoopOpen MUST receive the sampled initial render, NOT the raw
+  image-embed latent from LTXVImgToVideoInplaceKJ.
+- Correct path: #531 ImgToVideo → #350 ConcatAV → #161 Sampler → #245 SeparateAV → #1539 TensorLoopOpen
+- Wiring TensorLoopOpen directly to #531 skips audio conditioning entirely,
+  causing the loop to start from unsampled frames with ~5s audio offset.
+
 ## Resolution and latent volume
 
 - **Latent volume limit**: `(width/32) * (height/32) * ((frames-1)/8 + 1)` should
