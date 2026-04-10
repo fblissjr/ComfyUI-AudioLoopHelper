@@ -2,7 +2,7 @@
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
   "last_node_id": 1604,
-  "last_link_id": 2990,
+  "last_link_id": 2991,
   "nodes": [
     {
       "id": 252,
@@ -2748,8 +2748,7 @@
           "type": "LATENT",
           "links": [
             956,
-            2505,
-            2990
+            2505
           ]
         },
         {
@@ -2812,7 +2811,9 @@
         {
           "name": "latent",
           "type": "LATENT",
-          "links": []
+          "links": [
+            2991
+          ]
         }
       ],
       "properties": {
@@ -3609,7 +3610,7 @@
           "name": "initial_value",
           "shape": 7,
           "type": "LATENT",
-          "link": 2990
+          "link": 2991
         }
       ],
       "outputs": [
@@ -5217,9 +5218,9 @@
       "IMAGE"
     ],
     [
-      2990,
-      245,
-      0,
+      2991,
+      381,
+      2,
       1539,
       0,
       "LATENT"
