@@ -10,8 +10,8 @@ Reference: https://github.com/ChenDarYen/Normalized-Attention-Guidance
 
 ## Source Files
 
-- **Node implementation:** `<home>/ComfyUI/custom_nodes/ComfyUI-KJNodes/nodes/ltxv_nodes.py` (lines 336-521)
-- **Generic NAG (non-LTX):** `<home>/ComfyUI/comfy_extras/nodes_nag.py`
+- **Node implementation:** `ComfyUI-KJNodes/nodes/ltxv_nodes.py` (lines 336-521)
+- **Generic NAG (non-LTX):** `ComfyUI/comfy_extras/nodes_nag.py`
 
 ## Parameters
 
