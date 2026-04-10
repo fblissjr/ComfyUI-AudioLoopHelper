@@ -3438,8 +3438,8 @@
         },
         {
           "label": "previous_images",
-          "name": "images",
-          "type": "IMAGE",
+          "name": "previous_latent",
+          "type": "LATENT",
           "link": 2869
         },
         {
@@ -3516,7 +3516,7 @@
       ],
       "outputs": [
         {
-          "name": "extended_images",
+          "name": "extended_latent",
           "type": "LATENT",
           "links": [
             2867
@@ -4958,7 +4958,7 @@
       0,
       1540,
       1,
-      "IMAGE"
+      "LATENT"
     ],
     [
       2869,
@@ -4966,7 +4966,7 @@
       1,
       843,
       4,
-      "IMAGE"
+      "LATENT"
     ],
     [
       2902,
@@ -5341,8 +5341,8 @@
           },
           {
             "id": "4605b7c0-f8b9-4b8d-9841-046659396fcd",
-            "name": "images",
-            "type": "IMAGE",
+            "name": "previous_latent",
+            "type": "LATENT",
             "linkIds": [
               2957
             ],
@@ -5492,10 +5492,9 @@
         "outputs": [
           {
             "id": "9ae11cae-35c6-4960-a10c-ffb08f8d6cdf",
-            "name": "extended_images",
-            "type": "IMAGE",
+            "name": "extended_latent",
+            "type": "LATENT",
             "linkIds": [
-              2782,
               2960
             ],
             "pos": [
