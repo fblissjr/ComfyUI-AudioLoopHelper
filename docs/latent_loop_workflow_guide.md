@@ -1,6 +1,17 @@
-Last updated: 2026-04-09
+Last updated: 2026-04-10
 
 # Latent-Space Loop Workflow (LTXVLoopingSampler)
+
+**STATUS: VIDEO-ONLY. LTXVLoopingSampler does NOT support Audio-Visual
+latents (throws ValueError for NestedTensor). Cannot be used for music
+video workflows that need audio conditioning for lip sync.**
+
+For music videos, use the TensorLoop workflow with latent-space subgraph
+rework instead (see `subgraph_latent_rework_guide.md`).
+
+This doc is kept as reference for video-only use cases.
+
+---
 
 Alternative to the TensorLoopOpen/Close workflow. Uses LTXVLoopingSampler
 from ComfyUI-LTXVideo which stays entirely in latent space between
