@@ -92,6 +92,14 @@ Helper functions:
 - **Scrub workflows before open-sourcing:** filenames, absolute paths, UUIDs, image previews, videopreview fullpath/filename, creative prompts, clipspace references.
 - Pyright `reportIncompatibleMethodOverride` on `execute()` methods is a false positive -- standard ComfyUI node API pattern.
 
+## LTXVLoopingSampler limitation
+
+LTXVLoopingSampler (ComfyUI-LTXVideo) does NOT support Audio-Visual latents.
+It throws `ValueError: LoopingSampler currently does not support Audio Visual latents`.
+For music video workflows that need audio conditioning for lip sync, use
+TensorLoopOpen/Close with the extension subgraph instead.
+ScheduleToMultiPrompt node is kept for future use if AV support is added.
+
 ## How image guides actually work in LTX 2.3
 
 Guide strength does NOT control how much the image influences style.
@@ -236,8 +244,7 @@ Run `internal/scripts/test_workflow_integrity.py` after every programmatic edit.
 
 ## Workflow docs
 
-- `example_workflows/latent-loop-music-video-v1.json` -- LTXVLoopingSampler workflow (latent-space, no subgraph)
-- `example_workflows/native-audio-looping-music-video_v0408.json` -- TensorLoop workflow (legacy, has subgraph)
+- `example_workflows/native-audio-looping-music-video_v0408.json` -- current TensorLoop workflow (with subgraph)
 - `example_workflows/upscale-loop-output.json` -- separate upscale workflow (when built)
 - `coderef/origiltx23_long_loop_extension_test.json` -- original pre-scheduler workflow
 - `coderef/RuneXX_LTX-2.3-Workflows/` -- reference LTX 2.3 workflows (3-pass upscale pattern)
@@ -246,6 +253,6 @@ Run `internal/scripts/test_workflow_integrity.py` after every programmatic edit.
 - `docs/prompt_creation_guide.md` -- prompt writing guide with variation patterns
 - `docs/ltx23_prompt_system_prompts.md` -- official i2v/t2v system prompts
 - `docs/upscale_guide.md` -- upscale workflow build guide
-- `docs/ltxv_looping_sampler_settings.md` -- LTXVLoopingSampler parameter reference and tuning
-- `docs/latent_loop_build_guide.md` -- step-by-step build guide for latent-space workflow
+- `docs/ltxv_looping_sampler_settings.md` -- LTXVLoopingSampler reference (VIDEO-ONLY, no AV latent support)
+- `docs/latent_loop_build_guide.md` -- build guide for LTXVLoopingSampler (video-only, not for music video)
 - `internal/postmortem_v0408_session.md` -- debugging history (6 issues with fixes)
