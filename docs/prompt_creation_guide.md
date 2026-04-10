@@ -57,18 +57,26 @@ Key rules for the loop workflow:
 
 ### 5. Set workflow values
 
-| Setting | Value | Notes |
-|---------|-------|-------|
-| node 567 start_index | Song-dependent | Skip instrumental intro |
-| node 169 prompt | Match first schedule entry | Keep aligned with init_image |
-| overlap_seconds | 2.0-3.0 | More = smoother transitions |
-| blend_seconds | 5.0-10.0 | More = gentler prompt transitions |
-| window_seconds | 19.88 | Don't change |
-| fps | 25 | Don't change |
-| TensorLoopOpen iterations | 50 | Safety cap |
-| MelBand 568/569 | Enabled | For lip sync |
-| trim_to_audio | true | Always |
-| SageAttention 268 | Bypassed | Enable after quality is stable |
+**Starting values (adjust per results):**
+
+| Setting | Start with | Range | Notes |
+|---------|-----------|-------|-------|
+| overlap_seconds | **2.0** | 1.0-3.0 | Start at 2.0. Increase to 3.0 if jitter between iterations. |
+| blend_seconds | **5.0** | 0-10.0 | Start at 5.0. Increase to 10.0 if style drifts at prompt boundaries. Set 0 to disable blending. |
+| node 567 start_index | **10** | 0-30 | Seconds to skip. Match to your song's instrumental intro length. |
+| node 169 prompt | — | — | Must closely match the 0:00 schedule entry AND the init_image. |
+
+**Fixed values (don't change):**
+
+| Setting | Value | Why |
+|---------|-------|-----|
+| window_seconds | 19.88 | LTX 2.3 default window |
+| fps | 25 | LTX 2.3 default framerate |
+| TensorLoopOpen iterations | 50 | Safety cap. Auto-stop handles actual termination. |
+| MelBand 568/569 | Enabled (mode 0) | Vocal separation for lip sync |
+| trim_to_audio | true | Clip output to audio length |
+| SageAttention 268 | Bypassed (mode 4) | Enable only after quality is stable |
+| CFG (node 644 inside subgraph) | 1.0 | LTX 2.3 is distilled. NAG handles guidance. |
 
 ### 6. Run and iterate
 
