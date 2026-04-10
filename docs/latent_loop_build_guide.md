@@ -1,6 +1,10 @@
 Last updated: 2026-04-10
 
-# Build Guide: LTXVLoopingSampler Music Video Workflow
+# Build Guide: LTXVLoopingSampler Workflow (VIDEO-ONLY)
+
+**STATUS: VIDEO-ONLY. LTXVLoopingSampler does NOT support AV latents.
+For music videos with audio conditioning, use the TensorLoop latent-space
+workflow (v0409) with `subgraph_latent_rework_guide.md` instead.**
 
 Build this from scratch in ComfyUI. No subgraph, no TensorLoop.
 LTXVLoopingSampler handles all looping internally in latent space.

@@ -1,9 +1,12 @@
 # ComfyUI-AudioLoopHelper
 
-**TLDR**: Drop in these nodes to generate full-length music videos with LTX 2.3.
-They handle loop timing, auto-stopping at the audio boundary, per-iteration
-seed variation, timestamp-based prompt scheduling, and smooth conditioning
-blending between prompt transitions. No manual iteration counting or fragile constants.
+**TLDR**: Custom ComfyUI nodes for generating full-length music videos with LTX 2.3.
+Handles loop timing, auto-stopping at the audio boundary, per-iteration seed
+variation, timestamp-based prompt scheduling, smooth conditioning blending,
+and latent-space overlap conversion. No manual iteration counting or fragile constants.
+
+v0409: The extension subgraph now operates in latent space -- no per-iteration
+VAE decode/encode. One decode at the end. Better quality over long videos.
 
 Workflow adapted from [kijai's LTX 2.3 long loop extension test](https://github.com/kijai/ComfyUI-NativeLooping_testing/blob/main/ltx23_long_loop_extension_test.json).
 
@@ -52,10 +55,12 @@ just the audio tensor + window/overlap settings.
 | audio_duration | FLOAT | Informational (total audio length) |
 | iteration_seed | INT | Extension component's noise_seed input |
 | stride_seconds | FLOAT | TimestampPromptSchedule and AudioLoopPlanner |
-| overlap_frames | INT | Extension component's overlap_frames input |
+| overlap_frames | INT | Extension component's overlap_frames input (pixel space) |
+| overlap_latent_frames | INT | LTXVSelectLatents in latent-space subgraph (pixel_frames // 8) |
 
-Changing `overlap_seconds` automatically adjusts the stride, stop timing,
-start indices, iteration count, and overlap_frames. One value, one place.
+Changing `overlap_seconds` automatically adjusts stride, stop timing,
+start indices, iteration count, overlap_frames, and overlap_latent_frames.
+One value, one place.
 
 ### Timestamp Prompt Schedule
 

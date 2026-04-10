@@ -2,8 +2,10 @@ Last updated: 2026-04-10
 
 # LTXVLoopingSampler Settings Reference
 
-Settings for the LTXVLoopingSampler node (#1599) in the latent-loop
-music video workflow. Maps each parameter to its old TensorLoop equivalent.
+**NOTE: VIDEO-ONLY. Does not support AV latents for music video workflows.**
+
+Settings for the LTXVLoopingSampler node. Maps each parameter to its
+TensorLoop equivalent. Kept as reference for video-only use cases.
 
 ## Settings Table
 
