@@ -17,6 +17,11 @@ from comfy_api.latest import ComfyExtension, io
 from typing_extensions import override
 
 
+def _compute_tile_count(audio_duration: float, stride: float) -> int:
+    """Number of valid loop iterations. Matches AudioLoopController stop condition."""
+    return max(1, min(math.ceil(audio_duration / stride) - 1, 200))
+
+
 def _audio_duration(audio: dict) -> float:
     """Extract duration in seconds from a ComfyUI AUDIO dict."""
     return audio["waveform"].shape[-1] / audio["sample_rate"]
@@ -407,10 +412,7 @@ class AudioLoopPlanner(io.ComfyNode):
     ) -> io.NodeOutput:
         audio_duration = _audio_duration(audio)
 
-        # Last valid iteration N satisfies: (N+1)*stride < duration
-        # => N < duration/stride - 1 => N = floor(duration/stride) - 1
-        # Matches AudioLoopController's stop condition (next start >= duration)
-        iterations = max(1, min(math.ceil(audio_duration / stride_seconds) - 1, 200))
+        iterations = _compute_tile_count(audio_duration, stride_seconds)
 
         lines = [
             f"Audio: {audio_duration:.1f}s ({_format_timestamp(audio_duration)})",
@@ -452,18 +454,18 @@ class ScheduleToMultiPrompt(io.ComfyNode):
             inputs=[
                 io.Audio.Input("audio", tooltip="The audio track (for duration)."),
                 io.Float.Input(
+                    "stride_seconds",
+                    default=18.88,
+                    min=0.01,
+                    step=0.01,
+                    tooltip="Audio stride per tile. Wire from AudioLoopController.",
+                ),
+                io.Float.Input(
                     "window_seconds",
                     default=19.88,
                     min=0.01,
                     step=0.01,
                     tooltip="Temporal tile size in seconds.",
-                ),
-                io.Float.Input(
-                    "overlap_seconds",
-                    default=1.0,
-                    min=0.0,
-                    step=0.01,
-                    tooltip="Overlap between tiles in seconds.",
                 ),
                 io.String.Input(
                     "schedule",
@@ -483,31 +485,25 @@ class ScheduleToMultiPrompt(io.ComfyNode):
     def execute(
         cls,
         audio: dict,
+        stride_seconds: float,
         window_seconds: float,
-        overlap_seconds: float,
         schedule: str,
     ) -> io.NodeOutput:
         audio_duration = _audio_duration(audio)
-        stride = window_seconds - overlap_seconds
-
-        # Compute tile count (same formula as AudioLoopPlanner)
-        tile_count = max(1, min(math.ceil(audio_duration / stride) - 1, 200))
-
+        tile_count = _compute_tile_count(audio_duration, stride_seconds)
         entries = _parse_schedule(schedule)
 
-        # Map each tile to its prompt based on tile midpoint time
+        # Tiles are 1-based (matching AudioLoopPlanner/Controller)
         prompts = []
         tile_map_lines = []
-        for i in range(tile_count):
-            # First tile starts at 0, subsequent tiles advance by stride
-            tile_start = i * stride
+        for i in range(1, tile_count + 1):
+            tile_start = i * stride_seconds
             tile_mid = tile_start + window_seconds / 2
             prompt = _match_schedule(entries, tile_mid)
             prompts.append(prompt)
+            label = (prompt[:60] + "...") if len(prompt) > 60 else prompt
             tile_map_lines.append(
-                f"Tile {i + 1}: {_format_timestamp(tile_start)}-{_format_timestamp(tile_start + window_seconds)} -> {prompt[:60]}..."
-                if len(prompt) > 60
-                else f"Tile {i + 1}: {_format_timestamp(tile_start)}-{_format_timestamp(tile_start + window_seconds)} -> {prompt}"
+                f"Tile {i}: {_format_timestamp(tile_start)}-{_format_timestamp(tile_start + window_seconds)} -> {label}"
             )
 
         prompt_string = " | ".join(prompts)
