@@ -236,7 +236,8 @@ Run `internal/scripts/test_workflow_integrity.py` after every programmatic edit.
 
 ## Workflow docs
 
-- `example_workflows/native-audio-looping-music-video_v0408.json` -- current loop workflow
+- `example_workflows/latent-loop-music-video-v1.json` -- LTXVLoopingSampler workflow (latent-space, no subgraph)
+- `example_workflows/native-audio-looping-music-video_v0408.json` -- TensorLoop workflow (legacy, has subgraph)
 - `example_workflows/upscale-loop-output.json` -- separate upscale workflow (when built)
 - `coderef/origiltx23_long_loop_extension_test.json` -- original pre-scheduler workflow
 - `coderef/RuneXX_LTX-2.3-Workflows/` -- reference LTX 2.3 workflows (3-pass upscale pattern)
@@ -245,4 +246,6 @@ Run `internal/scripts/test_workflow_integrity.py` after every programmatic edit.
 - `docs/prompt_creation_guide.md` -- prompt writing guide with variation patterns
 - `docs/ltx23_prompt_system_prompts.md` -- official i2v/t2v system prompts
 - `docs/upscale_guide.md` -- upscale workflow build guide
+- `docs/ltxv_looping_sampler_settings.md` -- LTXVLoopingSampler parameter reference and tuning
+- `docs/latent_loop_build_guide.md` -- step-by-step build guide for latent-space workflow
 - `internal/postmortem_v0408_session.md` -- debugging history (6 issues with fixes)
