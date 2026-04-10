@@ -239,6 +239,10 @@ class AudioLoopController(io.ComfyNode):
                     "overlap_frames",
                     tooltip="overlap_seconds * fps. Wire to extension component's overlap_frames input.",
                 ),
+                io.Int.Output(
+                    "overlap_latent_frames",
+                    tooltip="overlap_frames in latent space (pixel_frames // 8). Wire to LTXVSelectLatents for latent-space loop.",
+                ),
             ],
         )
 
@@ -272,7 +276,9 @@ class AudioLoopController(io.ComfyNode):
         iteration_seed = seed + current_iteration
         overlap_frames = round(overlap_seconds * fps)
 
-        return io.NodeOutput(start_index, should_stop, float(audio_duration), iteration_seed, stride, overlap_frames)
+        overlap_latent_frames = overlap_frames // 8  # LTX temporal scale factor
+
+        return io.NodeOutput(start_index, should_stop, float(audio_duration), iteration_seed, stride, overlap_frames, overlap_latent_frames)
 
 
 class TimestampPromptSchedule(io.ComfyNode):
