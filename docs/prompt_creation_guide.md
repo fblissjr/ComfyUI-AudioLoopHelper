@@ -268,7 +268,38 @@ still image with no motion, subtitles, text, scene change, blurry, out of focus,
 
 ## Testing order
 
-1. **Variation 1** (framing only) first -- establish baseline consistency
+### Phase 1: Prompt variations (keep sampler defaults)
+
+1. **Variation 1** (framing only) -- establish baseline consistency
 2. If stable, try **Variation 2** (energy-matched) -- more dynamic
 3. If still stable, try **Variation 3** (lighting) -- most visual variation
 4. If any variation causes drift, increase `blend_seconds` or `overlap_seconds`
+
+### Phase 2: Sampler tuning (after finding a good prompt)
+
+Keep your best prompt variation and test these one at a time:
+
+| Node | Setting | Default | Try | Expected effect |
+|------|---------|---------|-----|-----------------|
+| 154 (KSamplerSelect) | sampler | euler_ancestral | **euler** | More deterministic. Less noise per step = more consistent between loop iterations. Try this first. |
+| 154 | sampler | euler_ancestral | **dpmpp_2m** | Faster convergence. May produce cleaner results in fewer steps. |
+| 1513 (ModelSamplingSD3) | shift | 13 | **9** | Lower shift = smoother denoising schedule. May reduce artifacts at edges. |
+| 1513 | shift | 13 | **7** | Even lower. More gradual denoising. Test if 9 helps. |
+| 1421 (BasicScheduler) | steps | 8 | **10** | More steps = better quality, ~25% slower per iteration. |
+| 1421 | steps | 8 | **12** | Diminishing returns above 10. Only if 10 shows clear improvement. |
+| 1421 | scheduler | linear_quadratic | **normal** | Different noise schedule shape. Worth comparing. |
+
+**Testing rules:**
+- Change ONE value at a time. Compare output to previous best.
+- Use the same seed, audio, and prompt for fair comparison.
+- If `euler` helps consistency, keep it and move to shift testing.
+- If quality is fine at 8 steps, don't increase -- each step costs ~7.5s of GPU time.
+
+### Phase 3: Overlap and blend tuning (if transitions are rough)
+
+| Setting | Default | Try | When |
+|---------|---------|-----|------|
+| overlap_seconds | 2.0 | **3.0** | Jitter between iterations (not at prompt boundaries) |
+| blend_seconds | 5.0 | **10.0** | Style drift specifically at prompt transition timestamps |
+| blend_seconds | 5.0 | **0** | Disable blending to isolate whether prompts or overlap cause issues |
+| overlap_seconds | 2.0 | **1.0** | If results are good and you want faster coverage (fewer iterations) |
