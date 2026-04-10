@@ -253,7 +253,7 @@ Run `internal/scripts/test_workflow_integrity.py` after every programmatic edit.
 
 ## Workflow docs
 
-- `example_workflows/native-audio-looping-music-video_v0409_latent.json` -- latent-space loop (no per-iteration VAE round-trip)
+- `example_workflows/native-audio-looping-music-video_v0409_latent.json` -- UNTESTED latent-space loop (no VAE round-trip, likely has issues)
 - `example_workflows/native-audio-looping-music-video_v0408.json` -- legacy TensorLoop (per-iteration VAE round-trip)
 - `example_workflows/upscale-loop-output.json` -- separate upscale workflow (when built)
 - `coderef/origiltx23_long_loop_extension_test.json` -- original pre-scheduler workflow
