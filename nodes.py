@@ -17,8 +17,17 @@ from comfy_api.latest import ComfyExtension, io
 from typing_extensions import override
 
 
+LTX_TEMPORAL_SCALE = 8  # LTX 2.3 VAE temporal compression factor (pixel_frames // 8 = latent_frames)
+
+
 def _compute_tile_count(audio_duration: float, stride: float) -> int:
-    """Number of valid loop iterations. Matches AudioLoopController stop condition."""
+    """Number of valid loop iterations. Matches AudioLoopController stop condition.
+
+    Note: caps at 200 for display/planning purposes. AudioLoopController itself
+    has no cap -- it runs until should_stop fires. For audio > 200 * stride seconds,
+    the planner and ScheduleToMultiPrompt will show/generate 200 tiles but the
+    loop will continue past that (last prompt repeats via fallback).
+    """
     return max(1, min(math.ceil(audio_duration / stride) - 1, 200))
 
 
@@ -276,7 +285,7 @@ class AudioLoopController(io.ComfyNode):
         iteration_seed = seed + current_iteration
         overlap_frames = round(overlap_seconds * fps)
 
-        overlap_latent_frames = overlap_frames // 8  # LTX temporal scale factor
+        overlap_latent_frames = overlap_frames // LTX_TEMPORAL_SCALE
 
         return io.NodeOutput(start_index, should_stop, float(audio_duration), iteration_seed, stride, overlap_frames, overlap_latent_frames)
 
@@ -597,6 +606,8 @@ class ConditioningBlend(io.ComfyNode):
             return io.NodeOutput(conditioning_b)
 
         out = []
+        # Uses only conditioning_b[0] -- LTX Gemma 3 produces single-element conditioning.
+        # For multi-element CLIP conditioning, this would need zip/min indexing.
         cond_b = conditioning_b[0][0]
 
         for i in range(len(conditioning_a)):

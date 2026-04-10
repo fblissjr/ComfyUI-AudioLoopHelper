@@ -6,7 +6,7 @@
 generation with LTX 2.3. The main node (AudioLoopController) reads audio
 duration from the tensor, computes stride from window + overlap, outputs
 start_index / should_stop / audio_duration / iteration_seed / stride_seconds /
-overlap_frames. No manual constants to keep in sync.
+overlap_frames / overlap_latent_frames. No manual constants to keep in sync.
 
 ## Architecture
 
@@ -14,7 +14,7 @@ Single file: `nodes.py`. Uses ComfyUI's extension API (`ComfyExtension`,
 `io.ComfyNode`). Entry point: `comfy_entrypoint()`.
 
 5 nodes:
-- `AudioLoopController` -- core: start_index, should_stop, audio_duration, iteration_seed, stride_seconds, overlap_frames
+- `AudioLoopController` -- core: start_index, should_stop, audio_duration, iteration_seed, stride_seconds, overlap_frames, overlap_latent_frames
 - `TimestampPromptSchedule` -- per-iteration prompt from timestamp ranges, with blend support
 - `ConditioningBlend` -- lerps two conditioning tensors for smooth prompt transitions (works with LTX Gemma 3 and CLIP)
 - `AudioLoopPlanner` -- displays iteration timeline for planning
