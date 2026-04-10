@@ -430,6 +430,92 @@ class AudioLoopPlanner(io.ComfyNode):
         return io.NodeOutput("\n".join(lines), iterations)
 
 
+class ScheduleToMultiPrompt(io.ComfyNode):
+    """Converts a timestamp-based schedule into a pipe-separated prompt list
+    for LTXVLoopingSampler's MultiPromptProvider.
+
+    Computes how many temporal tiles the audio needs, then maps each tile's
+    midpoint to the matching schedule entry. Outputs a single string with
+    prompts separated by | (one per tile).
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="ScheduleToMultiPrompt",
+            display_name="Schedule to Multi-Prompt",
+            category="looping/audio",
+            description=(
+                "Converts a timestamp schedule into pipe-separated prompts "
+                "for LTXVLoopingSampler via MultiPromptProvider. One prompt per temporal tile."
+            ),
+            inputs=[
+                io.Audio.Input("audio", tooltip="The audio track (for duration)."),
+                io.Float.Input(
+                    "window_seconds",
+                    default=19.88,
+                    min=0.01,
+                    step=0.01,
+                    tooltip="Temporal tile size in seconds.",
+                ),
+                io.Float.Input(
+                    "overlap_seconds",
+                    default=1.0,
+                    min=0.0,
+                    step=0.01,
+                    tooltip="Overlap between tiles in seconds.",
+                ),
+                io.String.Input(
+                    "schedule",
+                    default="0:00+: default prompt",
+                    multiline=True,
+                    tooltip="Timestamp-based schedule (same format as TimestampPromptSchedule).",
+                ),
+            ],
+            outputs=[
+                io.String.Output("prompts", tooltip="Pipe-separated prompts, one per tile. Wire to MultiPromptProvider."),
+                io.Int.Output("tile_count", tooltip="Number of temporal tiles."),
+                io.String.Output("tile_map", tooltip="Debug: shows which prompt maps to which tile."),
+            ],
+        )
+
+    @classmethod
+    def execute(
+        cls,
+        audio: dict,
+        window_seconds: float,
+        overlap_seconds: float,
+        schedule: str,
+    ) -> io.NodeOutput:
+        audio_duration = _audio_duration(audio)
+        stride = window_seconds - overlap_seconds
+
+        # Compute tile count (same formula as AudioLoopPlanner)
+        tile_count = max(1, min(math.ceil(audio_duration / stride) - 1, 200))
+
+        entries = _parse_schedule(schedule)
+
+        # Map each tile to its prompt based on tile midpoint time
+        prompts = []
+        tile_map_lines = []
+        for i in range(tile_count):
+            # First tile starts at 0, subsequent tiles advance by stride
+            tile_start = i * stride
+            tile_mid = tile_start + window_seconds / 2
+            prompt = _match_schedule(entries, tile_mid)
+            prompts.append(prompt)
+            tile_map_lines.append(
+                f"Tile {i + 1}: {_format_timestamp(tile_start)}-{_format_timestamp(tile_start + window_seconds)} -> {prompt[:60]}..."
+                if len(prompt) > 60
+                else f"Tile {i + 1}: {_format_timestamp(tile_start)}-{_format_timestamp(tile_start + window_seconds)} -> {prompt}"
+            )
+
+        prompt_string = " | ".join(prompts)
+        tile_map = "\n".join(tile_map_lines)
+
+        return io.NodeOutput(prompt_string, tile_count, tile_map)
+
+
 class AudioDuration(io.ComfyNode):
     """Returns the duration of an audio tensor in seconds."""
 
@@ -556,6 +642,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             TimestampPromptSchedule,
             ConditioningBlend,
             AudioLoopPlanner,
+            ScheduleToMultiPrompt,
             AudioDuration,
         ]
 
