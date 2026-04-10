@@ -285,7 +285,9 @@ class AudioLoopController(io.ComfyNode):
         iteration_seed = seed + current_iteration
         overlap_frames = round(overlap_seconds * fps)
 
-        overlap_latent_frames = overlap_frames // LTX_TEMPORAL_SCALE
+        # Video VAE: first pixel frame → 1 latent frame, then 1 latent per 8 pixels.
+        # Formula: latent = (pixel - 1) // scale + 1. Matches vae.downscale_index_formula.
+        overlap_latent_frames = (overlap_frames - 1) // LTX_TEMPORAL_SCALE + 1
 
         return io.NodeOutput(start_index, should_stop, float(audio_duration), iteration_seed, stride, overlap_frames, overlap_latent_frames)
 

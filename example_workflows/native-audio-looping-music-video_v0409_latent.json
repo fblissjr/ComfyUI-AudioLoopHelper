@@ -6236,7 +6236,7 @@
               "Node name for S&R": "LTXVSelectLatents"
             },
             "widgets_values": [
-              -3,
+              -4,
               -1
             ]
           },
@@ -6290,7 +6290,7 @@
               "Node name for S&R": "LTXVSelectLatents"
             },
             "widgets_values": [
-              3,
+              4,
               -1
             ]
           }
