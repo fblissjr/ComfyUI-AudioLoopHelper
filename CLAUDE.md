@@ -149,7 +149,11 @@ Fixes applied across workflow versions:
 - Include audio descriptions inline with visuals (LTX 2.3 is audio-video joint).
 - No meta-language: no "The scene opens with...", no timestamps, no cuts.
 - Camera motion only when intended. Keywords: `static camera`, `dolly in/out/left/right`, `jib up/down`, `focus shift`.
+- **Avoid dolly out** -- breaks limbs and faces. Use static camera with lighting shifts for visual variation.
+- **i2v rule: describe only changes from the init_image.** Re-describing the setting causes the model to "restart" the scene.
+- **Two-person scenes: always "singing together."** Don't direct male vs female vocals -- audio conditioning handles it.
 - Full system prompts for i2v and t2v: `docs/ltx23_prompt_system_prompts.md`
+- Prompt creation guide with variation patterns: `docs/prompt_creation_guide.md`
 - For prompt scheduling: keep core subject identical across all entries, vary only framing/camera/lighting.
 
 ## Dependencies
@@ -160,6 +164,13 @@ Companion custom nodes (not imported, just used alongside in workflows):
 - ComfyUI-KJNodes -- Set/Get nodes, FloatConstant, LTX2_NAG, LTXVImgToVideoInplaceKJ, ImageResizeKJv2
 - ComfyUI-VideoHelperSuite -- VHS_VideoCombine
 - ComfyUI-MelBandRoFormer -- vocal separation
+
+## Audio analysis
+
+- Use `scripts/analyze_audio.py` for energy timeline and structure detection.
+- Use ffmpeg astats for RMS levels, NOT Python wave module (produces compressed/misleading values).
+- `--trim N` offsets timestamps for node 567 start_index.
+- MelBandRoFormer separates vocals/instruments only. No male/female distinction.
 
 ## Testing
 
