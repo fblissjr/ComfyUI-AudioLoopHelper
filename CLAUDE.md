@@ -222,10 +222,27 @@ Compare against a known-working workflow JSON (keep copies in internal/scratch/)
 When multiple settings differ, change ONE at a time and test. Do not batch changes.
 Run `internal/scripts/test_workflow_integrity.py` after every programmatic edit.
 
+## Upscaling
+
+- Upscale is a SEPARATE workflow, not part of the loop workflow.
+- Previous attempt to integrate upscaling into the loop failed: VAE round-trip
+  quality loss + refinement sampler OOM at 24GB. See internal/postmortem_v0408_session.md Issue 4.
+- Correct approach (from RuneXX 3-pass): stay in latent space. Load video → VAEEncode (once) →
+  LTXVLatentUpsampler (2x) → 3-step refinement sampler → VAEDecodeTiled. Never leave latent
+  space between upscale and refinement.
+- Model: `ltx-2.3-spatial-upscaler-x2-1.1.safetensors`
+- Refinement sigmas: [0.85, 0.725, 0.4219, 0.0] (3 steps). Drop to 2 or 1 if OOM.
+- Guide: `docs/upscale_guide.md`
+
 ## Workflow docs
 
-- `example_workflows/native-audio-looping-music-video_v0408.json` -- current workflow
+- `example_workflows/native-audio-looping-music-video_v0408.json` -- current loop workflow
+- `example_workflows/upscale-loop-output.json` -- separate upscale workflow (when built)
 - `coderef/origiltx23_long_loop_extension_test.json` -- original pre-scheduler workflow
-- `coderef/RuneXX_LTX-2.3-Workflows/` -- reference LTX 2.3 workflows from HuggingFace
-- `internal/workflow_pipeline_trace.md` -- end-to-end pipeline trace (both original and loop paths)
-- `internal/nag_technical_reference.md` -- LTX2_NAG technical documentation
+- `coderef/RuneXX_LTX-2.3-Workflows/` -- reference LTX 2.3 workflows (3-pass upscale pattern)
+- `docs/workflow_pipeline_trace.md` -- end-to-end pipeline trace
+- `docs/nag_technical_reference.md` -- LTX2_NAG technical documentation
+- `docs/prompt_creation_guide.md` -- prompt writing guide with variation patterns
+- `docs/ltx23_prompt_system_prompts.md` -- official i2v/t2v system prompts
+- `docs/upscale_guide.md` -- upscale workflow build guide
+- `internal/postmortem_v0408_session.md` -- debugging history (6 issues with fixes)
