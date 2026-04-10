@@ -99,24 +99,25 @@ discontinuity at ~20 seconds where the conditioning shifts. Copy the
 ### Pattern A: Framing only (safest)
 
 Every entry has identical subject and action. Only the shot type changes.
+No audio descriptions -- the model conditions on the actual audio waveform.
 
 ```
-0:00-0:40: In a medium shot, [subjects] are singing together. [audio description].
-0:40-1:20: [subjects] are singing together, static camera, locked off shot. [audio description].
-1:20-2:00: In a close-up, [subjects] are singing together, focus shift. [audio description].
-2:00+: [subjects] are singing together, static camera. [audio description].
+0:00-0:40: In a medium shot, [subjects] are singing together.
+0:40-1:20: [subjects] are singing together, static camera, locked off shot.
+1:20-2:00: In a close-up, [subjects] are singing together, focus shift.
+2:00+: [subjects] are singing together, static camera.
 ```
 
 ### Pattern B: Framing + energy (moderate)
 
-Shot type changes plus energy level matches the music.
+Shot type changes plus energy level described visually (body language, not voice).
 
 ```
-0:00-0:40: In a medium shot, [subjects] are singing together softly. [quiet audio].
-0:40-1:00: [subjects] are singing together with growing intensity. [building audio].
-1:00-1:40: In a close-up, [subjects] are singing together with full energy. [powerful audio].
-1:40-2:00: [subjects] are singing together quietly. [intimate audio].
-2:00+: [subjects] are singing together as the energy fades. [fading audio].
+0:00-0:40: In a medium shot, [subjects] are singing together softly.
+0:40-1:00: [subjects] are singing together, leaning forward, animated and expressive, static camera.
+1:00-1:40: In a close-up, [subjects] are singing together with full energy, focus shift.
+1:40-2:00: [subjects] are singing together quietly, still.
+2:00+: [subjects] are singing together, relaxing back, static camera.
 ```
 
 ### Pattern C: Framing + energy + lighting (most variation)
@@ -124,12 +125,16 @@ Shot type changes plus energy level matches the music.
 Everything above plus lighting shifts to match mood.
 
 ```
-0:00-0:40: In a medium shot, [subjects] are singing together. Soft ambient lighting. [audio].
-0:40-1:00: [subjects] are singing together with growing energy, static camera. Light shifts warmer, golden tones. [audio].
-1:00-1:40: In a close-up, [subjects] are singing together with full power, focus shift. Warm light on faces, deep shadows. [audio].
-1:40-2:00: [subjects] are singing together softly. Light dims, only faint glow remains. [audio].
-2:00+: [subjects] are singing together as energy fades, static camera. Room grows dim. [audio].
+0:00-0:40: In a medium shot, [subjects] are singing together. Soft ambient lighting.
+0:40-1:00: [subjects] are singing together, animated and expressive, static camera. Light shifts warmer, golden tones.
+1:00-1:40: In a close-up, [subjects] are singing together, focus shift. Warm light on faces, deep shadows.
+1:40-2:00: [subjects] are singing together softly. Light dims, only faint glow remains.
+2:00+: [subjects] are singing together, static camera. Room grows dim.
 ```
+
+**Note:** Don't describe audio dynamics ("voices surging," "voices trailing off").
+LTX 2.3 conditions on the actual audio waveform -- it hears the song directly.
+Only describe ambient sounds not in the audio track (e.g., "muted city sounds").
 
 ---
 
@@ -153,51 +158,51 @@ Concrete apartment, red phone, TV.
 
 **Node 169** (must match first schedule entry):
 ```
-In a medium shot, the man and the woman are singing together. Their voices are filling the room with a warm resonance. Muted city sounds through the windows.
+In a medium shot, the man and the woman are singing together.
 ```
 
 **Schedule:**
 ```
-0:00-0:42: In a medium shot, the man and the woman are singing together. Their voices are filling the room with a warm resonance. Muted city sounds through the windows.
-0:42-1:40: The man and the woman are singing together with growing energy, static camera, locked off shot. Their combined voices are echoing off the concrete walls.
-1:40-2:22: In a close-up, the man and the woman are singing together, focus shift. Their voices are intimate and blending quietly.
-2:22+: The man and the woman are singing together, static camera. Their voices are trailing off gently. The room is growing quiet.
+0:00-0:42: In a medium shot, the man and the woman are singing together.
+0:42-1:40: The man and the woman are singing together, static camera, locked off shot.
+1:40-2:22: In a close-up, the man and the woman are singing together, focus shift.
+2:22+: The man and the woman are singing together, static camera.
 ```
 
 ### Variation 2: Energy-matched (Pattern B)
 
 **Node 169** (must match first schedule entry):
 ```
-In a medium shot, the man and the woman are singing together softly. Their voices are filling the room gently. Quiet city ambience through the windows.
+In a medium shot, the man and the woman are singing together softly.
 ```
 
 **Schedule:**
 ```
-0:00-0:42: In a medium shot, the man and the woman are singing together softly. Their voices are filling the room gently. Quiet city ambience through the windows.
-0:42-0:50: The man and the woman are singing together with sudden intensity, static camera. Their voices are surging powerfully, echoing off the walls.
-0:50-1:40: The man and the woman are singing together at a steady pace. Their voices carry with warmth. Ambient room tone.
-1:40-1:52: The man and the woman are singing together with building power, static camera. Their voices are rising, the room resonating.
-1:52-2:22: In a close-up, the man and the woman are singing together, focus shift. Their voices are layering and growing.
-2:22-2:34: The man and the woman are singing together at full intensity, static camera. Their voices are at their peak, filling every corner.
-2:34+: The man and the woman are singing together as the energy fades. Their voices are trailing off. The room is settling into quiet.
+0:00-0:42: In a medium shot, the man and the woman are singing together softly.
+0:42-0:50: The man and the woman are singing together, leaning forward, animated, static camera.
+0:50-1:40: The man and the woman are singing together steadily.
+1:40-1:52: The man and the woman are singing together, both expressive and intense, static camera.
+1:52-2:22: In a close-up, the man and the woman are singing together, focus shift.
+2:22-2:34: The man and the woman are singing together with full energy, static camera.
+2:34+: The man and the woman are singing together, relaxing back. The room is growing still.
 ```
 
 ### Variation 3: Lighting shifts (Pattern C)
 
 **Node 169** (must match first schedule entry):
 ```
-In a medium shot, the man and the woman are singing together. Their voices are filling the room. Soft ambient light from the windows, muted city sounds.
+In a medium shot, the man and the woman are singing together. Soft ambient light from the windows.
 ```
 
 **Schedule:**
 ```
-0:00-0:42: In a medium shot, the man and the woman are singing together. Their voices are filling the room. Soft ambient light from the windows, muted city sounds.
-0:42-0:50: The man and the woman are singing together with sudden intensity, static camera. Light shifts warmer, golden tones from the TV washing over them. Their voices are surging.
-0:50-1:40: The man and the woman are singing together steadily. Warm even lighting across the room. Their voices carry with resonance.
-1:40-1:52: The man and the woman are singing together with rising power, static camera. Light grows brighter, shadows sharpen. Their voices are building.
-1:52-2:22: In a close-up, the man and the woman are singing together, focus shift. Soft warm light on their faces, deep shadows around them. Their voices are intimate.
-2:22-2:34: The man and the woman are singing together at full intensity, static camera. Bright light fills the room. Their voices peak.
-2:34+: The man and the woman are singing together as energy fades, static camera. The room is growing dim, only faint TV glow remains. Their voices trail off.
+0:00-0:42: In a medium shot, the man and the woman are singing together. Soft ambient light from the windows.
+0:42-0:50: The man and the woman are singing together, animated, static camera. Light shifts warmer, golden tones from the TV.
+0:50-1:40: The man and the woman are singing together. Warm even lighting across the room.
+1:40-1:52: The man and the woman are singing together, expressive, static camera. Light grows brighter, shadows sharpen.
+1:52-2:22: In a close-up, the man and the woman are singing together, focus shift. Soft warm light on faces, deep shadows.
+2:22-2:34: The man and the woman are singing together, static camera. Bright light fills the room.
+2:34+: The man and the woman are singing together, static camera. The room is growing dim, only faint TV glow remains.
 ```
 
 ---
@@ -211,51 +216,51 @@ Same apartment, closer composition.
 
 **Node 169** (must match first schedule entry):
 ```
-In a medium shot, the man and the woman are singing together on the couch. Their voices are filling the room. Muted city sounds through the windows.
+In a medium shot, the man and the woman are singing together on the couch.
 ```
 
 **Schedule:**
 ```
-0:00-0:42: In a medium shot, the man and the woman are singing together on the couch. Their voices are filling the room. Muted city sounds through the windows.
-0:42-1:40: The man and the woman are singing together on the couch, static camera, locked off shot. Their voices are echoing off the concrete walls.
-1:40-2:22: In a close-up, the man and the woman are singing together on the couch, focus shift. Their voices are intimate and warm.
-2:22+: The man and the woman are singing together on the couch, static camera. Their voices are trailing off gently. The room is growing quiet.
+0:00-0:42: In a medium shot, the man and the woman are singing together on the couch.
+0:42-1:40: The man and the woman are singing together on the couch, static camera, locked off shot.
+1:40-2:22: In a close-up, the man and the woman are singing together on the couch, focus shift.
+2:22+: The man and the woman are singing together on the couch, static camera.
 ```
 
 ### Variation 2: Energy-matched
 
 **Node 169** (must match first schedule entry):
 ```
-In a medium shot, the man and the woman are singing together softly on the couch. Their voices are gentle in the room. City ambience.
+In a medium shot, the man and the woman are singing together softly on the couch.
 ```
 
 **Schedule:**
 ```
-0:00-0:42: In a medium shot, the man and the woman are singing together softly on the couch. Their voices are gentle in the room. City ambience.
-0:42-0:50: The man and the woman are singing together with sudden intensity on the couch, static camera. Their voices are surging powerfully.
-0:50-1:40: The man and the woman are singing together steadily on the couch. Their voices carry with warmth. Ambient room tone.
-1:40-1:52: The man and the woman are singing together with building power on the couch, static camera. Their voices are rising.
-1:52-2:22: In a close-up, the man and the woman are singing together on the couch, focus shift. Voices layering and growing.
-2:22-2:34: The man and the woman are singing together at full intensity on the couch, static camera. Voices at their peak.
-2:34+: The man and the woman are singing together as energy fades on the couch. Voices trailing off. Room settling into quiet.
+0:00-0:42: In a medium shot, the man and the woman are singing together softly on the couch.
+0:42-0:50: The man and the woman are singing together on the couch, leaning forward, animated, static camera.
+0:50-1:40: The man and the woman are singing together steadily on the couch.
+1:40-1:52: The man and the woman are singing together on the couch, both expressive and intense, static camera.
+1:52-2:22: In a close-up, the man and the woman are singing together on the couch, focus shift.
+2:22-2:34: The man and the woman are singing together with full energy on the couch, static camera.
+2:34+: The man and the woman are singing together on the couch, relaxing back. The room is growing still.
 ```
 
 ### Variation 3: Lighting shifts
 
 **Node 169** (must match first schedule entry):
 ```
-In a medium shot, the man and the woman are singing together on the couch. Soft ambient light from windows. Their voices fill the room gently. Muted city sounds.
+In a medium shot, the man and the woman are singing together on the couch. Soft ambient light from windows.
 ```
 
 **Schedule:**
 ```
-0:00-0:42: In a medium shot, the man and the woman are singing together on the couch. Soft ambient light from windows. Their voices fill the room gently. Muted city sounds.
-0:42-0:50: The man and the woman are singing together with intensity on the couch, static camera. Light shifts warmer, golden TV glow. Voices surging.
-0:50-1:40: The man and the woman are singing together on the couch. Warm even lighting. Voices carrying steadily.
-1:40-1:52: The man and the woman are singing together with rising power on the couch, static camera. Light brightening, shadows sharpening. Voices building.
-1:52-2:22: In a close-up, the man and the woman are singing together on the couch, focus shift. Soft warm light on faces, deep shadows. Intimate vocals.
-2:22-2:34: The man and the woman are singing together at full intensity on the couch, static camera. Bright light fills room. Peak vocals.
-2:34+: The man and the woman are singing together as energy fades on the couch, static camera. Room growing dim, faint TV glow. Voices trailing off.
+0:00-0:42: In a medium shot, the man and the woman are singing together on the couch. Soft ambient light from windows.
+0:42-0:50: The man and the woman are singing together on the couch, animated, static camera. Light shifts warmer, golden TV glow.
+0:50-1:40: The man and the woman are singing together on the couch. Warm even lighting.
+1:40-1:52: The man and the woman are singing together on the couch, expressive, static camera. Light brightening, shadows sharpening.
+1:52-2:22: In a close-up, the man and the woman are singing together on the couch, focus shift. Soft warm light on faces, deep shadows.
+2:22-2:34: The man and the woman are singing together on the couch, static camera. Bright light fills room.
+2:34+: The man and the woman are singing together on the couch, static camera. Room growing dim, faint TV glow.
 ```
 
 ---
