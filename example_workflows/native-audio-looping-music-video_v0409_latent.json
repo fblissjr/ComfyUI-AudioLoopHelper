@@ -450,49 +450,6 @@
       "bgcolor": "#272e27"
     },
     {
-      "id": 1507,
-      "type": "ImageBatch",
-      "pos": [
-        3485.235965500124,
-        4534.909986301338
-      ],
-      "size": [
-        140,
-        46
-      ],
-      "flags": {},
-      "order": 87,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "image1",
-          "type": "IMAGE",
-          "link": 2773
-        },
-        {
-          "name": "image2",
-          "type": "IMAGE",
-          "link": 2868
-        }
-      ],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": [
-            2968,
-            2984
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.16.4",
-        "Node name for S&R": "ImageBatch"
-      },
-      "widgets_values": []
-    },
-    {
       "id": 1513,
       "type": "ModelSamplingSD3",
       "pos": [
@@ -2280,9 +2237,7 @@
         {
           "name": "",
           "type": "IMAGE",
-          "links": [
-            2773
-          ]
+          "links": []
         }
       ],
       "properties": {
@@ -3413,7 +3368,7 @@
         },
         {
           "name": "processed",
-          "type": "IMAGE,MASK,LATENT",
+          "type": "LATENT",
           "link": 2867
         },
         {
@@ -3426,9 +3381,8 @@
       "outputs": [
         {
           "name": "output",
-          "type": "IMAGE",
+          "type": "LATENT",
           "links": [
-            2868,
             2987
           ]
         }
@@ -3563,7 +3517,7 @@
       "outputs": [
         {
           "name": "extended_images",
-          "type": "IMAGE",
+          "type": "LATENT",
           "links": [
             2867
           ]
@@ -3654,7 +3608,7 @@
         {
           "name": "initial_value",
           "shape": 7,
-          "type": "IMAGE,MASK,LATENT",
+          "type": "LATENT",
           "link": 2986
         }
       ],
@@ -3668,7 +3622,7 @@
         },
         {
           "name": "previous_value",
-          "type": "IMAGE",
+          "type": "LATENT",
           "links": [
             2869
           ]
@@ -4204,7 +4158,7 @@
         {
           "name": "pixels",
           "type": "IMAGE",
-          "link": 2968
+          "link": null
         },
         {
           "name": "vae",
@@ -4895,14 +4849,6 @@
       "IMAGE"
     ],
     [
-      2773,
-      618,
-      0,
-      1507,
-      0,
-      "IMAGE"
-    ],
-    [
       2794,
       503,
       0,
@@ -5011,14 +4957,6 @@
       843,
       0,
       1540,
-      1,
-      "IMAGE"
-    ],
-    [
-      2868,
-      1540,
-      0,
-      1507,
       1,
       "IMAGE"
     ],
@@ -5191,14 +5129,6 @@
       "CONDITIONING"
     ],
     [
-      2968,
-      1507,
-      0,
-      1590,
-      0,
-      "IMAGE"
-    ],
-    [
       2962,
       1598,
       0,
@@ -5261,14 +5191,6 @@
       1587,
       0,
       "CONDITIONING"
-    ],
-    [
-      2984,
-      1507,
-      0,
-      617,
-      0,
-      "IMAGE"
     ],
     [
       2986,
