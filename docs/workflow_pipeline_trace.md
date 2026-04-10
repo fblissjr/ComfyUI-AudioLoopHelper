@@ -129,7 +129,7 @@ Node 414: UNETLoader (loads LTX 2.3 model)
 
 - **compression: 10** (NOT 0)
 - Applies H.264 video codec compression (CRF=10, which is near-lossless)
-- Source: `/home/fbliss/ComfyUI/comfy_extras/nodes_lt.py` lines 590-614
+- Source: `ComfyUI/comfy_extras/nodes_lt.py` lines 590-614
 
 **What this does:** Encodes the image as a single-frame MP4 at CRF 10 quality, then decodes it back. This simulates video codec artifacts that the LTX model was trained on. CRF 10 is very high quality (near-lossless), so the image looks almost identical but has the subtle characteristics of video-sourced content.
 
@@ -149,7 +149,7 @@ Node 414: UNETLoader (loads LTX 2.3 model)
 
 ### 3e. LTXVImgToVideoInplaceKJ (Node 531)
 
-- Source: `/home/fbliss/ComfyUI/custom_nodes/ComfyUI-KJNodes/nodes/ltxv_nodes.py` lines 1021-1132
+- Source: `ComfyUI-KJNodes/nodes/ltxv_nodes.py` lines 1021-1132
 - **num_images: 1**
 - **strength: 1** (full conditioning -- the first frame IS the input image)
 - **index_1: 0** (insert at frame 0 -- the very first frame)
@@ -182,7 +182,7 @@ Node 570: SetLatentNoiseMask (applies mask to audio latent)
 
 ### 4b. Audio-Video Latent Concatenation (Node 350: LTXVConcatAVLatent)
 
-- Source: `/home/fbliss/ComfyUI/comfy_extras/nodes_lt.py` lines 618-650 (native ComfyUI node)
+- Source: `ComfyUI/comfy_extras/nodes_lt.py` lines 618-650 (native ComfyUI node)
 - **video_latent** from Node 531 (image-at-frame-0 latent)
 - **audio_latent** from Node 570 (encoded audio with noise mask)
 
