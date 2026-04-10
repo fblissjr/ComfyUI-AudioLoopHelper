@@ -55,6 +55,12 @@ Key rules for the loop workflow:
   conditioning handle who's actually singing. Don't try to direct male vs
   female -- the model figures it out from the audio.
 
+**Critical: node 169 prompt MUST match the schedule's first entry.**
+Node 169 generates the initial ~20 seconds. The schedule's 0:00 entry
+controls the first loop extension. If they differ, there's a visual
+discontinuity at ~20 seconds where the conditioning shifts. Copy the
+0:00 schedule entry into node 169 exactly.
+
 ### 5. Set workflow values
 
 **Starting values (adjust per results):**
@@ -145,9 +151,9 @@ Concrete apartment, red phone, TV.
 
 ### Variation 1: Framing only (Pattern A)
 
-**Node 169:**
+**Node 169** (must match first schedule entry):
 ```
-The man and the woman are singing together. Their voices are filling the room. Muted city sounds through the windows.
+In a medium shot, the man and the woman are singing together. Their voices are filling the room with a warm resonance. Muted city sounds through the windows.
 ```
 
 **Schedule:**
@@ -160,9 +166,9 @@ The man and the woman are singing together. Their voices are filling the room. M
 
 ### Variation 2: Energy-matched (Pattern B)
 
-**Node 169:**
+**Node 169** (must match first schedule entry):
 ```
-The man and the woman are singing together softly. Their voices are quiet in the room. Muted city sounds.
+In a medium shot, the man and the woman are singing together softly. Their voices are filling the room gently. Quiet city ambience through the windows.
 ```
 
 **Schedule:**
@@ -178,9 +184,9 @@ The man and the woman are singing together softly. Their voices are quiet in the
 
 ### Variation 3: Lighting shifts (Pattern C)
 
-**Node 169:**
+**Node 169** (must match first schedule entry):
 ```
-The man and the woman are singing together. Their voices fill the room. Soft ambient light from the windows.
+In a medium shot, the man and the woman are singing together. Their voices are filling the room. Soft ambient light from the windows, muted city sounds.
 ```
 
 **Schedule:**
@@ -203,9 +209,9 @@ Same apartment, closer composition.
 
 ### Variation 1: Framing only
 
-**Node 169:**
+**Node 169** (must match first schedule entry):
 ```
-The man and the woman are singing together on the couch. Their voices fill the room. Muted city sounds.
+In a medium shot, the man and the woman are singing together on the couch. Their voices are filling the room. Muted city sounds through the windows.
 ```
 
 **Schedule:**
@@ -218,9 +224,9 @@ The man and the woman are singing together on the couch. Their voices fill the r
 
 ### Variation 2: Energy-matched
 
-**Node 169:**
+**Node 169** (must match first schedule entry):
 ```
-The man and the woman are singing together softly on the couch. Their voices are quiet. Muted city sounds.
+In a medium shot, the man and the woman are singing together softly on the couch. Their voices are gentle in the room. City ambience.
 ```
 
 **Schedule:**
@@ -236,9 +242,9 @@ The man and the woman are singing together softly on the couch. Their voices are
 
 ### Variation 3: Lighting shifts
 
-**Node 169:**
+**Node 169** (must match first schedule entry):
 ```
-The man and the woman are singing together on the couch. Their voices fill the room. Soft ambient light.
+In a medium shot, the man and the woman are singing together on the couch. Soft ambient light from windows. Their voices fill the room gently. Muted city sounds.
 ```
 
 **Schedule:**
