@@ -254,22 +254,46 @@ Companion custom nodes (not imported, just used alongside in workflows):
 
 ## Audio analysis
 
-- Use `scripts/analyze_audio.py` for energy timeline and structure detection.
+Two analysis scripts with different dependency boundaries:
+
+### `scripts/analyze_audio.py` (ffmpeg only, no Python deps)
+- Energy timeline and structure detection via ffmpeg astats.
 - Use ffmpeg astats for RMS levels, NOT Python wave module (produces compressed/misleading values).
 - `--trim N` offsets timestamps for node 567 start_index.
 - MelBandRoFormer separates vocals/instruments only. No male/female distinction.
 
+### `scripts/analyze_audio_features.py` (librosa, optional)
+- Music-aware feature extraction: BPM, key, chromagram, mel spectrogram,
+  vocal F0, structure segmentation.
+- Requires: `uv sync --group analysis` (installs librosa + deps into project venv).
+- Run: `uv run --group analysis python scripts/analyze_audio_features.py audio.wav`
+- Outputs: JSON (for LLM prompt generation), markdown report, PNG visualizations.
+- JSON output is the primary format -- paste into LLM prompt for schedule generation.
+  PNG visualizations are for human review only, NOT for LLM consumption.
+- **Design principle**: LTX-2.3 audio path is sacred. Audio enters the model
+  via `LTXVAudioVAEEncode -> LTXVConcatAVLatent` where cross-attention translates
+  mel features into visual motion. Never feed audio visualizations (spectrograms,
+  chromagrams) into the video latent stream via `LTXVAddLatentGuide` -- the DiT
+  would generate frames that look like heatmaps.
+- Future Phase 2 runtime nodes will output FLOAT/INT scalars only (torchaudio,
+  no new deps) to modulate text conditioning and sampling parameters.
+
+### Dependency boundary
+- **Offline scripts** (scripts/): librosa allowed via optional dep group.
+- **Runtime ComfyUI nodes** (nodes.py): torchaudio only, zero extra deps.
+  All analysis outputs must be FLOAT or INT. No IMAGE outputs for audio features.
+
 ## Testing
 
-No comfy_api outside ComfyUI runtime. Test parsing logic inline:
+Tests run via the project's own venv with pytest:
 ```bash
-uv run python -c "
-import re
-# paste _parse_timestamp, _parse_schedule, _match_schedule
-# run assertions
-print('pass')
-"
+uv run --group analysis python -m pytest tests/ -v --rootdir=.
 ```
+- `__init__.py` has a try/except guard so pytest can import the package
+  without comfy_api (only available inside ComfyUI runtime).
+- `tests/conftest.py` adds `scripts/` to sys.path for import.
+- `tests/test_audio_features.py` -- 17 tests for librosa extraction (synthetic audio).
+- `tests/test_workflows.py` -- workflow JSON structural validation.
 
 ## Editing workflow JSON (subgraphs)
 

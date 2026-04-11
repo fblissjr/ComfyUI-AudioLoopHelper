@@ -7,6 +7,14 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `scripts/analyze_audio_features.py`: librosa-based music feature extraction
+  (BPM, key detection, chromagram, mel spectrogram, vocal F0, structure segmentation).
+  Outputs JSON (for LLM prompt generation), markdown report, and PNG visualizations.
+- `pyproject.toml` with `analysis` dependency group for librosa (`uv sync --group analysis`)
+- `tests/test_audio_features.py`: 17 tests covering all extraction functions
+  with synthetic audio (sine waves, click tracks, silence)
+- `tests/conftest.py`: pytest path configuration for scripts/ imports
+- `conftest.py` (root): prevents pytest from importing ComfyUI-only `__init__.py`
 - LatentContextExtract node: extracts tail latent frames + strips noise_mask
 - LatentOverlapTrim node: trims overlap latent frames + strips noise_mask
 - StripLatentNoiseMask node: low-level utility for noise_mask removal
@@ -20,6 +28,7 @@ This project uses [Semantic Versioning](https://semver.org/).
 - CHANGELOG.md
 
 ### Changed
+- `__init__.py` now guards ComfyUI-only import with try/except (allows pytest to run)
 - Renamed workflows: removed date-based versioning (v0408/v0409), now
   `audio-loop-music-video_image.json` and `audio-loop-music-video_latent.json`
 - AudioLoopController now outputs 7 values (added overlap_latent_frames)
