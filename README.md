@@ -1,14 +1,18 @@
 # ComfyUI-AudioLoopHelper
 
+Last updated: 2026-04-11
+
 **TLDR**: Custom ComfyUI nodes for generating full-length music videos with LTX 2.3.
 Handles loop timing, auto-stopping at the audio boundary, per-iteration seed
 variation, timestamp-based prompt scheduling, smooth conditioning blending,
 and latent-space overlap conversion. No manual iteration counting or fragile constants.
 
 v0409 (UNTESTED): The extension subgraph was reworked to operate in latent
-space -- no per-iteration VAE decode/encode. One decode at the end. This is
-entirely untested and almost certainly has issues. The tested/working workflow
-is v0408 which uses per-iteration IMAGE decode. Use v0409 at your own risk.
+space using LatentContextExtract and LatentOverlapTrim -- no per-iteration
+VAE decode/encode. One decode at the end. These nodes handle noise_mask
+stripping internally (critical for sampler correctness). The tested/working
+workflow is v0408 which uses per-iteration IMAGE decode. Use v0409 at your
+own risk until testing confirms lip sync parity.
 
 Workflow adapted from [kijai's LTX 2.3 long loop extension test](https://github.com/kijai/ComfyUI-NativeLooping_testing/blob/main/ltx23_long_loop_extension_test.json).
 
@@ -198,6 +202,53 @@ an audio tensor.
 
 **Inputs:** `audio` (AUDIO)
 **Outputs:** `duration_seconds` (FLOAT), `sample_rate` (INT), `total_samples` (INT)
+
+### Latent Context Extract
+
+Extracts the last N latent frames as context for the next loop iteration.
+Replaces LTXVSelectLatents + StripLatentNoiseMask in the latent-space
+subgraph (v0409). Strips noise_mask so LTXVAudioVideoMask creates a
+fresh mask (matching VAEEncode behavior from the IMAGE workflow).
+
+**Inputs:**
+
+| Input | Type | Description |
+|-------|------|-------------|
+| latent | LATENT | Previous iteration's video latent (from TensorLoopOpen) |
+| overlap_latent_frames | INT | Number of tail latent frames to extract (default 4). Wire from AudioLoopController. |
+
+**Outputs:**
+
+| Output | Type | Wire to |
+|--------|------|---------|
+| context | LATENT | LTXVAudioVideoMask video_latent input |
+
+### Latent Overlap Trim
+
+Trims the first N latent frames (overlap region) from a sampler's output.
+Keeps new content only, strips noise_mask. Used in the latent-space
+subgraph (v0409) to avoid duplicating overlap frames across iterations.
+
+**Inputs:**
+
+| Input | Type | Description |
+|-------|------|-------------|
+| latent | LATENT | Sampler output video latent (after CropGuides) |
+| overlap_latent_frames | INT | Number of leading latent frames to trim (default 4). Wire from AudioLoopController. |
+
+**Outputs:**
+
+| Output | Type | Wire to |
+|--------|------|---------|
+| trimmed | LATENT | Subgraph output / TensorLoopClose |
+
+### Strip Latent Noise Mask
+
+Low-level utility that removes noise_mask from a latent dict. Prefer
+LatentContextExtract or LatentOverlapTrim which handle this automatically.
+
+**Inputs:** `latent` (LATENT)
+**Outputs:** `latent` (LATENT, noise_mask removed)
 
 ## Tuning guide
 
