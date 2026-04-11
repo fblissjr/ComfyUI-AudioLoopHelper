@@ -1,4 +1,4 @@
-Last updated: 2026-04-10
+Last updated: 2026-04-11
 
 # Subgraph Latent Rework: Eliminate Per-Iteration VAE Round-Trip
 
@@ -53,7 +53,7 @@ OUTPUT: extended_images (IMAGE) to TensorLoopClose
 ```
 INPUT: previous_latent (LATENT) from TensorLoopOpen
   ↓
-LTXVSelectLatents [NEW]: last 4 LATENT frames → context guide
+LatentContextExtract #2004: last 4 LATENT frames → context (strips noise_mask)
   ↓
 VAEEncode #1520: init_image IMAGE → LATENT (guide)        ← KEEP
   ↓
@@ -67,10 +67,15 @@ LTXVSeparateAVLatent #596: split video/audio
   ↓
 LTXVCropGuides #655: trim guide padding
   ↓
-LTXVSelectLatents [NEW]: trim first 4 LATENT frames
+LatentOverlapTrim #2005: trim first 4 LATENT frames (strips noise_mask)
   ↓
 OUTPUT: extended_latent (LATENT) to TensorLoopClose
 ```
+
+NOTE: LatentContextExtract and LatentOverlapTrim replace LTXVSelectLatents +
+StripLatentNoiseMask. They handle noise_mask stripping internally, which is
+critical -- stale noise_mask from previous iterations corrupts the sampler.
+See `internal/postmortem_v0409_latent_rework.md` Issue 5 for the full analysis.
 
 ## Step-by-step in ComfyUI
 
@@ -94,13 +99,15 @@ Double-click #843 to enter the subgraph.
 **Delete** node 615 (GetImageRangeFromBatch).
 **Delete** node 614 (VAEEncode for context frames).
 
-**Add** LTXVSelectLatents node. Wire:
-- samples ← subgraph input "images" (now receives LATENT, rename to "previous_latent")
-- start_index: **-4** (last 4 latent frames = ~25 pixel frames at temporal_scale=8)
-- end_index: **-1** (to the end)
+**Add** LatentContextExtract node (#2004). Wire:
+- latent ← subgraph input (now receives LATENT from TensorLoopOpen)
+- overlap_latent_frames ← AudioLoopController overlap_latent_frames output (4 for 1s overlap)
 
-Wire output → LTXVAddLatentGuide #1519 guiding_latent input
-(where VAEEncode #614 output used to go)
+Wire context output → LTXVAudioVideoMask video_latent input
+(where VAEEncode #614 output used to go).
+
+LatentContextExtract extracts the tail frames AND strips noise_mask
+internally. No need for a separate StripLatentNoiseMask node.
 
 ### Step 4: Replace output trimming (node 1509)
 
@@ -108,12 +115,14 @@ Wire output → LTXVAddLatentGuide #1519 guiding_latent input
 **Delete** node 1521 (VAEDecode).
 **Delete** node 1504 (GetImageSizeAndCount).
 
-**Add** LTXVSelectLatents node. Wire:
-- samples ← LTXVCropGuides #655 latent output (or SeparateAVLatent #596 video_latent if #655 is removed)
-- start_index: **4** (skip first 4 latent frames = ~25 pixel overlap)
-- end_index: **-1** (to the end)
+**Add** LatentOverlapTrim node (#2005). Wire:
+- latent ← LTXVCropGuides #655 latent output
+- overlap_latent_frames ← AudioLoopController overlap_latent_frames output (4 for 1s overlap)
 
-Wire output → subgraph output (extended_latent)
+Wire trimmed output → subgraph output (extended_latent).
+
+LatentOverlapTrim trims the overlap AND strips noise_mask internally.
+Clamps to prevent empty tensors if overlap >= total frames.
 
 ### Step 5: Update subgraph input type
 

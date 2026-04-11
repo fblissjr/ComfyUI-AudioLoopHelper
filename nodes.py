@@ -250,7 +250,7 @@ class AudioLoopController(io.ComfyNode):
                 ),
                 io.Int.Output(
                     "overlap_latent_frames",
-                    tooltip="overlap_frames in latent space (pixel_frames // 8). Wire to LTXVSelectLatents for latent-space loop.",
+                    tooltip="overlap_frames in latent space ((pixel-1)//8+1). Wire to LatentContextExtract / LatentOverlapTrim.",
                 ),
             ],
         )
@@ -728,7 +728,9 @@ class LatentOverlapTrim(io.ComfyNode):
         s = latent.copy()
         video = s["samples"]
 
-        s["samples"] = video[:, :, overlap_latent_frames:]
+        # Clamp to avoid empty tensor if overlap >= total frames
+        trim = min(overlap_latent_frames, video.shape[2] - 1)
+        s["samples"] = video[:, :, trim:]
 
         # Strip noise_mask for clean accumulation
         s.pop("noise_mask", None)
