@@ -649,6 +649,33 @@ class ConditioningBlend(io.ComfyNode):
         return io.NodeOutput(out)
 
 
+class StripLatentNoiseMask(io.ComfyNode):
+    """Removes noise_mask from a latent dict so downstream nodes create fresh masks.
+
+    Use between LTXVSelectLatents and LTXVAudioVideoMask in the latent-space
+    loop to match the behavior of VAEEncode (which produces latent without
+    noise_mask). Without this, inherited noise_mask from previous iterations
+    corrupts the sampler's mask semantics and breaks audio-video sync.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="StripLatentNoiseMask",
+            display_name="Strip Latent Noise Mask",
+            category="latent",
+            description="Removes noise_mask from latent so downstream nodes create fresh masks.",
+            inputs=[io.Latent.Input("latent")],
+            outputs=[io.Latent.Output()],
+        )
+
+    @classmethod
+    def execute(cls, latent: dict) -> io.NodeOutput:
+        out = latent.copy()
+        out.pop("noise_mask", None)
+        return io.NodeOutput(out)
+
+
 class AudioLoopHelperExtension(ComfyExtension):
     @override
     async def get_node_list(self) -> list[type[io.ComfyNode]]:
@@ -658,6 +685,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             ConditioningBlend,
             AudioLoopPlanner,
             ScheduleToMultiPrompt,
+            StripLatentNoiseMask,
             AudioDuration,
         ]
 
