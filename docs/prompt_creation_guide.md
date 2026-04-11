@@ -36,19 +36,16 @@ section-appropriate framing (close-up for chorus, wide shot for bridge, etc.).
 
 Use `--trim N` to offset timestamps by your node 567 start_index value.
 
-### 2. Separate vocals (optional)
+### 2. Vocal separation
 
-If you want to see when vocals are present vs instrumental:
+Vocal separation is done by MelBandRoFormer **inside the ComfyUI workflow**
+(nodes 568/569), not by a CLI script. The workflow already separates vocals
+from instruments before encoding audio to latents.
 
-```bash
-uv run scripts/separate_vocals.py path/to/song.wav --output-dir ./output/
-uv run scripts/analyze_audio.py ./output/vocals.wav --trim 10
-```
-
-Note: MelBandRoFormer separates vocals from instruments but does NOT
-distinguish male from female vocals. For duets, use the AudioPitchDetect
-runtime node which detects male (F0 < 160 Hz) vs female (F0 > 160 Hz)
-vocal ranges per iteration using the separated vocals output.
+MelBandRoFormer separates vocals from instruments but does NOT distinguish
+male from female vocals. For duets, use the AudioPitchDetect runtime node
+which detects male (F0 < 160 Hz) vs female (F0 > 160 Hz) vocal ranges
+per iteration using the separated vocals output.
 
 ### 3. Study the init_image
 

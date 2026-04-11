@@ -372,6 +372,7 @@ Run `scripts/test_workflow_integrity.py` after every programmatic edit.
 - `docs/workflow_pipeline_trace.md` -- end-to-end pipeline trace
 - `docs/nag_technical_reference.md` -- LTX2_NAG technical documentation
 - `docs/prompt_creation_guide.md` -- prompt writing guide with variation patterns
+- `docs/audio_analysis_guide.md` -- offline/runtime analysis, AudioPitchDetect wiring patterns, vocal_fraction as blend_factor
 - `docs/ltx23_prompt_system_prompts.md` -- official i2v/t2v system prompts
 - `docs/upscale_guide.md` -- upscale workflow build guide
 - `docs/ltxv_looping_sampler_settings.md` -- LTXVLoopingSampler reference (VIDEO-ONLY, no AV latent support)

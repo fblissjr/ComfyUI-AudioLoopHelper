@@ -276,32 +276,32 @@ _SECTION_MODIFIERS = {
     "INTRO": {
         "framing": "In a wide establishing shot, static camera, locked off shot,",
         "lighting": "Soft lighting, gentle.",
-        "energy_verb": "is beginning to sing softly",
+        "energy_verb": "is beginning to perform softly",
         "audio_desc": "Quiet ambient tone, gentle room presence.",
     },
     "VERSE": {
         "framing": "In a medium shot,",
         "lighting": "Warm lighting, steady energy.",
-        "energy_verb": "is singing",
-        "audio_desc": "Her voice fills the space. Soft ambient hum.",
+        "energy_verb": "is performing",
+        "audio_desc": "The voice fills the space. Soft ambient hum.",
     },
     "CHORUS": {
         "framing": "In a close-up,",
         "lighting": "Bright, dynamic lighting.",
-        "energy_verb": "is singing with intensity",
-        "audio_desc": "Her voice is powerful and resonant.",
+        "energy_verb": "is performing with intensity",
+        "audio_desc": "The voice is powerful and resonant.",
     },
     "BRIDGE": {
         "framing": "In a wide shot,",
         "lighting": "Moody, low contrast lighting.",
-        "energy_verb": "is singing with quiet emotion",
+        "energy_verb": "is performing with quiet emotion",
         "audio_desc": "Subdued melody, reflective atmosphere.",
     },
     "OUTRO": {
         "framing": "In a wide shot, dolly out, camera pulling back,",
         "lighting": "Fading, gentle lighting.",
-        "energy_verb": "is singing softly, trailing off",
-        "audio_desc": "Her voice fades quietly. Room tone settles.",
+        "energy_verb": "is performing softly, trailing off",
+        "audio_desc": "The sound fades quietly. Room tone settles.",
     },
     "BREAK": {
         "framing": "In a medium shot, static camera,",
@@ -315,7 +315,7 @@ _SECTION_MODIFIERS = {
 _DEFAULT_MODIFIER = {
     "framing": "In a medium shot,",
     "lighting": "Natural lighting.",
-    "energy_verb": "is singing",
+    "energy_verb": "is performing",
     "audio_desc": "Music continues.",
 }
 
