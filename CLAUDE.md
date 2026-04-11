@@ -28,7 +28,9 @@ Analysis nodes (nodes_analysis.py, torchaudio only):
 Helper functions:
 - `_audio_duration(audio)` -- shared duration extraction (used by 3 nodes)
 - `_parse_timestamp(ts)` -- "M:SS" or bare seconds to float
-- `_format_timestamp(seconds)` -- float to "M:SS" (preserves sub-second)
+- `_format_timestamp(seconds)` -- float to "M:SS" or "M:SS.ss" (preserves sub-second).
+  NOT the same as `_fmt_ts()` in analyze_audio_features.py which truncates to
+  whole seconds for schedule timestamps. Different semantics, intentionally separate.
 - `_parse_schedule(schedule)` -- multiline schedule text to entries list
 - `_match_schedule(entries, time)` -- find matching prompt for a timestamp
 - `_match_schedule_with_next(entries, time, blend_seconds)` -- returns (prompt, next_prompt, blend_factor)
