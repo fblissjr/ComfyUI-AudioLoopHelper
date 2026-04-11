@@ -5327,8 +5327,8 @@
         "version": 1,
         "state": {
           "lastGroupId": 9,
-          "lastNodeId": 2002,
-          "lastLinkId": 2960,
+          "lastNodeId": 2003,
+          "lastLinkId": 2962,
           "lastRerouteId": 0
         },
         "revision": 0,
@@ -6183,7 +6183,7 @@
                 "name": "video_latent",
                 "shape": 7,
                 "type": "LATENT",
-                "link": 2958
+                "link": 2962
               },
               {
                 "localized_name": "audio_latent",
@@ -6295,7 +6295,7 @@
                 "name": "LATENT",
                 "type": "LATENT",
                 "links": [
-                  2958
+                  2961
                 ]
               }
             ],
@@ -6360,6 +6360,41 @@
               4,
               -1
             ]
+          },
+          {
+            "id": 2003,
+            "type": "StripLatentNoiseMask",
+            "pos": [
+              2800,
+              4200
+            ],
+            "size": [
+              250,
+              60
+            ],
+            "flags": {},
+            "order": 8,
+            "mode": 0,
+            "inputs": [
+              {
+                "name": "latent",
+                "type": "LATENT",
+                "link": 2961
+              }
+            ],
+            "outputs": [
+              {
+                "name": "LATENT",
+                "type": "LATENT",
+                "links": [
+                  2962
+                ]
+              }
+            ],
+            "properties": {
+              "Node name for S&R": "StripLatentNoiseMask"
+            },
+            "widgets_values": []
           }
         ],
         "groups": [],
@@ -6629,14 +6664,6 @@
             "type": "LATENT"
           },
           {
-            "id": 2958,
-            "origin_id": 2001,
-            "origin_slot": 0,
-            "target_id": 606,
-            "target_slot": 0,
-            "type": "LATENT"
-          },
-          {
             "id": 2959,
             "origin_id": 655,
             "origin_slot": 2,
@@ -6649,6 +6676,22 @@
             "origin_id": 2002,
             "origin_slot": 0,
             "target_id": -20,
+            "target_slot": 0,
+            "type": "LATENT"
+          },
+          {
+            "id": 2961,
+            "origin_id": 2001,
+            "origin_slot": 0,
+            "target_id": 2003,
+            "target_slot": 0,
+            "type": "LATENT"
+          },
+          {
+            "id": 2962,
+            "origin_id": 2003,
+            "origin_slot": 0,
+            "target_id": 606,
             "target_slot": 0,
             "type": "LATENT"
           }
