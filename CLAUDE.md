@@ -116,11 +116,41 @@ ScheduleToMultiPrompt node is kept for future use if AV support is added.
   image-embed latent from LTXVImgToVideoInplaceKJ.
 - LTXVAddLatentGuide APPENDS guide frames to temporal dim (torch.cat dim=2).
   Sampler output latent has shape [B,C,63+N_guides,H,W], not [B,C,63,H,W].
-  MUST route through LTXVCropGuides (#381) to strip guide padding before
-  passing to TensorLoopOpen or any node that indexes latent frames.
-- Correct path: #531 ImgToVideo → #350 ConcatAV → #161 Sampler → #245 SeparateAV → #381 CropGuides → #1539 TensorLoopOpen
-- Skipping CropGuides causes LTXVSelectLatents to select guide frames
-  instead of real video content, breaking audio-video sync.
+- For LATENT workflows: initial render prepended via LatentConcat (dim=t)
+  using CropGuides output (guide-stripped). TensorLoopOpen receives from
+  SeparateAV directly (with guides, matching v0408 behavior).
+- Correct latent path: #531 → #350 ConcatAV → #161 Sampler → #245 SeparateAV → #1539 TensorLoopOpen
+  Plus: #245 → #381 CropGuides → #1605 LatentConcat (prepend to loop output)
+
+## noise_mask handling (critical for latent-space loop)
+
+- **VAEEncode produces latent with NO noise_mask key.** LTXVAudioVideoMask
+  then creates a fresh all-zeros mask. This is the correct behavior.
+- **LTXVSelectLatents PRESERVES the existing noise_mask** from its input.
+  Inherited stale masks corrupt the sampler's mask semantics and break sync.
+- **StripLatentNoiseMask** (our node) removes noise_mask so downstream nodes
+  create fresh masks. REQUIRED between LTXVSelectLatents and LTXVAudioVideoMask
+  in the latent-space subgraph.
+- **TensorLoopClose passes previous_value as-is** — no noise_mask transformation.
+  The loop does not strip masks anywhere. LATENT workflows must handle this.
+- **_AccumulationToImageBatch** strips noise_mask first, reconstructs only if
+  ALL items have it. VAEDecode ignores noise_mask, so this is safe.
+
+## Dual workflow support (IMAGE vs LATENT)
+
+Our nodes support both workflow types:
+- **IMAGE workflow (v0408)**: Subgraph uses GetImageRangeFromBatch + VAEEncode/Decode.
+  No StripLatentNoiseMask needed. ImageBatch prepends initial render.
+- **LATENT workflow (v0409)**: Subgraph uses LTXVSelectLatents + StripLatentNoiseMask.
+  LatentConcat prepends initial render. No per-iteration VAE round-trip.
+- AudioLoopController outputs work for both: overlap_frames (pixel) + overlap_latent_frames (latent).
+- **LatentContextExtract**: Replaces LTXVSelectLatents + StripLatentNoiseMask.
+  Extracts tail frames AND strips noise_mask in one node. Wire overlap_latent_frames.
+- **LatentOverlapTrim**: Replaces LTXVSelectLatents for output trimming.
+  Trims overlap AND strips noise_mask. Wire overlap_latent_frames.
+- Always use these instead of raw LTXVSelectLatents in the latent-space loop
+  subgraph. They hide noise_mask complexity from the user.
+- StripLatentNoiseMask kept as low-level utility if needed separately.
 
 ## Resolution and latent volume
 
