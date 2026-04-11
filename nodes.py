@@ -649,13 +649,98 @@ class ConditioningBlend(io.ComfyNode):
         return io.NodeOutput(out)
 
 
+class LatentContextExtract(io.ComfyNode):
+    """Extracts the last N latent frames as context for the next loop iteration.
+
+    Replaces LTXVSelectLatents + StripLatentNoiseMask in the latent-space loop.
+    Takes the tail frames and strips noise_mask so LTXVAudioVideoMask creates
+    a fresh mask (matching VAEEncode behavior from the IMAGE workflow).
+
+    Wire: TensorLoopOpen previous_value → this → LTXVAudioVideoMask video_latent
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="LatentContextExtract",
+            display_name="Latent Context Extract",
+            category="looping/audio",
+            description=(
+                "Extracts last N latent frames as context for the next loop iteration. "
+                "Strips noise_mask for clean sampler behavior."
+            ),
+            inputs=[
+                io.Latent.Input("latent", tooltip="Previous iteration's video latent."),
+                io.Int.Input("overlap_latent_frames", default=4, min=1,
+                             tooltip="Number of tail latent frames to extract. Wire from AudioLoopController."),
+            ],
+            outputs=[
+                io.Latent.Output("context", tooltip="Clean context latent (no noise_mask). Wire to LTXVAudioVideoMask."),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, latent: dict, overlap_latent_frames: int) -> io.NodeOutput:
+        s = latent.copy()
+        video = s["samples"]
+        frames = video.shape[2]
+
+        start = max(0, frames - overlap_latent_frames)
+        s["samples"] = video[:, :, start:]
+
+        # Strip noise_mask so downstream creates fresh (matches VAEEncode behavior)
+        s.pop("noise_mask", None)
+
+        return io.NodeOutput(s)
+
+
+class LatentOverlapTrim(io.ComfyNode):
+    """Trims the first N latent frames (overlap region) from a sampler's output.
+
+    Replaces LTXVSelectLatents for output trimming in the latent-space loop.
+    Keeps everything after the overlap region, strips noise_mask.
+
+    Wire: LTXVCropGuides latent → this → subgraph output
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="LatentOverlapTrim",
+            display_name="Latent Overlap Trim",
+            category="looping/audio",
+            description=(
+                "Trims first N latent frames (overlap) from sampler output. "
+                "Keeps new content only."
+            ),
+            inputs=[
+                io.Latent.Input("latent", tooltip="Sampler output video latent (after CropGuides)."),
+                io.Int.Input("overlap_latent_frames", default=4, min=0,
+                             tooltip="Number of leading latent frames to trim. Wire from AudioLoopController."),
+            ],
+            outputs=[
+                io.Latent.Output("trimmed", tooltip="New content only (overlap removed)."),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, latent: dict, overlap_latent_frames: int) -> io.NodeOutput:
+        s = latent.copy()
+        video = s["samples"]
+
+        s["samples"] = video[:, :, overlap_latent_frames:]
+
+        # Strip noise_mask for clean accumulation
+        s.pop("noise_mask", None)
+
+        return io.NodeOutput(s)
+
+
 class StripLatentNoiseMask(io.ComfyNode):
     """Removes noise_mask from a latent dict so downstream nodes create fresh masks.
 
-    Use between LTXVSelectLatents and LTXVAudioVideoMask in the latent-space
-    loop to match the behavior of VAEEncode (which produces latent without
-    noise_mask). Without this, inherited noise_mask from previous iterations
-    corrupts the sampler's mask semantics and breaks audio-video sync.
+    Low-level utility. Prefer LatentContextExtract or LatentOverlapTrim which
+    handle this automatically.
     """
 
     @classmethod
@@ -685,6 +770,8 @@ class AudioLoopHelperExtension(ComfyExtension):
             ConditioningBlend,
             AudioLoopPlanner,
             ScheduleToMultiPrompt,
+            LatentContextExtract,
+            LatentOverlapTrim,
             StripLatentNoiseMask,
             AudioDuration,
         ]
