@@ -1,4 +1,4 @@
-Last updated: 2026-04-09
+Last updated: 2026-04-12
 
 # Music Video Prompt Creation Guide
 
@@ -9,14 +9,30 @@ audio-conditioned video loop workflow.
 
 ### 1. Analyze the audio
 
+Two analysis scripts are available:
+
+**Basic (ffmpeg only, no Python deps):**
 ```bash
 uv run scripts/analyze_audio.py path/to/song.wav --trim 10
 ```
+Gives you: energy timeline, song structure, prompt schedule template.
 
-This gives you:
-- Energy timeline showing loud/quiet sections
-- Detected song structure (verse/chorus/bridge)
-- Prompt schedule template with timestamps
+**Music-aware (librosa, requires `uv sync --group analysis`):**
+```bash
+uv run --group analysis python scripts/analyze_audio_features.py path/to/song.wav --trim 10
+```
+Gives you: BPM, musical key, chromagram, vocal F0, structure, JSON for LLM.
+
+**Auto-generated prompt templates (recommended):**
+```bash
+uv run --group analysis python scripts/analyze_audio_features.py path/to/song.wav \
+  --subject "a woman in her 30s with dark hair singing in a basement workshop" \
+  --trim 10
+```
+Generates copy-pasteable TimestampPromptSchedule entries with LTX 2.3
+camera, lighting, and energy modifiers matched to each song section.
+You provide the scene description once; the script wraps it with
+section-appropriate framing (close-up for chorus, wide shot for bridge, etc.).
 
 Use `--trim N` to offset timestamps by your node 567 start_index value.
 
@@ -30,9 +46,9 @@ uv run scripts/analyze_audio.py ./output/vocals.wav --trim 10
 ```
 
 Note: MelBandRoFormer separates vocals from instruments but does NOT
-distinguish male from female vocals. For two-person scenes, write
-prompts assuming both are singing together and let the audio conditioning
-handle who's actually vocalizing.
+distinguish male from female vocals. For duets, use the AudioPitchDetect
+runtime node which detects male (F0 < 160 Hz) vs female (F0 > 160 Hz)
+vocal ranges per iteration using the separated vocals output.
 
 ### 3. Study the init_image
 

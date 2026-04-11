@@ -2,23 +2,28 @@
 
 ## TLDR
 
-4 ComfyUI nodes that automate loop timing for full-length music video
-generation with LTX 2.3. The main node (AudioLoopController) reads audio
-duration from the tensor, computes stride from window + overlap, outputs
-start_index / should_stop / audio_duration / iteration_seed / stride_seconds /
-overlap_frames / overlap_latent_frames. No manual constants to keep in sync.
+ComfyUI nodes that automate loop timing and audio analysis for full-length
+music video generation with LTX 2.3. The main node (AudioLoopController)
+reads audio duration from the tensor, computes stride from window + overlap,
+outputs start_index / should_stop / audio_duration / iteration_seed /
+stride_seconds / overlap_frames / overlap_latent_frames.
 
 ## Architecture
 
-Single file: `nodes.py`. Uses ComfyUI's extension API (`ComfyExtension`,
-`io.ComfyNode`). Entry point: `comfy_entrypoint()`.
+Two files: `nodes.py` (core loop nodes) and `nodes_analysis.py` (runtime
+audio analysis). Uses ComfyUI's extension API (`ComfyExtension`,
+`io.ComfyNode`). Single entry point: `comfy_entrypoint()` in nodes.py
+imports analysis nodes from nodes_analysis.py.
 
-5 nodes:
+Core nodes (nodes.py):
 - `AudioLoopController` -- core: start_index, should_stop, audio_duration, iteration_seed, stride_seconds, overlap_frames, overlap_latent_frames
 - `TimestampPromptSchedule` -- per-iteration prompt from timestamp ranges, with blend support
 - `ConditioningBlend` -- lerps two conditioning tensors for smooth prompt transitions (works with LTX Gemma 3 and CLIP)
 - `AudioLoopPlanner` -- displays iteration timeline for planning
 - `AudioDuration` -- extracts duration/sample_rate from audio tensor
+
+Analysis nodes (nodes_analysis.py, torchaudio only):
+- `AudioPitchDetect` -- per-iteration F0 detection, vocal presence, male/female classification. Wire to MelBandRoFormer separated vocals for clean signal. Outputs FLOAT/BOOLEAN only.
 
 Helper functions:
 - `_audio_duration(audio)` -- shared duration extraction (used by 3 nodes)

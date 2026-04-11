@@ -9,12 +9,20 @@ This project uses [Semantic Versioning](https://semver.org/).
 ### Added
 - AudioLoopPlanner now shows initial render time range with "[uses static prompt,
   not schedule]" annotation, making it clear the schedule only applies to loop iterations
+- AudioPitchDetect node: per-iteration vocal pitch detection using torchaudio
+  (median F0, has_vocals, is_male_range, is_female_range, vocal_fraction).
+  Wire to MelBandRoFormer separated vocals for clean signal.
+- `nodes_analysis.py`: separate file for audio analysis runtime nodes
+- `_slice_audio_window()` shared helper for extracting iteration audio windows
 - `scripts/analyze_audio_features.py`: librosa-based music feature extraction
   (BPM, key detection, chromagram, mel spectrogram, vocal F0, structure segmentation).
   Outputs JSON (for LLM prompt generation), markdown report, and PNG visualizations.
-- `pyproject.toml` with `analysis` dependency group for librosa (`uv sync --group analysis`)
-- `tests/test_audio_features.py`: 17 tests covering all extraction functions
-  with synthetic audio (sine waves, click tracks, silence)
+- `--subject` flag on analyze_audio_features.py: generates full LTX 2.3 prompt
+  templates with section-appropriate camera, lighting, and energy modifiers.
+  Copy-pasteable into TimestampPromptSchedule.
+- `pyproject.toml` with `analysis` and `dev` dependency groups
+- `tests/test_audio_features.py`: 24 tests for offline feature extraction
+- `tests/test_audio_analysis_nodes.py`: 9 tests for runtime AudioPitchDetect
 - `tests/conftest.py`: pytest path configuration for scripts/ imports
 - `conftest.py` (root): prevents pytest from importing ComfyUI-only `__init__.py`
 - LatentContextExtract node: extracts tail latent frames + strips noise_mask

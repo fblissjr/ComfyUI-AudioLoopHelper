@@ -768,6 +768,8 @@ class StripLatentNoiseMask(io.ComfyNode):
 class AudioLoopHelperExtension(ComfyExtension):
     @override
     async def get_node_list(self) -> list[type[io.ComfyNode]]:
+        from nodes_analysis import AudioPitchDetect
+
         return [
             AudioLoopController,
             TimestampPromptSchedule,
@@ -778,6 +780,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LatentOverlapTrim,
             StripLatentNoiseMask,
             AudioDuration,
+            AudioPitchDetect,
         ]
 
 
