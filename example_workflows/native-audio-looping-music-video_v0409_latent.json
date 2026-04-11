@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1604,
-  "last_link_id": 2991,
+  "last_node_id": 1605,
+  "last_link_id": 2995,
   "nodes": [
     {
       "id": 252,
@@ -2748,7 +2748,8 @@
           "type": "LATENT",
           "links": [
             956,
-            2505
+            2505,
+            2992
           ]
         },
         {
@@ -2812,7 +2813,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            2991
+            2993
           ]
         }
       ],
@@ -3384,7 +3385,7 @@
           "name": "output",
           "type": "LATENT",
           "links": [
-            2987
+            2994
           ]
         }
       ],
@@ -3610,7 +3611,7 @@
           "name": "initial_value",
           "shape": 7,
           "type": "LATENT",
-          "link": 2991
+          "link": 2992
         }
       ],
       "outputs": [
@@ -4298,7 +4299,7 @@
         {
           "name": "samples",
           "type": "LATENT",
-          "link": 2987
+          "link": 2995
         },
         {
           "name": "vae",
@@ -4325,6 +4326,55 @@
         240,
         32,
         16
+      ]
+    },
+    {
+      "id": 1605,
+      "type": "LatentConcat",
+      "pos": [
+        3600,
+        4700
+      ],
+      "size": [
+        300,
+        100
+      ],
+      "flags": {},
+      "order": 96,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples1",
+          "type": "LATENT",
+          "link": 2993
+        },
+        {
+          "name": "samples2",
+          "type": "LATENT",
+          "link": 2994
+        },
+        {
+          "name": "dim",
+          "type": "COMBO",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            2995
+          ]
+        }
+      ],
+      "title": "Prepend Initial Render",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "Node name for S&R": "LatentConcat"
+      },
+      "widgets_values": [
+        "t"
       ]
     }
   ],
@@ -5194,14 +5244,6 @@
       "CONDITIONING"
     ],
     [
-      2987,
-      1540,
-      0,
-      1604,
-      0,
-      "LATENT"
-    ],
-    [
       2988,
       1598,
       0,
@@ -5218,10 +5260,34 @@
       "IMAGE"
     ],
     [
-      2991,
+      2992,
+      245,
+      0,
+      1539,
+      0,
+      "LATENT"
+    ],
+    [
+      2993,
       381,
       2,
-      1539,
+      1605,
+      0,
+      "LATENT"
+    ],
+    [
+      2994,
+      1540,
+      0,
+      1605,
+      1,
+      "LATENT"
+    ],
+    [
+      2995,
+      1605,
+      0,
+      1604,
       0,
       "LATENT"
     ]
