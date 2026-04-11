@@ -1,0 +1,14 @@
+[project]
+name = "comfyui-audioloophelper"
+version = "0.4.9"
+description = "Audio-aware loop management nodes for full-length music video generation with LTX 2.3"
+requires-python = ">=3.11"
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+analysis = ["librosa>=0.10"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["scripts"]
+addopts = "--import-mode=importlib"

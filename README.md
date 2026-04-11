@@ -1,6 +1,6 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-04-11
+Last updated: 2026-04-12
 
 **TLDR**: Custom ComfyUI nodes for generating full-length music videos with LTX 2.3.
 Handles loop timing, auto-stopping at the audio boundary, per-iteration seed
@@ -336,6 +336,63 @@ Controls how gradually prompt transitions happen.
 The blend_factor ramps linearly from 0 to 1 over `blend_seconds` before
 each timestamp boundary. At 0, only the current prompt's conditioning is
 used. At 1, fully transitioned to the next prompt.
+
+## Audio feature analysis (offline)
+
+Analyze your audio track before building your prompt schedule. Extracts
+musical features that help you write better, music-aware prompts.
+
+**Setup** (one time):
+```bash
+cd custom_nodes/ComfyUI-AudioLoopHelper
+uv sync --group analysis
+```
+
+**Usage:**
+```bash
+# Full analysis with markdown report
+uv run --group analysis python scripts/analyze_audio_features.py your_song.wav
+
+# Write report to file
+uv run --group analysis python scripts/analyze_audio_features.py your_song.wav -o analysis.md
+
+# Export JSON (for LLM-assisted schedule generation)
+uv run --group analysis python scripts/analyze_audio_features.py your_song.wav -j analysis.json
+
+# PNG visualizations (spectrogram, chromagram, onset envelope)
+uv run --group analysis python scripts/analyze_audio_features.py your_song.wav --png-dir ./viz
+
+# With trim offset and separated vocal track for F0 analysis
+uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
+  --trim 10 --vocal-track vocals_only.wav
+```
+
+**What it extracts:**
+
+| Feature | Description | Use for scheduling |
+|---------|-------------|-------------------|
+| BPM | Tempo and beat grid timestamps | Align prompt transitions to beats |
+| Key | Musical key (e.g., "G Major") | Annotate mood shifts |
+| Chromagram | 12-pitch-class heatmap (PNG) | Visual harmonic review |
+| Mel spectrogram | Frequency x time heatmap (PNG) | Visual BPM/vocal review |
+| Vocal F0 | Fundamental frequency + male/female classification | Choose appropriate prompts |
+| Structure | Labeled sections (intro, verse, chorus, bridge, outro) | Scaffold your TimestampPromptSchedule |
+
+**Using with an LLM for schedule generation:**
+
+The JSON output is designed to be pasted into an LLM prompt:
+```
+You are a music video director. Here is the analysis for the track:
+{paste JSON here}
+
+Write a TimestampPromptSchedule for a woman singing in a dimly lit
+basement workshop with Christmas lights. Keep the core subject
+identical across all entries. Vary only framing, camera, and energy.
+```
+
+The LLM reads the structured data (BPM, key, sections, vocal range) and
+generates a complete schedule. PNG visualizations are for your own review
+only -- don't feed them to the LLM.
 
 ## Prompt writing guide (LTX 2.3)
 
