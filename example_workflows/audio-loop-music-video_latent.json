@@ -2,7 +2,7 @@
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
   "last_node_id": 1605,
-  "last_link_id": 2997,
+  "last_link_id": 2999,
   "nodes": [
     {
       "id": 252,
@@ -2412,7 +2412,7 @@
           "name": "CONDITIONING",
           "type": "CONDITIONING",
           "links": [
-            2959
+            2999
           ]
         }
       ],
@@ -3456,12 +3456,12 @@
         {
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 2960
+          "link": 2998
         },
         {
           "name": "negative",
           "type": "CONDITIONING",
-          "link": 2961
+          "link": 2999
         },
         {
           "label": "init_image",
@@ -4019,33 +4019,29 @@
       ],
       "flags": {},
       "order": 84,
-      "mode": 0,
+      "mode": 4,
       "inputs": [
         {
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 2983
+          "link": null
         },
         {
           "name": "negative",
           "type": "CONDITIONING",
-          "link": 2959
+          "link": null
         }
       ],
       "outputs": [
         {
           "name": "positive",
           "type": "CONDITIONING",
-          "links": [
-            2960
-          ]
+          "links": []
         },
         {
           "name": "negative",
           "type": "CONDITIONING",
-          "links": [
-            2961
-          ]
+          "links": []
         }
       ],
       "title": "Loop LTXVConditioning",
@@ -4080,7 +4076,7 @@
           "name": "CONDITIONING",
           "type": "CONDITIONING",
           "links": [
-            2983
+            2998
           ]
         }
       ],
@@ -5179,30 +5175,6 @@
       "INT"
     ],
     [
-      2959,
-      648,
-      0,
-      1587,
-      1,
-      "CONDITIONING"
-    ],
-    [
-      2960,
-      1587,
-      0,
-      843,
-      6,
-      "CONDITIONING"
-    ],
-    [
-      2961,
-      1587,
-      1,
-      843,
-      7,
-      "CONDITIONING"
-    ],
-    [
       2962,
       1598,
       0,
@@ -5259,14 +5231,6 @@
       "LATENT"
     ],
     [
-      2983,
-      1588,
-      0,
-      1587,
-      0,
-      "CONDITIONING"
-    ],
-    [
       2988,
       1598,
       0,
@@ -5313,6 +5277,22 @@
       1604,
       0,
       "LATENT"
+    ],
+    [
+      2998,
+      1588,
+      0,
+      843,
+      6,
+      "CONDITIONING"
+    ],
+    [
+      2999,
+      648,
+      0,
+      843,
+      7,
+      "CONDITIONING"
     ]
   ],
   "groups": [
