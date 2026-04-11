@@ -5327,8 +5327,8 @@
         "version": 1,
         "state": {
           "lastGroupId": 9,
-          "lastNodeId": 2003,
-          "lastLinkId": 2962,
+          "lastNodeId": 2005,
+          "lastLinkId": 2960,
           "lastRerouteId": 0
         },
         "revision": 0,
@@ -5562,6 +5562,7 @@
             "name": "extended_latent",
             "type": "LATENT",
             "linkIds": [
+              2960,
               2960
             ],
             "pos": [
@@ -5746,6 +5747,7 @@
                 "type": "LATENT",
                 "links": [
                   2834,
+                  2959,
                   2959
                 ]
               }
@@ -6183,7 +6185,7 @@
                 "name": "video_latent",
                 "shape": 7,
                 "type": "LATENT",
-                "link": 2962
+                "link": 2958
               },
               {
                 "localized_name": "audio_latent",
@@ -6254,147 +6256,96 @@
             ]
           },
           {
-            "id": 2001,
-            "type": "LTXVSelectLatents",
+            "id": 2004,
+            "type": "LatentContextExtract",
             "pos": [
-              2600,
+              2700,
               4100
             ],
             "size": [
-              300,
-              100
+              280,
+              80
             ],
             "flags": {},
             "order": 7,
             "mode": 0,
             "inputs": [
               {
-                "name": "samples",
+                "name": "latent",
                 "type": "LATENT",
                 "link": 2957
               },
               {
-                "name": "start_index",
+                "name": "overlap_latent_frames",
                 "type": "INT",
                 "widget": {
-                  "name": "start_index"
-                },
-                "link": null
-              },
-              {
-                "name": "end_index",
-                "type": "INT",
-                "widget": {
-                  "name": "end_index"
+                  "name": "overlap_latent_frames"
                 },
                 "link": null
               }
             ],
             "outputs": [
               {
-                "name": "LATENT",
+                "name": "context",
                 "type": "LATENT",
                 "links": [
-                  2961
+                  2958
                 ]
               }
             ],
+            "title": "Context Extract",
             "properties": {
-              "Node name for S&R": "LTXVSelectLatents"
+              "Node name for S&R": "LatentContextExtract"
             },
             "widgets_values": [
-              -4,
-              -1
+              4
             ]
           },
           {
-            "id": 2002,
-            "type": "LTXVSelectLatents",
+            "id": 2005,
+            "type": "LatentOverlapTrim",
             "pos": [
               4300,
               4900
             ],
             "size": [
-              300,
-              100
+              280,
+              80
             ],
             "flags": {},
             "order": 13,
             "mode": 0,
             "inputs": [
               {
-                "name": "samples",
+                "name": "latent",
                 "type": "LATENT",
                 "link": 2959
               },
               {
-                "name": "start_index",
+                "name": "overlap_latent_frames",
                 "type": "INT",
                 "widget": {
-                  "name": "start_index"
-                },
-                "link": null
-              },
-              {
-                "name": "end_index",
-                "type": "INT",
-                "widget": {
-                  "name": "end_index"
+                  "name": "overlap_latent_frames"
                 },
                 "link": null
               }
             ],
             "outputs": [
               {
-                "name": "LATENT",
+                "name": "trimmed",
                 "type": "LATENT",
                 "links": [
                   2960
                 ]
               }
             ],
+            "title": "Overlap Trim",
             "properties": {
-              "Node name for S&R": "LTXVSelectLatents"
+              "Node name for S&R": "LatentOverlapTrim"
             },
             "widgets_values": [
-              4,
-              -1
+              4
             ]
-          },
-          {
-            "id": 2003,
-            "type": "StripLatentNoiseMask",
-            "pos": [
-              2800,
-              4200
-            ],
-            "size": [
-              250,
-              60
-            ],
-            "flags": {},
-            "order": 8,
-            "mode": 0,
-            "inputs": [
-              {
-                "name": "latent",
-                "type": "LATENT",
-                "link": 2961
-              }
-            ],
-            "outputs": [
-              {
-                "name": "LATENT",
-                "type": "LATENT",
-                "links": [
-                  2962
-                ]
-              }
-            ],
-            "properties": {
-              "Node name for S&R": "StripLatentNoiseMask"
-            },
-            "widgets_values": []
           }
         ],
         "groups": [],
@@ -6659,7 +6610,15 @@
             "id": 2957,
             "origin_id": -10,
             "origin_slot": 4,
-            "target_id": 2001,
+            "target_id": 2004,
+            "target_slot": 0,
+            "type": "LATENT"
+          },
+          {
+            "id": 2958,
+            "origin_id": 2004,
+            "origin_slot": 0,
+            "target_id": 606,
             "target_slot": 0,
             "type": "LATENT"
           },
@@ -6667,31 +6626,15 @@
             "id": 2959,
             "origin_id": 655,
             "origin_slot": 2,
-            "target_id": 2002,
+            "target_id": 2005,
             "target_slot": 0,
             "type": "LATENT"
           },
           {
             "id": 2960,
-            "origin_id": 2002,
+            "origin_id": 2005,
             "origin_slot": 0,
             "target_id": -20,
-            "target_slot": 0,
-            "type": "LATENT"
-          },
-          {
-            "id": 2961,
-            "origin_id": 2001,
-            "origin_slot": 0,
-            "target_id": 2003,
-            "target_slot": 0,
-            "type": "LATENT"
-          },
-          {
-            "id": 2962,
-            "origin_id": 2003,
-            "origin_slot": 0,
-            "target_id": 606,
             "target_slot": 0,
             "type": "LATENT"
           }
