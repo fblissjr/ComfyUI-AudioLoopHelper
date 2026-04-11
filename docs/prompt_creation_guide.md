@@ -149,6 +149,44 @@ Everything above plus lighting shifts to match mood.
 LTX 2.3 conditions on the actual audio waveform -- it hears the song directly.
 Only describe ambient sounds not in the audio track (e.g., "muted city sounds").
 
+### Multi-character scenes (preventing duplicates)
+
+LTX 2.3 tends to duplicate characters, especially distinct ones (e.g., a cartoon
+duck gets cloned). The model interprets vague nouns like "characters" or "figures"
+as an invitation to add more.
+
+**Rules:**
+- Name each character by position and visual trait, not by count alone.
+  BAD: "three characters talking on a beach"
+  GOOD: "The duck on the left, the tall creature in the center, and the small
+  blue figure on the right are talking together"
+- Add "No other characters" or "No one else appears" as an explicit constraint.
+- Use "static camera, locked off shot" to prevent panning that reveals new areas
+  where the model might spawn extras.
+- Never use generic group words: "crowd", "group", "people", "others".
+- Position-anchor each character: "on the left", "in the center", "on the right"
+  tells the model the composition is fixed.
+
+**Negative prompt additions for multi-character:**
+```
+duplicate character, clone, twin, copy, mirror image, extra characters,
+additional people, new figures appearing, fourth character, background characters,
+wrong number of characters
+```
+
+**Example (3 cartoon characters talking in water):**
+```
+The duck on the left, the tall creature in the center, and the small blue
+figure on the right are talking together. No other characters. Mouth movements
+and subtle gestures. Water ripples. Static camera, locked off shot. Three
+distinct voices in conversation.
+```
+
+**For conversation audio (non-music):** The model maps speech audio to mouth
+movements via cross-attention, but it won't perfectly assign voice-to-character.
+It just ensures mouths move when audio is active. Vocal separation (MelBandRoFormer)
+is less useful for multi-speaker dialogue than for singing.
+
 ---
 
 ## Example: "The Body Like a Lamp" with test3.jpg
