@@ -3975,6 +3975,13 @@
             2954,
             2957
           ]
+        },
+        {
+          "name": "overlap_latent_frames",
+          "type": "INT",
+          "links": null,
+          "slot_index": 6,
+          "shape": 3
         }
       ],
       "properties": {

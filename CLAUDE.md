@@ -139,10 +139,12 @@ ScheduleToMultiPrompt node is kept for future use if AV support is added.
 ## Dual workflow support (IMAGE vs LATENT)
 
 Our nodes support both workflow types:
-- **IMAGE workflow (v0408)**: Subgraph uses GetImageRangeFromBatch + VAEEncode/Decode.
-  No StripLatentNoiseMask needed. ImageBatch prepends initial render.
-- **LATENT workflow (v0409)**: Subgraph uses LTXVSelectLatents + StripLatentNoiseMask.
-  LatentConcat prepends initial render. No per-iteration VAE round-trip.
+- **IMAGE workflow** (`audio-loop-music-video_image.json`): Subgraph uses
+  GetImageRangeFromBatch + VAEEncode/Decode. No StripLatentNoiseMask needed.
+  ImageBatch prepends initial render.
+- **LATENT workflow** (`audio-loop-music-video_latent.json`): Subgraph uses
+  LatentContextExtract + LatentOverlapTrim. LatentConcat prepends initial render.
+  No per-iteration VAE round-trip.
 - AudioLoopController outputs work for both: overlap_frames (pixel) + overlap_latent_frames (latent).
 - **LatentContextExtract**: Replaces LTXVSelectLatents + StripLatentNoiseMask.
   Extracts tail frames AND strips noise_mask in one node. Wire overlap_latent_frames.
@@ -170,7 +172,7 @@ Our nodes support both workflow types:
 
 ## Subgraph editing
 
-- ALWAYS use WorkflowEditor from `internal/scripts/workflow_utils.py` for
+- ALWAYS use WorkflowEditor from `scripts/workflow_utils.py` for
   subgraph modifications. Manual JSON surgery on subgraphs has failed
   repeatedly (stale slots, broken links, shifted indices).
 - Use the `/workflow-edit` skill which documents the full API.
@@ -278,7 +280,7 @@ Subgraph definitions live at `wf['definitions']['subgraphs'][0]` with keys:
 Subgraph input distributor node ID is -10. Output collector is -20.
 All three representations (top-level links, node link fields, subgraph linkIds)
 must stay in sync or wires break on reload.
-Use `internal/scripts/workflow_utils.py` for programmatic edits.
+Use `scripts/workflow_utils.py` for programmatic edits.
 
 ## LTX 2.3 audio-video alignment
 
@@ -305,7 +307,7 @@ Getting this wrong silently misconfigures the node (wrong strength/index mapping
 
 Compare against a known-working workflow JSON (keep copies in internal/scratch/).
 When multiple settings differ, change ONE at a time and test. Do not batch changes.
-Run `internal/scripts/test_workflow_integrity.py` after every programmatic edit.
+Run `scripts/test_workflow_integrity.py` after every programmatic edit.
 
 ## Upscaling
 
@@ -321,8 +323,8 @@ Run `internal/scripts/test_workflow_integrity.py` after every programmatic edit.
 
 ## Workflow docs
 
-- `example_workflows/native-audio-looping-music-video_v0409_latent.json` -- UNTESTED latent-space loop (no VAE round-trip, likely has issues)
-- `example_workflows/native-audio-looping-music-video_v0408.json` -- legacy TensorLoop (per-iteration VAE round-trip)
+- `example_workflows/audio-loop-music-video_latent.json` -- latent-space loop (no per-iteration VAE round-trip, UNTESTED)
+- `example_workflows/audio-loop-music-video_image.json` -- image-space loop (per-iteration VAE round-trip, tested/working)
 - `example_workflows/upscale-loop-output.json` -- separate upscale workflow (when built)
 - `coderef/origiltx23_long_loop_extension_test.json` -- original pre-scheduler workflow
 - `coderef/RuneXX_LTX-2.3-Workflows/` -- reference LTX 2.3 workflows (3-pass upscale pattern)
