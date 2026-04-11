@@ -60,10 +60,16 @@ Helper functions:
 - Workflow uses DualCLIPLoader + CLIPTextEncode nodes. Despite the names,
   these are Gemma 3 encoders (loaded via gemma_3_12B + ltx-2.3_text_projection).
   They produce `[tensor, {"attention_mask": ...}]` with no pooled_output.
-- **Conditioning path**: Text encode output MUST go through LTXVConditioning
-  (node 1587, frame_rate=25) before reaching Extension #843 positive input.
-  Without frame_rate metadata, positive conditioning mismatches negative.
-  Path: Text Encode → (ConditioningBlend if blending) → LTXVConditioning → #843.
+- **Conditioning path**: Extension #843 positive/negative should come from
+  Get_base_cond_pos/neg DIRECTLY, NOT through an extra LTXVConditioning node.
+  Node 1587 (LTXVConditioning) was previously in this path but caused the
+  initial render to lose lip sync -- ComfyUI's execution engine evaluates the
+  conditioning graph and the extra LTXVConditioning corrupted the initial
+  render's audio-video cross-attention. Node 1587 is now bypassed.
+  The initial render's conditioning goes through node 164 (LTXVConditioning,
+  frame_rate=25) which is sufficient.
+  Path: Get_base_cond_pos → #843 positive (static mode).
+  Path: Text Encode → (ConditioningBlend if blending) → #843 positive (scheduling mode).
 - **Blending wiring**: TimestampPromptSchedule outputs STRING, not CONDITIONING.
   Blending requires two text encode nodes (both from same DualCLIPLoader) inside
   the loop body: prompt → encode A → conditioning_a, next_prompt → encode B →
