@@ -230,16 +230,25 @@ comfy_extras/nodes_lt.py (append_keyframe), comfy/ldm/lightricks/model.py
 ## Extension subgraph (Node 843)
 
 The "extension" group node inside the loop contains the per-iteration
-sampling pipeline. Key internals:
+sampling pipeline. IMAGE and LATENT workflows differ in context extraction
+and output trimming nodes. Shared internals:
 
-- GetImageRangeFromBatch (615) -- extracts last overlap_frames from previous_images
-- VAEEncode (614) -- encodes those tail frames to latent (continuity guide)
 - VAEEncode (1520) -- encodes init_image to latent (scene anchor guide)
 - LTXVAddLatentGuide (1519) -- merges conditioning + both guides into latent
 - LTXVConcatAVLatent (583) -- adds audio latent
 - CFGGuider (644) -- packages for sampling (cfg=1.0, NAG does guidance)
 - SamplerCustomAdvanced (573) -- generates new frames
+
+IMAGE workflow only:
+- GetImageRangeFromBatch (615) -- extracts last overlap_frames from previous_images
+- VAEEncode (614) -- encodes those tail frames to latent (continuity guide)
 - GetImageRangeFromBatch (1509) -- trims first overlap_frames, keeps only new content
+
+LATENT workflow only:
+- LatentContextExtract (2004) -- extracts last overlap_latent_frames, strips noise_mask
+- LatentOverlapTrim (2005) -- trims first overlap_latent_frames, strips noise_mask
+
+Full traces: `docs/pipeline_flow_image.md` and `docs/pipeline_flow_latent.md`.
 
 Fixes applied across workflow versions:
 - v0407: added LTXVConditioning (Node 1587, frame_rate=25) between
@@ -316,6 +325,7 @@ uv run --group analysis python -m pytest tests/ -v --rootdir=.
   without comfy_api (only available inside ComfyUI runtime).
 - `tests/conftest.py` adds `scripts/` to sys.path for import.
 - `tests/test_audio_features.py` -- 24 tests for librosa extraction (synthetic audio).
+- `tests/test_audio_analysis_nodes.py` -- 9 tests for runtime AudioPitchDetect node.
 - `tests/test_workflows.py` -- workflow JSON structural validation.
 
 ## Editing workflow JSON (subgraphs)
@@ -388,3 +398,4 @@ Run `scripts/test_workflow_integrity.py` after every programmatic edit.
 - `docs/subgraph_latent_rework_guide.md` -- how the latent rework was done
 - `docs/analysis/ltx23_gaps_analysis.md` -- capability gaps + LTXVLoopingSampler AV incompatibility analysis
 - `internal/postmortem_v0408_session.md` -- debugging history (6 issues with fixes)
+- `internal/postmortem_v0409_latent_rework.md` -- latent-space loop rework (5 issues with fixes, noise_mask root cause)
