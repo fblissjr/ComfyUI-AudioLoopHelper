@@ -437,6 +437,8 @@ class AudioLoopPlanner(io.ComfyNode):
             f"Overlap: {window_seconds - stride_seconds:.2f}s",
             f"Estimated {iterations} iterations:",
             "",
+            f"  Initial:  {_format_timestamp(0)} - {_format_timestamp(window_seconds)}"
+            f"  (0.0s - {window_seconds:.1f}s)  [uses static prompt, not schedule]",
         ]
         for i in range(1, iterations + 1):
             start = i * stride_seconds

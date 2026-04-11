@@ -7,6 +7,8 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- AudioLoopPlanner now shows initial render time range with "[uses static prompt,
+  not schedule]" annotation, making it clear the schedule only applies to loop iterations
 - `scripts/analyze_audio_features.py`: librosa-based music feature extraction
   (BPM, key detection, chromagram, mel spectrogram, vocal F0, structure segmentation).
   Outputs JSON (for LLM prompt generation), markdown report, and PNG visualizations.
