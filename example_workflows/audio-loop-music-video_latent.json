@@ -3826,9 +3826,24 @@
           ]
         },
         {
+          "name": "next_prompt",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 1,
+          "shape": 3
+        },
+        {
+          "name": "blend_factor",
+          "type": "FLOAT",
+          "links": null,
+          "slot_index": 2,
+          "shape": 3
+        },
+        {
           "name": "current_time",
           "type": "FLOAT",
-          "links": null
+          "links": null,
+          "slot_index": 3
         }
       ],
       "title": "Prompt Schedule - Timestamp Ranges",
@@ -5573,7 +5588,6 @@
             "name": "extended_latent",
             "type": "LATENT",
             "linkIds": [
-              2960,
               2960
             ],
             "pos": [
