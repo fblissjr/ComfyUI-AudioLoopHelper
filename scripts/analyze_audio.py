@@ -3,6 +3,9 @@
 Outputs energy timeline, detected song structure, and loudness stats.
 Uses ffmpeg for analysis -- no heavy Python dependencies.
 
+For music-aware analysis (BPM, key, chromagram, vocal F0, auto-generated
+prompt templates), see analyze_audio_features.py (requires: uv sync --group analysis).
+
 Usage:
     uv run scripts/analyze_audio.py path/to/audio.wav
     uv run scripts/analyze_audio.py path/to/audio.wav --output analysis.md

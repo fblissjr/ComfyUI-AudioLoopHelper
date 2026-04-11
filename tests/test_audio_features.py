@@ -193,16 +193,101 @@ class TestDetectStructure:
 
 
 class TestGenerateScheduleSuggestion:
+    _SECTIONS = [
+        {"start": 0.0, "end": 30.0, "label": "INTRO", "level": "quiet"},
+        {"start": 30.0, "end": 90.0, "label": "VERSE", "level": "medium"},
+        {"start": 90.0, "end": 150.0, "label": "CHORUS", "level": "loud"},
+        {"start": 150.0, "end": 180.0, "label": "OUTRO", "level": "quiet"},
+    ]
+
     def test_output_is_parseable_schedule(self):
         """The suggested schedule should be parseable by _parse_schedule."""
-        sections = [
-            {"start": 0.0, "end": 30.0, "label": "INTRO", "level": "quiet"},
-            {"start": 30.0, "end": 90.0, "label": "VERSE", "level": "medium"},
-            {"start": 90.0, "end": 150.0, "label": "CHORUS", "level": "loud"},
-        ]
-        schedule_text = generate_schedule_suggestion(sections)
+        schedule_text = generate_schedule_suggestion(self._SECTIONS)
         assert isinstance(schedule_text, str)
         assert len(schedule_text.strip().splitlines()) >= 3
+
+    def test_placeholder_without_subject(self):
+        """Without subject, output should contain generic placeholder text."""
+        schedule_text = generate_schedule_suggestion(self._SECTIONS)
+        # Should have placeholder markers, not full prompts
+        assert "describe" in schedule_text.lower() or "[" in schedule_text
+
+    def test_subject_produces_full_prompts(self):
+        """With subject, output should contain the subject in every line."""
+        subject = "a woman singing in a basement workshop"
+        schedule_text = generate_schedule_suggestion(
+            self._SECTIONS, subject=subject
+        )
+        lines = schedule_text.strip().splitlines()
+        for line in lines:
+            # Every prompt line should contain the subject
+            prompt_part = line.split(":", 2)[-1].strip()  # after timestamp
+            assert "woman" in prompt_part.lower(), (
+                f"Subject not found in line: {line}"
+            )
+
+    def test_subject_includes_style_prefix(self):
+        """With subject, each line should contain 'Style: cinematic.'"""
+        subject = "a person playing guitar on stage"
+        schedule_text = generate_schedule_suggestion(
+            self._SECTIONS, subject=subject
+        )
+        lines = schedule_text.strip().splitlines()
+        for line in lines:
+            assert "Style: cinematic" in line, (
+                f"Missing style prefix in: {line}"
+            )
+
+    def test_chorus_has_close_up(self):
+        """CHORUS sections should suggest close-up framing."""
+        subject = "a singer on stage"
+        schedule_text = generate_schedule_suggestion(
+            self._SECTIONS, subject=subject
+        )
+        lines = schedule_text.strip().splitlines()
+        # Find the chorus line (90-150)
+        chorus_line = [l for l in lines if "1:30" in l or "close" in l.lower()]
+        assert any("close" in l.lower() for l in lines), (
+            f"No close-up suggested for chorus. Lines: {lines}"
+        )
+
+    def test_outro_has_fadeout_camera(self):
+        """OUTRO sections should suggest dolly out or pulling back."""
+        subject = "a singer on stage"
+        schedule_text = generate_schedule_suggestion(
+            self._SECTIONS, subject=subject
+        )
+        lines = schedule_text.strip().splitlines()
+        last_line = lines[-1]
+        assert "dolly" in last_line.lower() or "pulling" in last_line.lower() or "fade" in last_line.lower(), (
+            f"No fadeout camera in outro: {last_line}"
+        )
+
+    def test_verse_has_medium_shot(self):
+        """VERSE sections should suggest medium shot framing."""
+        subject = "a singer on stage"
+        schedule_text = generate_schedule_suggestion(
+            self._SECTIONS, subject=subject
+        )
+        lines = schedule_text.strip().splitlines()
+        assert any("medium" in l.lower() for l in lines), (
+            f"No medium shot suggested for verse"
+        )
+
+    def test_schedule_parseable_by_parse_schedule(self):
+        """With subject, output must still parse as valid schedule format."""
+        from analyze_audio_features import generate_schedule_suggestion
+        import re
+
+        subject = "a woman singing in a workshop"
+        schedule_text = generate_schedule_suggestion(
+            self._SECTIONS, subject=subject
+        )
+        lines = schedule_text.strip().splitlines()
+        # Each line must match: timestamp_range: prompt_text
+        ts_pattern = re.compile(r"^\d+:\d{2}")
+        for line in lines:
+            assert ts_pattern.match(line), f"Line doesn't start with timestamp: {line}"
 
 
 # --- JSON report ---

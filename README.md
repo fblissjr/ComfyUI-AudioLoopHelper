@@ -252,6 +252,46 @@ LatentContextExtract or LatentOverlapTrim which handle this automatically.
 **Inputs:** `latent` (LATENT)
 **Outputs:** `latent` (LATENT, noise_mask removed)
 
+### Audio Pitch Detect
+
+Per-iteration vocal pitch detection using torchaudio. Best results when
+wired to MelBandRoFormer's separated vocals output (already in the workflow).
+
+**Inputs:**
+
+| Input | Type | Description |
+|-------|------|-------------|
+| audio | AUDIO | Audio track (wire to MelBandRoFormer vocals output for clean signal) |
+| start_seconds | FLOAT | From AudioLoopController.start_index |
+| window_seconds | FLOAT | Same value as AudioLoopController.window_seconds |
+| freq_low | FLOAT | Min detection frequency (default 85 Hz, low male vocals) |
+| freq_high | FLOAT | Max detection frequency (default 400 Hz, high female vocals) |
+
+**Outputs:**
+
+| Output | Type | Use |
+|--------|------|-----|
+| median_f0 | FLOAT | Median fundamental frequency in Hz (0.0 if unvoiced) |
+| has_vocals | BOOLEAN | True if pitched content detected in window |
+| is_male_range | BOOLEAN | True if median F0 < 160 Hz |
+| is_female_range | BOOLEAN | True if median F0 > 160 Hz |
+| vocal_fraction | FLOAT | Ratio of voiced frames (0.0-1.0) |
+
+**Example wiring for vocal/instrumental prompt switching:**
+```
+MelBandRoFormerSampler (vocals output)
+  └→ AudioPitchDetect.audio
+
+AudioLoopController
+  └→ start_index → AudioPitchDetect.start_seconds
+
+AudioPitchDetect
+  └→ has_vocals → Switch node → select vocal vs instrumental prompt
+```
+
+Note: requires a Switch/Mux node (from ComfyUI-KJNodes or similar) to
+conditionally select between prompt paths based on the BOOLEAN output.
+
 ## Tuning guide
 
 ### overlap_seconds (AudioLoopController)
@@ -365,6 +405,11 @@ uv run --group analysis python scripts/analyze_audio_features.py your_song.wav -
 # With trim offset and separated vocal track for F0 analysis
 uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
   --trim 10 --vocal-track vocals_only.wav
+
+# Generate full LTX 2.3 prompt templates (copy-paste ready)
+uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
+  --subject "a woman in her 30s with dark hair singing in a basement workshop" \
+  --trim 10
 ```
 
 **What it extracts:**
