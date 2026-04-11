@@ -35,7 +35,9 @@ except ImportError:
 
 # Krumhansl-Schmuckler key profiles for major and minor keys
 _MAJOR_PROFILE = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
+_MAJOR_PROFILE_NORM = _MAJOR_PROFILE / np.linalg.norm(_MAJOR_PROFILE)
 _MINOR_PROFILE = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
+_MINOR_PROFILE_NORM = _MINOR_PROFILE / np.linalg.norm(_MINOR_PROFILE)
 _PITCH_CLASSES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 
@@ -60,13 +62,14 @@ def detect_bpm(audio: np.ndarray, sr: int) -> dict:
     }
 
 
-def detect_key(audio: np.ndarray, sr: int) -> dict:
+def detect_key(audio: np.ndarray, sr: int, chroma: np.ndarray | None = None) -> dict:
     """Detect musical key using Krumhansl-Schmuckler algorithm.
 
     Returns:
         {"key": str, "confidence": float}
     """
-    chroma = compute_chromagram(audio, sr)
+    if chroma is None:
+        chroma = compute_chromagram(audio, sr)
     mean_chroma = chroma.mean(axis=1)
 
     # Normalize
@@ -82,15 +85,13 @@ def detect_key(audio: np.ndarray, sr: int) -> dict:
         rotated = np.roll(mean_chroma, -shift)
 
         # Major
-        major_norm = _MAJOR_PROFILE / np.linalg.norm(_MAJOR_PROFILE)
-        corr_major = float(np.corrcoef(rotated, major_norm)[0, 1])
+        corr_major = float(np.corrcoef(rotated, _MAJOR_PROFILE_NORM)[0, 1])
         if corr_major > best_corr:
             best_corr = corr_major
             best_key = f"{_PITCH_CLASSES[shift]} Major"
 
         # Minor
-        minor_norm = _MINOR_PROFILE / np.linalg.norm(_MINOR_PROFILE)
-        corr_minor = float(np.corrcoef(rotated, minor_norm)[0, 1])
+        corr_minor = float(np.corrcoef(rotated, _MINOR_PROFILE_NORM)[0, 1])
         if corr_minor > best_corr:
             best_corr = corr_minor
             best_key = f"{_PITCH_CLASSES[shift]} Minor"
@@ -268,13 +269,87 @@ def detect_structure_librosa(audio: np.ndarray, sr: int, window_s: float = 2.0) 
     return sections
 
 
+# Section-to-prompt modifier mapping for LTX 2.3 i2v conventions.
+# Camera motions from CLAUDE.md prompt guide. Avoid dolly out (breaks limbs/faces)
+# except for OUTRO where it's the expected visual pattern.
+_SECTION_MODIFIERS = {
+    "INTRO": {
+        "framing": "In a wide establishing shot, static camera, locked off shot,",
+        "lighting": "Soft lighting, gentle.",
+        "energy_verb": "is beginning to sing softly",
+        "audio_desc": "Quiet ambient tone, gentle room presence.",
+    },
+    "VERSE": {
+        "framing": "In a medium shot,",
+        "lighting": "Warm lighting, steady energy.",
+        "energy_verb": "is singing",
+        "audio_desc": "Her voice fills the space. Soft ambient hum.",
+    },
+    "CHORUS": {
+        "framing": "In a close-up,",
+        "lighting": "Bright, dynamic lighting.",
+        "energy_verb": "is singing with intensity",
+        "audio_desc": "Her voice is powerful and resonant.",
+    },
+    "BRIDGE": {
+        "framing": "In a wide shot,",
+        "lighting": "Moody, low contrast lighting.",
+        "energy_verb": "is singing with quiet emotion",
+        "audio_desc": "Subdued melody, reflective atmosphere.",
+    },
+    "OUTRO": {
+        "framing": "In a wide shot, dolly out, camera pulling back,",
+        "lighting": "Fading, gentle lighting.",
+        "energy_verb": "is singing softly, trailing off",
+        "audio_desc": "Her voice fades quietly. Room tone settles.",
+    },
+    "BREAK": {
+        "framing": "In a medium shot, static camera,",
+        "lighting": "Dim lighting, still.",
+        "energy_verb": "pauses, swaying gently",
+        "audio_desc": "Brief instrumental moment, ambient quiet.",
+    },
+}
+
+# Fallback for unknown section labels
+_DEFAULT_MODIFIER = {
+    "framing": "In a medium shot,",
+    "lighting": "Natural lighting.",
+    "energy_verb": "is singing",
+    "audio_desc": "Music continues.",
+}
+
+
 def generate_schedule_suggestion(
-    sections: list[dict], trim_offset: float = 0.0
+    sections: list[dict],
+    subject: str = "",
+    trim_offset: float = 0.0,
 ) -> str:
     """Generate a TimestampPromptSchedule text block from sections.
 
-    Output is copy-pasteable into the TimestampPromptSchedule node.
+    Without subject: produces placeholder prompts with section labels.
+    With subject: produces full LTX 2.3 i2v prompts using the subject
+    description wrapped with section-appropriate camera, lighting, and
+    energy modifiers. Copy-pasteable into TimestampPromptSchedule.
+
+    Args:
+        sections: list of dicts with start, end, label, level keys.
+        subject: scene description (e.g., "a woman singing in a workshop").
+            If empty, falls back to placeholder output.
+        trim_offset: seconds to subtract from timestamps.
     """
+    if not subject:
+        return _generate_placeholder_schedule(sections, trim_offset)
+
+    return _generate_subject_schedule(sections, subject, trim_offset)
+
+
+def _build_schedule(
+    sections: list[dict],
+    trim_offset: float,
+    build_prompt,
+) -> str:
+    """Shared loop for schedule generation. build_prompt(section) -> str."""
     lines = []
     for i, s in enumerate(sections):
         start = max(0, s["start"] - trim_offset)
@@ -282,22 +357,44 @@ def generate_schedule_suggestion(
         if end <= 0:
             continue
 
-        label = s["label"]
-        level = s["level"]
+        prompt = build_prompt(s)
+        ts_start = _fmt_ts(start)
 
-        m_s = int(start) // 60
-        s_s = int(start) % 60
-        m_e = int(end) // 60
-        s_e = int(end) % 60
-
-        if i == len(sections) - 1 or label == "OUTRO":
-            lines.append(f"{m_s}:{s_s:02d}+: [{label} - {level}] describe fadeout")
+        if i == len(sections) - 1 or s["label"] == "OUTRO":
+            lines.append(f"{ts_start}+: {prompt}")
         else:
-            lines.append(
-                f"{m_s}:{s_s:02d}-{m_e}:{s_e:02d}: [{label} - {level}] describe action and audio here"
-            )
+            lines.append(f"{ts_start}-{_fmt_ts(end)}: {prompt}")
 
     return "\n".join(lines)
+
+
+def _generate_placeholder_schedule(
+    sections: list[dict], trim_offset: float
+) -> str:
+    """Placeholder output with section labels for manual editing."""
+    def build(s):
+        return f"[{s['label']} - {s['level']}] describe action and audio here"
+    return _build_schedule(sections, trim_offset, build)
+
+
+def _generate_subject_schedule(
+    sections: list[dict], subject: str, trim_offset: float
+) -> str:
+    """Full prompt schedule with subject wrapped in section modifiers."""
+    def build(s):
+        mods = _SECTION_MODIFIERS.get(s["label"], _DEFAULT_MODIFIER)
+        return (
+            f"Style: cinematic. {mods['framing']} {subject} {mods['energy_verb']}. "
+            f"{mods['lighting']} {mods['audio_desc']}"
+        )
+    return _build_schedule(sections, trim_offset, build)
+
+
+def _fmt_ts(seconds: float) -> str:
+    """Format seconds as M:SS for schedule timestamps."""
+    m = int(seconds) // 60
+    s = int(seconds) % 60
+    return f"{m}:{s:02d}"
 
 
 def format_json_report(
@@ -338,21 +435,16 @@ def format_markdown_report(
     sections: list[dict],
     f0_result: dict | None = None,
     trim_offset: float = 0.0,
+    subject: str = "",
 ) -> str:
     """Format a human-readable markdown report."""
-
-    def _fmt_time(seconds: float) -> str:
-        m = int(seconds) // 60
-        s = int(seconds) % 60
-        return f"{m}:{s:02d}"
-
     lines = []
     lines.append(f"# Audio Feature Analysis: {os.path.basename(audio_path)}")
     lines.append(f"Last updated: {_today()}")
     lines.append("")
 
     # Summary
-    lines.append(f"**Duration:** {duration:.1f}s ({_fmt_time(duration)})")
+    lines.append(f"**Duration:** {duration:.1f}s ({_fmt_ts(duration)})")
     lines.append(f"**BPM:** {bpm_result['bpm']}")
     lines.append(f"**Key:** {key_result['key']} (confidence: {key_result['confidence']:.2f})")
     lines.append(f"**Beats detected:** {len(bpm_result.get('beat_times', []))}")
@@ -370,7 +462,7 @@ def format_markdown_report(
     lines.append("| Section | Time | Duration | Energy |")
     lines.append("|---------|------|----------|--------|")
     for s in sections:
-        t_range = f"{_fmt_time(s['start'])}-{_fmt_time(s['end'])}"
+        t_range = f"{_fmt_ts(s['start'])}-{_fmt_ts(s['end'])}"
         dur = s["end"] - s["start"]
         lines.append(f"| {s['label']:8s} | {t_range:11s} | {dur:5.0f}s   | {s['level']:6s} |")
     lines.append("")
@@ -381,7 +473,7 @@ def format_markdown_report(
     lines.append("Copy and adapt:")
     lines.append("")
     lines.append("```")
-    lines.append(generate_schedule_suggestion(sections, trim_offset))
+    lines.append(generate_schedule_suggestion(sections, subject=subject, trim_offset=trim_offset))
     lines.append("```")
     lines.append("")
 
@@ -412,6 +504,7 @@ def save_png_visualizations(
     sr: int,
     output_dir: str,
     basename: str,
+    precomputed_chroma: np.ndarray | None = None,
 ) -> list[str]:
     """Save spectrogram, chromagram, and onset envelope as PNGs.
 
@@ -441,9 +534,9 @@ def save_png_visualizations(
     plt.close(fig)
     saved.append(str(path))
 
-    # Chromagram
+    # Chromagram (use precomputed if available to avoid redundant CQT)
     fig, ax = plt.subplots(figsize=(12, 3))
-    chroma = compute_chromagram(audio, sr)
+    chroma = precomputed_chroma if precomputed_chroma is not None else compute_chromagram(audio, sr)
     librosa.display.specshow(chroma, sr=sr, x_axis="time", y_axis="chroma", ax=ax)
     ax.set_title(f"Chromagram: {basename}")
     fig.tight_layout()
@@ -479,8 +572,9 @@ def analyze_file(
     audio, file_sr = librosa.load(audio_path, sr=sr, mono=True)
     duration = len(audio) / sr
 
+    chroma = compute_chromagram(audio, sr)
     bpm_result = detect_bpm(audio, sr)
-    key_result = detect_key(audio, sr)
+    key_result = detect_key(audio, sr, chroma=chroma)
     sections = detect_structure_librosa(audio, sr)
 
     f0_result = None
@@ -499,6 +593,7 @@ def analyze_file(
         "key": key_result,
         "sections": sections,
         "f0": f0_result,
+        "chroma": chroma,
     }
 
 
@@ -513,6 +608,8 @@ def main():
     parser.add_argument("--trim", "-t", type=float, default=0.0,
                         help="Trim offset in seconds for schedule timestamps")
     parser.add_argument("--vocal-track", help="Separated vocal track for F0 analysis")
+    parser.add_argument("--subject", "-s",
+                        help="Scene description for prompt templates (e.g., 'a woman singing in a workshop')")
     parser.add_argument("--sr", type=int, default=22050, help="Sample rate (default: 22050)")
     args = parser.parse_args()
 
@@ -538,6 +635,7 @@ def main():
         sections=results["sections"],
         f0_result=results["f0"],
         trim_offset=args.trim,
+        subject=args.subject or "",
     )
 
     if args.output:
@@ -569,7 +667,10 @@ def main():
     # PNG visualizations
     if args.png_dir:
         basename = Path(args.audio_path).stem
-        saved = save_png_visualizations(results["audio"], results["sr"], args.png_dir, basename)
+        saved = save_png_visualizations(
+            results["audio"], results["sr"], args.png_dir, basename,
+            precomputed_chroma=results.get("chroma"),
+        )
         for p in saved:
             print(f"Saved: {p}", file=sys.stderr)
 
