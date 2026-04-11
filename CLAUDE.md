@@ -34,6 +34,9 @@ Helper functions:
 - `_parse_schedule(schedule)` -- multiline schedule text to entries list
 - `_match_schedule(entries, time)` -- find matching prompt for a timestamp
 - `_match_schedule_with_next(entries, time, blend_seconds)` -- returns (prompt, next_prompt, blend_factor)
+- **TimestampPromptSchedule only runs in loop iterations, NOT the initial render.**
+  Initial render (0 to window_seconds) uses the static prompt on node 169.
+  AudioLoopPlanner output shows this explicitly with an "Initial:" line.
 
 ## Key patterns
 
@@ -93,19 +96,26 @@ Helper functions:
   regenerate audio from noise, destroying lip sync. Verify mask semantics
   before changing any LTXVAudioVideoMask wiring.
 - **Deleting PrimitiveNodes breaks subgraph wiring.** PrimitiveNodes override widget values via a special mechanism. Delete them first, then rewire the freed inputs from the component input panel.
+- **Workflow JSON output slots must match nodes.py define_schema().** If you add
+  an output to a node's schema, the workflow JSON won't have it until the user
+  deletes and re-adds the node. Fix programmatically via WorkflowEditor.
 - **After changing a node's define_schema(), users must delete and re-add the node in the UI.** JSON slot indices are baked at save time. Editing JSON slot numbers manually is fragile -- ComfyUI routes by slot index, not name.
 - **Removing a subgraph component input shifts all higher slot indices.** Internal links referencing `origin_slot` must be decremented. Miss one and wires silently disconnect.
 - **Always validate workflow JSON after programmatic edits:** `python3 -c "import json; json.load(open('file.json'))"`
 - **Scrub workflows before open-sourcing:** filenames, absolute paths, UUIDs, image previews, videopreview fullpath/filename, creative prompts, clipspace references.
 - Pyright `reportIncompatibleMethodOverride` on `execute()` methods is a false positive -- standard ComfyUI node API pattern.
 
-## LTXVLoopingSampler limitation
+## LTXVLoopingSampler AV incompatibility (settled)
 
-LTXVLoopingSampler (ComfyUI-LTXVideo) does NOT support Audio-Visual latents.
-It throws `ValueError: LoopingSampler currently does not support Audio Visual latents`.
-For music video workflows that need audio conditioning for lip sync, use
-TensorLoopOpen/Close with the extension subgraph instead.
-ScheduleToMultiPrompt node is kept for future use if AV support is added.
+LTXVLoopingSampler CANNOT support AV latents. 5 blocking architectural issues:
+spatial tiling on 5D fails on 4D audio, temporal tiling uses video frame count
+not audio 25Hz, weighted accumulation can't index-assign NestedTensor,
+sub-samplers expect video-only, model forward requires both modalities
+simultaneously for cross-attention. This is not a TODO -- it's fundamental.
+TensorLoop is the correct approach for AV. Do not attempt to build an AV
+looping sampler -- use two-stage upscale for resolution instead.
+Full analysis: `docs/analysis/ltx23_gaps_analysis.md`
+ScheduleToMultiPrompt node kept for video-only LTXVLoopingSampler use cases.
 
 ## Video/Audio VAE temporal conversion
 
@@ -299,7 +309,7 @@ uv run --group analysis python -m pytest tests/ -v --rootdir=.
 - `__init__.py` has a try/except guard so pytest can import the package
   without comfy_api (only available inside ComfyUI runtime).
 - `tests/conftest.py` adds `scripts/` to sys.path for import.
-- `tests/test_audio_features.py` -- 17 tests for librosa extraction (synthetic audio).
+- `tests/test_audio_features.py` -- 24 tests for librosa extraction (synthetic audio).
 - `tests/test_workflows.py` -- workflow JSON structural validation.
 
 ## Editing workflow JSON (subgraphs)
@@ -366,6 +376,8 @@ Run `scripts/test_workflow_integrity.py` after every programmatic edit.
 - `docs/upscale_guide.md` -- upscale workflow build guide
 - `docs/ltxv_looping_sampler_settings.md` -- LTXVLoopingSampler reference (VIDEO-ONLY, no AV latent support)
 - `docs/latent_loop_build_guide.md` -- build guide for LTXVLoopingSampler (video-only, not for music video)
+- `docs/pipeline_flow_image.md` -- full pipeline trace for image workflow (every node, wire, widget)
+- `docs/pipeline_flow_latent.md` -- full pipeline trace for latent workflow (includes noise_mask flow)
 - `docs/subgraph_latent_rework_guide.md` -- how the latent rework was done
-- `internal/analysis/ltx23_gaps_analysis.md` -- capability gaps across LTX-Desktop, LTX-2, ComfyUI-LTXVideo
+- `docs/analysis/ltx23_gaps_analysis.md` -- capability gaps + LTXVLoopingSampler AV incompatibility analysis
 - `internal/postmortem_v0408_session.md` -- debugging history (6 issues with fixes)
