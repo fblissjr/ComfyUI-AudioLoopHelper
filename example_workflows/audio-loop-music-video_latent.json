@@ -2,7 +2,7 @@
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
   "last_node_id": 1605,
-  "last_link_id": 2995,
+  "last_link_id": 2997,
   "nodes": [
     {
       "id": 252,
@@ -3929,9 +3929,17 @@
           "name": "overlap_frames",
           "type": "INT",
           "links": [
-            2954,
             2957
           ]
+        },
+        {
+          "name": "overlap_latent_frames",
+          "type": "INT",
+          "links": [
+            2954
+          ],
+          "slot_index": 6,
+          "shape": 3
         }
       ],
       "properties": {
@@ -5142,7 +5150,7 @@
     [
       2954,
       1582,
-      5,
+      6,
       843,
       14,
       "INT"
@@ -5548,8 +5556,11 @@
             "id": "4b3abc3c-e1fe-4c77-afb4-74f5f8f0f82d",
             "name": "num_frames",
             "type": "INT",
-            "linkIds": [],
-            "label": "overlap",
+            "linkIds": [
+              2996,
+              2997
+            ],
+            "label": "overlap_latent_frames",
             "pos": [
               2538.414173062898,
               4954.807109796994
@@ -6281,7 +6292,7 @@
                 "widget": {
                   "name": "overlap_latent_frames"
                 },
-                "link": null
+                "link": 2996
               }
             ],
             "outputs": [
@@ -6327,7 +6338,7 @@
                 "widget": {
                   "name": "overlap_latent_frames"
                 },
-                "link": null
+                "link": 2997
               }
             ],
             "outputs": [
@@ -6637,6 +6648,22 @@
             "target_id": -20,
             "target_slot": 0,
             "type": "LATENT"
+          },
+          {
+            "id": 2996,
+            "origin_id": -10,
+            "origin_slot": 14,
+            "target_id": 2004,
+            "target_slot": 1,
+            "type": "INT"
+          },
+          {
+            "id": 2997,
+            "origin_id": -10,
+            "origin_slot": 14,
+            "target_id": 2005,
+            "target_slot": 1,
+            "type": "INT"
           }
         ],
         "extra": {

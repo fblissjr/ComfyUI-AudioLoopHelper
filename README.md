@@ -7,12 +7,14 @@ Handles loop timing, auto-stopping at the audio boundary, per-iteration seed
 variation, timestamp-based prompt scheduling, smooth conditioning blending,
 and latent-space overlap conversion. No manual iteration counting or fragile constants.
 
-v0409 (UNTESTED): The extension subgraph was reworked to operate in latent
-space using LatentContextExtract and LatentOverlapTrim -- no per-iteration
-VAE decode/encode. One decode at the end. These nodes handle noise_mask
-stripping internally (critical for sampler correctness). The tested/working
-workflow is v0408 which uses per-iteration IMAGE decode. Use v0409 at your
-own risk until testing confirms lip sync parity.
+Two workflow variants included:
+- **Image workflow** (`audio-loop-music-video_image.json`) -- tested/working.
+  Per-iteration VAE decode/encode. Proven lip sync.
+- **Latent workflow** (`audio-loop-music-video_latent.json`) -- UNTESTED.
+  Operates in latent space using LatentContextExtract and LatentOverlapTrim.
+  No per-iteration VAE round-trip. These nodes handle noise_mask stripping
+  internally (critical for sampler correctness). Use at your own risk until
+  testing confirms lip sync parity.
 
 Workflow adapted from [kijai's LTX 2.3 long loop extension test](https://github.com/kijai/ComfyUI-NativeLooping_testing/blob/main/ltx23_long_loop_extension_test.json).
 
@@ -207,7 +209,7 @@ an audio tensor.
 
 Extracts the last N latent frames as context for the next loop iteration.
 Replaces LTXVSelectLatents + StripLatentNoiseMask in the latent-space
-subgraph (v0409). Strips noise_mask so LTXVAudioVideoMask creates a
+subgraph (latent workflow). Strips noise_mask so LTXVAudioVideoMask creates a
 fresh mask (matching VAEEncode behavior from the IMAGE workflow).
 
 **Inputs:**
@@ -227,7 +229,7 @@ fresh mask (matching VAEEncode behavior from the IMAGE workflow).
 
 Trims the first N latent frames (overlap region) from a sampler's output.
 Keeps new content only, strips noise_mask. Used in the latent-space
-subgraph (v0409) to avoid duplicating overlap frames across iterations.
+subgraph (latent workflow) to avoid duplicating overlap frames across iterations.
 
 **Inputs:**
 

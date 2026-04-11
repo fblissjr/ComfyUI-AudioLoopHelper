@@ -3,7 +3,7 @@ Last updated: 2026-04-09
 # End-to-End Workflow Pipeline Trace
 
 Original source: kijai's `ltx23_long_loop_extension_test.json`
-Current version: `example_workflows/native-audio-looping-music-video_v0408.json`
+Current version: `example_workflows/audio-loop-music-video_image.json`
 
 ---
 
