@@ -110,6 +110,9 @@ Helper functions:
 - **Always validate workflow JSON after programmatic edits:** `python3 -c "import json; json.load(open('file.json'))"`
 - **Scrub workflows before open-sourcing:** filenames, absolute paths, UUIDs, image previews, videopreview fullpath/filename, creative prompts, clipspace references.
 - Pyright `reportIncompatibleMethodOverride` on `execute()` methods is a false positive -- standard ComfyUI node API pattern.
+- **torchaudio detect_pitch_frequency on silence gives false positives.** Always
+  gate with an RMS energy check (< 0.005 threshold) before calling. AudioPitchDetect
+  does this automatically. If adding new pitch-based nodes, replicate the gate.
 
 ## LTXVLoopingSampler AV incompatibility (settled)
 
@@ -283,6 +286,11 @@ Companion custom nodes (not imported, just used alongside in workflows):
 - ComfyUI-KJNodes -- Set/Get nodes, FloatConstant, LTX2_NAG, LTXVImgToVideoInplaceKJ, ImageResizeKJv2
 - ComfyUI-VideoHelperSuite -- VHS_VideoCombine
 - ComfyUI-MelBandRoFormer -- vocal separation
+- **MelBandRoFormer loader has hardcoded architecture** (`dim=384, depth=6,
+  num_stems=1`). Only `MelBandRoformer_fp16.safetensors` loads. "Big" models
+  (dim=512) and 4-stem models (num_stems=4) require code changes to the loader.
+  No HF model exists for male/female voice separation -- AudioPitchDetect fills
+  this gap via F0 classification on the separated vocals output.
 
 ## Audio analysis
 
@@ -307,19 +315,26 @@ Two analysis scripts with different dependency boundaries:
   mel features into visual motion. Never feed audio visualizations (spectrograms,
   chromagrams) into the video latent stream via `LTXVAddLatentGuide` -- the DiT
   would generate frames that look like heatmaps.
-- Future Phase 2 runtime nodes will output FLOAT/INT scalars only (torchaudio,
-  no new deps) to modulate text conditioning and sampling parameters.
+- `--subject` flag generates copy-pasteable LTX 2.3 prompt templates with
+  section-appropriate camera/lighting/energy modifiers.
+- Full guide: `docs/audio_analysis_guide.md`
 
 ### Dependency boundary
 - **Offline scripts** (scripts/): librosa allowed via optional dep group.
-- **Runtime ComfyUI nodes** (nodes.py): torchaudio only, zero extra deps.
+- **Runtime ComfyUI nodes** (nodes.py, nodes_analysis.py): torchaudio only, zero extra deps.
   All analysis outputs must be FLOAT or INT. No IMAGE outputs for audio features.
+- **AudioPitchDetect.vocal_fraction wires directly to ConditioningBlend.blend_factor.**
+  It's a 0-1 FLOAT representing how much of the window has vocals. This enables
+  audio-reactive prompt blending without TimestampPromptSchedule's time-based blend.
+  Disconnect TPS blend_factor, wire vocal_fraction instead. Sections with heavy
+  vocals emphasize the vocal-focused prompt; instrumental sections emphasize the other.
+  See `docs/audio_analysis_guide.md` wiring pattern 2.
 
 ## Testing
 
 Tests run via the project's own venv with pytest:
 ```bash
-uv run --group analysis python -m pytest tests/ -v --rootdir=.
+uv run --group dev --group analysis python -m pytest tests/ -v --rootdir=.
 ```
 - `__init__.py` has a try/except guard so pytest can import the package
   without comfy_api (only available inside ComfyUI runtime).
