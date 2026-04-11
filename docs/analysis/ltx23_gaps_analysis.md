@@ -1,4 +1,4 @@
-Last updated: 2026-04-10
+Last updated: 2026-04-12
 
 # LTX 2.3 Gaps Analysis: ComfyUI-LTXVideo vs LTX-2 Native vs LTX-Desktop
 
@@ -245,6 +245,70 @@ exists where, what's missing, and what could be brought into ComfyUI workflows.
 7. **APG guider** -- better text adherence
 8. **LLM-based prompt suggestion** -- use local Gemma or API to suggest prompts per section
 9. **Per-modality guidance tuning** -- separate video/audio CFG during generation
+
+---
+
+## LTXVLoopingSampler AV Latent Incompatibility (Deep Analysis)
+
+Last analyzed: 2026-04-12
+
+LTXVLoopingSampler (`ComfyUI-LTXVideo/looping_sampler.py` line 722) explicitly
+rejects AV latents with: "LoopingSampler currently does not support Audio Visual
+latents." This is not a TODO -- it's a fundamental architectural incompatibility.
+
+### Why it's incompatible (5 blocking issues)
+
+1. **Spatial tiling on 5D video fails on 4D audio**: Line 245 does
+   `samples[:,:,:,v_start:v_end,h_start:h_end]`. NestedTensor applies this to
+   BOTH tensors. Audio is `[B,8,T,16]` (4D) -- indexing dims 3,4 causes IndexError.
+
+2. **Temporal tiling uses video frame count**: Lines 325-339 iterate based on
+   `shape[2]` (video latent frames: 63). Audio has 497 frames at 25Hz -- completely
+   independent. Tile boundaries would slice audio at wrong positions.
+
+3. **Weighted spatial accumulation**: Line 914 does
+   `final_output[:,:,:,v,h] += tile * weights`. Can't index-assign a NestedTensor
+   result into a regular 5D tensor.
+
+4. **Sub-sampler expectations**: LTXVBaseSampler/ExtendSampler do
+   `latents["samples"][:,:,:t.shape[2]] = t` -- assumes 5D video-only.
+
+5. **Model forward requires BOTH**: `av_model.py` forward() separates input `x`
+   into `[vx, ax]` and processes both through cross-attention (audio_to_video,
+   video_to_audio). Can't tile them separately with different schedules because
+   cross-attention operates at token level across both modalities simultaneously.
+
+### Why TensorLoop works for AV
+
+- Passes whole NestedTensor to sampler (no slicing, no indexing)
+- Model's `separate/recombine_audio_and_video_latents` handles unpacking internally
+- Audio re-added fresh each iteration via LTXVConcatAVLatent
+- No spatial or temporal tiling -- each iteration generates one full window
+
+### Could we build an AV-compatible version?
+
+Theoretically yes (separate video/audio before tiling, compute corresponding
+audio ranges per video tile, recombine for sampling, separate for accumulation).
+But: ~1500 lines of new code, audio temporal alignment is non-trivial (25Hz vs
+8x compressed video), audio overlap blending is undefined (no established
+approach), and the model hasn't been tested with tiled AV inference at boundaries.
+
+**Recommendation**: Stay on TensorLoop for AV. Use LTXVLoopingSampler only for
+video-only workflows. The two-stage upscale approach (generate at 832x480, upscale
+separately) addresses the resolution limitation without requiring spatial tiling
+during AV generation.
+
+### Source files
+
+| File | Lines | What |
+|------|-------|------|
+| `~/ComfyUI/custom_nodes/ComfyUI-LTXVideo/looping_sampler.py` | 722-729 | AV rejection check |
+| `~/ComfyUI/custom_nodes/ComfyUI-LTXVideo/looping_sampler.py` | 241-309 | Spatial tiling (5D only) |
+| `~/ComfyUI/custom_nodes/ComfyUI-LTXVideo/looping_sampler.py` | 310-523 | Temporal chunking |
+| `~/ComfyUI/comfy/nested_tensor.py` | 1-92 | NestedTensor class |
+| `~/ComfyUI/comfy_extras/nodes_lt.py` | 619-683 | ConcatAV / SeparateAV |
+| `~/ComfyUI/comfy/ldm/lightricks/av_model.py` | 633-644 | separate/recombine latents |
+| `~/ComfyUI/comfy/ldm/lightricks/av_model.py` | 1026-1059 | forward() AV handling |
 
 ---
 
