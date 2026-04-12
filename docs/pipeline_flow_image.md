@@ -1178,7 +1178,7 @@ Passes the decoded initial render images to both the ImageBatch and TensorLoopOp
 
 Retrieves `base_cond_pos` -- the static positive conditioning for loop iterations.
 
-**Output:** CONDITIONING to Node 1587 (Loop LTXVConditioning) positive input.
+**Output:** CONDITIONING directly to Node 843 (extension subgraph) `positive` input.
 
 ---
 
@@ -1186,32 +1186,21 @@ Retrieves `base_cond_pos` -- the static positive conditioning for loop iteration
 
 Retrieves `base_cond_neg`.
 
-**Output:** CONDITIONING to Node 1587 (Loop LTXVConditioning) negative input.
+**Output:** CONDITIONING directly to Node 843 (extension subgraph) `negative` input.
 
 ---
 
-### Node 1587 -- LTXVConditioning (Loop)
+### Node 1587 -- LTXVConditioning (Loop) -- BYPASSED
 
 | Field | Value |
 |-------|-------|
 | **Type** | `LTXVConditioning` |
+| **Mode** | **4 (BYPASSED)** |
 | **Source** | ComfyUI core |
-| **What it does** | Wraps the loop conditioning with frame_rate=25 metadata. Critical -- without this, the positive conditioning mismatches the negative inside the extension subgraph. |
+| **Why bypassed** | Was wrapping the Extension's conditioning with frame_rate=25. This caused ComfyUI's execution engine to evaluate the conditioning graph in a way that corrupted the initial render's audio-video cross-attention, destroying lip sync. Removed 2026-04-12. See `internal/postmortem_v0409_latent_rework.md` Issue 6. |
 
-**Inputs:**
-
-| Input | Type | Source | Value |
-|-------|------|--------|-------|
-| positive | CONDITIONING | Node 1588 (Get_base_cond_pos) | -- |
-| negative | CONDITIONING | Node 648 (Get_base_cond_neg) | -- |
-| frame_rate | INT (widget) | -- | `25` |
-
-**Outputs:**
-
-| Output | Type | Connects to |
-|--------|------|-------------|
-| positive | CONDITIONING | Node 843 (extension subgraph) `positive` input |
-| negative | CONDITIONING | Node 843 (extension subgraph) `negative` input |
+Conditioning now flows directly from Get_base_cond_pos (#1588) and
+Get_base_cond_neg (#648) to Extension #843 positive/negative inputs.
 
 ---
 
@@ -1248,8 +1237,8 @@ Node 843 is a **group node (subgraph)** with ID `b4973d68-09b9-4da5-9845-38ad62a
 | 3 | vae | VAE | Node 619 (Get_video_vae) |
 | 4 | previous_images | IMAGE | Node 1539 (TensorLoopOpen) previous_value |
 | 5 | window_size_seconds | FLOAT | Node 691 (Get_window_size_seconds) |
-| 6 | positive | CONDITIONING | Node 1587 (Loop LTXVConditioning) positive |
-| 7 | negative | CONDITIONING | Node 1587 (Loop LTXVConditioning) negative |
+| 6 | positive | CONDITIONING | Node 1588 (Get_base_cond_pos) directly |
+| 7 | negative | CONDITIONING | Node 648 (Get_base_cond_neg) directly |
 | 8 | init_image | IMAGE | Node 651 (Get_input_image) |
 | 9 | Audio VAE | VAE | Node 599 (Get_audio_vae) |
 | 10 | audio | AUDIO | Node 641 (Get_actual_audio) |

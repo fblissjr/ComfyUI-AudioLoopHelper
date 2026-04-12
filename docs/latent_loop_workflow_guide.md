@@ -1,4 +1,4 @@
-Last updated: 2026-04-10
+Last updated: 2026-04-12
 
 # Latent-Space Loop Workflow (LTXVLoopingSampler)
 

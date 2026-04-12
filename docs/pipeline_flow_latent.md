@@ -674,26 +674,19 @@ Output Assembly:
 ### Node 1588 -- Get_base_cond_pos (Static Mode)
 - **Type**: `GetNode` (KJNodes) -- retrieves `base_cond_pos`
 - **What**: In static mode (TimestampPromptSchedule bypassed), the base positive conditioning from the initial render is reused for every loop iteration.
-- **Outputs**: CONDITIONING -> #1587 Loop LTXVConditioning pos (slot 0)
+- **Outputs**: CONDITIONING -> #843 Extension positive (slot 6) directly
 
 ### Node 648 -- Get_base_cond_neg
 - **Type**: `GetNode` (KJNodes) -- retrieves `base_cond_neg`
-- **Outputs**: CONDITIONING -> #1587 Loop LTXVConditioning neg (slot 1)
+- **Outputs**: CONDITIONING -> #843 Extension negative (slot 7) directly
 
-### Node 1587 -- LTXVConditioning (Loop)
-- **Type**: `LTXVConditioning` (ComfyUI core: `comfy_extras/nodes_lt.py`)
-- **What**: Adds frame_rate=25 metadata to the loop body conditioning. Required so positive conditioning matches negative conditioning format.
-- **Inputs**:
-  | Input | Type | Source |
-  |-------|------|--------|
-  | positive | CONDITIONING | #1588 Get_base_cond_pos (slot 0) |
-  | negative | CONDITIONING | #648 Get_base_cond_neg (slot 0) |
-- **Widgets**: `frame_rate`: `25`
-- **Outputs**:
-  | Output | Type | Connected To |
-  |--------|------|-------------|
-  | positive | CONDITIONING | #843 Extension positive (slot 6) |
-  | negative | CONDITIONING | #843 Extension negative (slot 7) |
+### Node 1587 -- LTXVConditioning (Loop) -- BYPASSED (mode=4)
+- **Type**: `LTXVConditioning` (ComfyUI core)
+- **Why bypassed**: Was wrapping the Extension's conditioning with frame_rate=25.
+  This caused ComfyUI's execution engine to evaluate the conditioning graph in a
+  way that corrupted the initial render's audio-video cross-attention, destroying
+  lip sync. Removed 2026-04-12. See `internal/postmortem_v0409_latent_rework.md` Issue 6.
+- Conditioning now flows directly from #1588/#648 to #843.
 
 ### Node 1560 -- AudioLoopPlanner (BYPASSED, mode=4)
 - **Type**: `AudioLoopPlanner` (AudioLoopHelper: `nodes.py`)
@@ -725,8 +718,8 @@ The subgraph receives 15 inputs from the outer workflow via internal node -10:
 | 3 | vae | VAE | #619 Get_video_vae |
 | 4 | previous_latent (previous_images) | LATENT | #1539 TensorLoopOpen previous_value (slot 1) |
 | 5 | video_end_time (window_size_seconds) | FLOAT | #691 Get_window_size_seconds -- 19.88 |
-| 6 | positive | CONDITIONING | #1587 Loop LTXVConditioning pos (slot 0) |
-| 7 | negative | CONDITIONING | #1587 Loop LTXVConditioning neg (slot 1) |
+| 6 | positive | CONDITIONING | #1588 Get_base_cond_pos directly |
+| 7 | negative | CONDITIONING | #648 Get_base_cond_neg directly |
 | 8 | num_guides.image_1 (init_image) | IMAGE | #651 Get_input_image |
 | 9 | audio_vae (Audio VAE) | VAE | #599 Get_audio_vae |
 | 10 | audio | AUDIO | #641 Get_actual_audio |
