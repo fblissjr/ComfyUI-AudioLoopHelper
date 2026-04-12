@@ -196,6 +196,32 @@ Our nodes support both workflow types:
 - For our loop workflow: each window is 497 frames at 832x480. Changing resolution
   requires adjusting window_seconds or temporal_tile_size to stay under the limit.
 
+## Color drift prevention (AdaIN)
+
+Loop iterations progressively darken because each iteration's latent statistics
+drift from the initial render. The init_image guide anchors composition but not
+color -- guide strength controls the denoise mask, not cross-attention style.
+
+Two AdaIN approaches (can be used together or independently):
+
+**Per-iteration AdaIN** (LTXVAdainLatent, inside subgraph):
+- Location: after SeparateAVLatent (#596), before CropGuides (#655)
+- Reference: initial render video latent from SeparateAV #245
+- Factor: 0.2 default (gentle). Increase to 0.5 for stronger correction.
+- per_frame=False (global statistics). Try True if per-frame flickering occurs.
+- Present in all three workflows. Bypass (mode=4) to disable.
+
+**Per-step AdaIN** (LTXVPerStepAdainPatcher, model chain):
+- Location: after SamplingPreviewOverride, before Set_model
+- Reference: node 531 (init image embed latent, available before sampling)
+- Factors: per-denoising-step, e.g., "0.3,0.2,0.1,0.05,0.0,0.0,0.0,0.0"
+  (stronger at early noisy steps, none at late detail steps)
+- Only in `audio-loop-music-video_image_adain_perstep.json`
+- More aggressive than per-iteration. Applied during sampling, not after.
+
+**Testing order**: Start with per-iteration only (factor=0.2). If drift persists,
+try the per-step workflow. Compare iteration 5+ brightness against initial render.
+
 ## Subgraph editing
 
 - ALWAYS use WorkflowEditor from `scripts/workflow_utils.py` for
@@ -395,8 +421,9 @@ Run `scripts/test_workflow_integrity.py` after every programmatic edit.
 
 ## Workflow docs
 
-- `example_workflows/audio-loop-music-video_latent.json` -- latent-space loop (no per-iteration VAE round-trip, UNTESTED)
-- `example_workflows/audio-loop-music-video_image.json` -- image-space loop (per-iteration VAE round-trip, tested/working)
+- `example_workflows/audio-loop-music-video_image.json` -- image-space loop (per-iteration VAE round-trip, tested/working). Has per-iteration AdaIN (factor=0.2, bypassable).
+- `example_workflows/audio-loop-music-video_latent.json` -- latent-space loop (no per-iteration VAE round-trip, UNTESTED). Has per-iteration AdaIN (factor=0.2, bypassable).
+- `example_workflows/audio-loop-music-video_image_adain_perstep.json` -- image-space loop + per-step AdaIN model patcher. Has BOTH per-iteration AdaIN inside subgraph AND LTXVPerStepAdainPatcher on model chain. Reference: node 531 (init image embed). Experimental.
 - `example_workflows/upscale-loop-output.json` -- separate upscale workflow (when built)
 - `coderef/origiltx23_long_loop_extension_test.json` -- original pre-scheduler workflow
 - `coderef/RuneXX_LTX-2.3-Workflows/` -- reference LTX 2.3 workflows (3-pass upscale pattern)
