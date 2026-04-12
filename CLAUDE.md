@@ -16,7 +16,7 @@ audio analysis). Uses ComfyUI's extension API (`ComfyExtension`,
 imports analysis nodes from nodes_analysis.py.
 
 Core nodes (nodes.py):
-- `AudioLoopController` -- core: start_index, should_stop, audio_duration, iteration_seed, stride_seconds, overlap_frames, overlap_latent_frames
+- `AudioLoopController` -- core: 8 outputs (start_index, should_stop, audio_duration, iteration_seed, stride_seconds, overlap_frames, overlap_latent_frames, overlap_seconds). overlap_seconds (slot 7) auto-wires to LTXVAudioVideoMask video_start_time.
 - `TimestampPromptSchedule` -- per-iteration prompt from timestamp ranges, with blend support
 - `ConditioningBlend` -- lerps two conditioning tensors for smooth prompt transitions (works with LTX Gemma 3 and CLIP)
 - `AudioLoopPlanner` -- displays iteration timeline for planning
@@ -110,6 +110,17 @@ Helper functions:
 - **Always validate workflow JSON after programmatic edits:** `python3 -c "import json; json.load(open('file.json'))"`
 - **Scrub workflows before open-sourcing:** filenames, absolute paths, UUIDs, image previews, videopreview fullpath/filename, creative prompts, clipspace references.
 - Pyright `reportIncompatibleMethodOverride` on `execute()` methods is a false positive -- standard ComfyUI node API pattern.
+- **ComfyUI execution engine evaluates downstream conditioning graphs before
+  upstream sampling.** Adding nodes to the Extension's conditioning path (e.g.,
+  extra LTXVConditioning) can corrupt the initial render even though the Extension
+  runs AFTER the initial render. Always compare against a known-working workflow
+  snapshot when debugging lip sync regressions.
+- **Node 560 (VHS_VideoCombine, bypassed by default)**: Enable to preview the
+  initial render in isolation. Decodes from VAEDecode #1318 (same path as the
+  working v0408 output). Useful for debugging lip sync without loop iterations.
+- **Keep known-working workflow snapshots in `internal/scratch/`.** When lip sync
+  regresses, diff against the working snapshot to find structural changes.
+  LTX-2_00032.json and LTX-2_00040.json are confirmed working (April 9, 2026).
 - **torchaudio detect_pitch_frequency on silence gives false positives.** Always
   gate with an RMS energy check (< 0.005 threshold) before calling. AudioPitchDetect
   does this automatically. If adding new pitch-based nodes, replicate the gate.
