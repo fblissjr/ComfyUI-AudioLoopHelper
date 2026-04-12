@@ -97,7 +97,24 @@ discontinuity at ~20 seconds where the conditioning shifts. Copy the
 | SageAttention 268 | Bypassed (mode 4) | Enable only after quality is stable |
 | CFG (node 644 inside subgraph) | 1.0 | LTX 2.3 is distilled. NAG handles guidance. |
 
-### 6. Run and iterate
+### 6. Use an LLM to generate prompts (optional)
+
+Instead of writing prompts manually, export the analysis as JSON and paste
+it into an LLM. The JSON includes a system prompt with all the rules above.
+
+```bash
+uv run --group analysis python scripts/analyze_audio_features.py path/to/song.wav \
+  --trim 10 \
+  --subject "a woman singing in a basement workshop" \
+  --image-desc "Woman on chair, dark hair, vintage dress, dim basement, Christmas lights" \
+  -j analysis.json
+```
+
+Then paste the JSON into Claude/Gemini with your creative direction. The LLM
+generates both node_169_prompt and the schedule. See
+`docs/analysis/llm_prompt_generation_guide.md` for the full workflow with examples.
+
+### 7. Run and iterate
 
 - First run: no prompt schedule (static prompt, blend_seconds=0).
   Verify the base loop works and consistency holds.

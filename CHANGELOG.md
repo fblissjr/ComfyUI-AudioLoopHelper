@@ -7,6 +7,12 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Enhanced JSON export (`-j`): includes `workflow_context` (trim, window, stride,
+  subject, image description) and `llm_system_prompt` with all 17 prompt engineering
+  rules for the i2v + frozen audio loop workflow. Paste directly into Claude/Gemini.
+- New CLI args: `--window`, `--overlap`, `--image-desc` for workflow timing context
+- `docs/analysis/llm_prompt_generation_guide.md`: complete guide for LLM-assisted
+  prompt schedule generation with system prompt, user template, and examples
 - Per-iteration AdaIN color correction (LTXVAdainLatent) inside Extension subgraph
   for all workflows. Normalizes each iteration's latent statistics against the
   initial render. factor=0.2 default, bypassable. Prevents progressive darkening.

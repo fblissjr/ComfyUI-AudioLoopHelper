@@ -307,3 +307,62 @@ class TestFormatJsonReport:
         assert "key" in report
         assert "sections" in report
         assert "duration" in report
+
+    def test_no_beat_times_by_default(self):
+        """beat_times should NOT be in default output (bloats LLM context)."""
+        report = format_json_report(
+            bpm_result={"bpm": 120.0, "beat_times": [0.5, 1.0, 1.5]},
+            key_result={"key": "C Major", "confidence": 0.9},
+            sections=[],
+            duration=60.0,
+        )
+        assert "beat_times" not in report
+
+    def test_workflow_context_present(self):
+        """With workflow args, report should include workflow_context."""
+        report = format_json_report(
+            bpm_result={"bpm": 120.0, "beat_times": []},
+            key_result={"key": "G Major", "confidence": 0.85},
+            sections=[{"start": 0.0, "end": 60.0, "label": "VERSE", "level": "medium"}],
+            duration=180.0,
+            trim_offset=10.0,
+            window_seconds=19.88,
+            overlap_seconds=2.0,
+            subject="a man playing guitar",
+            init_image_description="Man with acoustic guitar, dim room",
+        )
+        assert "workflow_context" in report
+        ctx = report["workflow_context"]
+        assert ctx["trim_offset"] == 10.0
+        assert ctx["window_seconds"] == 19.88
+        assert ctx["stride_seconds"] == pytest.approx(17.88)
+        assert ctx["subject"] == "a man playing guitar"
+        assert ctx["init_image_description"] == "Man with acoustic guitar, dim room"
+
+    def test_llm_system_prompt_present(self):
+        """Report should include llm_system_prompt string."""
+        report = format_json_report(
+            bpm_result={"bpm": 120.0, "beat_times": []},
+            key_result={"key": "G Major", "confidence": 0.85},
+            sections=[],
+            duration=180.0,
+        )
+        assert "llm_system_prompt" in report
+        prompt = report["llm_system_prompt"]
+        assert isinstance(prompt, str)
+        assert "LTX 2.3" in prompt
+        assert "node_169_prompt" in prompt
+        assert "schedule" in prompt
+
+    def test_llm_system_prompt_contains_rules(self):
+        """System prompt should contain key rules."""
+        report = format_json_report(
+            bpm_result={"bpm": 120.0, "beat_times": []},
+            key_result={"key": "G Major", "confidence": 0.85},
+            sections=[],
+            duration=180.0,
+        )
+        prompt = report["llm_system_prompt"]
+        assert "dolly out" in prompt.lower()
+        assert "present-progressive" in prompt.lower()
+        assert "frozen" in prompt.lower()
