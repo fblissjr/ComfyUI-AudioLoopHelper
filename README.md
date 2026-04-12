@@ -64,11 +64,12 @@ just the audio tensor + window/overlap settings.
 | iteration_seed | INT | Extension component's noise_seed input |
 | stride_seconds | FLOAT | TimestampPromptSchedule and AudioLoopPlanner |
 | overlap_frames | INT | Extension component's overlap_frames input (pixel space) |
-| overlap_latent_frames | INT | LTXVSelectLatents in latent-space subgraph (pixel_frames // 8) |
+| overlap_latent_frames | INT | LatentContextExtract / LatentOverlapTrim in latent-space subgraph |
+| overlap_seconds | FLOAT | Extension subgraph's LTXVAudioVideoMask video_start_time |
 
 Changing `overlap_seconds` automatically adjusts stride, stop timing,
-start indices, iteration count, overlap_frames, and overlap_latent_frames.
-One value, one place.
+start indices, iteration count, overlap_frames, overlap_latent_frames,
+and the subgraph's video_start_time mask. One value, one place.
 
 ### Timestamp Prompt Schedule
 
