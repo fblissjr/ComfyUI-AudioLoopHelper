@@ -7,14 +7,18 @@ Handles loop timing, auto-stopping at the audio boundary, per-iteration seed
 variation, timestamp-based prompt scheduling, smooth conditioning blending,
 and latent-space overlap conversion. No manual iteration counting or fragile constants.
 
-Two workflow variants included:
+Three workflow variants included:
 - **Image workflow** (`audio-loop-music-video_image.json`) -- tested/working.
-  Per-iteration VAE decode/encode. Proven lip sync.
+  Per-iteration VAE decode/encode. Proven lip sync. Per-iteration AdaIN for
+  color drift prevention (factor=0.2, bypassable).
+- **Image + per-step AdaIN** (`audio-loop-music-video_image_adain_perstep.json`) --
+  experimental. Same as image workflow plus LTXVPerStepAdainPatcher on the model
+  chain. Corrects color drift during denoising, not just after. Use this if
+  per-iteration AdaIN alone isn't enough.
 - **Latent workflow** (`audio-loop-music-video_latent.json`) -- UNTESTED.
   Operates in latent space using LatentContextExtract and LatentOverlapTrim.
-  No per-iteration VAE round-trip. These nodes handle noise_mask stripping
-  internally (critical for sampler correctness). Use at your own risk until
-  testing confirms lip sync parity.
+  No per-iteration VAE round-trip. Per-iteration AdaIN included. Use at your
+  own risk until testing confirms lip sync parity.
 
 Workflow adapted from [kijai's LTX 2.3 long loop extension test](https://github.com/kijai/ComfyUI-NativeLooping_testing/blob/main/ltx23_long_loop_extension_test.json).
 

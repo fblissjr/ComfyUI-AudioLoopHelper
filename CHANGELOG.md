@@ -7,6 +7,15 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Per-iteration AdaIN color correction (LTXVAdainLatent) inside Extension subgraph
+  for all workflows. Normalizes each iteration's latent statistics against the
+  initial render. factor=0.2 default, bypassable. Prevents progressive darkening.
+- Per-step AdaIN workflow variant (`audio-loop-music-video_image_adain_perstep.json`).
+  Adds LTXVPerStepAdainPatcher to model chain for denoising-time correction.
+- `overlap_seconds` output on AudioLoopController (slot 7). Automatically wires
+  to LTXVAudioVideoMask video_start_time inside the Extension subgraph. No more
+  manual sync when changing overlap.
+- Multi-character prompting guide in docs/prompt_creation_guide.md
 - AudioLoopPlanner now shows initial render time range with "[uses static prompt,
   not schedule]" annotation, making it clear the schedule only applies to loop iterations
 - AudioPitchDetect node: per-iteration vocal pitch detection using torchaudio
