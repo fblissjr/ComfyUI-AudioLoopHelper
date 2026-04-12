@@ -35,8 +35,9 @@ uv run --group analysis python scripts/analyze_audio_features.py song.wav --trim
 uv run --group analysis python scripts/analyze_audio_features.py song.wav \
   --subject "a woman in her 30s with dark hair singing in a basement workshop"
 
-# Export JSON for LLM-assisted schedule generation
-uv run --group analysis python scripts/analyze_audio_features.py song.wav -j analysis.json
+# Export JSON for LLM-assisted schedule generation (includes system prompt + workflow context)
+uv run --group analysis python scripts/analyze_audio_features.py song.wav -j analysis.json \
+  --image-desc "description of your init image" --window 19.88 --overlap 2.0
 
 # PNG visualizations (spectrogram, chromagram, onset envelope)
 uv run --group analysis python scripts/analyze_audio_features.py song.wav --png-dir ./viz
@@ -53,13 +54,21 @@ Without `--subject`, the script outputs placeholder prompts:
 0:02-0:45: [VERSE - medium] describe action and audio here
 ```
 
-With `--subject`, it generates full LTX 2.3 prompt templates:
+With `--subject`, the output has two clearly labeled sections:
+
+**Node 169 (initial render prompt):**
 ```
-0:02-0:45: Style: cinematic. In a medium shot, a woman singing in a workshop is performing. Warm lighting, steady energy. The voice fills the space. Soft ambient hum.
+Style: cinematic. In a wide establishing shot, a woman singing in a workshop is beginning to perform softly. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
 ```
 
-The subject is wrapped with section-appropriate modifiers. Copy-paste into
-TimestampPromptSchedule and edit the details.
+**TimestampPromptSchedule (node 1558):**
+```
+0:00-0:45: Style: cinematic. In a wide establishing shot, a woman singing in a workshop is beginning to perform softly. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
+0:45-1:18: Style: cinematic. In a medium shot, a woman singing in a workshop is performing. Warm lighting, steady energy. The voice fills the space. Soft ambient hum.
+```
+
+Paste the node 169 prompt into node 169 (CLIPTextEncode). Paste the schedule
+into node 1558. The node 169 prompt matches the first schedule entry automatically.
 
 ### Section modifier mapping
 

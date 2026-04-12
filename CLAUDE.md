@@ -70,10 +70,17 @@ Helper functions:
   frame_rate=25) which is sufficient.
   Path: Get_base_cond_pos → #843 positive (static mode).
   Path: Text Encode → (ConditioningBlend if blending) → #843 positive (scheduling mode).
-- **Blending wiring**: TimestampPromptSchedule outputs STRING, not CONDITIONING.
-  Blending requires two text encode nodes (both from same DualCLIPLoader) inside
-  the loop body: prompt → encode A → conditioning_a, next_prompt → encode B →
-  conditioning_b, blend_factor → ConditioningBlend. Without blending, one encode suffices.
+- **Blending wiring (fully connected in all 3 workflows)**:
+  ```
+  TimestampPromptSchedule (1558)
+    ├→ prompt → CLIPTextEncode A (1559) → ConditioningBlend.conditioning_a
+    ├→ next_prompt → CLIPTextEncode B (1604*) → ConditioningBlend.conditioning_b
+    └→ blend_factor → ConditioningBlend.blend_factor
+                              → Extension #843 input 6 (positive)
+  ```
+  *Node IDs vary per workflow. Both encodes share DualCLIPLoader 416.
+  blend_seconds=0 means hard switch (blend_factor=0, only conditioning_a used).
+  blend_seconds=5.0 smoothly transitions over 5s before each boundary.
 - Nodes that need per-iteration evaluation (TimestampPromptSchedule,
   ConditioningBlend, text encoders) must be inside the loop body (between
   TensorLoopOpen and TensorLoopClose in the dependency graph) to be cloned
@@ -392,9 +399,9 @@ uv run --group dev --group analysis python -m pytest tests/ -v --rootdir=.
 - `__init__.py` has a try/except guard so pytest can import the package
   without comfy_api (only available inside ComfyUI runtime).
 - `tests/conftest.py` adds `scripts/` to sys.path for import.
-- `tests/test_audio_features.py` -- 24 tests for librosa extraction (synthetic audio).
+- `tests/test_audio_features.py` -- 33 tests for offline analysis (BPM, key, structure, schedule, node 169 prompt, JSON report).
 - `tests/test_audio_analysis_nodes.py` -- 9 tests for runtime AudioPitchDetect node.
-- `tests/test_workflows.py` -- workflow JSON structural validation.
+- `tests/test_workflows.py` -- workflow JSON structural validation (3 workflows).
 
 ## Editing workflow JSON (subgraphs)
 
