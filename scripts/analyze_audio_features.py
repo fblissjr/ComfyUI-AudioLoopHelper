@@ -344,6 +344,41 @@ def generate_schedule_suggestion(
     return _generate_subject_schedule(sections, subject, trim_offset)
 
 
+def get_node_169_prompt(
+    sections: list[dict],
+    subject: str = "",
+    trim_offset: float = 0.0,
+) -> str:
+    """Extract the node 169 initial render prompt.
+
+    Returns the prompt text for the first section (matching the 0:00
+    schedule entry). Node 169 covers trimmed 0:00 to ~20s and must
+    match the schedule's first entry to avoid visual discontinuity.
+
+    Without subject: returns a placeholder.
+    """
+    if not sections:
+        return ""
+
+    # Find the first section that starts at or after the trim offset
+    first_section = None
+    for s in sections:
+        if s["end"] - trim_offset > 0:
+            first_section = s
+            break
+    if not first_section:
+        first_section = sections[0]
+
+    if not subject:
+        return f"[{first_section['label']} - {first_section['level']}] describe initial scene"
+
+    mods = _SECTION_MODIFIERS.get(first_section["label"], _DEFAULT_MODIFIER)
+    return (
+        f"Style: cinematic. {mods['framing']} {subject} {mods['energy_verb']}. "
+        f"{mods['lighting']} {mods['audio_desc']}"
+    )
+
+
 def _build_schedule(
     sections: list[dict],
     trim_offset: float,
@@ -553,10 +588,20 @@ def format_markdown_report(
         lines.append(f"| {s['label']:8s} | {t_range:11s} | {dur:5.0f}s   | {s['level']:6s} |")
     lines.append("")
 
-    # Prompt schedule suggestion
-    lines.append("## Suggested TimestampPromptSchedule")
+    # Node 169 prompt (initial render)
+    lines.append("## Node 169 (initial render prompt)")
     lines.append("")
-    lines.append("Copy and adapt:")
+    lines.append("Paste this into node 169 (CLIPTextEncode). Covers the first ~20 seconds.")
+    lines.append("")
+    lines.append("```")
+    lines.append(get_node_169_prompt(sections, subject=subject, trim_offset=trim_offset))
+    lines.append("```")
+    lines.append("")
+
+    # Prompt schedule suggestion
+    lines.append("## TimestampPromptSchedule (node 1558)")
+    lines.append("")
+    lines.append("Paste this into the schedule text box:")
     lines.append("")
     lines.append("```")
     lines.append(generate_schedule_suggestion(sections, subject=subject, trim_offset=trim_offset))
