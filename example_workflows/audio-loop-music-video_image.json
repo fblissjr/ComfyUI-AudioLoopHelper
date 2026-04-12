@@ -2,7 +2,7 @@
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
   "last_node_id": 1603,
-  "last_link_id": 2987,
+  "last_link_id": 2991,
   "nodes": [
     {
       "id": 252,
@@ -2794,7 +2794,8 @@
           "type": "LATENT",
           "links": [
             956,
-            2505
+            2505,
+            2991
           ]
         },
         {
@@ -3557,6 +3558,12 @@
             "name": "num_frames"
           },
           "link": 2954
+        },
+        {
+          "name": "reference_latent",
+          "type": "LATENT",
+          "link": 2991,
+          "label": "adain_reference"
         }
       ],
       "outputs": [
@@ -5230,6 +5237,14 @@
       843,
       7,
       "CONDITIONING"
+    ],
+    [
+      2991,
+      245,
+      0,
+      843,
+      15,
+      "LATENT"
     ]
   ],
   "groups": [
@@ -5500,6 +5515,15 @@
               2538.414173062898,
               4954.807109796994
             ]
+          },
+          {
+            "id": "5674a483-4fe6-48cb-b900-86e3da0950c9",
+            "name": "reference_latent",
+            "type": "LATENT",
+            "linkIds": [
+              2989
+            ],
+            "label": "adain_reference"
           }
         ],
         "outputs": [
@@ -5670,7 +5694,7 @@
                 "localized_name": "latent",
                 "name": "latent",
                 "type": "LATENT",
-                "link": 1713
+                "link": 2990
               }
             ],
             "outputs": [
@@ -6540,6 +6564,50 @@
               "Node name for S&R": "VAEEncode"
             },
             "widgets_values": []
+          },
+          {
+            "id": 1585,
+            "type": "LTXVAdainLatent",
+            "pos": [
+              750,
+              420
+            ],
+            "size": [
+              270,
+              130
+            ],
+            "flags": {},
+            "order": 80,
+            "mode": 0,
+            "inputs": [
+              {
+                "name": "latents",
+                "type": "LATENT",
+                "link": 2988
+              },
+              {
+                "name": "reference",
+                "type": "LATENT",
+                "link": 2989
+              }
+            ],
+            "outputs": [
+              {
+                "name": "LATENT",
+                "type": "LATENT",
+                "links": [
+                  2990
+                ]
+              }
+            ],
+            "title": "AdaIN Color Correction",
+            "properties": {
+              "Node name for S&R": "LTXVAdainLatent"
+            },
+            "widgets_values": [
+              0.2,
+              false
+            ]
           }
         ],
         "groups": [],
@@ -6574,14 +6642,6 @@
             "origin_slot": 0,
             "target_id": 596,
             "target_slot": 0,
-            "type": "LATENT"
-          },
-          {
-            "id": 1713,
-            "origin_id": 596,
-            "origin_slot": 0,
-            "target_id": 655,
-            "target_slot": 2,
             "type": "LATENT"
           },
           {
@@ -6895,6 +6955,30 @@
             "target_id": 606,
             "target_slot": 3,
             "type": "FLOAT"
+          },
+          {
+            "id": 2988,
+            "origin_id": 596,
+            "origin_slot": 0,
+            "target_id": 1585,
+            "target_slot": 0,
+            "type": "LATENT"
+          },
+          {
+            "id": 2989,
+            "origin_id": -10,
+            "origin_slot": 15,
+            "target_id": 1585,
+            "target_slot": 1,
+            "type": "LATENT"
+          },
+          {
+            "id": 2990,
+            "origin_id": 1585,
+            "origin_slot": 0,
+            "target_id": 655,
+            "target_slot": 2,
+            "type": "LATENT"
           }
         ],
         "extra": {

@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1605,
-  "last_link_id": 2999,
+  "last_node_id": 1606,
+  "last_link_id": 3005,
   "nodes": [
     {
       "id": 252,
@@ -2749,7 +2749,8 @@
           "links": [
             956,
             2505,
-            2992
+            3000,
+            3005
           ]
         },
         {
@@ -3514,6 +3515,12 @@
             "name": "num_frames"
           },
           "link": 2954
+        },
+        {
+          "name": "reference_latent",
+          "type": "LATENT",
+          "link": 3005,
+          "label": "adain_reference"
         }
       ],
       "outputs": [
@@ -3611,7 +3618,7 @@
           "name": "initial_value",
           "shape": 7,
           "type": "LATENT",
-          "link": 2992
+          "link": 3001
         }
       ],
       "outputs": [
@@ -4395,6 +4402,42 @@
       "widgets_values": [
         "t"
       ]
+    },
+    {
+      "id": 1606,
+      "type": "Reroute",
+      "pos": [
+        1200,
+        5000
+      ],
+      "size": [
+        75,
+        26
+      ],
+      "flags": {},
+      "order": 75,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "",
+          "type": "*",
+          "link": 3000
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "LATENT",
+          "links": [
+            3001
+          ]
+        }
+      ],
+      "properties": {
+        "showOutputText": false,
+        "horizontal": false
+      },
+      "widgets_values": []
     }
   ],
   "links": [
@@ -5247,14 +5290,6 @@
       "IMAGE"
     ],
     [
-      2992,
-      245,
-      0,
-      1539,
-      0,
-      "LATENT"
-    ],
-    [
       2993,
       381,
       2,
@@ -5293,6 +5328,30 @@
       843,
       7,
       "CONDITIONING"
+    ],
+    [
+      3000,
+      245,
+      0,
+      1606,
+      0,
+      "LATENT"
+    ],
+    [
+      3001,
+      1606,
+      0,
+      1539,
+      0,
+      "LATENT"
+    ],
+    [
+      3005,
+      245,
+      0,
+      843,
+      15,
+      "LATENT"
     ]
   ],
   "groups": [
@@ -5560,6 +5619,15 @@
               2538.414173062898,
               4954.807109796994
             ]
+          },
+          {
+            "id": "861d1872-403c-4a64-a716-cff2c5d9a6a3",
+            "name": "reference_latent",
+            "type": "LATENT",
+            "linkIds": [
+              3003
+            ],
+            "label": "adain_reference"
           }
         ],
         "outputs": [
@@ -5730,7 +5798,7 @@
                 "localized_name": "latent",
                 "name": "latent",
                 "type": "LATENT",
-                "link": 1713
+                "link": 3004
               }
             ],
             "outputs": [
@@ -6351,6 +6419,50 @@
             "widgets_values": [
               4
             ]
+          },
+          {
+            "id": 2006,
+            "type": "LTXVAdainLatent",
+            "pos": [
+              750,
+              420
+            ],
+            "size": [
+              270,
+              130
+            ],
+            "flags": {},
+            "order": 80,
+            "mode": 0,
+            "inputs": [
+              {
+                "name": "latents",
+                "type": "LATENT",
+                "link": 3002
+              },
+              {
+                "name": "reference",
+                "type": "LATENT",
+                "link": 3003
+              }
+            ],
+            "outputs": [
+              {
+                "name": "LATENT",
+                "type": "LATENT",
+                "links": [
+                  3004
+                ]
+              }
+            ],
+            "title": "AdaIN Color Correction",
+            "properties": {
+              "Node name for S&R": "LTXVAdainLatent"
+            },
+            "widgets_values": [
+              0.2,
+              false
+            ]
           }
         ],
         "groups": [],
@@ -6385,14 +6497,6 @@
             "origin_slot": 0,
             "target_id": 596,
             "target_slot": 0,
-            "type": "LATENT"
-          },
-          {
-            "id": 1713,
-            "origin_id": 596,
-            "origin_slot": 0,
-            "target_id": 655,
-            "target_slot": 2,
             "type": "LATENT"
           },
           {
@@ -6658,6 +6762,30 @@
             "target_id": 2005,
             "target_slot": 1,
             "type": "INT"
+          },
+          {
+            "id": 3002,
+            "origin_id": 596,
+            "origin_slot": 0,
+            "target_id": 2006,
+            "target_slot": 0,
+            "type": "LATENT"
+          },
+          {
+            "id": 3003,
+            "origin_id": -10,
+            "origin_slot": 15,
+            "target_id": 2006,
+            "target_slot": 1,
+            "type": "LATENT"
+          },
+          {
+            "id": 3004,
+            "origin_id": 2006,
+            "origin_slot": 0,
+            "target_id": 655,
+            "target_slot": 2,
+            "type": "LATENT"
           }
         ],
         "extra": {
