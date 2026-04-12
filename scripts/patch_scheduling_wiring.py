@@ -45,20 +45,21 @@ def patch_workflow(path: Path) -> bool:
         print(f"  {name}: already has ConditioningBlend (node {existing[0]['id']}), skipping")
         return False
 
-    # Verify expected nodes exist
+    # Verify expected nodes exist and cache references
     try:
         ed.find_node(NODE_TPS)
-        ed.find_node(NODE_ENCODE_A)
+        n1559 = ed.find_node(NODE_ENCODE_A)
         ed.find_node(NODE_CLIP)
         ed.find_node(NODE_SUBGRAPH)
     except ValueError as e:
         print(f"  {name}: missing expected node: {e}")
         return False
 
-    # Get node 1559 position for placement reference
-    n1559 = ed.find_node(NODE_ENCODE_A)
     x_base = n1559["pos"][0]
     y_base = n1559["pos"][1]
+
+    # Derive execution order from existing max
+    max_order = max(n.get("order", 0) for n in ed.wf["nodes"])
 
     # --- Step 1: Create second CLIPTextEncode for next_prompt ---
     encode_b_id = ed.next_node_id()
@@ -68,7 +69,7 @@ def patch_workflow(path: Path) -> bool:
         "pos": [x_base, y_base + 120],  # Below node 1559
         "size": [300, 88],
         "flags": {},
-        "order": 91,
+        "order": max_order + 1,
         "mode": 0,
         "inputs": [
             {"name": "clip", "type": "CLIP", "link": None},
@@ -91,10 +92,7 @@ def patch_workflow(path: Path) -> bool:
     ed.add_link(NODE_CLIP, 0, encode_b_id, 0, "CLIP")
 
     # Wire text input from TimestampPromptSchedule output 1 (next_prompt)
-    lid_next_prompt = ed.add_link(NODE_TPS, 1, encode_b_id, 1, "STRING")
-    # Fix TPS output 1 links field (was None)
-    tps = ed.find_node(NODE_TPS)
-    tps["outputs"][1]["links"] = [lid_next_prompt]
+    ed.add_link(NODE_TPS, 1, encode_b_id, 1, "STRING")
 
     # --- Step 2: Create ConditioningBlend node ---
     blend_id = ed.next_node_id()
@@ -104,7 +102,7 @@ def patch_workflow(path: Path) -> bool:
         "pos": [x_base + 340, y_base + 60],  # Right of the encode nodes
         "size": [270, 100],
         "flags": {},
-        "order": 92,
+        "order": max_order + 2,
         "mode": 0,
         "inputs": [
             {"name": "conditioning_a", "type": "CONDITIONING", "link": None},
@@ -130,9 +128,7 @@ def patch_workflow(path: Path) -> bool:
     ed.add_link(encode_b_id, 0, blend_id, 1, "CONDITIONING")
 
     # Wire blend_factor from TimestampPromptSchedule output 2
-    lid_blend = ed.add_link(NODE_TPS, 2, blend_id, 2, "FLOAT")
-    # Fix TPS output 2 links field (was None)
-    tps["outputs"][2]["links"] = [lid_blend]
+    ed.add_link(NODE_TPS, 2, blend_id, 2, "FLOAT")
 
     # --- Step 3: Rewire Extension subgraph input 6 ---
 
