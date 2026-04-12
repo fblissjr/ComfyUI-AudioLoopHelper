@@ -110,6 +110,9 @@ Helper functions:
 - **Always validate workflow JSON after programmatic edits:** `python3 -c "import json; json.load(open('file.json'))"`
 - **Scrub workflows before open-sourcing:** filenames, absolute paths, UUIDs, image previews, videopreview fullpath/filename, creative prompts, clipspace references.
 - Pyright `reportIncompatibleMethodOverride` on `execute()` methods is a false positive -- standard ComfyUI node API pattern.
+- **Module constant ordering**: constants (`_SECTION_MODIFIERS`, `_LLM_SYSTEM_PROMPT`,
+  etc.) must be defined BEFORE the functions that reference them. Python's late
+  binding makes it work either way, but declare-before-use is the project convention.
 - **ComfyUI execution engine evaluates downstream conditioning graphs before
   upstream sampling.** Adding nodes to the Extension's conditioning path (e.g.,
   extra LTXVConditioning) can corrupt the initial render even though the Extension
@@ -314,6 +317,14 @@ Fixes applied across workflow versions:
 - Full system prompts for i2v and t2v: `docs/ltx23_prompt_system_prompts.md`
 - Prompt creation guide with variation patterns: `docs/prompt_creation_guide.md`
 - For prompt scheduling: keep core subject identical across all entries, vary only framing/camera/lighting.
+- **Subject anchoring, not setting re-description.** Describe WHO (traits,
+  clothing, position) in every entry to anchor identity. Do NOT re-describe
+  the environment -- that's in the init_image. This resolves the tension
+  between "describe the image perfectly" and "don't re-describe."
+- **Node 169 covers trimmed 0:00 to window_seconds (~20s).** TimestampPromptSchedule
+  does NOT run during the initial render. Schedule fires at iteration 1:
+  `current_time = 1 * stride_seconds` (~18s with overlap=2). Node 169 prompt MUST
+  match the schedule's 0:00 entry to avoid visual discontinuity at ~20s.
 
 ## Dependencies
 
@@ -354,6 +365,11 @@ Two analysis scripts with different dependency boundaries:
   would generate frames that look like heatmaps.
 - `--subject` flag generates copy-pasteable LTX 2.3 prompt templates with
   section-appropriate camera/lighting/energy modifiers.
+- **LLM prompt generation**: `-j` exports JSON with `workflow_context` and
+  `llm_system_prompt`. Paste into Claude/Gemini with creative direction to
+  generate node_169_prompt + schedule. 17 rules embedded in system prompt.
+  CLI: `--window`, `--overlap`, `--image-desc` add timing context to JSON.
+  Guide: `docs/analysis/llm_prompt_generation_guide.md`
 - Full guide: `docs/audio_analysis_guide.md`
 
 ### Dependency boundary
@@ -442,6 +458,9 @@ Run `scripts/test_workflow_integrity.py` after every programmatic edit.
 - `docs/nag_technical_reference.md` -- LTX2_NAG technical documentation
 - `docs/prompt_creation_guide.md` -- prompt writing guide with variation patterns
 - `docs/audio_analysis_guide.md` -- offline/runtime analysis, AudioPitchDetect wiring patterns, vocal_fraction as blend_factor
+- `docs/analysis/llm_prompt_generation_guide.md` -- LLM-assisted prompt generation: system prompt, user template, 17 rules, examples
+- `docs/analysis/audio_in_prompt_analysis.md` -- community research on LTX 2.3 lip sync prompting (transcription, delivery, volume trick)
+- `docs/analysis/audio_in_prompt_guide_notebooklm.md` -- additional i2v + audio prompting research (subject anchoring, frozen video fix, over-emoting)
 - `docs/ltx23_prompt_system_prompts.md` -- official i2v/t2v system prompts
 - `docs/upscale_guide.md` -- upscale workflow build guide
 - `docs/ltxv_looping_sampler_settings.md` -- LTXVLoopingSampler reference (VIDEO-ONLY, no AV latent support)
