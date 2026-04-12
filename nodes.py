@@ -252,6 +252,10 @@ class AudioLoopController(io.ComfyNode):
                     "overlap_latent_frames",
                     tooltip="overlap_frames in latent space ((pixel-1)//8+1). Wire to LatentContextExtract / LatentOverlapTrim.",
                 ),
+                io.Float.Output(
+                    "overlap_seconds",
+                    tooltip="Pass-through of overlap_seconds input. Wire to Extension subgraph's video_start_time on LTXVAudioVideoMask.",
+                ),
             ],
         )
 
@@ -289,7 +293,7 @@ class AudioLoopController(io.ComfyNode):
         # Formula: latent = (pixel - 1) // scale + 1. Matches vae.downscale_index_formula.
         overlap_latent_frames = (overlap_frames - 1) // LTX_TEMPORAL_SCALE + 1
 
-        return io.NodeOutput(start_index, should_stop, float(audio_duration), iteration_seed, stride, overlap_frames, overlap_latent_frames)
+        return io.NodeOutput(start_index, should_stop, float(audio_duration), iteration_seed, stride, overlap_frames, overlap_latent_frames, overlap_seconds)
 
 
 class TimestampPromptSchedule(io.ComfyNode):

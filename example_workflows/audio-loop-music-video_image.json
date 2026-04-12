@@ -2,7 +2,7 @@
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
   "last_node_id": 1603,
-  "last_link_id": 2991,
+  "last_link_id": 2993,
   "nodes": [
     {
       "id": 252,
@@ -3564,6 +3564,15 @@
           "type": "LATENT",
           "link": 2991,
           "label": "adain_reference"
+        },
+        {
+          "name": "video_start_time",
+          "type": "FLOAT",
+          "link": 2993,
+          "label": "overlap_seconds",
+          "widget": {
+            "name": "video_start_time"
+          }
         }
       ],
       "outputs": [
@@ -4003,6 +4012,15 @@
           "type": "INT",
           "links": null,
           "slot_index": 6,
+          "shape": 3
+        },
+        {
+          "name": "overlap_seconds",
+          "type": "FLOAT",
+          "links": [
+            2993
+          ],
+          "slot_index": 7,
           "shape": 3
         }
       ],
@@ -5245,6 +5263,14 @@
       843,
       15,
       "LATENT"
+    ],
+    [
+      2993,
+      1582,
+      7,
+      843,
+      16,
+      "FLOAT"
     ]
   ],
   "groups": [
@@ -5524,6 +5550,15 @@
               2989
             ],
             "label": "adain_reference"
+          },
+          {
+            "id": "ac23d0c4-8322-4130-9bc1-29cd944fdd5c",
+            "name": "video_start_time",
+            "type": "FLOAT",
+            "linkIds": [
+              2992
+            ],
+            "label": "overlap_seconds"
           }
         ],
         "outputs": [
@@ -6485,6 +6520,14 @@
                   "name": "audio_end_time"
                 },
                 "link": 1783
+              },
+              {
+                "name": "video_start_time",
+                "type": "FLOAT",
+                "link": 2992,
+                "widget": {
+                  "name": "video_start_time"
+                }
               }
             ],
             "outputs": [
@@ -6979,6 +7022,14 @@
             "target_id": 655,
             "target_slot": 2,
             "type": "LATENT"
+          },
+          {
+            "id": 2992,
+            "origin_id": -10,
+            "origin_slot": 16,
+            "target_id": 606,
+            "target_slot": 5,
+            "type": "FLOAT"
           }
         ],
         "extra": {
