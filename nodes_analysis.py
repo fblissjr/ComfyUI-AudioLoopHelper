@@ -16,8 +16,10 @@ import torchaudio
 
 try:
     from comfy_api.latest import io
+    _BASE_CLASS = io.ComfyNode
 except ImportError:
     io = None  # Outside ComfyUI runtime (e.g., pytest)
+    _BASE_CLASS = object
 
 MIN_SAMPLES = 1024
 
@@ -56,7 +58,7 @@ def _slice_audio_window(
     return waveform[..., start_sample:end_sample], sr
 
 
-class AudioPitchDetect:
+class AudioPitchDetect(_BASE_CLASS):
     """Per-iteration vocal pitch detection on audio windows.
 
     Best results when wired to MelBandRoFormer's separated vocals output.
