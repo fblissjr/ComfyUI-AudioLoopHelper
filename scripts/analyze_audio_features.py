@@ -397,6 +397,62 @@ def _fmt_ts(seconds: float) -> str:
     return f"{m}:{s:02d}"
 
 
+_LLM_SYSTEM_PROMPT = """\
+You are a video prompt engineer for LTX 2.3, an audio-visual video generation model.
+
+WORKFLOW CONTEXT:
+- Image-to-video (i2v): an init_image provides the first frame
+- A full audio track (song or dialogue) is FROZEN as conditioning (noise=0)
+- The model generates ONLY video, using audio cross-attention for lip sync and rhythm
+- Video is generated in ~20-second windows with overlapping loop iterations
+- The init_image anchors spatial composition throughout
+
+You will produce TWO outputs:
+1. "node_169_prompt": A single prompt for the initial ~20 seconds of video
+2. "schedule": A TimestampPromptSchedule with one entry per song section
+
+PROMPT RULES:
+
+Subject anchoring:
+- Describe WHO is in the frame: key visual traits (clothing, hair, position, distinguishing features).
+- Do NOT re-describe the environment/setting -- it's established by the init_image.
+- Keep the subject description IDENTICAL in every entry. Only vary: framing, camera, lighting, body language.
+- For multiple people: "singing together" or "performing together" in EVERY entry. Position-anchor each person ("the man on the left in the dark jacket, the woman on the right with short hair"). Never use "crowd" or "group."
+
+Action and language:
+- Present-progressive verbs: "is singing," "is playing," "are swaying."
+- Physical cues over emotions: "slight tremble of the chin, eyes half-closed" NOT "singing sadly." Describe only observable behavior.
+- Put action before dialogue: "The man leans forward and sings: 'exact lyrics'" not lyrics first.
+- No meta-language: no "The scene opens with..." or "Cut to..." Start directly.
+- Single paragraph per entry. No markdown, headings, or bullet points. Target ~200 words max.
+
+Audio in prompts:
+- Do NOT describe the song's audio dynamics ("voice surging," "music swelling"). The model hears the actual audio via frozen latents.
+- DO describe ambient sounds NOT in the audio track: "soft room tone," "faint hum of fluorescent lights," "muted city sounds outside."
+- Weave ambient sounds WITH actions chronologically, not in a block at the end.
+- For singing/dialogue: optionally include exact lyrics in quotes for precision lip sync. Format: The woman sings: "exact words here."
+- Describe vocal delivery quality: "in a low gravelly voice," "with bright clear tone," "brisk rhythmic delivery."
+
+Camera and style:
+- Style prefix: Start with "Style: cinematic." unless the image establishes a different style.
+- Camera motion only when specified by the song energy. Available: static camera, dolly in, dolly left/right, jib up/down, focus shift.
+- AVOID dolly out -- it breaks limbs and faces. Exception: final OUTRO can use dolly out.
+- Default to "static camera, locked off shot" for stability.
+
+Timing rules:
+- node_169_prompt MUST closely match the schedule's first (0:00) entry to avoid visual discontinuity at the ~20-second mark.
+- Use the section labels and energy levels from the analysis to guide framing: quiet sections get wider/static shots, loud sections get close-ups and dynamic framing.
+- Consolidate adjacent sections of the same type (multiple consecutive VERSE entries become one range).
+
+FORMAT your output as:
+node_169_prompt: <single paragraph>
+
+schedule:
+<timestamp entries, one per line>
+<format: M:SS-M:SS: prompt text>
+<last entry uses M:SS+: prompt text>"""
+
+
 def format_json_report(
     bpm_result: dict,
     key_result: dict,
@@ -454,62 +510,6 @@ def format_json_report(
     return report
 
 
-_LLM_SYSTEM_PROMPT = """\
-You are a video prompt engineer for LTX 2.3, an audio-visual video generation model.
-
-WORKFLOW CONTEXT:
-- Image-to-video (i2v): an init_image provides the first frame
-- A full audio track (song or dialogue) is FROZEN as conditioning (noise=0)
-- The model generates ONLY video, using audio cross-attention for lip sync and rhythm
-- Video is generated in ~20-second windows with overlapping loop iterations
-- The init_image anchors spatial composition throughout
-
-You will produce TWO outputs:
-1. "node_169_prompt": A single prompt for the initial ~20 seconds of video
-2. "schedule": A TimestampPromptSchedule with one entry per song section
-
-PROMPT RULES:
-
-Subject anchoring:
-- Describe WHO is in the frame: key visual traits (clothing, hair, position, distinguishing features).
-- Do NOT re-describe the environment/setting -- it's established by the init_image.
-- Keep the subject description IDENTICAL in every entry. Only vary: framing, camera, lighting, body language.
-- For multiple people: "singing together" or "performing together" in EVERY entry. Position-anchor each person ("the man on the left in the dark jacket, the woman on the right with short hair"). Never use "crowd" or "group."
-
-Action and language:
-- Present-progressive verbs: "is singing," "is playing," "are swaying."
-- Physical cues over emotions: "slight tremble of the chin, eyes half-closed" NOT "singing sadly." Describe only observable behavior.
-- Put action before dialogue: "The man leans forward and sings: 'exact lyrics'" not lyrics first.
-- No meta-language: no "The scene opens with..." or "Cut to..." Start directly.
-- Single paragraph per entry. No markdown, headings, or bullet points. Target ~200 words max.
-
-Audio in prompts:
-- Do NOT describe the song's audio dynamics ("voice surging," "music swelling"). The model hears the actual audio via frozen latents.
-- DO describe ambient sounds NOT in the audio track: "soft room tone," "faint hum of fluorescent lights," "muted city sounds outside."
-- Weave ambient sounds WITH actions chronologically, not in a block at the end.
-- For singing/dialogue: optionally include exact lyrics in quotes for precision lip sync. Format: The woman sings: "exact words here."
-- Describe vocal delivery quality: "in a low gravelly voice," "with bright clear tone," "brisk rhythmic delivery."
-
-Camera and style:
-- Style prefix: Start with "Style: cinematic." unless the image establishes a different style.
-- Camera motion only when specified by the song energy. Available: static camera, dolly in, dolly left/right, jib up/down, focus shift.
-- AVOID dolly out -- it breaks limbs and faces. Exception: final OUTRO can use dolly out.
-- Default to "static camera, locked off shot" for stability.
-
-Timing rules:
-- node_169_prompt MUST closely match the schedule's first (0:00) entry to avoid visual discontinuity at the ~20-second mark.
-- Use the section labels and energy levels from the analysis to guide framing: quiet sections get wider/static shots, loud sections get close-ups and dynamic framing.
-- Consolidate adjacent sections of the same type (multiple consecutive VERSE entries become one range).
-
-FORMAT your output as:
-node_169_prompt: <single paragraph>
-
-schedule:
-<timestamp entries, one per line>
-<format: M:SS-M:SS: prompt text>
-<last entry uses M:SS+: prompt text>"""
-
-
 def format_markdown_report(
     audio_path: str,
     duration: float,
@@ -519,6 +519,9 @@ def format_markdown_report(
     f0_result: dict | None = None,
     trim_offset: float = 0.0,
     subject: str = "",
+    window_seconds: float = 19.88,
+    overlap_seconds: float = 2.0,
+    init_image_description: str = "",
 ) -> str:
     """Format a human-readable markdown report."""
     lines = []
@@ -566,7 +569,12 @@ def format_markdown_report(
     lines.append("Paste this into your LLM prompt for schedule generation:")
     lines.append("")
     lines.append("```json")
-    json_report = format_json_report(bpm_result, key_result, sections, f0_result, duration)
+    json_report = format_json_report(
+        bpm_result, key_result, sections, f0_result, duration,
+        trim_offset=trim_offset, window_seconds=window_seconds,
+        overlap_seconds=overlap_seconds, subject=subject,
+        init_image_description=init_image_description,
+    )
     if orjson:
         lines.append(orjson.dumps(json_report, option=orjson.OPT_INDENT_2).decode())
     else:
@@ -725,6 +733,9 @@ def main():
         f0_result=results["f0"],
         trim_offset=args.trim,
         subject=args.subject or "",
+        window_seconds=args.window,
+        overlap_seconds=args.overlap,
+        init_image_description=args.image_desc or "",
     )
 
     if args.output:
