@@ -1,4 +1,4 @@
-Last updated: 2026-04-09
+Last updated: 2026-04-12
 
 # LTX2_NAG -- Normalized Attention Guidance Technical Reference
 

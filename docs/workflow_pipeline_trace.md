@@ -1,6 +1,10 @@
-Last updated: 2026-04-09
+Last updated: 2026-04-12
 
-# End-to-End Workflow Pipeline Trace
+# End-to-End Workflow Pipeline Trace (HISTORICAL)
+
+**SUPERSEDED by `docs/pipeline_flow_image.md` and `docs/pipeline_flow_latent.md`
+which are auto-generated, more detailed, and reflect current workflow state
+including the node 1587 bypass, AdaIN additions, and overlap_seconds auto-wiring.**
 
 Original source: kijai's `ltx23_long_loop_extension_test.json`
 Current version: `example_workflows/audio-loop-music-video_image.json`
