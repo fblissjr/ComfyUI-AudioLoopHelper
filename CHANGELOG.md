@@ -11,6 +11,13 @@ This project uses [Semantic Versioning](https://semver.org/).
   subject, image description) and `llm_system_prompt` with all 17 prompt engineering
   rules for the i2v + frozen audio loop workflow. Paste directly into Claude/Gemini.
 - New CLI args: `--window`, `--overlap`, `--image-desc` for workflow timing context
+- `get_node_169_prompt()`: script now outputs a separate "Node 169" section showing
+  exactly what to paste into the initial CLIPTextEncode (matches first schedule entry)
+- TimestampPromptSchedule + ConditioningBlend fully wired in all 3 example workflows:
+  prompt -> CLIPTextEncode A -> ConditioningBlend.a, next_prompt -> CLIPTextEncode B ->
+  ConditioningBlend.b, blend_factor -> ConditioningBlend. Extension subgraph input 6
+  rewired from static GetNode to ConditioningBlend output.
+- `scripts/patch_scheduling_wiring.py`: one-shot patch script for wiring scheduling
 - `docs/analysis/llm_prompt_generation_guide.md`: complete guide for LLM-assisted
   prompt schedule generation with system prompt, user template, and examples
 - Per-iteration AdaIN color correction (LTXVAdainLatent) inside Extension subgraph

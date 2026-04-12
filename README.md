@@ -31,14 +31,20 @@ Built for use alongside:
 
 ## Quick start
 
-1. Set TensorLoopOpen iterations to **50** (high safety cap)
-2. Add **Audio Loop Controller** -- wire `current_iteration` from TensorLoopOpen,
-   `window_seconds` from your window size constant, `audio` from your trimmed audio
-3. Wire outputs: `start_index` -> extension component, `should_stop` -> TensorLoopClose stop,
-   `iteration_seed` -> extension noise_seed, `stride_seconds` -> Timestamp Prompt Schedule
-4. Add **Timestamp Prompt Schedule** -- write prompts for each section of your song
-5. Add **Audio Loop Planner** -- see the iteration timeline to plan your prompts
-6. Run. The loop auto-stops when it reaches the end of the audio.
+The example workflows come with all scheduling and blending nodes pre-wired.
+To use prompt scheduling:
+
+1. Run audio analysis:
+   ```bash
+   cd custom_nodes/ComfyUI-AudioLoopHelper
+   uv sync --group analysis
+   uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
+     --subject "your scene description" --trim 5
+   ```
+2. Paste the **Node 169** output into node 169 (CLIPTextEncode)
+3. Paste the **TimestampPromptSchedule** output into node 1558's schedule text box
+4. Set `blend_seconds` to **5.0** on node 1558 for smooth transitions
+5. Run. The loop auto-stops when it reaches the end of the audio.
 
 ## Nodes
 
@@ -428,21 +434,31 @@ uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
 | Vocal F0 | Fundamental frequency + male/female classification | Choose appropriate prompts |
 | Structure | Labeled sections (intro, verse, chorus, bridge, outro) | Scaffold your TimestampPromptSchedule |
 
+**Output with `--subject`:**
+
+The script outputs two clearly labeled sections:
+
+1. **Node 169 (initial render prompt)** -- paste into the CLIPTextEncode
+   for the first ~20 seconds
+2. **TimestampPromptSchedule (node 1558)** -- paste into the schedule text box
+
+The node 169 prompt automatically matches the first schedule entry to
+avoid visual discontinuity at the ~20-second boundary.
+
 **Using with an LLM for schedule generation:**
 
-The JSON output is designed to be pasted into an LLM prompt:
-```
-You are a music video director. Here is the analysis for the track:
-{paste JSON here}
-
-Write a TimestampPromptSchedule for a woman singing in a dimly lit
-basement workshop with Christmas lights. Keep the core subject
-identical across all entries. Vary only framing, camera, and energy.
+```bash
+uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
+  --trim 5 -j analysis.json \
+  --image-desc "Man with acoustic guitar, dim room, warm lighting, brick wall" \
+  --subject "a man playing acoustic guitar in a dim room"
 ```
 
-The LLM reads the structured data (BPM, key, sections, vocal range) and
-generates a complete schedule. PNG visualizations are for your own review
-only -- don't feed them to the LLM.
+The JSON export includes `workflow_context` (timing, subject, image description)
+and a complete `llm_system_prompt` with all 17 prompt engineering rules baked in.
+Paste the JSON into Claude or Gemini -- the LLM outputs both `node_169_prompt`
+and `schedule` ready to paste. See `docs/analysis/llm_prompt_generation_guide.md`
+for the full workflow.
 
 ## Prompt writing guide (LTX 2.3)
 
