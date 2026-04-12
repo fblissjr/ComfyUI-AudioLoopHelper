@@ -16,6 +16,7 @@ from analyze_audio_features import (
     estimate_vocal_f0,
     detect_structure_librosa,
     generate_schedule_suggestion,
+    get_node_169_prompt,
     format_json_report,
 )
 
@@ -288,6 +289,42 @@ class TestGenerateScheduleSuggestion:
         ts_pattern = re.compile(r"^\d+:\d{2}")
         for line in lines:
             assert ts_pattern.match(line), f"Line doesn't start with timestamp: {line}"
+
+
+# --- Node 169 prompt ---
+
+
+class TestGetNode169Prompt:
+    _SECTIONS = [
+        {"start": 0.0, "end": 30.0, "label": "INTRO", "level": "quiet"},
+        {"start": 30.0, "end": 90.0, "label": "VERSE", "level": "medium"},
+        {"start": 90.0, "end": 150.0, "label": "CHORUS", "level": "loud"},
+    ]
+
+    def test_with_subject_contains_subject(self):
+        prompt = get_node_169_prompt(self._SECTIONS, subject="a singer on stage")
+        assert "singer" in prompt.lower()
+
+    def test_with_subject_has_style_prefix(self):
+        prompt = get_node_169_prompt(self._SECTIONS, subject="a singer on stage")
+        assert "Style: cinematic" in prompt
+
+    def test_without_subject_is_placeholder(self):
+        prompt = get_node_169_prompt(self._SECTIONS)
+        assert "INTRO" in prompt or "describe" in prompt.lower()
+
+    def test_matches_first_schedule_entry(self):
+        """Node 169 prompt should match the first schedule entry's prompt text."""
+        subject = "a singer on stage"
+        prompt_169 = get_node_169_prompt(self._SECTIONS, subject=subject)
+        schedule = generate_schedule_suggestion(self._SECTIONS, subject=subject)
+        first_line = schedule.strip().splitlines()[0]
+        # Extract prompt text after the timestamp
+        first_prompt = first_line.split(": ", 1)[1] if ": " in first_line else first_line
+        assert prompt_169 == first_prompt
+
+    def test_empty_sections(self):
+        assert get_node_169_prompt([]) == ""
 
 
 # --- JSON report ---
