@@ -403,15 +403,26 @@ def format_json_report(
     sections: list[dict],
     f0_result: dict | None = None,
     duration: float = 0.0,
+    trim_offset: float = 0.0,
+    window_seconds: float = 19.88,
+    overlap_seconds: float = 2.0,
+    subject: str = "",
+    init_image_description: str = "",
 ) -> dict:
     """Build structured JSON report for LLM consumption.
 
+    Includes audio analysis, workflow timing context, and an LLM system
+    prompt that embeds all prompt engineering rules for the i2v + frozen
+    audio loop workflow. The user pastes this JSON into an LLM alongside
+    their creative direction to generate a complete TimestampPromptSchedule.
+
     Returns a dict (caller serializes with orjson or stdlib json).
     """
+    stride = window_seconds - overlap_seconds
+
     report = {
         "duration": round(duration, 2),
         "bpm": bpm_result.get("bpm", 0.0),
-        "beat_times": bpm_result.get("beat_times", []),
         "key": key_result.get("key", "Unknown"),
         "key_confidence": key_result.get("confidence", 0.0),
         "sections": sections,
@@ -424,7 +435,79 @@ def format_json_report(
             "classification": f0_result.get("classification", "unknown"),
         }
 
+    report["workflow_context"] = {
+        "trim_offset": trim_offset,
+        "window_seconds": window_seconds,
+        "overlap_seconds": overlap_seconds,
+        "stride_seconds": round(stride, 2),
+        "initial_render_covers": (
+            f"trimmed 0:00 to {_fmt_ts(window_seconds)} "
+            f"(song {_fmt_ts(trim_offset)} to {_fmt_ts(trim_offset + window_seconds)})"
+        ),
+        "schedule_starts_at": f"trimmed {_fmt_ts(stride)} (iteration 1)",
+        "subject": subject,
+        "init_image_description": init_image_description,
+    }
+
+    report["llm_system_prompt"] = _LLM_SYSTEM_PROMPT
+
     return report
+
+
+_LLM_SYSTEM_PROMPT = """\
+You are a video prompt engineer for LTX 2.3, an audio-visual video generation model.
+
+WORKFLOW CONTEXT:
+- Image-to-video (i2v): an init_image provides the first frame
+- A full audio track (song or dialogue) is FROZEN as conditioning (noise=0)
+- The model generates ONLY video, using audio cross-attention for lip sync and rhythm
+- Video is generated in ~20-second windows with overlapping loop iterations
+- The init_image anchors spatial composition throughout
+
+You will produce TWO outputs:
+1. "node_169_prompt": A single prompt for the initial ~20 seconds of video
+2. "schedule": A TimestampPromptSchedule with one entry per song section
+
+PROMPT RULES:
+
+Subject anchoring:
+- Describe WHO is in the frame: key visual traits (clothing, hair, position, distinguishing features).
+- Do NOT re-describe the environment/setting -- it's established by the init_image.
+- Keep the subject description IDENTICAL in every entry. Only vary: framing, camera, lighting, body language.
+- For multiple people: "singing together" or "performing together" in EVERY entry. Position-anchor each person ("the man on the left in the dark jacket, the woman on the right with short hair"). Never use "crowd" or "group."
+
+Action and language:
+- Present-progressive verbs: "is singing," "is playing," "are swaying."
+- Physical cues over emotions: "slight tremble of the chin, eyes half-closed" NOT "singing sadly." Describe only observable behavior.
+- Put action before dialogue: "The man leans forward and sings: 'exact lyrics'" not lyrics first.
+- No meta-language: no "The scene opens with..." or "Cut to..." Start directly.
+- Single paragraph per entry. No markdown, headings, or bullet points. Target ~200 words max.
+
+Audio in prompts:
+- Do NOT describe the song's audio dynamics ("voice surging," "music swelling"). The model hears the actual audio via frozen latents.
+- DO describe ambient sounds NOT in the audio track: "soft room tone," "faint hum of fluorescent lights," "muted city sounds outside."
+- Weave ambient sounds WITH actions chronologically, not in a block at the end.
+- For singing/dialogue: optionally include exact lyrics in quotes for precision lip sync. Format: The woman sings: "exact words here."
+- Describe vocal delivery quality: "in a low gravelly voice," "with bright clear tone," "brisk rhythmic delivery."
+
+Camera and style:
+- Style prefix: Start with "Style: cinematic." unless the image establishes a different style.
+- Camera motion only when specified by the song energy. Available: static camera, dolly in, dolly left/right, jib up/down, focus shift.
+- AVOID dolly out -- it breaks limbs and faces. Exception: final OUTRO can use dolly out.
+- Default to "static camera, locked off shot" for stability.
+
+Timing rules:
+- node_169_prompt MUST closely match the schedule's first (0:00) entry to avoid visual discontinuity at the ~20-second mark.
+- Use the section labels and energy levels from the analysis to guide framing: quiet sections get wider/static shots, loud sections get close-ups and dynamic framing.
+- Consolidate adjacent sections of the same type (multiple consecutive VERSE entries become one range).
+
+FORMAT your output as:
+node_169_prompt: <single paragraph>
+
+schedule:
+<timestamp entries, one per line>
+<format: M:SS-M:SS: prompt text>
+<last entry uses M:SS+: prompt text>"""
 
 
 def format_markdown_report(
@@ -610,6 +693,12 @@ def main():
     parser.add_argument("--vocal-track", help="Separated vocal track for F0 analysis")
     parser.add_argument("--subject", "-s",
                         help="Scene description for prompt templates (e.g., 'a woman singing in a workshop')")
+    parser.add_argument("--image-desc",
+                        help="Init image description for LLM context (e.g., 'Man with guitar, dim room, brick wall')")
+    parser.add_argument("--window", type=float, default=19.88,
+                        help="Window seconds (default: 19.88) -- for timing context in JSON")
+    parser.add_argument("--overlap", type=float, default=2.0,
+                        help="Overlap seconds (default: 2.0) -- for stride calculation in JSON")
     parser.add_argument("--sr", type=int, default=22050, help="Sample rate (default: 22050)")
     args = parser.parse_args()
 
@@ -653,6 +742,11 @@ def main():
             sections=results["sections"],
             f0_result=results["f0"],
             duration=results["duration"],
+            trim_offset=args.trim,
+            window_seconds=args.window,
+            overlap_seconds=args.overlap,
+            subject=args.subject or "",
+            init_image_description=args.image_desc or "",
         )
         if orjson:
             data = orjson.dumps(json_report, option=orjson.OPT_INDENT_2)
