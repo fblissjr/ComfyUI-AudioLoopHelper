@@ -176,6 +176,9 @@ Compare to the TensorLoop workflow: ~50+ nodes including the subgraph internals.
 
 ## Settings Reference
 
+See `ltxv_looping_sampler_settings.md` for detailed parameter explanations
+and tuning guidance.
+
 | Parameter | Value | Where |
 |-----------|-------|-------|
 | temporal_tile_size | 497 | #33 LTXVLoopingSampler. Pixel frames per window (19.88s * 25fps). |

@@ -77,23 +77,15 @@ schedule:
 
 **Copy node_169_prompt into node 169. Copy the schedule block into TimestampPromptSchedule (node 1558).**
 
-## Step 3 (optional): Use a VLM for init_image description
+## Step 3: Use a VLM for init_image description
 
-For best subject anchoring, pass your init_image through a vision model first:
+For best subject anchoring, pass your init_image through a vision model to
+extract both `--subject` and `--image-desc`. See `prompt_workflow_end_to_end.md`
+Step 2 for complete VLM prompts (single-person and multi-person variants).
 
-```
-[Upload image to Claude/Gemini/GPT-4o]
-
-Describe this image in detail for use as a video generation reference.
-Focus on: the person(s), their clothing, hair, position, pose, and
-key distinguishing visual features. Describe the lighting quality.
-Do NOT describe the background environment in detail -- just note
-the general setting type.
-```
-
-Use the VLM output as the `--image-desc` CLI arg and in your LLM user prompt.
-This gives the LLM precise visual traits to repeat in every schedule entry,
-preserving character identity across the full video.
+Use the VLM output as the `--image-desc` and `--subject` CLI args and in
+your LLM user prompt. This gives the LLM precise visual traits to repeat
+in every schedule entry, preserving character identity across the full video.
 
 ## The 17 prompt rules (summary)
 
@@ -147,7 +139,8 @@ Reference for understanding why prompts look the way they do:
 - Most visual interest but highest risk of drift
 - Use blend_seconds >= 5.0
 
-See `docs/prompt_creation_guide.md` for full examples of each pattern.
+See `prompt_creation_guide.md` for full examples of each pattern (6 complete
+scenarios across two songs with three variation levels each).
 
 ## Timing reference
 

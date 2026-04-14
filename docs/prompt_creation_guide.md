@@ -57,6 +57,9 @@ Identify:
 
 ### 4. Write prompts following i2v rules
 
+See `ltx23_prompt_system_prompts.md` for the official LTX 2.3 i2v and t2v
+system prompts these rules derive from.
+
 Key rules for the loop workflow:
 - **Describe only changes from the image.** Don't re-describe the setting.
 - **Keep the core subject identical in every schedule entry.**
