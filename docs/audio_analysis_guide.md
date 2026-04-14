@@ -31,7 +31,8 @@ uv run --group analysis python scripts/analyze_audio_features.py song.wav
 # With trim offset (matches node 567 start_index)
 uv run --group analysis python scripts/analyze_audio_features.py song.wav --trim 10
 
-# Auto-generate prompt templates
+# Auto-generate prompt templates (see prompt_workflow_end_to_end.md Step 2 for
+# how to extract --subject and --image-desc from a VLM)
 uv run --group analysis python scripts/analyze_audio_features.py song.wav \
   --subject "a woman in her 30s with dark hair singing in a basement workshop"
 

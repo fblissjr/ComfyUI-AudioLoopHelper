@@ -7,6 +7,28 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `docs/prompt_workflow_end_to_end.md`: complete end-to-end walkthrough from
+  init image preparation through VLM description extraction, audio analysis,
+  LLM schedule generation, and workflow insertion. Includes exact VLM prompts
+  for single and multi-person scenes.
+- `docs/ltx23_model_reference.md`: extracted LTX 2.3 model behavior reference
+  (image guides, latent volume, VAE conversion, AdaIN, conditioning path,
+  noise_mask, dual workflow support, extension subgraph, upscaling)
+
+### Changed
+- CLAUDE.md reorganized for progressive disclosure (481 -> 154 lines).
+  Deep implementation details moved to `docs/ltx23_model_reference.md`.
+  CLAUDE.md now focuses on architecture, key patterns, critical constraints,
+  gotchas, and a categorized documentation index.
+- Removed `docs/latent_loop_workflow_guide.md` (redundant with
+  `docs/latent_loop_build_guide.md`, had confusing supersession header)
+- Moved raw analysis artifacts to `internal/analysis/` (comfyui_ltxvideo_raw,
+  ltx2_native_raw, ltx_desktop_raw)
+- Moved superseded `workflow_pipeline_trace.md` to `internal/`
+- Added cross-references between docs: VLM extraction prompts linked from
+  audio_analysis_guide and llm_prompt_generation_guide; variation patterns
+  linked to full examples in prompt_creation_guide; multi-person rules
+  linked from end-to-end guide to prompt_creation_guide
 - Enhanced JSON export (`-j`): includes `workflow_context` (trim, window, stride,
   subject, image description) and `llm_system_prompt` with all 17 prompt engineering
   rules for the i2v + frozen audio loop workflow. Paste directly into Claude/Gemini.
