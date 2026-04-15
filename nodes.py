@@ -13,8 +13,32 @@ import math
 import re
 
 import torch
-from comfy_api.latest import ComfyExtension, io
 from typing_extensions import override
+
+try:
+    from comfy_api.latest import ComfyExtension, io
+except ImportError:
+    # Outside ComfyUI runtime (e.g., pytest). Provide minimal stubs so
+    # helper functions and execute() methods remain testable.
+    # __getattr__ handles io.Schema, io.Int.Input, etc. used in annotations
+    # and define_schema() without enumerating every attribute.
+    class _Passthrough:
+        """Returns itself for any attribute access or call."""
+        def __getattr__(self, _name):
+            return _Passthrough()
+        def __call__(self, *args, **kwargs):
+            return _Passthrough()
+
+    class _IOStub(_Passthrough):
+        class ComfyNode:
+            pass
+
+        @staticmethod
+        def NodeOutput(*args):
+            return args
+
+    ComfyExtension = type("ComfyExtension", (), {})
+    io = _IOStub()
 
 
 LTX_TEMPORAL_SCALE = 8  # LTX 2.3 VAE temporal compression factor (pixel_frames // 8 = latent_frames)
@@ -157,6 +181,97 @@ def _match_schedule_with_next(
         return current_prompt, next_prompt, blend_factor
 
     return current_prompt, current_prompt, 0.0
+
+
+def _parse_image_schedule(schedule: str) -> list[tuple[float, float | None, int]]:
+    """Parse a timestamp-based image schedule.
+
+    Same format as _parse_schedule but values are integer image indices
+    instead of prompt strings.  Example:
+        0:00-0:38: 0
+        0:38-1:15: 1
+        1:15+: 2
+    """
+    entries: list[tuple[float, float | None, int]] = []
+    for line in schedule.strip().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        match = _LINE_RE.match(line)
+        if not match:
+            continue
+        range_part = match.group(1).strip()
+        value = match.group(2).strip()
+
+        try:
+            idx = int(value)
+        except ValueError:
+            continue
+
+        if range_part.endswith("+"):
+            start = _parse_timestamp(range_part[:-1])
+            entries.append((start, None, idx))
+        elif "-" in range_part:
+            parts = range_part.split("-", 1)
+            start = _parse_timestamp(parts[0])
+            end = _parse_timestamp(parts[1])
+            entries.append((start, end, idx))
+        else:
+            t = _parse_timestamp(range_part)
+            entries.append((t, t, idx))
+    return entries
+
+
+def _match_image_schedule(
+    entries: list[tuple[float, float | None, int]], current_time: float
+) -> int:
+    """Find the matching image index for the given time. Last match wins."""
+    result: int | None = None
+    for start, end, idx in entries:
+        if end is None:
+            if current_time >= start:
+                result = idx
+        else:
+            if start <= current_time <= end:
+                result = idx
+    if result is None and entries:
+        result = entries[-1][2]
+    return result if result is not None else 0
+
+
+def _match_image_schedule_with_next(
+    entries: list[tuple[float, float | None, int]],
+    current_time: float,
+    blend_seconds: float,
+) -> tuple[int, int, float]:
+    """Find current image index, next image index, and blend factor.
+
+    Returns (current_idx, next_idx, blend_factor).
+    blend_factor is 0.0 when not near a boundary, and ramps to 1.0
+    at the boundary over blend_seconds.
+    """
+    current_idx = _match_image_schedule(entries, current_time)
+
+    if blend_seconds <= 0:
+        return current_idx, current_idx, 0.0
+
+    next_boundary = None
+    next_idx = current_idx
+    for start, _end, idx in entries:
+        if start > current_time:
+            if next_boundary is None or start < next_boundary:
+                next_boundary = start
+                next_idx = idx
+
+    if next_boundary is None:
+        return current_idx, current_idx, 0.0
+
+    time_to_boundary = next_boundary - current_time
+    if time_to_boundary < blend_seconds:
+        blend_factor = 1.0 - (time_to_boundary / blend_seconds)
+        return current_idx, next_idx, blend_factor
+
+    return current_idx, current_idx, 0.0
 
 
 class AudioLoopController(io.ComfyNode):
@@ -769,6 +884,230 @@ class StripLatentNoiseMask(io.ComfyNode):
         return io.NodeOutput(out)
 
 
+class KeyframeImageSchedule(io.ComfyNode):
+    """Selects a keyframe image based on the current audio position using a
+    timestamp schedule, analogous to how TimestampPromptSchedule selects prompts.
+
+    Write a schedule mapping time ranges to image indices (0-based into the
+    input IMAGE batch). The node picks the right keyframe each iteration so
+    different song sections can use different reference images.
+
+    When blend_seconds > 0, outputs next_image and blend_factor for smooth
+    visual transitions via ImageBlend.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="KeyframeImageSchedule",
+            display_name="Keyframe Image Schedule",
+            category="looping/audio",
+            description=(
+                "Selects a keyframe image based on the current audio position. "
+                "Maps timestamp ranges to image indices for per-iteration visual grounding. "
+                "Supports gradual blending between keyframes at transitions."
+            ),
+            inputs=[
+                io.Image.Input(
+                    "images",
+                    tooltip="Batch of keyframe images. Index 0 = first image in batch.",
+                ),
+                io.Int.Input(
+                    "current_iteration",
+                    default=1,
+                    min=0,
+                    tooltip="Current loop iteration (1-based) from TensorLoopOpen.",
+                ),
+                io.Float.Input(
+                    "stride_seconds",
+                    default=18.88,
+                    min=0.01,
+                    step=0.01,
+                    tooltip="Audio stride per iteration (same as AudioLoopController).",
+                ),
+                io.String.Input(
+                    "schedule",
+                    default="0:00+: 0",
+                    multiline=True,
+                    tooltip=(
+                        "Timestamp-to-image-index schedule. One entry per line.\n"
+                        "Formats:\n"
+                        "  0:00-0:38: 0\n"
+                        "  0:38-1:15: 1\n"
+                        "  1:15+: 2\n"
+                        "Values are 0-based image indices into the batch."
+                    ),
+                ),
+                io.Float.Input(
+                    "blend_seconds",
+                    default=0.0,
+                    min=0.0,
+                    step=0.5,
+                    tooltip=(
+                        "Transition duration in seconds. 0 = hard switch (default). "
+                        "Set to e.g. 5.0 to blend over ~5 seconds before each boundary. "
+                        "Wire next_image and blend_factor to ImageBlend."
+                    ),
+                ),
+            ],
+            outputs=[
+                io.Image.Output("image", tooltip="Keyframe image for this iteration."),
+                io.Image.Output("next_image", tooltip="Upcoming keyframe at next boundary. Same as image when not near a transition."),
+                io.Float.Output("blend_factor", tooltip="0.0 = fully current image, ramps to 1.0 at the boundary. Wire to ImageBlend."),
+                io.Float.Output("current_time", tooltip="Current position in seconds."),
+                io.Int.Output("image_index", tooltip="Which image index was selected."),
+            ],
+        )
+
+    @classmethod
+    def execute(
+        cls,
+        images: torch.Tensor,
+        current_iteration: int,
+        stride_seconds: float,
+        schedule: str,
+        blend_seconds: float,
+    ) -> io.NodeOutput:
+        current_time = current_iteration * stride_seconds
+        entries = _parse_image_schedule(schedule)
+        batch_size = images.shape[0]
+
+        current_idx, next_idx, blend_factor = _match_image_schedule_with_next(
+            entries, current_time, blend_seconds
+        )
+
+        # Clamp indices to valid range
+        current_idx = max(0, min(current_idx, batch_size - 1))
+        next_idx = max(0, min(next_idx, batch_size - 1))
+
+        image = images[current_idx : current_idx + 1]
+        next_image = images[next_idx : next_idx + 1]
+
+        return io.NodeOutput(image, next_image, blend_factor, current_time, current_idx)
+
+
+class VideoFrameExtract(io.ComfyNode):
+    """Extracts the frame from a reference video/image batch at the current
+    iteration's timestamp. Enables video-to-video style transfer by using
+    reference video frames as per-iteration guides.
+
+    Wire the output image to the subgraph's init_image input to ground
+    each iteration in the corresponding reference frame.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="VideoFrameExtract",
+            display_name="Video Frame Extract",
+            category="looping/audio",
+            description=(
+                "Extracts a frame from a reference video at the current iteration's timestamp. "
+                "Enables video-to-video style transfer across full songs."
+            ),
+            inputs=[
+                io.Image.Input(
+                    "images",
+                    tooltip="Reference video as an image batch.",
+                ),
+                io.Int.Input(
+                    "current_iteration",
+                    default=1,
+                    min=0,
+                    tooltip="Current loop iteration (1-based) from TensorLoopOpen.",
+                ),
+                io.Float.Input(
+                    "stride_seconds",
+                    default=18.88,
+                    min=0.01,
+                    step=0.01,
+                    tooltip="Audio stride per iteration (same as AudioLoopController).",
+                ),
+                io.Float.Input(
+                    "source_fps",
+                    default=25.0,
+                    min=0.01,
+                    step=0.01,
+                    tooltip="Frame rate of the source video batch.",
+                ),
+            ],
+            outputs=[
+                io.Image.Output("image", tooltip="Single frame at the matching timestamp."),
+                io.Int.Output("frame_index", tooltip="Which frame index was extracted."),
+            ],
+        )
+
+    @classmethod
+    def execute(
+        cls,
+        images: torch.Tensor,
+        current_iteration: int,
+        stride_seconds: float,
+        source_fps: float,
+    ) -> io.NodeOutput:
+        current_time = current_iteration * stride_seconds
+        frame_index = round(current_time * source_fps)
+        batch_size = images.shape[0]
+
+        # Clamp to valid range
+        frame_index = max(0, min(frame_index, batch_size - 1))
+
+        image = images[frame_index : frame_index + 1]
+        return io.NodeOutput(image, frame_index)
+
+
+class ImageBlend(io.ComfyNode):
+    """Blends two images with a factor. Pairs with KeyframeImageSchedule
+    for smooth visual transitions between keyframes.
+
+    When blend_factor = 0.0, passes image_a through unchanged.
+    When blend_factor = 1.0, passes image_b through unchanged.
+    Values between lerp the pixel values.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="ImageBlend_AudioLoop",
+            display_name="Image Blend",
+            category="looping/audio",
+            description=(
+                "Blends two images with a factor. Use with KeyframeImageSchedule "
+                "for smooth transitions between keyframes."
+            ),
+            inputs=[
+                io.Image.Input("image_a", tooltip="Current keyframe image."),
+                io.Image.Input("image_b", tooltip="Next keyframe image."),
+                io.Float.Input(
+                    "blend_factor",
+                    default=0.0,
+                    min=0.0,
+                    max=1.0,
+                    step=0.01,
+                    tooltip="0.0 = all A, 1.0 = all B. Wire from KeyframeImageSchedule.",
+                ),
+            ],
+            outputs=[
+                io.Image.Output("image"),
+            ],
+        )
+
+    @classmethod
+    def execute(
+        cls,
+        image_a: torch.Tensor,
+        image_b: torch.Tensor,
+        blend_factor: float,
+    ) -> io.NodeOutput:
+        if blend_factor <= 0.0:
+            return io.NodeOutput(image_a)
+        if blend_factor >= 1.0:
+            return io.NodeOutput(image_b)
+
+        blended = image_a * (1.0 - blend_factor) + image_b * blend_factor
+        return io.NodeOutput(blended)
+
+
 class AudioLoopHelperExtension(ComfyExtension):
     @override
     async def get_node_list(self) -> list[type[io.ComfyNode]]:
@@ -785,6 +1124,9 @@ class AudioLoopHelperExtension(ComfyExtension):
             StripLatentNoiseMask,
             AudioDuration,
             AudioPitchDetect,
+            KeyframeImageSchedule,
+            VideoFrameExtract,
+            ImageBlend,
         ]
 
 
