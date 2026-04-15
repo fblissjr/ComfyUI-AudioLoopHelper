@@ -24,13 +24,18 @@ Core nodes (nodes.py):
 - `LatentContextExtract` -- extracts tail latent frames + strips noise_mask
 - `LatentOverlapTrim` -- trims overlap latent frames + strips noise_mask
 - `StripLatentNoiseMask` -- low-level noise_mask removal utility
+- `KeyframeImageSchedule` -- per-iteration keyframe image selection from timestamp schedule (like TimestampPromptSchedule but for images). Outputs image/next_image/blend_factor.
+- `VideoFrameExtract` -- extracts frame from reference video at current iteration's timestamp for video-to-video conditioning
+- `ImageBlend` -- pixel-space lerp of two images by a factor. Pairs with KeyframeImageSchedule for smooth keyframe transitions.
 
 Analysis nodes (nodes_analysis.py, torchaudio only):
 - `AudioPitchDetect` -- per-iteration F0 detection, vocal presence, male/female classification. Outputs FLOAT/BOOLEAN only.
 
 Key helper functions: `_audio_duration`, `_parse_timestamp` ("M:SS" or bare seconds),
 `_format_timestamp` (preserves sub-second; NOT same as `_fmt_ts()` in analyze_audio_features.py
-which truncates), `_parse_schedule`, `_match_schedule`, `_match_schedule_with_next`.
+which truncates), `_parse_schedule`, `_match_schedule`, `_match_schedule_with_next`,
+`_parse_image_schedule` (like `_parse_schedule` but int image indices),
+`_match_image_schedule`, `_match_image_schedule_with_next`.
 
 ## Key patterns
 
@@ -84,9 +89,11 @@ which truncates), `_parse_schedule`, `_match_schedule`, `_match_schedule_with_ne
 uv run --group dev --group analysis python -m pytest tests/ -v --rootdir=.
 ```
 - `__init__.py` guards ComfyUI-only import with try/except for pytest.
+- `nodes.py` has try/except for `comfy_api` with `_IOStub`/`_Passthrough` fallback for test imports.
 - `tests/conftest.py` adds `scripts/` to sys.path.
 - `tests/test_audio_features.py` -- 33 tests (offline analysis)
 - `tests/test_audio_analysis_nodes.py` -- 9 tests (runtime AudioPitchDetect)
+- `tests/test_keyframe_nodes.py` -- 28 tests (KeyframeImageSchedule, VideoFrameExtract, ImageBlend)
 - `tests/test_workflows.py` -- workflow JSON structural validation
 
 ## Dependencies
