@@ -198,14 +198,14 @@ def patch_workflow(path: Path) -> None:
                 node_id_source_link=tlo_initial_link,
                 pos=[2600, 4400],
                 widgets=[
-                    True,                  # enabled
-                    "./profile_output/",   # output_dir
-                    1,                     # warmup_iterations
-                    3,                     # active_iterations
-                    True,                  # include_cpu
-                    True,                  # include_memory
-                    True,                  # include_shapes
-                    False,                 # include_flops
+                    True,                # enabled
+                    "profile_output",    # output_dir (plugin-relative, gitignored)
+                    1,                   # warmup_iterations
+                    3,                   # active_iterations
+                    True,                # include_cpu
+                    True,                # include_memory
+                    True,                # include_shapes
+                    False,               # include_flops
                 ],
                 title="Profile Begin",
             )
