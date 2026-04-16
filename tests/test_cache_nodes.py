@@ -22,9 +22,8 @@ class _MockClip:
         self.tokenize_calls += 1
         return {"text": text}  # opaque "tokens" -- passed to encode_from_tokens_scheduled
 
-    def encode_from_tokens_scheduled(self, tokens):
+    def encode_from_tokens_scheduled(self, _tokens):
         self.encode_calls += 1
-        # Return a CONDITIONING-shaped structure: list of [tensor, metadata] pairs
         return [[torch.zeros(1, 4, 8), {"attention_mask": torch.ones(1, 4)}]]
 
 
@@ -86,34 +85,42 @@ class TestCachedTextEncodeLRU:
         _COND_CACHE.clear()
 
     def test_eviction_when_exceeding_max(self):
-        from nodes import CachedTextEncode, _COND_CACHE, _COND_CACHE_MAX
+        from nodes import CachedTextEncode, _COND_CACHE_MAX
 
         clip = _MockClip()
-        # Fill the cache to exactly max capacity
         for i in range(_COND_CACHE_MAX):
             CachedTextEncode.execute(clip=clip, text=f"prompt_{i}")
-        assert len(_COND_CACHE) == _COND_CACHE_MAX
+        assert clip.tokenize_calls == _COND_CACHE_MAX
 
-        # Add one more -- should evict the oldest (prompt_0)
+        # Adding a new entry exceeds capacity -> evicts the oldest (prompt_0).
         CachedTextEncode.execute(clip=clip, text="prompt_new")
-        assert len(_COND_CACHE) == _COND_CACHE_MAX
-        assert (id(clip), "prompt_0") not in _COND_CACHE
-        assert (id(clip), "prompt_new") in _COND_CACHE
+        assert clip.tokenize_calls == _COND_CACHE_MAX + 1
+
+        # prompt_0 was evicted: re-encoding it causes another tokenize call.
+        CachedTextEncode.execute(clip=clip, text="prompt_0")
+        assert clip.tokenize_calls == _COND_CACHE_MAX + 2
 
     def test_lru_reorders_on_hit(self):
-        from nodes import CachedTextEncode, _COND_CACHE, _COND_CACHE_MAX
+        from nodes import CachedTextEncode, _COND_CACHE_MAX
 
         clip = _MockClip()
         for i in range(_COND_CACHE_MAX):
             CachedTextEncode.execute(clip=clip, text=f"prompt_{i}")
 
-        # Hit prompt_0 -- now it's most recently used
+        # Hit prompt_0 -> now it's most recently used.
         CachedTextEncode.execute(clip=clip, text="prompt_0")
+        baseline = clip.tokenize_calls
 
-        # Adding a new entry should evict prompt_1 (the new oldest), not prompt_0
+        # Adding a new entry should evict prompt_1 (now the oldest), not prompt_0.
         CachedTextEncode.execute(clip=clip, text="prompt_new")
-        assert (id(clip), "prompt_0") in _COND_CACHE
-        assert (id(clip), "prompt_1") not in _COND_CACHE
+
+        # prompt_0 is still cached -> no new tokenize call.
+        CachedTextEncode.execute(clip=clip, text="prompt_0")
+        assert clip.tokenize_calls == baseline + 1  # only "prompt_new" tokenized
+
+        # prompt_1 was evicted -> re-encoding causes a tokenize call.
+        CachedTextEncode.execute(clip=clip, text="prompt_1")
+        assert clip.tokenize_calls == baseline + 2
 
 
 # --- IterationCleanup ---
@@ -123,21 +130,21 @@ class TestIterationCleanup:
     def test_passthrough_always_mode(self):
         from nodes import IterationCleanup
 
-        latent = {"samples": torch.randn(1, 128, 4, 60, 104)}
+        latent = {"samples": torch.zeros(1)}  # identity check; shape irrelevant
         result = IterationCleanup.execute(latent=latent, mode="always")
         assert result[0] is latent
 
     def test_passthrough_gpu_only_mode(self):
         from nodes import IterationCleanup
 
-        latent = {"samples": torch.randn(1, 128, 4, 60, 104)}
+        latent = {"samples": torch.zeros(1)}  # identity check; shape irrelevant
         result = IterationCleanup.execute(latent=latent, mode="gpu_only")
         assert result[0] is latent
 
     def test_passthrough_never_mode(self):
         from nodes import IterationCleanup
 
-        latent = {"samples": torch.randn(1, 128, 4, 60, 104)}
+        latent = {"samples": torch.zeros(1)}  # identity check; shape irrelevant
         result = IterationCleanup.execute(latent=latent, mode="never")
         assert result[0] is latent
 

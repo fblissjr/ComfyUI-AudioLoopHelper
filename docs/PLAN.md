@@ -1,12 +1,25 @@
 Last updated: 2026-04-16
 
-# Phase 1 Validation + Conditional Next Steps
+# Performance Improvements + Phase 1 Validation + Conditional Next Steps
+
+## Status
+
+- **Step 0 (perf improvements)**: ✅ SHIPPED. `CachedTextEncode_AudioLoop` +
+  `IterationCleanup` nodes added; all three production workflows patched via
+  `scripts/apply_perf_improvements.py`. 88 tests pass.
+- **Step 1 (Phase 1 validation)**: ⏳ pending user test.
+- **Step 2 (conditional Phase 2 multi-guide)**: ⏳ branches on Step 1 outcome.
+- **Step 3 (Retake node)**: ⏳ pending Step 1 outcome.
 
 ## Context
 
 We built `KeyframeImageSchedule`, `VideoFrameExtract`, `ImageBlend` and a new
 example workflow `audio-loop-music-video_latent_keyframe.json`. The user has
 not yet run this workflow end-to-end against any real audio + keyframe set.
+
+Analysis of `coderef/comfy-aimdo` (Comfy-Org dynamic VRAM allocator) surfaced
+two realistic perf wins that don't require aimdo integration. Both were
+built in Step 0 before Phase 1 validation so the validation run benefits.
 
 Three uncertainties were investigated before deciding what to build next:
 1. **DynamicCombo widget fragility** — only one real constraint exists
