@@ -5,7 +5,7 @@ description = "Audio-aware loop management nodes for full-length music video gen
 requires-python = ">=3.11"
 
 [dependency-groups]
-dev = ["pytest>=8.0", "torch>=2.0", "torchaudio>=2.0"]
+dev = ["pytest>=8.0", "torch>=2.0", "torchaudio>=2.0", "orjson>=3.9"]
 analysis = ["librosa>=0.10"]
 
 [tool.pytest.ini_options]

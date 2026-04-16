@@ -7,6 +7,31 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- End-to-end profiling via three coordinated nodes:
+  - `ProfileBegin_AudioLoop`: starts `torch.profiler` before the loop. All
+    settings live here (enabled toggle, output dir, warmup/active iteration
+    counts, CPU/memory/shapes/flops flags).
+  - `ProfileIterStep_AudioLoop`: placed inside the subgraph; calls
+    `profiler.step()` to mark iteration boundaries. Zero widgets.
+  - `ProfileEnd_AudioLoop`: placed after the loop; stops the profiler and
+    writes `trace.json` + `summary.txt` + `memory_timeline.html` to a
+    timestamped subdir of `output_dir`.
+  - All three become zero-overhead passthroughs when `enabled=False` or
+    bypassed. `torch.profiler.record_function` spans added to
+    `CachedTextEncode`, `IterationCleanup`, `LatentContextExtract`, and
+    `LatentOverlapTrim` so the trace shows named spans for our hot paths.
+- `scripts/profile_summary.py`: re-run categorized summary on any saved
+  trace without re-running the workflow. Uses orjson per project convention.
+- `docs/profiling_guide.md`: user-facing guide for placing the three
+  profile nodes, reading the output, and interpreting categorized kernel
+  breakdowns.
+- 7 new tests in `tests/test_profile_nodes.py` covering disabled-path
+  passthroughs, one-time warning behavior, and three-node coordination.
+
+### Changed
+- `pyproject.toml`: added `orjson>=3.9` to the `dev` dependency group
+  (used by `scripts/profile_summary.py`).
+
 - Two new nodes for reducing per-iteration overhead:
   - `CachedTextEncode_AudioLoop`: drop-in replacement for `CLIPTextEncode`
     with an LRU cache keyed on `(id(clip), text)`. Skips Gemma 3 encoding
