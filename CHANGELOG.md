@@ -7,6 +7,27 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Three new nodes for per-iteration visual conditioning:
+  - `KeyframeImageSchedule`: timestamp-to-image-index schedule, outputs
+    image/next_image/blend_factor/current_time/image_index. Mirrors
+    `TimestampPromptSchedule` pattern for images.
+  - `VideoFrameExtract`: pulls a frame from a reference video batch at
+    the current iteration's timestamp. Enables video-to-video style transfer.
+  - `ImageBlend`: pixel-space lerp of two images by a factor. Pairs with
+    `KeyframeImageSchedule` for smooth keyframe transitions.
+- New workflow variant `example_workflows/audio-loop-music-video_latent_keyframe.json`
+  (UNTESTED): latent workflow with KeyframeImageSchedule + ImageBlend wired to
+  the subgraph init_image. Different reference images per song section.
+- `scripts/build_keyframe_workflow.py`: generates the keyframe workflow from
+  the base latent workflow via `WorkflowEditor`. Reusable pattern for variants.
+- Four analysis reports in `docs/analysis/` (ltx2_native, ltx_desktop,
+  comfyui_ltxvideo, kjnodes multi-frame guide capabilities) — surface what
+  we can borrow from each codebase for future phases.
+- `docs/PLAN.md`: decision-tree plan for Phase 1 validation + conditional
+  Phase 2 (multi-guide subgraph) and Phase 3 (retake node) next steps.
+- 28 new tests in `tests/test_keyframe_nodes.py` (schedule parsing, matching,
+  blend computation, node execute()).
+
 - `docs/prompt_workflow_end_to_end.md`: complete end-to-end walkthrough from
   init image preparation through VLM description extraction, audio analysis,
   LLM schedule generation, and workflow insertion. Includes exact VLM prompts
@@ -16,6 +37,14 @@ This project uses [Semantic Versioning](https://semver.org/).
   noise_mask, dual workflow support, extension subgraph, upscaling)
 
 ### Changed
+- `nodes.py`: schedule helpers deduplicated into generic functions
+  (`_parse_schedule_generic`, `_match_schedule_generic`,
+  `_match_schedule_with_next_generic`) parameterized by value converter and
+  default. Prompt (str) and image (int) variants become thin wrappers.
+  Net -13 lines.
+- `nodes.py`: added try/except guard around `comfy_api.latest` import with
+  `_IOStub`/`_Passthrough` fallback so helper functions and execute() methods
+  are testable outside ComfyUI runtime (matches pattern in `nodes_analysis.py`).
 - CLAUDE.md reorganized for progressive disclosure (481 -> 154 lines).
   Deep implementation details moved to `docs/ltx23_model_reference.md`.
   CLAUDE.md now focuses on architecture, key patterns, critical constraints,
