@@ -1,6 +1,6 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-04-16
+Last updated: 2026-04-17
 
 **TLDR**: Custom ComfyUI nodes for generating full-length music videos with LTX 2.3.
 Handles loop timing, auto-stopping at the audio boundary, per-iteration seed
@@ -345,6 +345,54 @@ smooth visual transitions between keyframes.
 
 When `blend_factor = 0.0`, passes image_a through unchanged (no computation).
 When `blend_factor = 1.0`, passes image_b through unchanged.
+
+### Cached Text Encode
+
+Drop-in replacement for `CLIPTextEncode` with an LRU cache keyed on
+`(id(clip), text)`. Skips Gemma 3 encoding when the same prompt is reused
+across iterations. Same input/output signature as `CLIPTextEncode` — no
+other wiring changes needed when swapping.
+
+**Inputs:**
+
+| Input | Type | Description |
+|-------|------|-------------|
+| clip | CLIP | CLIP model (Gemma 3 for LTX 2.3) |
+| text | STRING | Prompt text. Identical text + same CLIP hits the cache. |
+
+**Outputs:** `conditioning` (CONDITIONING)
+
+**Why this is useful**: `TimestampPromptSchedule` often emits the same
+prompt string across multiple iterations when a schedule range spans more
+than one iteration (e.g., `0:00-0:38: ...` at stride ~19s covers iterations
+0-2). Without caching, Gemma re-encodes the same text each time. With the
+cache, iteration 2+ returns instantly.
+
+**Bounded**: LRU, max 20 entries. At ~16MB per cached conditioning, worst
+case is ~320MB — negligible next to LTX's 22B DiT.
+
+**Scope**: cache is module-level, so it persists across loop iterations
+(our goal) AND across workflow runs within the same Python process (bonus).
+
+### Iteration Cleanup
+
+LATENT passthrough that calls `gc.collect()` and `torch.cuda.empty_cache()`
+as a side effect. Place in the subgraph output path so every iteration ends
+with a clean allocator state. Reduces PyTorch caching allocator fragmentation
+in long-running loops.
+
+**Inputs:**
+
+| Input | Type | Description |
+|-------|------|-------------|
+| latent | LATENT | Latent to pass through unchanged |
+| mode | COMBO | `always` (gc + empty_cache), `gpu_only` (empty_cache only), `never` (passthrough) |
+
+**Outputs:** `latent` (LATENT, unchanged)
+
+**Default mode `always`** matches what the `comfy-aimdo` README recommends
+for allocator hygiene between model runs. Set to `never` to bypass without
+removing the node from the workflow.
 
 ### Audio Pitch Detect
 
