@@ -153,6 +153,7 @@ LTX-2_00032.json and LTX-2_00040.json are confirmed working (April 9, 2026).
 ### Example workflows
 - `example_workflows/audio-loop-music-video_image.json` -- IMAGE loop (tested/working, per-iteration AdaIN)
 - `example_workflows/audio-loop-music-video_latent.json` -- LATENT loop (UNTESTED, per-iteration AdaIN)
+- `example_workflows/audio-loop-music-video_latent_keyframe.json` -- LATENT loop + per-iteration keyframe image schedule (UNTESTED). Uses KeyframeImageSchedule + ImageBlend instead of constant Get_input_image.
 - `example_workflows/audio-loop-music-video_image_adain_perstep.json` -- IMAGE + per-step AdaIN (experimental)
 - `example_workflows/upscale-loop-output.json` -- separate upscale workflow (when built)
 
