@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1608,
-  "last_link_id": 3015,
+  "last_node_id": 1610,
+  "last_link_id": 3021,
   "nodes": [
     {
       "id": 252,
@@ -3388,7 +3388,7 @@
           "name": "output",
           "type": "LATENT",
           "links": [
-            2994
+            3018
           ]
         }
       ],
@@ -3629,7 +3629,7 @@
           "name": "initial_value",
           "shape": 7,
           "type": "LATENT",
-          "link": 3001
+          "link": 3017
         }
       ],
       "outputs": [
@@ -4399,7 +4399,7 @@
         {
           "name": "samples2",
           "type": "LATENT",
-          "link": 2994
+          "link": 3019
         },
         {
           "name": "dim",
@@ -4451,7 +4451,7 @@
           "name": "",
           "type": "LATENT",
           "links": [
-            3001
+            3016
           ]
         }
       ],
@@ -4559,6 +4559,89 @@
       "widgets_values": [
         0.0
       ]
+    },
+    {
+      "id": 1609,
+      "type": "ProfileBegin_AudioLoop",
+      "pos": [
+        2600,
+        4400
+      ],
+      "size": [
+        320,
+        220
+      ],
+      "flags": {},
+      "order": 90,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "trigger",
+          "type": "*",
+          "link": 3016
+        }
+      ],
+      "outputs": [
+        {
+          "name": "trigger",
+          "type": "*",
+          "links": [
+            3017
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-audioloophelper",
+        "Node name for S&R": "ProfileBegin_AudioLoop"
+      },
+      "widgets_values": [
+        true,
+        "./profile_output/",
+        1,
+        3,
+        true,
+        true,
+        true,
+        false
+      ],
+      "title": "Profile Begin"
+    },
+    {
+      "id": 1610,
+      "type": "ProfileEnd_AudioLoop",
+      "pos": [
+        3900,
+        5000
+      ],
+      "size": [
+        320,
+        80
+      ],
+      "flags": {},
+      "order": 90,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "trigger",
+          "type": "*",
+          "link": 3018
+        }
+      ],
+      "outputs": [
+        {
+          "name": "trigger",
+          "type": "*",
+          "links": [
+            3019
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-audioloophelper",
+        "Node name for S&R": "ProfileEnd_AudioLoop"
+      },
+      "widgets_values": [],
+      "title": "Profile End"
     }
   ],
   "links": [
@@ -5419,14 +5502,6 @@
       "LATENT"
     ],
     [
-      2994,
-      1540,
-      0,
-      1605,
-      1,
-      "LATENT"
-    ],
-    [
       2995,
       1605,
       0,
@@ -5447,14 +5522,6 @@
       245,
       0,
       1606,
-      0,
-      "LATENT"
-    ],
-    [
-      3001,
-      1606,
-      0,
-      1539,
       0,
       "LATENT"
     ],
@@ -5521,6 +5588,38 @@
       843,
       6,
       "CONDITIONING"
+    ],
+    [
+      3016,
+      1606,
+      0,
+      1609,
+      0,
+      "LATENT"
+    ],
+    [
+      3017,
+      1609,
+      0,
+      1539,
+      0,
+      "LATENT"
+    ],
+    [
+      3018,
+      1540,
+      0,
+      1610,
+      0,
+      "LATENT"
+    ],
+    [
+      3019,
+      1610,
+      0,
+      1605,
+      1,
+      "LATENT"
     ]
   ],
   "groups": [
@@ -5814,7 +5913,7 @@
             "name": "extended_latent",
             "type": "LATENT",
             "linkIds": [
-              3015
+              3021
             ],
             "pos": [
               4811.1378697247,
@@ -6684,7 +6783,7 @@
                 "name": "latent",
                 "type": "LATENT",
                 "links": [
-                  3015
+                  3020
                 ]
               }
             ],
@@ -6695,6 +6794,43 @@
             "widgets_values": [
               "always"
             ]
+          },
+          {
+            "id": 2008,
+            "type": "ProfileIterStep_AudioLoop",
+            "pos": [
+              4860,
+              4900
+            ],
+            "size": [
+              220,
+              58
+            ],
+            "flags": {},
+            "order": 90,
+            "mode": 0,
+            "inputs": [
+              {
+                "name": "latent",
+                "type": "LATENT",
+                "link": 3020
+              }
+            ],
+            "outputs": [
+              {
+                "name": "latent",
+                "type": "LATENT",
+                "links": [
+                  3021
+                ]
+              }
+            ],
+            "properties": {
+              "cnr_id": "comfyui-audioloophelper",
+              "Node name for S&R": "ProfileIterStep_AudioLoop"
+            },
+            "widgets_values": [],
+            "title": "Profile Iter Step"
           }
         ],
         "groups": [],
@@ -7028,8 +7164,16 @@
             "type": "LATENT"
           },
           {
-            "id": 3015,
+            "id": 3020,
             "origin_id": 2007,
+            "origin_slot": 0,
+            "target_id": 2008,
+            "target_slot": 0,
+            "type": "LATENT"
+          },
+          {
+            "id": 3021,
+            "origin_id": 2008,
             "origin_slot": 0,
             "target_id": -20,
             "target_slot": 0,
