@@ -50,6 +50,7 @@ value converter and default. Thin wrappers: `_parse_schedule` / `_match_schedule
 - Video VAE formula: `latent = (pixel - 1) // 8 + 1`. NOT `pixel // 8`.
 - **mask=0 means "fixed context"** in LTX noise masks. Audio latent with mask=0 keeps real song. mask=1 regenerates from noise, destroying lip sync.
 - LTXVLoopingSampler CANNOT support AV latents (5 blocking architectural issues). TensorLoop is the correct approach. See `docs/analysis/ltx23_gaps_analysis.md`.
+- **Guide chaining works**: Multiple `LTXVAddLatentGuide` or KJNodes' `LTXVAddGuideMulti` calls accumulate guides via `keyframe_idxs` metadata. `LTXVCropGuides` counts all guides and strips them correctly. Path to multi-guide-per-window without custom nodes.
 
 ## Critical constraints
 
@@ -102,7 +103,7 @@ uv run --group dev --group analysis python -m pytest tests/ -v --rootdir=.
 Companion custom nodes (not imported, used alongside in workflows):
 - ComfyUI-NativeLooping_testing -- TensorLoopOpen/Close
 - ComfyUI-LTXVideo -- LTXVAddLatentGuide, LTXVCropGuides, LTXVPreprocess
-- ComfyUI-KJNodes -- Set/Get nodes, FloatConstant, LTX2_NAG, LTXVImgToVideoInplaceKJ
+- ComfyUI-KJNodes -- Set/Get nodes, FloatConstant, LTX2_NAG, LTXVImgToVideoInplaceKJ, LTXVAddGuideMulti (multi-guide, up to 20), LTXVAddGuidesFromBatch
 - ComfyUI-VideoHelperSuite -- VHS_VideoCombine
 - ComfyUI-MelBandRoFormer -- vocal separation (hardcoded `dim=384, depth=6, num_stems=1`)
 
@@ -149,6 +150,10 @@ LTX-2_00032.json and LTX-2_00040.json are confirmed working (April 9, 2026).
 - `docs/analysis/ltx23_gaps_analysis.md` -- capability gaps, LTXVLoopingSampler AV incompatibility
 - `docs/analysis/audio_in_prompt_analysis.md` -- community lip sync prompting research
 - `docs/analysis/audio_in_prompt_guide_notebooklm.md` -- i2v + audio prompting research
+- `docs/analysis/ltx2_native_conditioning_analysis.md` -- 3 conditioning types, MultiModalGuiderFactory per-sigma guidance
+- `docs/analysis/ltx_desktop_conditioning_analysis.md` -- ModalitySpec, TemporalRegionMask (retake), frozen modality
+- `docs/analysis/comfyui_ltxvideo_multiframe_guide_analysis.md` -- guide chaining, LTXVAddGuide* hierarchy
+- `docs/analysis/kjnodes_multiframe_guide_analysis.md` -- LTXVAddGuideMulti (up to 20 guides), LTXVAddGuidesFromBatch
 
 ### Example workflows
 - `example_workflows/audio-loop-music-video_image.json` -- IMAGE loop (tested/working, per-iteration AdaIN)
@@ -156,6 +161,11 @@ LTX-2_00032.json and LTX-2_00040.json are confirmed working (April 9, 2026).
 - `example_workflows/audio-loop-music-video_latent_keyframe.json` -- LATENT loop + per-iteration keyframe image schedule (UNTESTED). Uses KeyframeImageSchedule + ImageBlend instead of constant Get_input_image.
 - `example_workflows/audio-loop-music-video_image_adain_perstep.json` -- IMAGE + per-step AdaIN (experimental)
 - `example_workflows/upscale-loop-output.json` -- separate upscale workflow (when built)
+
+### Reference codebases (read-only, for comparing implementations)
+- `coderef/LTX-2/` -- LTX-2 native. Conditioning types at `packages/ltx-core/src/ltx_core/conditioning/types/`, pipelines at `packages/ltx-pipelines/src/ltx_pipelines/`
+- `coderef/LTX-Desktop/` -- Lightricks Desktop app. A2V / retake / IC-LoRA at `backend/services/`
+- `~/ComfyUI/custom_nodes/ComfyUI-LTXVideo/` -- ComfyUI LTX integration. Guide nodes at `guide.py`, `latents.py`, samplers at `looping_sampler.py`
 
 ### Internal (gitignored)
 - `internal/postmortem_v0408_session.md` -- debugging history (6 issues)
