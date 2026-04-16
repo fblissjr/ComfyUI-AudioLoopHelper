@@ -4370,10 +4370,10 @@
         "Node name for S&R": "VAEDecodeTiled"
       },
       "widgets_values": [
-        320,
-        240,
-        32,
-        16
+        512,
+        64,
+        64,
+        8
       ]
     },
     {
