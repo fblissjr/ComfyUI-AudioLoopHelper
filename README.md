@@ -1,13 +1,14 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-04-12
+Last updated: 2026-04-16
 
 **TLDR**: Custom ComfyUI nodes for generating full-length music videos with LTX 2.3.
 Handles loop timing, auto-stopping at the audio boundary, per-iteration seed
 variation, timestamp-based prompt scheduling, smooth conditioning blending,
-and latent-space overlap conversion. No manual iteration counting or fragile constants.
+latent-space overlap conversion, and per-iteration keyframe image scheduling
+for scene changes. No manual iteration counting or fragile constants.
 
-Three workflow variants included:
+Four workflow variants included:
 - **Image workflow** (`audio-loop-music-video_image.json`) -- tested/working.
   Per-iteration VAE decode/encode. Proven lip sync. Per-iteration AdaIN for
   color drift prevention (factor=0.2, bypassable).
@@ -19,6 +20,10 @@ Three workflow variants included:
   Operates in latent space using LatentContextExtract and LatentOverlapTrim.
   No per-iteration VAE round-trip. Per-iteration AdaIN included. Use at your
   own risk until testing confirms lip sync parity.
+- **Latent + keyframe schedule** (`audio-loop-music-video_latent_keyframe.json`) --
+  UNTESTED. Latent workflow plus KeyframeImageSchedule + ImageBlend wired to
+  the subgraph init_image input. Different reference images per song section
+  (verse/chorus/bridge) for actual scene changes, not just lighting shifts.
 
 Workflow adapted from [kijai's LTX 2.3 long loop extension test](https://github.com/kijai/ComfyUI-NativeLooping_testing/blob/main/ltx23_long_loop_extension_test.json).
 
@@ -26,7 +31,7 @@ Built for use alongside:
 - [ComfyUI-NativeLooping](https://github.com/kijai/ComfyUI-NativeLooping_testing) -- TensorLoopOpen/Close loop mechanism
 - [ComfyUI-LTXVideo](https://github.com/logtd/ComfyUI-LTXVideo) -- LTXVAddLatentGuide, LTXVCropGuides, LTXVPreprocess, spatial upscaler
 - [ComfyUI-VideoHelperSuite](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite) -- video output and batching
-- [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes) -- Set/Get nodes, LTX2_NAG, LTXVImgToVideoInplaceKJ, ImageResizeKJv2
+- [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes) -- Set/Get nodes, LTX2_NAG, LTXVImgToVideoInplaceKJ, LTXVAddGuideMulti, ImageResizeKJv2
 - [ComfyUI-MelBandRoFormer](https://github.com/DrJKL/ComfyUI-MelBandRoFormer) -- vocal separation for improved lip sync
 
 ## Quick start
@@ -262,6 +267,84 @@ LatentContextExtract or LatentOverlapTrim which handle this automatically.
 
 **Inputs:** `latent` (LATENT)
 **Outputs:** `latent` (LATENT, noise_mask removed)
+
+### Keyframe Image Schedule
+
+Per-iteration keyframe image selection from a timestamp schedule. Like
+TimestampPromptSchedule but for images. Use a batch of keyframe images
+and a schedule mapping timestamps to image indices — the node picks
+the right image each iteration so different song sections can be
+visually grounded in different reference images.
+
+**Inputs:**
+
+| Input | Type | Description |
+|-------|------|-------------|
+| images | IMAGE | Batch of keyframe images. Index 0 = first image. |
+| current_iteration | INT | From TensorLoopOpen (0 = initial render) |
+| stride_seconds | FLOAT | From AudioLoopController |
+| schedule | STRING | Timestamp-to-image-index schedule (see below) |
+| blend_seconds | FLOAT | Transition duration (default 0 = hard cut). Set to e.g. 5.0 to blend over ~5 seconds before each boundary. |
+
+**Outputs:**
+
+| Output | Type | Wire to |
+|--------|------|---------|
+| image | IMAGE | Subgraph init_image input (directly, or via ImageBlend) |
+| next_image | IMAGE | ImageBlend image_b |
+| blend_factor | FLOAT | ImageBlend blend_factor |
+| current_time | FLOAT | Informational |
+| image_index | INT | Informational (debug which index was selected) |
+
+**Schedule format** (same as TimestampPromptSchedule but integer values):
+```
+0:00-0:38: 0
+0:38-1:15: 1
+1:15+: 2
+```
+
+With a single-image batch and schedule `0:00+: 0`, behavior is identical
+to the constant `Get_input_image` wiring in the base latent workflow.
+
+### Video Frame Extract
+
+Extracts a single frame from a reference video/image batch at the
+current iteration's timestamp. Enables video-to-video style transfer
+across full songs.
+
+**Inputs:**
+
+| Input | Type | Description |
+|-------|------|-------------|
+| images | IMAGE | Reference video as an image batch |
+| current_iteration | INT | From TensorLoopOpen |
+| stride_seconds | FLOAT | From AudioLoopController |
+| source_fps | FLOAT | FPS of the source video (default 25.0) |
+
+**Outputs:**
+
+| Output | Type | Description |
+|--------|------|-------------|
+| image | IMAGE | Single frame at matching timestamp |
+| frame_index | INT | Which frame was extracted |
+
+### Image Blend
+
+Pixel-space lerp of two images. Pairs with KeyframeImageSchedule for
+smooth visual transitions between keyframes.
+
+**Inputs:**
+
+| Input | Type | Description |
+|-------|------|-------------|
+| image_a | IMAGE | Current keyframe |
+| image_b | IMAGE | Next keyframe |
+| blend_factor | FLOAT | 0.0 = all A, 1.0 = all B |
+
+**Outputs:** `image` (IMAGE, blended)
+
+When `blend_factor = 0.0`, passes image_a through unchanged (no computation).
+When `blend_factor = 1.0`, passes image_b through unchanged.
 
 ### Audio Pitch Detect
 
