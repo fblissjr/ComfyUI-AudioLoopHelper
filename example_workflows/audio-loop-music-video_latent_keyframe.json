@@ -670,7 +670,7 @@
         "secondTabWidth": 65
       },
       "widgets_values": [
-        "still image with no motion, subtitles, text, scene change, instruments, violin, blurry, out of focus, overexposed, underexposed, low contrast, washed out colors, excessive noise, grainy texture, poor lighting, flickering, motion blur, distorted proportions, unnatural skin tones, deformed facial features, asymmetrical face, missing facial features, extra limbs, disfigured hands, wrong hand count, artifacts around text, inconsistent perspective, camera shake, incorrect depth of field"
+        "still image with no motion, subtitles, deformed facial features, extra limbs, disfigured hands, duplicate character, fourth character, twin, clone"
       ],
       "color": "#322",
       "bgcolor": "#533"
