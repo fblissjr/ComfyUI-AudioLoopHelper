@@ -7,6 +7,24 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Two new nodes for reducing per-iteration overhead:
+  - `CachedTextEncode_AudioLoop`: drop-in replacement for `CLIPTextEncode`
+    with an LRU cache keyed on `(id(clip), text)`. Skips Gemma 3 encoding
+    when the same prompt is reused across iterations (common when a
+    schedule range spans multiple iterations). Bounded at 20 entries.
+  - `IterationCleanup`: LATENT passthrough that calls `gc.collect()` and
+    `torch.cuda.empty_cache()` between iterations to reduce allocator
+    fragmentation. Three modes: `always` (default), `gpu_only`, `never`.
+- `scripts/apply_perf_improvements.py`: idempotent patch script that
+  swaps in-loop `CLIPTextEncode` nodes to `CachedTextEncode_AudioLoop` and
+  inserts `IterationCleanup` after `LatentOverlapTrim` in the subgraph.
+  Applied to `audio-loop-music-video_latent.json`,
+  `audio-loop-music-video_latent_keyframe.json`, and
+  `audio-loop-music-video_image.json` (CachedTextEncode only -- image
+  workflow's subgraph output is IMAGE-typed, no IterationCleanup).
+- 13 new tests in `tests/test_cache_nodes.py` covering cache hits/misses,
+  LRU eviction, and IterationCleanup mode behavior.
+
 - Three new nodes for per-iteration visual conditioning:
   - `KeyframeImageSchedule`: timestamp-to-image-index schedule, outputs
     image/next_image/blend_factor/current_time/image_index. Mirrors

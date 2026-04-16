@@ -9,8 +9,10 @@ ComfyUI-VideoHelperSuite, ComfyUI-KJNodes, and ComfyUI-MelBandRoFormer
 for generating full-length music videos with LTX 2.3.
 """
 
+import gc
 import math
 import re
+from collections import OrderedDict
 
 import torch
 from typing_extensions import override
@@ -1084,6 +1086,126 @@ class ImageBlend(io.ComfyNode):
         return io.NodeOutput(blended)
 
 
+# Module-level LRU cache for CachedTextEncode.
+# Persists across loop iterations (our goal) and across workflow runs.
+# Keyed on (id(clip), text). Bounded so long-running sessions don't grow
+# unbounded VRAM from cached CONDITIONING tensors.
+_COND_CACHE: OrderedDict = OrderedDict()
+_COND_CACHE_MAX = 20
+
+
+class CachedTextEncode(io.ComfyNode):
+    """Drop-in replacement for CLIPTextEncode that caches conditioning by
+    (clip, text). On cache hit, skips tokenize + encode entirely.
+
+    Speedup is significant for LTX 2.3 Gemma 3 12B: TimestampPromptSchedule
+    emits the same prompt string across multiple iterations when a schedule
+    range covers more than one iteration (e.g. "0:00-0:38: ..." at stride 19s
+    covers iterations 0-2). Without caching, Gemma re-encodes the identical
+    text each time.
+
+    The cache is module-level and bounded (LRU, max 20 entries). Each entry
+    holds a CONDITIONING tensor on GPU; 20 entries at ~16MB is ~320MB --
+    negligible next to the 22B DiT.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="CachedTextEncode_AudioLoop",
+            display_name="Cached Text Encode",
+            category="looping/audio",
+            description=(
+                "CLIPTextEncode with an LRU cache keyed on (clip, text). "
+                "Skips re-encoding when the same prompt is used across "
+                "multiple loop iterations. Drop-in replacement for CLIPTextEncode."
+            ),
+            inputs=[
+                io.Clip.Input("clip", tooltip="CLIP model (Gemma 3 for LTX 2.3)."),
+                io.String.Input(
+                    "text",
+                    multiline=True,
+                    default="",
+                    tooltip="Prompt text to encode. Identical text + same CLIP hits the cache.",
+                ),
+            ],
+            outputs=[
+                io.Conditioning.Output("conditioning"),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, clip, text: str) -> io.NodeOutput:
+        key = (id(clip), text)
+        if key in _COND_CACHE:
+            _COND_CACHE.move_to_end(key)
+            return io.NodeOutput(_COND_CACHE[key])
+
+        tokens = clip.tokenize(text)
+        cond = clip.encode_from_tokens_scheduled(tokens)
+
+        _COND_CACHE[key] = cond
+        while len(_COND_CACHE) > _COND_CACHE_MAX:
+            _COND_CACHE.popitem(last=False)
+        return io.NodeOutput(cond)
+
+
+class IterationCleanup(io.ComfyNode):
+    """LATENT passthrough that runs PyTorch allocator hygiene as a side
+    effect. Place in the subgraph output path so every iteration ends with
+    a clean allocator state.
+
+    comfy-aimdo's README recommends flushing the caching allocator between
+    model runs to prevent fragmentation. This node is the idiomatic way to
+    do that inside a TensorLoop iteration.
+
+    Modes:
+      - always:   gc.collect() + torch.cuda.empty_cache() (default)
+      - gpu_only: only torch.cuda.empty_cache() (skips Python gc pass)
+      - never:    passthrough only, no side effects
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="IterationCleanup",
+            display_name="Iteration Cleanup",
+            category="looping/audio",
+            description=(
+                "LATENT passthrough that flushes the PyTorch caching allocator "
+                "and runs Python gc. Reduces fragmentation across loop iterations."
+            ),
+            inputs=[
+                io.Latent.Input("latent", tooltip="Latent to pass through unchanged."),
+                io.Combo.Input(
+                    "mode",
+                    options=["always", "gpu_only", "never"],
+                    default="always",
+                    tooltip=(
+                        "always: gc + empty_cache. "
+                        "gpu_only: empty_cache only. "
+                        "never: passthrough (disables the cleanup)."
+                    ),
+                ),
+            ],
+            outputs=[
+                io.Latent.Output("latent"),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, latent, mode: str) -> io.NodeOutput:
+        if mode == "always":
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        elif mode == "gpu_only":
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        # mode == "never" falls through as passthrough
+        return io.NodeOutput(latent)
+
+
 class AudioLoopHelperExtension(ComfyExtension):
     @override
     async def get_node_list(self) -> list[type[io.ComfyNode]]:
@@ -1103,6 +1225,8 @@ class AudioLoopHelperExtension(ComfyExtension):
             KeyframeImageSchedule,
             VideoFrameExtract,
             ImageBlend,
+            CachedTextEncode,
+            IterationCleanup,
         ]
 
 
