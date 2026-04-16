@@ -11,8 +11,9 @@ import torch
 
 class TestProfileBeginDisabled:
     def setup_method(self):
-        from nodes import _PROFILER_STATE
+        from nodes import _PROFILER_STATE, _WARNED_KEYS
         _PROFILER_STATE.clear()
+        _WARNED_KEYS.clear()
 
     def test_disabled_returns_trigger_unchanged(self):
         from nodes import ProfileBegin
@@ -50,8 +51,9 @@ class TestProfileBeginDisabled:
 
 class TestProfileIterStepDisabled:
     def setup_method(self):
-        from nodes import _PROFILER_STATE
+        from nodes import _PROFILER_STATE, _WARNED_KEYS
         _PROFILER_STATE.clear()
+        _WARNED_KEYS.clear()
 
     def test_passthrough_when_no_profiler(self):
         from nodes import ProfileIterStep
@@ -81,8 +83,9 @@ class TestProfileIterStepDisabled:
 
 class TestProfileEndDisabled:
     def setup_method(self):
-        from nodes import _PROFILER_STATE
+        from nodes import _PROFILER_STATE, _WARNED_KEYS
         _PROFILER_STATE.clear()
+        _WARNED_KEYS.clear()
 
     def test_passthrough_when_no_profiler(self):
         from nodes import ProfileEnd
@@ -113,8 +116,9 @@ class TestProfilerStateCoordination:
     """
 
     def setup_method(self):
-        from nodes import _PROFILER_STATE
+        from nodes import _PROFILER_STATE, _WARNED_KEYS
         _PROFILER_STATE.clear()
+        _WARNED_KEYS.clear()
 
     def test_full_disabled_chain_is_all_passthrough(self):
         from nodes import ProfileBegin, ProfileIterStep, ProfileEnd
