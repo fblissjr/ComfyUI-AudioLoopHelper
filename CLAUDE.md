@@ -29,6 +29,7 @@ Core nodes (nodes.py):
 - `ImageBlend` -- pixel-space lerp of two images by a factor. Pairs with KeyframeImageSchedule for smooth keyframe transitions.
 - `CachedTextEncode` -- drop-in replacement for CLIPTextEncode. LRU-caches Gemma output by `(id(clip), text)`. Big win on schedules where a prompt spans multiple iterations.
 - `IterationCleanup` -- LATENT passthrough that runs `gc.collect()` + `torch.cuda.empty_cache()`. Place near subgraph output to reduce allocator fragmentation between iterations. Modes: always / gpu_only / never.
+- `ProfileBegin` / `ProfileIterStep` / `ProfileEnd` -- three-node `torch.profiler` integration. All settings on `ProfileBegin` (master `enabled` toggle). `ProfileIterStep` inside loop body marks iteration boundaries. `ProfileEnd` after loop writes trace.json + summary.txt + memory_timeline.html. Record spans on our hot nodes via `torch.profiler.record_function`. See `docs/profiling_guide.md`.
 
 Analysis nodes (nodes_analysis.py, torchaudio only):
 - `AudioPitchDetect` -- per-iteration F0 detection, vocal presence, male/female classification. Outputs FLOAT/BOOLEAN only.
@@ -101,6 +102,7 @@ uv run --group dev --group analysis python -m pytest tests/ -v --rootdir=.
 - `tests/test_audio_analysis_nodes.py` -- 9 tests (runtime AudioPitchDetect)
 - `tests/test_keyframe_nodes.py` -- 28 tests (KeyframeImageSchedule, VideoFrameExtract, ImageBlend)
 - `tests/test_cache_nodes.py` -- 13 tests (CachedTextEncode LRU, IterationCleanup modes)
+- `tests/test_profile_nodes.py` -- 7 tests (ProfileBegin / ProfileIterStep / ProfileEnd disabled paths)
 - `tests/test_workflows.py` -- workflow JSON structural validation
 
 ## Dependencies
