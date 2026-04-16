@@ -8,3 +8,4 @@ internal/
 coderef/
 .pytest_cache
 .venv
+profile_output/

@@ -8,7 +8,12 @@ make data-driven decisions about where to spend optimization effort.
 ## What you get
 
 Three output files per profile run, in a timestamped subdirectory of
-`./profile_output/<YYYYMMDD_HHMMSS>/`:
+`<plugin>/profile_output/<YYYYMMDD_HHMMSS>/`. The default `output_dir`
+widget value is `profile_output` (relative), which resolves to
+`ComfyUI/custom_nodes/ComfyUI-AudioLoopHelper/profile_output/` —
+gitignored, co-located with the plugin, and automatically cleared at
+each ComfyUI startup. Set an absolute path in the widget to write
+elsewhere.
 
 - **`trace.json`** — full chrome trace. Open at
   [perfetto.dev](https://ui.perfetto.dev/) (drag-drop the file) or
@@ -112,7 +117,7 @@ For a first-run "where is time going?" look, use the defaults:
 | Widget | Default | Why |
 |---|---|---|
 | `enabled` | `True` | — |
-| `output_dir` | `./profile_output/` | Timestamped subdir created per run |
+| `output_dir` | `profile_output` | Plugin-relative; resolves to `<plugin>/profile_output/`. Absolute paths accepted. Cleared at ComfyUI startup. |
 | `warmup_iterations` | `1` | Iteration 1 has first-time compilation noise |
 | `active_iterations` | `3` | Captures variance across real iterations |
 | `include_cpu` | `True` | Catches Python overhead and node dispatch cost |

@@ -1304,8 +1304,13 @@ class ProfileBegin(io.ComfyNode):
                 ),
                 io.String.Input(
                     "output_dir",
-                    default="./profile_output/",
-                    tooltip="Root dir for profile outputs. A timestamped subdir is created per run.",
+                    default="profile_output",
+                    tooltip=(
+                        "Root dir for profile outputs. Relative paths resolve "
+                        "against the ComfyUI-AudioLoopHelper plugin folder "
+                        "(gitignored). Use an absolute path to write elsewhere. "
+                        "A timestamped subdir is created per run."
+                    ),
                 ),
                 io.Int.Input(
                     "warmup_iterations",
@@ -1384,8 +1389,16 @@ class ProfileBegin(io.ComfyNode):
         import datetime
         from pathlib import Path
 
+        # Resolve relative output_dir against the plugin folder so profile
+        # data lands alongside our code (and is covered by our .gitignore)
+        # rather than wherever ComfyUI happened to be launched from.
+        out_root = Path(output_dir)
+        if not out_root.is_absolute():
+            plugin_dir = Path(__file__).resolve().parent
+            out_root = plugin_dir / out_root
+
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        run_dir = Path(output_dir) / ts
+        run_dir = out_root / ts
         run_dir.mkdir(parents=True, exist_ok=True)
 
         activities = [torch.profiler.ProfilerActivity.CUDA]
