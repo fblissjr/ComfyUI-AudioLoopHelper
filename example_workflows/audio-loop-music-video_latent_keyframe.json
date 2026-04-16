@@ -1944,7 +1944,7 @@
         "Node name for S&R": "PathchSageAttentionKJ"
       },
       "widgets_values": [
-        "sageattn_qk_int8_pv_fp16_triton",
+        "sageattn_qk_int8_pv_fp16_cuda",
         false
       ]
     },
@@ -7262,7 +7262,7 @@
         },
         "class_type": "LTXVGemmaCLIPModelLoader",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Gemma 3 Model Loader"
+          "title": "🅛🅣🅧 Gemma 3 Model Loader"
         }
       },
       "3": {
@@ -7348,7 +7348,7 @@
         },
         "class_type": "LTXVAudioVAELoader",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Audio VAE Loader"
+          "title": "🅛🅣🅧 LTXV Audio VAE Loader"
         }
       },
       "14": {
@@ -7364,7 +7364,7 @@
         },
         "class_type": "LTXVAudioVAEDecode",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Audio VAE Decode"
+          "title": "🅛🅣🅧 LTXV Audio VAE Decode"
         }
       },
       "15": {
@@ -7393,7 +7393,7 @@
         },
         "class_type": "VHS_VideoCombine",
         "_meta": {
-          "title": "Video Combine \ud83c\udfa5\ud83c\udd65\ud83c\udd57\ud83c\udd62"
+          "title": "Video Combine 🎥🅥🅗🅢"
         }
       },
       "17": {
@@ -7418,7 +7418,7 @@
         },
         "class_type": "MultimodalGuider",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Multimodal Guider"
+          "title": "🅛🅣🅧 Multimodal Guider"
         }
       },
       "18": {
@@ -7435,7 +7435,7 @@
         },
         "class_type": "GuiderParameters",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Guider Parameters"
+          "title": "🅛🅣🅧 Guider Parameters"
         }
       },
       "19": {
@@ -7448,7 +7448,7 @@
         },
         "class_type": "GuiderParameters",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Guider Parameters"
+          "title": "🅛🅣🅧 Guider Parameters"
         }
       },
       "21": {
@@ -7507,7 +7507,7 @@
         },
         "class_type": "LTXVEmptyLatentAudio",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Empty Latent Audio"
+          "title": "🅛🅣🅧 LTXV Empty Latent Audio"
         }
       },
       "27": {
@@ -7536,7 +7536,7 @@
         },
         "class_type": "LTXVConcatAVLatent",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Concat AV Latent"
+          "title": "🅛🅣🅧 LTXV Concat AV Latent"
         }
       },
       "29": {
@@ -7552,7 +7552,7 @@
         },
         "class_type": "LTXVSeparateAVLatent",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Separate AV Latent"
+          "title": "🅛🅣🅧 LTXV Separate AV Latent"
         }
       },
       "41": {
