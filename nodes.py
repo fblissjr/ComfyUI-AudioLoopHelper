@@ -1090,6 +1090,12 @@ class ImageBlend(io.ComfyNode):
 # Persists across loop iterations (our goal) and across workflow runs.
 # Keyed on (id(clip), text). Bounded so long-running sessions don't grow
 # unbounded VRAM from cached CONDITIONING tensors.
+#
+# Hazard: id(clip) can be recycled by CPython if the original CLIP is freed
+# and a new object lands at the same memory address. In practice CLIP models
+# are large (>10GB) and stay resident across iterations, so this is a latent
+# risk rather than an observed bug. If ghost hits ever appear, switch to
+# weakref-based keying.
 _COND_CACHE: OrderedDict = OrderedDict()
 _COND_CACHE_MAX = 20
 
@@ -1137,15 +1143,16 @@ class CachedTextEncode(io.ComfyNode):
     @classmethod
     def execute(cls, clip, text: str) -> io.NodeOutput:
         key = (id(clip), text)
-        if key in _COND_CACHE:
+        cached = _COND_CACHE.get(key)
+        if cached is not None:
             _COND_CACHE.move_to_end(key)
-            return io.NodeOutput(_COND_CACHE[key])
+            return io.NodeOutput(cached)
 
         tokens = clip.tokenize(text)
         cond = clip.encode_from_tokens_scheduled(tokens)
 
         _COND_CACHE[key] = cond
-        while len(_COND_CACHE) > _COND_CACHE_MAX:
+        if len(_COND_CACHE) > _COND_CACHE_MAX:
             _COND_CACHE.popitem(last=False)
         return io.NodeOutput(cond)
 
@@ -1202,7 +1209,6 @@ class IterationCleanup(io.ComfyNode):
         elif mode == "gpu_only":
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-        # mode == "never" falls through as passthrough
         return io.NodeOutput(latent)
 
 

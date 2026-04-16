@@ -84,7 +84,9 @@ value converter and default. Thin wrappers: `_parse_schedule` / `_match_schedule
 - Top-level links: array format `[id, src_node, src_slot, tgt_node, tgt_slot, type]`
 - Subgraph internal links: dict format `{id, origin_id, origin_slot, target_id, target_slot, type}`
 - Subgraph defs at `wf['definitions']['subgraphs'][0]` with keys: `nodes`, `links`, `inputs`, `outputs`, `widgets`.
-- Distributor node ID = -10. Output collector = -20.
+- Distributor node ID = -10. Output collector = -20. Both are VIRTUAL -- they do not appear in `sg["nodes"]`. Links with `origin_id == -10` terminate at the distributor; links with `target_id == -20` terminate at `sg["outputs"][target_slot]`.
+- **Node-output slots use `"links"` (plural, list). Subgraph boundary entries (`sg["inputs"][i]`, `sg["outputs"][i]`) use `"linkIds"`.** These are two schemas for two locations -- do not conflate them.
+- When adding a link into a subgraph output, also update `sg["outputs"][target_slot]["linkIds"]` -- `WorkflowEditor.remove_subgraph_link` handles input-side `linkIds` but output-side is currently manual.
 - DynamicCombo widgets: `[num_items, strength_1, strength_2, ..., index_1, index_2, ...]` -- strengths FIRST, then indices. NOT interleaved.
 
 ## Testing

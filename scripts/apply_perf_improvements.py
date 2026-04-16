@@ -30,20 +30,26 @@ WORKFLOWS = [
 IN_LOOP_ENCODE_TITLES = {"Loop Prompt Encode", "Next Prompt Encode"}
 
 
-def swap_clip_text_encodes(ed: WorkflowEditor) -> int:
+def swap_clip_text_encodes(ed: WorkflowEditor) -> tuple[int, int]:
     """Swap in-loop CLIPTextEncode nodes to CachedTextEncode_AudioLoop.
-    Returns count of nodes changed.
+
+    Returns (swapped_count, candidate_count) where candidate_count is the
+    total number of CLIPTextEncode nodes found. When candidate_count > 0 but
+    swapped_count == 0, titles don't match IN_LOOP_ENCODE_TITLES -- caller
+    should warn.
     """
-    count = 0
-    for n in ed.wf["nodes"]:
-        if n["type"] == "CLIPTextEncode" and n.get("title") in IN_LOOP_ENCODE_TITLES:
+    swapped = 0
+    candidates = ed.find_nodes_by_type("CLIPTextEncode")
+    for n in candidates:
+        if n.get("title") in IN_LOOP_ENCODE_TITLES:
             n["type"] = "CachedTextEncode_AudioLoop"
             props = n.setdefault("properties", {})
             props["Node name for S&R"] = "CachedTextEncode_AudioLoop"
             props["cnr_id"] = "comfyui-audioloophelper"
+            # Custom nodes don't carry an upstream "ver" like comfy-core does.
             props.pop("ver", None)
-            count += 1
-    return count
+            swapped += 1
+    return swapped, len(candidates)
 
 
 def insert_iteration_cleanup(ed: WorkflowEditor) -> bool:
@@ -86,53 +92,47 @@ def insert_iteration_cleanup(ed: WorkflowEditor) -> bool:
     output_target_slot = trim_out_link["target_slot"]
     old_link_id = trim_out_link["id"]
 
-    # Pick a new node ID and two new link IDs
     new_node_id = max((n["id"] for n in sg["nodes"]), default=0) + 1
     link_id_trim_to_cleanup = ed.next_link_id()
     link_id_cleanup_to_output = ed.next_link_id()
 
-    # Position the new node: slightly right of LatentOverlapTrim
     trim_pos = trim_node.get("pos", [0, 0])
     pos = [trim_pos[0] + 280, trim_pos[1]]
 
-    cleanup_node = {
-        "id": new_node_id,
-        "type": "IterationCleanup",
-        "pos": pos,
-        "size": [240, 80],
-        "flags": {},
-        "order": trim_node.get("order", 0) + 1,
-        "mode": 0,
-        "inputs": [
+    cleanup_node = ed.make_node(
+        node_id=new_node_id,
+        node_type="IterationCleanup",
+        pos=pos,
+        widgets=["always"],
+        inputs=[
             {"name": "latent", "type": "LATENT", "link": link_id_trim_to_cleanup},
             {"name": "mode", "type": "COMBO", "link": None,
              "widget": {"name": "mode"}},
         ],
-        "outputs": [
+        outputs=[
             {"name": "latent", "type": "LATENT", "links": [link_id_cleanup_to_output]},
         ],
-        "properties": {
-            "cnr_id": "comfyui-audioloophelper",
-            "Node name for S&R": "IterationCleanup",
-        },
-        "widgets_values": ["always"],
+    )
+    cleanup_node["size"] = [240, 80]
+    cleanup_node["order"] = trim_node.get("order", 0) + 1
+    cleanup_node["properties"] = {
+        "cnr_id": "comfyui-audioloophelper",
+        "Node name for S&R": "IterationCleanup",
     }
     sg["nodes"].append(cleanup_node)
 
-    # Remove the old direct link from trim to output
+    # Remove the old direct link from trim to output.
     sg["links"] = [l for l in sg["links"] if l["id"] != old_link_id]
 
-    # Update the origin's (LatentOverlapTrim output slot 0) links list:
-    # replace old_link_id with the new link to IterationCleanup
+    # Node-output slots use "links" (not "linkIds") -- "linkIds" is only for
+    # subgraph boundary entries (sg.inputs / sg.outputs). Update only "links"
+    # on the trim node's output slot.
     trim_out = trim_node["outputs"][0]
-    for key in ("links", "linkIds"):
-        if key in trim_out and trim_out[key] is not None:
-            trim_out[key] = [
-                lid for lid in trim_out[key] if lid != old_link_id
-            ] + [link_id_trim_to_cleanup]
+    trim_out["links"] = [
+        lid for lid in trim_out.get("links", []) if lid != old_link_id
+    ] + [link_id_trim_to_cleanup]
 
-    # Update the subgraph output entry (virtual target_id == -20 means
-    # the link terminates at sg['outputs'][target_slot]).
+    # Subgraph output entries (the virtual target_id == -20 sink) use "linkIds".
     sg_output = sg["outputs"][output_target_slot]
     sg_output["linkIds"] = [
         lid if lid != old_link_id else link_id_cleanup_to_output
@@ -164,11 +164,24 @@ def patch_workflow(path: Path) -> None:
     print(f"\n=== {path.name} ===")
     ed = WorkflowEditor(path)
 
-    swapped = swap_clip_text_encodes(ed)
+    already_patched = ed.find_nodes_by_type("CachedTextEncode_AudioLoop")
+    swapped, candidates = swap_clip_text_encodes(ed)
     if swapped:
         print(f"  Swapped {swapped} CLIPTextEncode -> CachedTextEncode_AudioLoop")
+    elif already_patched:
+        print(f"  Already patched ({len(already_patched)} CachedTextEncode_AudioLoop nodes)")
+    elif candidates:
+        # CLIPTextEncode nodes exist, none have an IN_LOOP_ENCODE_TITLES title,
+        # and no CachedTextEncode_AudioLoop has taken their place. Likely the
+        # user renamed the in-loop encoders.
+        print(
+            f"  WARN: {candidates} CLIPTextEncode node(s) found but none match "
+            f"IN_LOOP_ENCODE_TITLES={sorted(IN_LOOP_ENCODE_TITLES)}. "
+            f"Rename the in-loop prompt encoders to enable caching, or edit "
+            f"IN_LOOP_ENCODE_TITLES in this script."
+        )
     else:
-        print("  No in-loop CLIPTextEncode nodes to swap (already patched or absent)")
+        print("  No CLIPTextEncode nodes present")
 
     inserted = insert_iteration_cleanup(ed)
     if inserted:
