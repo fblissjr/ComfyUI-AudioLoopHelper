@@ -1147,10 +1147,11 @@ class CachedTextEncode(io.ComfyNode):
         key = (id(clip), text)
         cached = _COND_CACHE.get(key)
         if cached is not None:
-            with torch.profiler.record_function("CachedTextEncode.hit"):
-                _COND_CACHE.move_to_end(key)
+            _COND_CACHE.move_to_end(key)
             return io.NodeOutput(cached)
 
+        # Only the miss path hits GPU (Gemma encode) -- that's the only
+        # branch worth a named span in the profile trace.
         with torch.profiler.record_function("CachedTextEncode.miss"):
             tokens = clip.tokenize(text)
             cond = clip.encode_from_tokens_scheduled(tokens)
@@ -1205,7 +1206,7 @@ class IterationCleanup(io.ComfyNode):
 
     @classmethod
     def execute(cls, latent, mode: str) -> io.NodeOutput:
-        with torch.profiler.record_function(f"IterationCleanup.{mode}"):
+        with torch.profiler.record_function("IterationCleanup"):
             if mode == "always":
                 gc.collect()
                 if torch.cuda.is_available():
@@ -1229,12 +1230,16 @@ class IterationCleanup(io.ComfyNode):
 # node bypass (mode=4 on any of the three).
 _PROFILER_STATE: dict = {}
 
+# Separate from _PROFILER_STATE so ProfileBegin's state reset doesn't wipe
+# accumulated warnings. Persists across workflow runs within a Python process.
+_WARNED_KEYS: set[str] = set()
+
 
 def _log_once(key: str, message: str) -> None:
-    """Emit a warning message once per key in a workflow run."""
-    if _PROFILER_STATE.get(f"_warned_{key}"):
+    """Emit a warning message once per key per Python process."""
+    if key in _WARNED_KEYS:
         return
-    _PROFILER_STATE[f"_warned_{key}"] = True
+    _WARNED_KEYS.add(key)
     print(f"[AudioLoopHelper] {message}")
 
 
@@ -1329,7 +1334,15 @@ class ProfileBegin(io.ComfyNode):
         include_shapes: bool,
         include_flops: bool,
     ) -> io.NodeOutput:
-        # Clear any stale state from a previous run
+        # Stop any prior profiler that was left running (user cancelled a run
+        # before ProfileEnd fired, ComfyUI workflow re-queued, etc.) to avoid
+        # orphaning an active torch.profiler that keeps collecting invisibly.
+        prior = _PROFILER_STATE.get("profiler")
+        if prior is not None:
+            try:
+                prior.stop()
+            except Exception:  # noqa: BLE001 -- torch.profiler errors are unhelpful
+                pass
         _PROFILER_STATE.clear()
 
         if not enabled:
@@ -1464,34 +1477,42 @@ class ProfileEnd(io.ComfyNode):
         run_dir = _PROFILER_STATE["run_dir"]
         settings = _PROFILER_STATE["settings"]
 
-        profiler.stop()
-
-        trace_path = run_dir / "trace.json"
-        profiler.export_chrome_trace(str(trace_path))
-
-        # Summary (top kernels by cumulative CUDA time)
         try:
-            summary = profiler.key_averages().table(
-                sort_by="cuda_time_total",
-                row_limit=50,
-            )
-        except Exception as e:  # noqa: BLE001
-            summary = f"Summary generation failed: {e}"
-        summary_path = run_dir / "summary.txt"
-        summary_path.write_text(str(summary))
+            profiler.stop()
 
-        # Memory timeline (optional, requires profile_memory=True)
-        if settings.get("include_memory"):
+            # Write trace atomically: .tmp then rename, so a partial write
+            # on disk-full / permission error doesn't leave a corrupt file.
+            trace_path = run_dir / "trace.json"
+            tmp_path = run_dir / "trace.json.tmp"
             try:
-                profiler.export_memory_timeline(
-                    str(run_dir / "memory_timeline.html"),
-                    device="cuda:0",
-                )
-            except Exception as e:  # noqa: BLE001
-                _log_once("mem_timeline", f"ProfileEnd: memory_timeline export failed: {e}")
+                profiler.export_chrome_trace(str(tmp_path))
+                tmp_path.replace(trace_path)
+            except (RuntimeError, OSError, ValueError) as e:
+                _log_once("trace_export", f"ProfileEnd: trace export failed: {e}")
+                if tmp_path.exists():
+                    tmp_path.unlink()
 
-        print(f"[AudioLoopHelper] ProfileEnd: wrote profile to {run_dir}")
-        _PROFILER_STATE.clear()
+            try:
+                summary = profiler.key_averages().table(
+                    sort_by="cuda_time_total",
+                    row_limit=50,
+                )
+            except (RuntimeError, ValueError) as e:
+                summary = f"Summary generation failed: {e}"
+            (run_dir / "summary.txt").write_text(str(summary))
+
+            if settings.get("include_memory"):
+                try:
+                    profiler.export_memory_timeline(
+                        str(run_dir / "memory_timeline.html"),
+                        device="cuda:0",
+                    )
+                except (RuntimeError, OSError, ValueError) as e:
+                    _log_once("mem_timeline", f"ProfileEnd: memory_timeline export failed: {e}")
+
+            print(f"[AudioLoopHelper] ProfileEnd: wrote profile to {run_dir}")
+        finally:
+            _PROFILER_STATE.clear()
         return io.NodeOutput(trigger)
 
 

@@ -43,6 +43,7 @@ def summarize(trace_path: Path) -> str:
     # Collect kernel/op events with duration
     op_totals: dict[str, float] = defaultdict(float)
     op_counts: dict[str, int] = defaultdict(int)
+    op_category: dict[str, str] = {}  # cache per-name categorization
     category_totals: dict[str, float] = defaultdict(float)
     total_gpu_time = 0.0
     total_cpu_time = 0.0
@@ -53,13 +54,18 @@ def summarize(trace_path: Path) -> str:
         name = ev.get("name", "")
         dur = ev.get("dur", 0)  # microseconds
         cat = ev.get("cat", "")
+        cat_lower = cat.lower()
 
-        if "kernel" in cat or "cuda" in cat.lower():
+        if "kernel" in cat or "cuda" in cat_lower:
             op_totals[name] += dur
             op_counts[name] += 1
-            category_totals[categorize(name)] += dur
+            kcat = op_category.get(name)
+            if kcat is None:
+                kcat = categorize(name)
+                op_category[name] = kcat
+            category_totals[kcat] += dur
             total_gpu_time += dur
-        elif "cpu" in cat.lower() or cat == "":
+        elif "cpu" in cat_lower or cat == "":
             total_cpu_time += dur
 
     lines = []
@@ -87,7 +93,7 @@ def summarize(trace_path: Path) -> str:
         short_name = name if len(name) <= 60 else name[:57] + "..."
         lines.append(
             f"  {total / 1e3:10.2f}  {count:6d}  {per_call_us:12.1f}  "
-            f"{categorize(name):<12s}  {short_name}"
+            f"{op_category[name]:<12s}  {short_name}"
         )
 
     return "\n".join(lines)
