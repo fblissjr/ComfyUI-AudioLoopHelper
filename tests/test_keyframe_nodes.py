@@ -121,6 +121,16 @@ class TestMatchImageScheduleWithNext:
         assert next_idx == 0
         assert factor == 0.0
 
+    def test_at_exact_boundary(self):
+        from nodes import _parse_image_schedule, _match_image_schedule_with_next
+
+        entries = _parse_image_schedule("0:00-0:38: 0\n0:38+: 1")
+        # At exact boundary: already in second range, no blend needed
+        idx, next_idx, factor = _match_image_schedule_with_next(entries, 38.0, 5.0)
+        assert idx == 1
+        assert next_idx == 1
+        assert factor == 0.0
+
     def test_last_range_no_blend(self):
         from nodes import _parse_image_schedule, _match_image_schedule_with_next
 

@@ -33,9 +33,10 @@ Analysis nodes (nodes_analysis.py, torchaudio only):
 
 Key helper functions: `_audio_duration`, `_parse_timestamp` ("M:SS" or bare seconds),
 `_format_timestamp` (preserves sub-second; NOT same as `_fmt_ts()` in analyze_audio_features.py
-which truncates), `_parse_schedule`, `_match_schedule`, `_match_schedule_with_next`,
-`_parse_image_schedule` (like `_parse_schedule` but int image indices),
-`_match_image_schedule`, `_match_image_schedule_with_next`.
+which truncates). Schedule parsing uses generic `_parse_schedule_generic` /
+`_match_schedule_generic` / `_match_schedule_with_next_generic` parameterized by
+value converter and default. Thin wrappers: `_parse_schedule` / `_match_schedule` (str),
+`_parse_image_schedule` / `_match_image_schedule` (int via `_safe_int`).
 
 ## Key patterns
 

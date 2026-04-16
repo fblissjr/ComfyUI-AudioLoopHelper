@@ -94,18 +94,27 @@ _LINE_RE = re.compile(
 )
 
 
-def _parse_schedule(schedule: str) -> list[tuple[float, float | None, str]]:
-    """Parse a timestamp-based prompt schedule.
+from typing import Callable, TypeVar
 
-    Each line: `timestamp_range: prompt text`
+_T = TypeVar("_T")
+
+
+def _parse_schedule_generic(
+    schedule: str,
+    convert_value: Callable[[str], _T | None],
+) -> list[tuple[float, float | None, _T]]:
+    """Parse a timestamp-based schedule with a pluggable value converter.
+
+    Each line: `timestamp_range: value`
     Range formats:
-      - "0:00-0:38: prompt"   (start-end, inclusive)
-      - "1:15+: prompt"       (from here onward)
-      - "38-75: prompt"       (bare seconds)
+      - "0:00-0:38: value"   (start-end, inclusive)
+      - "1:15+: value"       (from here onward)
+      - "38-75: value"       (bare seconds)
 
-    Returns list of (start, end_or_None, prompt) tuples.
+    convert_value receives the raw string after the colon. Return None to
+    skip the line (e.g. invalid integer).
     """
-    entries = []
+    entries: list[tuple[float, float | None, _T]] = []
     for line in schedule.strip().splitlines():
         line = line.strip()
         if not line:
@@ -114,36 +123,90 @@ def _parse_schedule(schedule: str) -> list[tuple[float, float | None, str]]:
         if not match:
             continue
         range_part = match.group(1).strip()
-        prompt = match.group(2).strip()
+        value = convert_value(match.group(2).strip())
+        if value is None:
+            continue
 
         if range_part.endswith("+"):
             start = _parse_timestamp(range_part[:-1])
-            entries.append((start, None, prompt))
+            entries.append((start, None, value))
         elif "-" in range_part:
             parts = range_part.split("-", 1)
             start = _parse_timestamp(parts[0])
             end = _parse_timestamp(parts[1])
-            entries.append((start, end, prompt))
+            entries.append((start, end, value))
         else:
-            # Single timestamp -- treat as point match (this iteration only)
             t = _parse_timestamp(range_part)
-            entries.append((t, t, prompt))
+            entries.append((t, t, value))
     return entries
+
+
+def _match_schedule_generic(
+    entries: list[tuple[float, float | None, _T]],
+    current_time: float,
+    default: _T,
+) -> _T:
+    """Find the matching value for the given time. Last match wins."""
+    result: _T | None = None
+    for start, end, value in entries:
+        if end is None:
+            if current_time >= start:
+                result = value
+        else:
+            if start <= current_time <= end:
+                result = value
+    if result is None and entries:
+        result = entries[-1][2]
+    return result if result is not None else default
+
+
+def _match_schedule_with_next_generic(
+    entries: list[tuple[float, float | None, _T]],
+    current_time: float,
+    blend_seconds: float,
+    default: _T,
+) -> tuple[_T, _T, float]:
+    """Find current value, next value, and blend factor.
+
+    Returns (current_value, next_value, blend_factor).
+    blend_factor is 0.0 when not near a boundary, and ramps to 1.0
+    at the boundary over blend_seconds.
+    """
+    current_value = _match_schedule_generic(entries, current_time, default)
+
+    if blend_seconds <= 0:
+        return current_value, current_value, 0.0
+
+    next_boundary = None
+    next_value = current_value
+    for start, _end, value in entries:
+        if start > current_time:
+            if next_boundary is None or start < next_boundary:
+                next_boundary = start
+                next_value = value
+
+    if next_boundary is None:
+        return current_value, current_value, 0.0
+
+    time_to_boundary = next_boundary - current_time
+    if time_to_boundary < blend_seconds:
+        blend_factor = 1.0 - (time_to_boundary / blend_seconds)
+        return current_value, next_value, blend_factor
+
+    return current_value, current_value, 0.0
+
+
+# --- Prompt schedule (str values) ---
+
+
+def _parse_schedule(schedule: str) -> list[tuple[float, float | None, str]]:
+    """Parse a timestamp-based prompt schedule."""
+    return _parse_schedule_generic(schedule, str.strip)
 
 
 def _match_schedule(entries: list[tuple[float, float | None, str]], current_time: float) -> str:
     """Find the matching prompt for the given time. Last match wins."""
-    result = ""
-    for start, end, prompt in entries:
-        if end is None:
-            if current_time >= start:
-                result = prompt
-        else:
-            if start <= current_time <= end:
-                result = prompt
-    if not result and entries:
-        result = entries[-1][2]
-    return result
+    return _match_schedule_generic(entries, current_time, "")
 
 
 def _match_schedule_with_next(
@@ -151,92 +214,31 @@ def _match_schedule_with_next(
     current_time: float,
     blend_seconds: float,
 ) -> tuple[str, str, float]:
-    """Find current prompt, next prompt, and blend factor.
+    """Find current prompt, next prompt, and blend factor."""
+    return _match_schedule_with_next_generic(entries, current_time, blend_seconds, "")
 
-    Returns (current_prompt, next_prompt, blend_factor).
-    blend_factor is 0.0 when not near a boundary, and ramps to 1.0
-    at the boundary over blend_seconds.
-    """
-    current_prompt = _match_schedule(entries, current_time)
 
-    if blend_seconds <= 0:
-        return current_prompt, current_prompt, 0.0
+# --- Image schedule (int values) ---
 
-    # Find the next boundary: the earliest range start that is after current_time
-    next_boundary = None
-    next_prompt = current_prompt
-    for start, end, prompt in entries:
-        if start > current_time:
-            if next_boundary is None or start < next_boundary:
-                next_boundary = start
-                next_prompt = prompt
 
-    if next_boundary is None:
-        # No upcoming boundary -- we're in the last range
-        return current_prompt, current_prompt, 0.0
-
-    time_to_boundary = next_boundary - current_time
-    if time_to_boundary < blend_seconds:
-        blend_factor = 1.0 - (time_to_boundary / blend_seconds)
-        return current_prompt, next_prompt, blend_factor
-
-    return current_prompt, current_prompt, 0.0
+def _safe_int(s: str) -> int | None:
+    """Convert string to int, returning None on failure (skips the entry)."""
+    try:
+        return int(s)
+    except ValueError:
+        return None
 
 
 def _parse_image_schedule(schedule: str) -> list[tuple[float, float | None, int]]:
-    """Parse a timestamp-based image schedule.
-
-    Same format as _parse_schedule but values are integer image indices
-    instead of prompt strings.  Example:
-        0:00-0:38: 0
-        0:38-1:15: 1
-        1:15+: 2
-    """
-    entries: list[tuple[float, float | None, int]] = []
-    for line in schedule.strip().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        match = _LINE_RE.match(line)
-        if not match:
-            continue
-        range_part = match.group(1).strip()
-        value = match.group(2).strip()
-
-        try:
-            idx = int(value)
-        except ValueError:
-            continue
-
-        if range_part.endswith("+"):
-            start = _parse_timestamp(range_part[:-1])
-            entries.append((start, None, idx))
-        elif "-" in range_part:
-            parts = range_part.split("-", 1)
-            start = _parse_timestamp(parts[0])
-            end = _parse_timestamp(parts[1])
-            entries.append((start, end, idx))
-        else:
-            t = _parse_timestamp(range_part)
-            entries.append((t, t, idx))
-    return entries
+    """Parse a timestamp-based image schedule (values are integer indices)."""
+    return _parse_schedule_generic(schedule, _safe_int)
 
 
 def _match_image_schedule(
     entries: list[tuple[float, float | None, int]], current_time: float
 ) -> int:
     """Find the matching image index for the given time. Last match wins."""
-    result: int | None = None
-    for start, end, idx in entries:
-        if end is None:
-            if current_time >= start:
-                result = idx
-        else:
-            if start <= current_time <= end:
-                result = idx
-    if result is None and entries:
-        result = entries[-1][2]
-    return result if result is not None else 0
+    return _match_schedule_generic(entries, current_time, 0)
 
 
 def _match_image_schedule_with_next(
@@ -244,34 +246,8 @@ def _match_image_schedule_with_next(
     current_time: float,
     blend_seconds: float,
 ) -> tuple[int, int, float]:
-    """Find current image index, next image index, and blend factor.
-
-    Returns (current_idx, next_idx, blend_factor).
-    blend_factor is 0.0 when not near a boundary, and ramps to 1.0
-    at the boundary over blend_seconds.
-    """
-    current_idx = _match_image_schedule(entries, current_time)
-
-    if blend_seconds <= 0:
-        return current_idx, current_idx, 0.0
-
-    next_boundary = None
-    next_idx = current_idx
-    for start, _end, idx in entries:
-        if start > current_time:
-            if next_boundary is None or start < next_boundary:
-                next_boundary = start
-                next_idx = idx
-
-    if next_boundary is None:
-        return current_idx, current_idx, 0.0
-
-    time_to_boundary = next_boundary - current_time
-    if time_to_boundary < blend_seconds:
-        blend_factor = 1.0 - (time_to_boundary / blend_seconds)
-        return current_idx, next_idx, blend_factor
-
-    return current_idx, current_idx, 0.0
+    """Find current image index, next image index, and blend factor."""
+    return _match_schedule_with_next_generic(entries, current_time, blend_seconds, 0)
 
 
 class AudioLoopController(io.ComfyNode):
@@ -916,7 +892,7 @@ class KeyframeImageSchedule(io.ComfyNode):
                     "current_iteration",
                     default=1,
                     min=0,
-                    tooltip="Current loop iteration (1-based) from TensorLoopOpen.",
+                    tooltip="Current loop iteration from TensorLoopOpen (0 = initial render).",
                 ),
                 io.Float.Input(
                     "stride_seconds",
@@ -1014,7 +990,7 @@ class VideoFrameExtract(io.ComfyNode):
                     "current_iteration",
                     default=1,
                     min=0,
-                    tooltip="Current loop iteration (1-based) from TensorLoopOpen.",
+                    tooltip="Current loop iteration from TensorLoopOpen (0 = initial render).",
                 ),
                 io.Float.Input(
                     "stride_seconds",
