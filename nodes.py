@@ -780,15 +780,16 @@ class LatentContextExtract(io.ComfyNode):
 
     @classmethod
     def execute(cls, latent: dict, overlap_latent_frames: int) -> io.NodeOutput:
-        s = latent.copy()
-        video = s["samples"]
-        frames = video.shape[2]
+        with torch.profiler.record_function("LatentContextExtract"):
+            s = latent.copy()
+            video = s["samples"]
+            frames = video.shape[2]
 
-        start = max(0, frames - overlap_latent_frames)
-        s["samples"] = video[:, :, start:]
+            start = max(0, frames - overlap_latent_frames)
+            s["samples"] = video[:, :, start:]
 
-        # Strip noise_mask so downstream creates fresh (matches VAEEncode behavior)
-        s.pop("noise_mask", None)
+            # Strip noise_mask so downstream creates fresh (matches VAEEncode behavior)
+            s.pop("noise_mask", None)
 
         return io.NodeOutput(s)
 
@@ -824,15 +825,16 @@ class LatentOverlapTrim(io.ComfyNode):
 
     @classmethod
     def execute(cls, latent: dict, overlap_latent_frames: int) -> io.NodeOutput:
-        s = latent.copy()
-        video = s["samples"]
+        with torch.profiler.record_function("LatentOverlapTrim"):
+            s = latent.copy()
+            video = s["samples"]
 
-        # Clamp to avoid empty tensor if overlap >= total frames
-        trim = min(overlap_latent_frames, video.shape[2] - 1)
-        s["samples"] = video[:, :, trim:]
+            # Clamp to avoid empty tensor if overlap >= total frames
+            trim = min(overlap_latent_frames, video.shape[2] - 1)
+            s["samples"] = video[:, :, trim:]
 
-        # Strip noise_mask for clean accumulation
-        s.pop("noise_mask", None)
+            # Strip noise_mask for clean accumulation
+            s.pop("noise_mask", None)
 
         return io.NodeOutput(s)
 
@@ -1145,15 +1147,16 @@ class CachedTextEncode(io.ComfyNode):
         key = (id(clip), text)
         cached = _COND_CACHE.get(key)
         if cached is not None:
-            _COND_CACHE.move_to_end(key)
+            with torch.profiler.record_function("CachedTextEncode.hit"):
+                _COND_CACHE.move_to_end(key)
             return io.NodeOutput(cached)
 
-        tokens = clip.tokenize(text)
-        cond = clip.encode_from_tokens_scheduled(tokens)
-
-        _COND_CACHE[key] = cond
-        if len(_COND_CACHE) > _COND_CACHE_MAX:
-            _COND_CACHE.popitem(last=False)
+        with torch.profiler.record_function("CachedTextEncode.miss"):
+            tokens = clip.tokenize(text)
+            cond = clip.encode_from_tokens_scheduled(tokens)
+            _COND_CACHE[key] = cond
+            if len(_COND_CACHE) > _COND_CACHE_MAX:
+                _COND_CACHE.popitem(last=False)
         return io.NodeOutput(cond)
 
 
@@ -1202,14 +1205,294 @@ class IterationCleanup(io.ComfyNode):
 
     @classmethod
     def execute(cls, latent, mode: str) -> io.NodeOutput:
-        if mode == "always":
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        elif mode == "gpu_only":
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+        with torch.profiler.record_function(f"IterationCleanup.{mode}"):
+            if mode == "always":
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            elif mode == "gpu_only":
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
         return io.NodeOutput(latent)
+
+
+# --- Profiling nodes ---
+#
+# Three coordinated nodes capture end-to-end profile data for the audio loop:
+#   ProfileBegin    -> placed before the loop, starts torch.profiler
+#   ProfileIterStep -> placed inside the loop body, marks iteration boundaries
+#   ProfileEnd      -> placed after the loop, finalizes and writes outputs
+#
+# All settings live on ProfileBegin. ProfileIterStep and ProfileEnd have zero
+# widgets -- they read shared state from _PROFILER_STATE. Toggle off via the
+# `enabled` widget on ProfileBegin (master switch), or via ComfyUI's native
+# node bypass (mode=4 on any of the three).
+_PROFILER_STATE: dict = {}
+
+
+def _log_once(key: str, message: str) -> None:
+    """Emit a warning message once per key in a workflow run."""
+    if _PROFILER_STATE.get(f"_warned_{key}"):
+        return
+    _PROFILER_STATE[f"_warned_{key}"] = True
+    print(f"[AudioLoopHelper] {message}")
+
+
+class ProfileBegin(io.ComfyNode):
+    """Start torch.profiler before the audio loop.
+
+    Place this node between the audio/model loaders and TensorLoopOpen.
+    The `trigger` input is any value you want to pass through -- it exists
+    only to force this node into the execution order before the loop.
+
+    All profile settings live on this node. ProfileIterStep and ProfileEnd
+    read shared state, so you only change settings here.
+
+    Toggle off in three ways:
+      1. Set `enabled=False` (zero overhead)
+      2. Right-click bypass this node (mode=4)
+      3. Remove all three profile nodes from the workflow
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="ProfileBegin_AudioLoop",
+            display_name="Profile Begin",
+            category="looping/audio/profile",
+            description=(
+                "Starts torch.profiler for end-to-end audio-loop profiling. "
+                "Use with ProfileIterStep (inside loop) and ProfileEnd (after loop)."
+            ),
+            inputs=[
+                io.AnyType.Input("trigger", tooltip="Any value to sequence this node before the loop (passthrough)."),
+                io.Boolean.Input(
+                    "enabled",
+                    default=True,
+                    tooltip="Master on/off. False = all three profile nodes are passthroughs with zero overhead.",
+                ),
+                io.String.Input(
+                    "output_dir",
+                    default="./profile_output/",
+                    tooltip="Root dir for profile outputs. A timestamped subdir is created per run.",
+                ),
+                io.Int.Input(
+                    "warmup_iterations",
+                    default=1,
+                    min=0,
+                    max=10,
+                    tooltip="Skip this many iterations before recording (iteration 1 has compilation noise).",
+                ),
+                io.Int.Input(
+                    "active_iterations",
+                    default=3,
+                    min=1,
+                    max=20,
+                    tooltip="Record this many iterations after warmup. More = better variance data, larger files.",
+                ),
+                io.Boolean.Input(
+                    "include_cpu",
+                    default=True,
+                    tooltip="Profile CPU activities too (Python overhead, dispatcher cost). Adds ~10% overhead.",
+                ),
+                io.Boolean.Input(
+                    "include_memory",
+                    default=True,
+                    tooltip="Record VRAM allocation timeline. Adds ~3% overhead.",
+                ),
+                io.Boolean.Input(
+                    "include_shapes",
+                    default=True,
+                    tooltip="Record tensor shapes per op. Helps identify which layer is slow. Adds ~5% overhead.",
+                ),
+                io.Boolean.Input(
+                    "include_flops",
+                    default=False,
+                    tooltip="Count FLOPS per op. Expensive; enable only for deeper analysis.",
+                ),
+            ],
+            outputs=[
+                io.AnyType.Output("trigger", tooltip="Passthrough of input trigger."),
+            ],
+        )
+
+    @classmethod
+    def execute(
+        cls,
+        trigger,
+        enabled: bool,
+        output_dir: str,
+        warmup_iterations: int,
+        active_iterations: int,
+        include_cpu: bool,
+        include_memory: bool,
+        include_shapes: bool,
+        include_flops: bool,
+    ) -> io.NodeOutput:
+        # Clear any stale state from a previous run
+        _PROFILER_STATE.clear()
+
+        if not enabled:
+            return io.NodeOutput(trigger)
+
+        # Torch profiler only meaningful with CUDA; guard gracefully.
+        if not torch.cuda.is_available():
+            _log_once("no_cuda", "ProfileBegin: CUDA not available, profiling disabled.")
+            return io.NodeOutput(trigger)
+
+        import datetime
+        from pathlib import Path
+
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_dir = Path(output_dir) / ts
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        activities = [torch.profiler.ProfilerActivity.CUDA]
+        if include_cpu:
+            activities.append(torch.profiler.ProfilerActivity.CPU)
+
+        schedule = torch.profiler.schedule(
+            wait=0,
+            warmup=warmup_iterations,
+            active=active_iterations,
+            repeat=1,
+        )
+
+        profiler = torch.profiler.profile(
+            activities=activities,
+            schedule=schedule,
+            record_shapes=include_shapes,
+            profile_memory=include_memory,
+            with_flops=include_flops,
+            with_stack=False,
+        )
+        profiler.start()
+
+        _PROFILER_STATE["profiler"] = profiler
+        _PROFILER_STATE["run_dir"] = run_dir
+        _PROFILER_STATE["settings"] = {
+            "warmup_iterations": warmup_iterations,
+            "active_iterations": active_iterations,
+            "include_cpu": include_cpu,
+            "include_memory": include_memory,
+            "include_shapes": include_shapes,
+            "include_flops": include_flops,
+        }
+        print(f"[AudioLoopHelper] ProfileBegin: recording to {run_dir}")
+        return io.NodeOutput(trigger)
+
+
+class ProfileIterStep(io.ComfyNode):
+    """Mark an iteration boundary for torch.profiler.
+
+    Place inside the TensorLoop body (typically after LatentOverlapTrim or
+    IterationCleanup). Calls profiler.step() to advance its schedule.
+
+    No widgets -- settings are shared from ProfileBegin. Passthrough when
+    ProfileBegin isn't active or was set to disabled.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="ProfileIterStep_AudioLoop",
+            display_name="Profile Iter Step",
+            category="looping/audio/profile",
+            description="Calls torch.profiler.step() at iteration boundary. Passthrough LATENT.",
+            inputs=[
+                io.Latent.Input("latent", tooltip="Latent passed through unchanged."),
+            ],
+            outputs=[
+                io.Latent.Output("latent"),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, latent) -> io.NodeOutput:
+        profiler = _PROFILER_STATE.get("profiler")
+        if profiler is None:
+            _log_once(
+                "step_uninit",
+                "ProfileIterStep called without an active ProfileBegin -- passthrough. "
+                "Wire a ProfileBegin node before the loop to enable profiling.",
+            )
+            return io.NodeOutput(latent)
+        profiler.step()
+        return io.NodeOutput(latent)
+
+
+class ProfileEnd(io.ComfyNode):
+    """Stop torch.profiler and write outputs.
+
+    Place AFTER the TensorLoop completes. The `trigger` input exists only
+    to sequence this node after the loop (pass any downstream value, e.g.,
+    the TensorLoopClose output).
+
+    Emits (in the timestamped dir from ProfileBegin):
+      - trace.json        : chrome trace (open at perfetto.dev or chrome://tracing)
+      - summary.txt       : top kernels by cumulative time, categorized
+      - memory_timeline.html : VRAM timeline (if include_memory was True)
+
+    Passthrough when ProfileBegin isn't active.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="ProfileEnd_AudioLoop",
+            display_name="Profile End",
+            category="looping/audio/profile",
+            description="Stops torch.profiler and writes chrome trace + summary to disk.",
+            inputs=[
+                io.AnyType.Input("trigger", tooltip="Any value to sequence this node after the loop (passthrough)."),
+            ],
+            outputs=[
+                io.AnyType.Output("trigger"),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, trigger) -> io.NodeOutput:
+        profiler = _PROFILER_STATE.get("profiler")
+        if profiler is None:
+            _log_once(
+                "end_uninit",
+                "ProfileEnd called without an active ProfileBegin -- passthrough.",
+            )
+            return io.NodeOutput(trigger)
+
+        run_dir = _PROFILER_STATE["run_dir"]
+        settings = _PROFILER_STATE["settings"]
+
+        profiler.stop()
+
+        trace_path = run_dir / "trace.json"
+        profiler.export_chrome_trace(str(trace_path))
+
+        # Summary (top kernels by cumulative CUDA time)
+        try:
+            summary = profiler.key_averages().table(
+                sort_by="cuda_time_total",
+                row_limit=50,
+            )
+        except Exception as e:  # noqa: BLE001
+            summary = f"Summary generation failed: {e}"
+        summary_path = run_dir / "summary.txt"
+        summary_path.write_text(str(summary))
+
+        # Memory timeline (optional, requires profile_memory=True)
+        if settings.get("include_memory"):
+            try:
+                profiler.export_memory_timeline(
+                    str(run_dir / "memory_timeline.html"),
+                    device="cuda:0",
+                )
+            except Exception as e:  # noqa: BLE001
+                _log_once("mem_timeline", f"ProfileEnd: memory_timeline export failed: {e}")
+
+        print(f"[AudioLoopHelper] ProfileEnd: wrote profile to {run_dir}")
+        _PROFILER_STATE.clear()
+        return io.NodeOutput(trigger)
 
 
 class AudioLoopHelperExtension(ComfyExtension):
@@ -1233,6 +1516,9 @@ class AudioLoopHelperExtension(ComfyExtension):
             ImageBlend,
             CachedTextEncode,
             IterationCleanup,
+            ProfileBegin,
+            ProfileIterStep,
+            ProfileEnd,
         ]
 
 
