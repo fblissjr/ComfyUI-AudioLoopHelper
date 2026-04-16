@@ -29,20 +29,11 @@ GET_INPUT_IMAGE = 651   # GetNode "Get_input_image" -> constant IMAGE
 TENSOR_LOOP_OPEN = 1539 # TensorLoopOpen (output slot 3 = current_iteration)
 AUDIO_LOOP_CTRL = 1582  # AudioLoopController (output slot 4 = stride_seconds)
 
-# Verify the link we're about to remove
-link_2043 = None
-for l in ed.wf["links"]:
-    if isinstance(l, list) and l[0] == 2043:
-        link_2043 = l
-        break
-assert link_2043 is not None, "Link 2043 not found"
-assert link_2043[1] == GET_INPUT_IMAGE, f"Expected src={GET_INPUT_IMAGE}, got {link_2043[1]}"
-assert link_2043[3] == SUBGRAPH, f"Expected tgt={SUBGRAPH}, got {link_2043[3]}"
-assert link_2043[4] == 8, f"Expected tgt_slot=8, got {link_2043[4]}"
-
 # --- Remove the constant Get_input_image -> subgraph link ---
-ed.remove_link(2043)
-print("Removed link 2043 (Get_input_image -> subgraph init_image)")
+link_id = ed.find_link(GET_INPUT_IMAGE, SUBGRAPH)
+assert link_id is not None, f"No link found from node {GET_INPUT_IMAGE} to node {SUBGRAPH}"
+ed.remove_link(link_id)
+print(f"Removed link {link_id} (Get_input_image -> subgraph init_image)")
 
 # Get_input_image (node 651) still exists and feeds the initial render via
 # LTXVImgToVideoInplaceKJ (node 531 input slot 2). That wiring stays.
@@ -59,8 +50,8 @@ kf_node = ed.make_node(
     pos=[2700, 4100],
     title="Keyframe Image Schedule",
     widgets=[
-        "0:00+: 0",  # schedule (default: always use image 0)
-        0.0,          # blend_seconds
+        "0:00+: 0",
+        0.0,
     ],
     inputs=[
         {"name": "images", "type": "IMAGE", "link": None},
