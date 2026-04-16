@@ -1228,18 +1228,44 @@ class IterationCleanup(io.ComfyNode):
 # widgets -- they read shared state from _PROFILER_STATE. Toggle off via the
 # `enabled` widget on ProfileBegin (master switch), or via ComfyUI's native
 # node bypass (mode=4 on any of the three).
-_PROFILER_STATE: dict = {}
+# Profiler state MUST survive ComfyUI-HotReloadHack reimports of this module.
+# Module-level globals here would be reset mid-workflow if any file in our
+# package changes (file mtime, git pull, IDE autosave). Attaching to `torch`
+# (which never hot-reloads) keeps the state reachable even after our module
+# is reimported -- ProfileBegin / ProfileIterStep / ProfileEnd then coordinate
+# through a single live dict instead of three stale module copies.
+_STATE_ATTR = "_audioloophelper_profiler_state"
+_WARNED_ATTR = "_audioloophelper_warned_keys"
 
-# Separate from _PROFILER_STATE so ProfileBegin's state reset doesn't wipe
-# accumulated warnings. Persists across workflow runs within a Python process.
-_WARNED_KEYS: set[str] = set()
+
+def _get_profiler_state() -> dict:
+    state = getattr(torch, _STATE_ATTR, None)
+    if state is None:
+        state = {}
+        setattr(torch, _STATE_ATTR, state)
+    return state
+
+
+def _get_warned_keys() -> set:
+    warned = getattr(torch, _WARNED_ATTR, None)
+    if warned is None:
+        warned = set()
+        setattr(torch, _WARNED_ATTR, warned)
+    return warned
+
+
+# Backward-compat names for tests / imports. These point to the same live
+# objects attached to torch, so `.clear()` in tests works correctly.
+_PROFILER_STATE = _get_profiler_state()
+_WARNED_KEYS = _get_warned_keys()
 
 
 def _log_once(key: str, message: str) -> None:
     """Emit a warning message once per key per Python process."""
-    if key in _WARNED_KEYS:
+    warned = _get_warned_keys()
+    if key in warned:
         return
-    _WARNED_KEYS.add(key)
+    warned.add(key)
     print(f"[AudioLoopHelper] {message}")
 
 
@@ -1334,16 +1360,18 @@ class ProfileBegin(io.ComfyNode):
         include_shapes: bool,
         include_flops: bool,
     ) -> io.NodeOutput:
+        state = _get_profiler_state()
+
         # Stop any prior profiler that was left running (user cancelled a run
         # before ProfileEnd fired, ComfyUI workflow re-queued, etc.) to avoid
         # orphaning an active torch.profiler that keeps collecting invisibly.
-        prior = _PROFILER_STATE.get("profiler")
+        prior = state.get("profiler")
         if prior is not None:
             try:
                 prior.stop()
             except Exception:  # noqa: BLE001 -- torch.profiler errors are unhelpful
                 pass
-        _PROFILER_STATE.clear()
+        state.clear()
 
         if not enabled:
             return io.NodeOutput(trigger)
@@ -1378,12 +1406,13 @@ class ProfileBegin(io.ComfyNode):
             profile_memory=include_memory,
             with_flops=include_flops,
             with_stack=False,
+            acc_events=True,  # retain events across cycle transitions
         )
         profiler.start()
 
-        _PROFILER_STATE["profiler"] = profiler
-        _PROFILER_STATE["run_dir"] = run_dir
-        _PROFILER_STATE["settings"] = {
+        state["profiler"] = profiler
+        state["run_dir"] = run_dir
+        state["settings"] = {
             "warmup_iterations": warmup_iterations,
             "active_iterations": active_iterations,
             "include_cpu": include_cpu,
@@ -1422,7 +1451,7 @@ class ProfileIterStep(io.ComfyNode):
 
     @classmethod
     def execute(cls, latent) -> io.NodeOutput:
-        profiler = _PROFILER_STATE.get("profiler")
+        profiler = _get_profiler_state().get("profiler")
         if profiler is None:
             _log_once(
                 "step_uninit",
@@ -1466,7 +1495,8 @@ class ProfileEnd(io.ComfyNode):
 
     @classmethod
     def execute(cls, trigger) -> io.NodeOutput:
-        profiler = _PROFILER_STATE.get("profiler")
+        state = _get_profiler_state()
+        profiler = state.get("profiler")
         if profiler is None:
             _log_once(
                 "end_uninit",
@@ -1474,8 +1504,8 @@ class ProfileEnd(io.ComfyNode):
             )
             return io.NodeOutput(trigger)
 
-        run_dir = _PROFILER_STATE["run_dir"]
-        settings = _PROFILER_STATE["settings"]
+        run_dir = state["run_dir"]
+        settings = state["settings"]
 
         try:
             profiler.stop()
@@ -1512,7 +1542,7 @@ class ProfileEnd(io.ComfyNode):
 
             print(f"[AudioLoopHelper] ProfileEnd: wrote profile to {run_dir}")
         finally:
-            _PROFILER_STATE.clear()
+            state.clear()
         return io.NodeOutput(trigger)
 
 

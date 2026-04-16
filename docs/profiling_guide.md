@@ -182,6 +182,26 @@ You placed `ProfileIterStep` (or `ProfileEnd`) but didn't wire
 wire a `ProfileBegin` node before the loop, or disable the remaining
 profile nodes via bypass.
 
+**If this happens mid-workflow**: the profiler state is kept on the `torch`
+module specifically to survive `ComfyUI-HotReloadHack` reimports of our
+package. If you see the warning appear AFTER `ProfileBegin` logged its
+"recording to ..." line, a hot reload may have orphaned the prior profiler.
+The fix is already applied (state persists on `torch`), but if you edit
+our source files during a profile run, results are undefined — finish the
+run first, then edit.
+
+### Harmless warnings in the console during a profile run
+
+You may see these in the console:
+- `Profiler clears events at the end of each cycle` — we pass
+  `acc_events=True` so events are retained; this warning can be ignored.
+- `External init callback must run in same thread as registerClient` —
+  kineto (PyTorch profiler backend) is sensitive to cross-thread use.
+  ComfyUI runs nodes via asyncio; the warning is benign.
+- `Memory block of unknown size was allocated before the profiling
+  started` — some tensors existed before `profiler.start()` fired, so
+  their dealloc events aren't attributed. Does not affect summary data.
+
 ### No output files appeared
 
 - Check `enabled=True` on `ProfileBegin`.
