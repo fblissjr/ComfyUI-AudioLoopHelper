@@ -1965,7 +1965,7 @@
       ],
       "flags": {},
       "order": 36,
-      "mode": 4,
+      "mode": 0,
       "inputs": [
         {
           "name": "model",
@@ -1988,7 +1988,7 @@
         "Node name for S&R": "PathchSageAttentionKJ"
       },
       "widgets_values": [
-        "auto",
+        "sageattn_qk_int8_pv_fp16_cuda",
         false
       ]
     },
