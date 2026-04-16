@@ -3347,7 +3347,7 @@
     },
     {
       "id": 1559,
-      "type": "CLIPTextEncode",
+      "type": "CachedTextEncode_AudioLoop",
       "pos": [
         2897.4792724623944,
         5206.886032930646
@@ -3385,9 +3385,8 @@
       ],
       "title": "Loop Prompt Encode",
       "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.18.5",
-        "Node name for S&R": "CLIPTextEncode"
+        "cnr_id": "comfyui-audioloophelper",
+        "Node name for S&R": "CachedTextEncode_AudioLoop"
       },
       "widgets_values": [
         ""
@@ -4373,7 +4372,7 @@
     },
     {
       "id": 1604,
-      "type": "CLIPTextEncode",
+      "type": "CachedTextEncode_AudioLoop",
       "pos": [
         2897.4792724623944,
         5326.886032930646
@@ -4411,9 +4410,8 @@
       ],
       "title": "Next Prompt Encode",
       "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.18.5",
-        "Node name for S&R": "CLIPTextEncode"
+        "cnr_id": "comfyui-audioloophelper",
+        "Node name for S&R": "CachedTextEncode_AudioLoop"
       },
       "widgets_values": [
         "(next prompt - auto-filled by TimestampPromptSchedule)"
