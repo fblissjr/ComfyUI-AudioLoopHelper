@@ -63,6 +63,9 @@ value converter and default. Thin wrappers: `_parse_schedule` / `_match_schedule
 - **Node 169 prompt MUST match schedule's 0:00 entry** to avoid visual discontinuity at ~20s. Enforced structurally: `get_node_169_prompt` and `_generate_subject_schedule` both call `_build_prompt_for_section` via the SAME subdivision (`_prepare_sections`), so the first schedule entry is byte-exact to Node 169.
 - **Every generated prompt MUST contain "singing"** (or "are singing together" for multi-subject). LTX 2.3's audio-video joint cross-attention drives lip sync off the action verb; generic "performing" loses the signal. Enforced in `_SECTION_MODIFIERS` and `_build_action_phrase`; checked by `test_prompts_always_include_singing_verb_with_subject`.
 - **Always use WorkflowEditor** from `scripts/workflow_utils.py` for subgraph edits. Manual JSON surgery breaks links.
+- **Distilled 8-step sampling is a tuned package.** Shipped defaults: sampler `euler`, scheduler `linear_quadratic, 8, 1`, shift 13, CFG 1.0, `LTXVTiledVAEDecode` widgets `[2, 2, 1, true, "auto", "auto"]`. Don't go >8 steps on the distilled model (over-denoises). Don't use `euler_ancestral` — ancestral re-noise scales with sigma and the schedule plateaus at σ≈0.99 for 5 steps, so injected noise during warmup doesn't have runway to average out → iteration-to-iteration subject drift.
+- **`snap_boundaries=True` (default) means changing `overlap_seconds` does NOT require re-authoring the prompt schedule.** The node rounds schedule timestamps to the actual iteration stride at runtime. One-widget change; no mental math on the grid.
+- **Batch widget edits across the 4 example workflows:** `python3 -c` one-liner that loads each JSON, mutates `widgets_values` on the target node type, and writes back with `json.dumps(wf, indent=2) + "\n"`. Preserves structure cleanly.
 
 ## ComfyUI gotchas
 
