@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1610,
-  "last_link_id": 3021,
+  "last_node_id": 1614,
+  "last_link_id": 3042,
   "nodes": [
     {
       "id": 252,
@@ -3060,7 +3060,7 @@
       ],
       "flags": {},
       "order": 81,
-      "mode": 4,
+      "mode": 0,
       "inputs": [
         {
           "name": "audio",
@@ -3388,7 +3388,7 @@
           "name": "output",
           "type": "LATENT",
           "links": [
-            3018
+            3041
           ]
         }
       ],
@@ -3629,7 +3629,7 @@
           "name": "initial_value",
           "shape": 7,
           "type": "LATENT",
-          "link": 3017
+          "link": 3040
         }
       ],
       "outputs": [
@@ -3816,7 +3816,7 @@
       ],
       "flags": {},
       "order": 80,
-      "mode": 4,
+      "mode": 0,
       "inputs": [
         {
           "name": "current_iteration",
@@ -4399,7 +4399,7 @@
         {
           "name": "samples2",
           "type": "LATENT",
-          "link": 3019
+          "link": 3041
         },
         {
           "name": "dim",
@@ -4451,7 +4451,7 @@
           "name": "",
           "type": "LATENT",
           "links": [
-            3016
+            3040
           ]
         }
       ],
@@ -4559,89 +4559,6 @@
       "widgets_values": [
         0.0
       ]
-    },
-    {
-      "id": 1609,
-      "type": "ProfileBegin_AudioLoop",
-      "pos": [
-        2600,
-        4400
-      ],
-      "size": [
-        320,
-        220
-      ],
-      "flags": {},
-      "order": 90,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "trigger",
-          "type": "*",
-          "link": 3016
-        }
-      ],
-      "outputs": [
-        {
-          "name": "trigger",
-          "type": "*",
-          "links": [
-            3017
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfyui-audioloophelper",
-        "Node name for S&R": "ProfileBegin_AudioLoop"
-      },
-      "widgets_values": [
-        true,
-        "profile_output",
-        1,
-        3,
-        true,
-        true,
-        true,
-        false
-      ],
-      "title": "Profile Begin"
-    },
-    {
-      "id": 1610,
-      "type": "ProfileEnd_AudioLoop",
-      "pos": [
-        3900,
-        5000
-      ],
-      "size": [
-        320,
-        80
-      ],
-      "flags": {},
-      "order": 90,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "trigger",
-          "type": "*",
-          "link": 3018
-        }
-      ],
-      "outputs": [
-        {
-          "name": "trigger",
-          "type": "*",
-          "links": [
-            3019
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfyui-audioloophelper",
-        "Node name for S&R": "ProfileEnd_AudioLoop"
-      },
-      "widgets_values": [],
-      "title": "Profile End"
     }
   ],
   "links": [
@@ -5590,32 +5507,16 @@
       "CONDITIONING"
     ],
     [
-      3016,
+      3040,
       1606,
-      0,
-      1609,
-      0,
-      "LATENT"
-    ],
-    [
-      3017,
-      1609,
       0,
       1539,
       0,
       "LATENT"
     ],
     [
-      3018,
+      3041,
       1540,
-      0,
-      1610,
-      0,
-      "LATENT"
-    ],
-    [
-      3019,
-      1610,
       0,
       1605,
       1,
@@ -5913,7 +5814,7 @@
             "name": "extended_latent",
             "type": "LATENT",
             "linkIds": [
-              3021
+              3042
             ],
             "pos": [
               4811.1378697247,
@@ -6783,7 +6684,7 @@
                 "name": "latent",
                 "type": "LATENT",
                 "links": [
-                  3020
+                  3042
                 ]
               }
             ],
@@ -6794,43 +6695,6 @@
             "widgets_values": [
               "always"
             ]
-          },
-          {
-            "id": 2008,
-            "type": "ProfileIterStep_AudioLoop",
-            "pos": [
-              4860,
-              4900
-            ],
-            "size": [
-              220,
-              58
-            ],
-            "flags": {},
-            "order": 90,
-            "mode": 0,
-            "inputs": [
-              {
-                "name": "latent",
-                "type": "LATENT",
-                "link": 3020
-              }
-            ],
-            "outputs": [
-              {
-                "name": "latent",
-                "type": "LATENT",
-                "links": [
-                  3021
-                ]
-              }
-            ],
-            "properties": {
-              "cnr_id": "comfyui-audioloophelper",
-              "Node name for S&R": "ProfileIterStep_AudioLoop"
-            },
-            "widgets_values": [],
-            "title": "Profile Iter Step"
           }
         ],
         "groups": [],
@@ -7164,16 +7028,8 @@
             "type": "LATENT"
           },
           {
-            "id": 3020,
+            "id": 3042,
             "origin_id": 2007,
-            "origin_slot": 0,
-            "target_id": 2008,
-            "target_slot": 0,
-            "type": "LATENT"
-          },
-          {
-            "id": 3021,
-            "origin_id": 2008,
             "origin_slot": 0,
             "target_id": -20,
             "target_slot": 0,
@@ -7208,7 +7064,7 @@
         },
         "class_type": "LTXVGemmaCLIPModelLoader",
         "_meta": {
-          "title": "🅛🅣🅧 Gemma 3 Model Loader"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Gemma 3 Model Loader"
         }
       },
       "3": {
@@ -7294,7 +7150,7 @@
         },
         "class_type": "LTXVAudioVAELoader",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Audio VAE Loader"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Audio VAE Loader"
         }
       },
       "14": {
@@ -7310,7 +7166,7 @@
         },
         "class_type": "LTXVAudioVAEDecode",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Audio VAE Decode"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Audio VAE Decode"
         }
       },
       "15": {
@@ -7339,7 +7195,7 @@
         },
         "class_type": "VHS_VideoCombine",
         "_meta": {
-          "title": "Video Combine 🎥🅥🅗🅢"
+          "title": "Video Combine \ud83c\udfa5\ud83c\udd65\ud83c\udd57\ud83c\udd62"
         }
       },
       "17": {
@@ -7364,7 +7220,7 @@
         },
         "class_type": "MultimodalGuider",
         "_meta": {
-          "title": "🅛🅣🅧 Multimodal Guider"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Multimodal Guider"
         }
       },
       "18": {
@@ -7381,7 +7237,7 @@
         },
         "class_type": "GuiderParameters",
         "_meta": {
-          "title": "🅛🅣🅧 Guider Parameters"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Guider Parameters"
         }
       },
       "19": {
@@ -7394,7 +7250,7 @@
         },
         "class_type": "GuiderParameters",
         "_meta": {
-          "title": "🅛🅣🅧 Guider Parameters"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Guider Parameters"
         }
       },
       "21": {
@@ -7453,7 +7309,7 @@
         },
         "class_type": "LTXVEmptyLatentAudio",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Empty Latent Audio"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Empty Latent Audio"
         }
       },
       "27": {
@@ -7482,7 +7338,7 @@
         },
         "class_type": "LTXVConcatAVLatent",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Concat AV Latent"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Concat AV Latent"
         }
       },
       "29": {
@@ -7498,7 +7354,7 @@
         },
         "class_type": "LTXVSeparateAVLatent",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Separate AV Latent"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Separate AV Latent"
         }
       },
       "41": {
