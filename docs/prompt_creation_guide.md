@@ -1,4 +1,4 @@
-Last updated: 2026-04-12
+Last updated: 2026-04-17
 
 # Music Video Prompt Creation Guide
 
@@ -33,6 +33,16 @@ Generates copy-pasteable TimestampPromptSchedule entries with LTX 2.3
 camera, lighting, and energy modifiers matched to each song section.
 You provide the scene description once; the script wraps it with
 section-appropriate framing (close-up for chorus, wide shot for bridge, etc.).
+Every entry contains "is singing" (or "are singing together" for
+multi-subject) — enforced at code + test level to keep LTX 2.3's
+audio-video cross-attention signal intact for lip sync.
+
+Long sections are auto-subdivided into ~20s chunks so a 3-min song
+produces 7+ entries instead of 4-5. Use `--scene-diversity <tier><sub>`
+to dial ambition (default `2a` performance-dynamic; `3b` natural outdoor;
+`4a` narrative linear; etc. — see `audio_analysis_guide.md#scene-diversity-taxonomy`).
+Use `--montage` for Arcane-style music-drives-narrative pacing
+(~12s dwell, emotional-arc language).
 
 Use `--trim N` to offset timestamps by your node 567 start_index value.
 
@@ -61,21 +71,28 @@ See `ltx23_prompt_system_prompts.md` for the official LTX 2.3 i2v and t2v
 system prompts these rules derive from.
 
 Key rules for the loop workflow:
-- **Describe only changes from the image.** Don't re-describe the setting.
+- **Describe only changes from the image.** Don't re-describe the setting —
+  the init image already encodes style / palette / setting / subjects.
+  Schedule entries are a *delta* layer over that visual baseline.
 - **Keep the core subject identical in every schedule entry.**
+- **Every entry MUST include "is singing" (or "are singing together" for
+  multi-subject).** LTX 2.3's audio-video joint cross-attention reads the
+  singing verb for lip sync — generic "performing" / "vocalizing" kills
+  the signal. The auto-generator enforces this structurally.
 - **Use present-progressive verbs:** "is singing," "are leaning forward."
 - **Weave audio descriptions with actions,** not at the end.
 - **No meta-language:** No "The scene opens with..."
 - **Camera motion only when intended.** Avoid dolly out (breaks limbs/faces).
-- **For two people: say "singing together" in every entry.** Let the audio
+- **For two people: say "are singing together" in every entry.** Let the audio
   conditioning handle who's actually singing. Don't try to direct male vs
-  female -- the model figures it out from the audio.
+  female — the model figures it out from the audio.
 
-**Critical: node 169 prompt MUST match the schedule's first entry.**
-Node 169 generates the initial ~20 seconds. The schedule's 0:00 entry
-controls the first loop extension. If they differ, there's a visual
-discontinuity at ~20 seconds where the conditioning shifts. Copy the
-0:00 schedule entry into node 169 exactly.
+**Critical: node 169 prompt MUST match the schedule's first entry,
+byte-for-byte.** Node 169 generates the initial ~20 seconds. The
+schedule's 0:00 entry controls the first loop extension. If they
+differ, there's a visual discontinuity at ~20 seconds where the
+conditioning shifts. The auto-generator guarantees byte-exact equality
+via `_build_prompt_for_section` + shared `_prepare_sections`.
 
 ### 5. Set workflow values
 

@@ -552,6 +552,17 @@ uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
 uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
   --subject "a woman in her 30s with dark hair singing in a basement workshop" \
   --trim 10
+
+# Pick an ambition tier (default 2a performance-dynamic).
+# See docs/audio_analysis_guide.md#scene-diversity-taxonomy for all tiers.
+uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
+  --subject "a woman singing in a workshop" --scene-diversity 3b
+
+# Arcane-style montage: ~12s dwell, emotional-arc language.
+# Works with any tier 2-6.
+uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
+  --subject "a young woman walking through a snowy alley" \
+  --scene-diversity 4a --montage
 ```
 
 **What it extracts:**
