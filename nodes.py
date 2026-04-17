@@ -144,6 +144,50 @@ def _parse_schedule_generic(
     return entries
 
 
+def _snap_schedule_to_iterations(
+    entries: list[tuple[float, float | None, _T]],
+    stride_seconds: float,
+) -> list[tuple[float, float | None, _T]]:
+    """Round each entry boundary to the nearest integer multiple of stride.
+
+    Prevents the "mid-iteration mixed conditioning" failure mode — the loop
+    advances in fixed-stride steps, so any schedule boundary that doesn't
+    land on a stride multiple produces an iteration whose window straddles
+    the boundary. That iteration runs on one conditioning for its entire
+    window, effectively applying whichever prompt was nearest to the
+    iteration start-point; the further the boundary is from the stride
+    grid, the more timing drift accumulates.
+
+    Pure function over entries — no loop-state dependency.
+
+    - `end=None` (open last entry) is preserved.
+    - Zero-length entries after snapping are dropped.
+    - Entries whose snapped starts collide: later one wins (consistent with
+      `_match_schedule_generic`'s "last match wins" rule).
+    - `stride_seconds <= 0` is a no-op (returns input unchanged) to avoid
+      divide-by-zero.
+    """
+    if stride_seconds <= 0 or not entries:
+        return entries
+
+    def _snap(t: float) -> float:
+        return round(t / stride_seconds) * stride_seconds
+
+    snapped: list[tuple[float, float | None, _T]] = []
+    for start, end, value in entries:
+        s = _snap(start)
+        e = None if end is None else _snap(end)
+        if e is not None and e <= s:
+            continue
+        snapped.append((s, e, value))
+
+    # Collapse duplicates at the same snapped start — later entry wins.
+    by_start: dict[float, tuple[float, float | None, _T]] = {}
+    for entry in snapped:
+        by_start[entry[0]] = entry
+    return sorted(by_start.values(), key=lambda e: e[0])
+
+
 def _match_schedule_generic(
     entries: list[tuple[float, float | None, _T]],
     current_time: float,
@@ -168,19 +212,50 @@ def _match_schedule_with_next_generic(
     current_time: float,
     blend_seconds: float,
     default: _T,
+    blend_shape: str = "raised_cosine",
 ) -> tuple[_T, _T, float]:
     """Find current value, next value, and blend factor.
 
     Returns (current_value, next_value, blend_factor).
-    blend_factor is 0.0 when not near a boundary, and ramps to 1.0
-    at the boundary over blend_seconds.
+
+    `blend_shape` controls how blend_factor evolves near a boundary:
+
+    - `"raised_cosine"` (default): ramp centered on each boundary, spanning
+      `±blend_seconds/2`. At boundary−half_window: blend_factor=0,
+      current=pre-boundary. At boundary itself: blend_factor=0.5. At
+      boundary+half_window: blend_factor=1, values still describe the
+      pre→post transition so downstream ConditioningBlend can lerp
+      smoothly across the entire window.
+    - `"spike"`: legacy behavior — blend_factor only moves during the
+      blend_seconds window BEFORE the boundary, then snaps to the new
+      entry. Kept behind `snap_boundaries=False` for backcompat; this
+      shape is the root cause of the jitter bug when the blend window
+      is smaller than the loop stride.
+
+    Formula (raised-cosine): `blend_factor = 0.5 * (1 - cos(π * dt))`
+    where `dt = clip((current_time - boundary + half_window) /
+    blend_seconds, 0, 1)`.
     """
+    if blend_seconds <= 0 or not entries:
+        current = _match_schedule_generic(entries, current_time, default)
+        return current, current, 0.0
+
+    if blend_shape == "spike":
+        return _match_spike(entries, current_time, blend_seconds, default)
+
+    return _match_raised_cosine(entries, current_time, blend_seconds, default)
+
+
+def _match_spike(
+    entries: list[tuple[float, float | None, _T]],
+    current_time: float,
+    blend_seconds: float,
+    default: _T,
+) -> tuple[_T, _T, float]:
+    """Legacy per-iteration spike blend — kept for `snap_boundaries=False`."""
     current_value = _match_schedule_generic(entries, current_time, default)
 
-    if blend_seconds <= 0:
-        return current_value, current_value, 0.0
-
-    next_boundary = None
+    next_boundary: float | None = None
     next_value = current_value
     for start, _end, value in entries:
         if start > current_time:
@@ -197,6 +272,43 @@ def _match_schedule_with_next_generic(
         return current_value, next_value, blend_factor
 
     return current_value, current_value, 0.0
+
+
+def _match_raised_cosine(
+    entries: list[tuple[float, float | None, _T]],
+    current_time: float,
+    blend_seconds: float,
+    default: _T,
+) -> tuple[_T, _T, float]:
+    """Raised-cosine blend centered on each boundary.
+
+    Within the blend window, returns (pre_boundary_value, post_boundary_value,
+    ramp) so downstream consumers can smoothly lerp across the transition.
+    Outside the window, returns the pure current value (blend_factor=0).
+    """
+    sorted_entries = sorted(entries, key=lambda e: e[0])
+    boundaries = [e[0] for e in sorted_entries[1:]]  # transitions between entries
+    if not boundaries:
+        current = _match_schedule_generic(entries, current_time, default)
+        return current, current, 0.0
+
+    half_window = blend_seconds / 2.0
+    # Find the nearest boundary to current_time
+    nearest = min(boundaries, key=lambda b: abs(current_time - b))
+    if abs(current_time - nearest) > half_window:
+        current = _match_schedule_generic(entries, current_time, default)
+        return current, current, 0.0
+
+    # Sample pre- and post-boundary values. Use a small epsilon so
+    # _match_schedule_generic's "last match wins" rule picks the right side.
+    eps = 1e-6
+    pre_value = _match_schedule_generic(entries, nearest - eps, default)
+    post_value = _match_schedule_generic(entries, nearest + eps, default)
+
+    dt = (current_time - nearest + half_window) / blend_seconds
+    dt = max(0.0, min(1.0, dt))
+    blend_factor = 0.5 * (1.0 - math.cos(math.pi * dt))
+    return pre_value, post_value, blend_factor
 
 
 # --- Prompt schedule (str values) ---
@@ -249,8 +361,15 @@ def _match_image_schedule_with_next(
     current_time: float,
     blend_seconds: float,
 ) -> tuple[int, int, float]:
-    """Find current image index, next image index, and blend factor."""
-    return _match_schedule_with_next_generic(entries, current_time, blend_seconds, 0)
+    """Find current image index, next image index, and blend factor.
+
+    Uses the legacy `spike` blend shape for backcompat — `KeyframeImageSchedule`
+    does not yet expose a `snap_boundaries` widget. Logged as a Phase 1
+    finding to address in a follow-up.
+    """
+    return _match_schedule_with_next_generic(
+        entries, current_time, blend_seconds, 0, blend_shape="spike",
+    )
 
 
 class AudioLoopController(io.ComfyNode):
@@ -401,6 +520,11 @@ class TimestampPromptSchedule(io.ComfyNode):
     When blend_seconds > 0, also outputs the next_prompt and a blend_factor
     for smooth transitions. Wire both prompts through text encoders into
     ConditioningBlend for gradual prompt transitions.
+
+    `snap_boundaries` (default True) rounds every schedule boundary to the
+    nearest iteration multiple, so every iteration runs on exactly one
+    prompt. Prevents the "mid-iteration mixed conditioning" jitter failure
+    mode that affected pre-fix behavior at any `blend_seconds < stride`.
     """
 
     @classmethod
@@ -447,9 +571,26 @@ class TimestampPromptSchedule(io.ComfyNode):
                     min=0.0,
                     step=0.5,
                     tooltip=(
-                        "Transition duration in seconds. 0 = hard switch (default). "
-                        "Set to e.g. 5.0 to blend over ~5 seconds before each boundary. "
+                        "Transition duration in seconds. "
+                        "0 (default) = hard switch at each boundary — clean when "
+                        "subject is identical across entries. "
+                        "Values 0 < blend_seconds < stride_seconds are auto-clamped "
+                        "to stride_seconds and emit one warning (smaller values "
+                        "cannot produce smooth ramps at iteration resolution). "
+                        "Values >= stride_seconds produce a raised-cosine ramp "
+                        "across multiple iterations. "
                         "Wire next_prompt and blend_factor to ConditioningBlend."
+                    ),
+                ),
+                io.Boolean.Input(
+                    "snap_boundaries",
+                    default=True,
+                    tooltip=(
+                        "Snap schedule boundaries to the iteration grid "
+                        "(default on). Prevents mid-iteration prompt mixing that "
+                        "causes jitter. Turn off only if you need sub-stride "
+                        "timing precision and accept the jitter risk (uses the "
+                        "legacy spike-blend behavior)."
                     ),
                 ),
             ],
@@ -468,11 +609,33 @@ class TimestampPromptSchedule(io.ComfyNode):
         stride_seconds: float,
         schedule: str,
         blend_seconds: float,
+        snap_boundaries: bool = True,
     ) -> io.NodeOutput:
         current_time = current_iteration * stride_seconds
         entries = _parse_schedule(schedule)
-        prompt, next_prompt, blend_factor = _match_schedule_with_next(
-            entries, current_time, blend_seconds
+
+        if snap_boundaries:
+            entries = _snap_schedule_to_iterations(entries, stride_seconds)
+            blend_shape = "raised_cosine"
+            # Auto-clamp sub-stride blend_seconds — values below stride can't
+            # produce a smooth ramp at iteration resolution.
+            if 0 < blend_seconds < stride_seconds:
+                _log_once(
+                    "blend_seconds_clamped",
+                    (
+                        f"TimestampPromptSchedule: blend_seconds="
+                        f"{blend_seconds:.2f} is below stride_seconds="
+                        f"{stride_seconds:.2f}; clamping to stride. "
+                        "Sub-stride values can't produce smooth ramps at "
+                        "iteration resolution — see docs/prompt_creation_guide.md."
+                    ),
+                )
+                blend_seconds = stride_seconds
+        else:
+            blend_shape = "spike"
+
+        prompt, next_prompt, blend_factor = _match_schedule_with_next_generic(
+            entries, current_time, blend_seconds, "", blend_shape=blend_shape,
         )
         return io.NodeOutput(prompt, next_prompt, blend_factor, current_time)
 
