@@ -97,9 +97,11 @@ _LINE_RE = re.compile(
 )
 
 
-from typing import Callable, TypeVar
+from typing import Callable, Literal, TypeVar
 
 _T = TypeVar("_T")
+
+BlendShape = Literal["raised_cosine", "spike"]
 
 
 def _parse_schedule_generic(
@@ -212,7 +214,7 @@ def _match_schedule_with_next_generic(
     current_time: float,
     blend_seconds: float,
     default: _T,
-    blend_shape: str = "raised_cosine",
+    blend_shape: BlendShape = "raised_cosine",
 ) -> tuple[_T, _T, float]:
     """Find current value, next value, and blend factor.
 
@@ -242,8 +244,9 @@ def _match_schedule_with_next_generic(
 
     if blend_shape == "spike":
         return _match_spike(entries, current_time, blend_seconds, default)
-
-    return _match_raised_cosine(entries, current_time, blend_seconds, default)
+    if blend_shape == "raised_cosine":
+        return _match_raised_cosine(entries, current_time, blend_seconds, default)
+    raise ValueError(f"Unknown blend_shape: {blend_shape!r}")
 
 
 def _match_spike(
