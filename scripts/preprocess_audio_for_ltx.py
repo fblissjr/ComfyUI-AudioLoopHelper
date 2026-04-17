@@ -45,6 +45,16 @@ _EQ_CHAIN = [
     ("eq", 6500, 0.7, +3.0),           # sibilance shelf: recover fricatives
 ]
 
+# Spectral bands for before/after analysis. Shared between _analyze and
+# _print_comparison so they can't drift.
+_SPECTRAL_BANDS: list[tuple[int, int]] = [
+    (60, 300),    # rumble / low-bass
+    (300, 800),   # vowel body (F1)
+    (800, 1500),  # lower mids (F2)
+    (1500, 4000), # presence / intelligibility (F2/F3, phonemes)
+    (4000, 8000), # sibilance / fricatives
+]
+
 
 def _build_filter_chain(target_lufs: float, tp_ceiling: float, lra: float) -> str:
     """Build the ffmpeg -af filter chain string."""
@@ -58,9 +68,22 @@ def _build_filter_chain(target_lufs: float, tp_ceiling: float, lra: float) -> st
     return ",".join(stages)
 
 
-def _analyze(path: Path) -> dict:
-    """Spectral + level + SNR analysis at LTX's internal 16 kHz rate."""
-    y, _ = librosa.load(str(path), sr=16000, mono=True)
+def _analyze(
+    path: Path,
+    trim_start: float | None = None,
+    trim_end: float | None = None,
+) -> dict:
+    """Spectral + level + SNR analysis at LTX's internal 16 kHz rate.
+
+    When `trim_start`/`trim_end` are set, loads only that region — keeps
+    the before-analysis aligned with what ffmpeg's output will cover, so
+    the comparison table isn't skewed by audio that got trimmed away.
+    """
+    offset = trim_start or 0.0
+    duration = None if trim_end is None else (trim_end - offset)
+    y, _ = librosa.load(
+        str(path), sr=16000, mono=True, offset=offset, duration=duration,
+    )
     rms = float(np.sqrt(np.mean(y**2)))
     peak = float(np.max(np.abs(y)))
     frames = librosa.util.frame(y, frame_length=2048, hop_length=1024)
@@ -71,9 +94,8 @@ def _analyze(path: Path) -> dict:
 
     S_power = np.abs(librosa.stft(y, n_fft=1024, hop_length=160)) ** 2
     freqs = librosa.fft_frequencies(sr=16000, n_fft=1024)
-    bands = [(60, 300), (300, 800), (800, 1500), (1500, 4000), (4000, 8000)]
     band_e = {}
-    for lo, hi in bands:
+    for lo, hi in _SPECTRAL_BANDS:
         mask = (freqs >= lo) & (freqs < hi)
         band_e[(lo, hi)] = float(S_power[mask].sum() / (hi - lo))
     ref = max(band_e.values())
@@ -101,7 +123,7 @@ def _print_comparison(before: dict, after: dict) -> None:
     print(f"{'spectral band (rel. to loudest)':32s}  "
           f"{'before':>10s}  {'after':>10s}  {'delta':>10s}")
     print("-" * 68)
-    for lo, hi in [(60, 300), (300, 800), (800, 1500), (1500, 4000), (4000, 8000)]:
+    for lo, hi in _SPECTRAL_BANDS:
         label = f"{lo}-{hi} Hz"
         b = before["shape"][(lo, hi)]
         a = after["shape"][(lo, hi)]
@@ -118,15 +140,18 @@ def _run_ffmpeg(
     sample_rate: int,
 ) -> None:
     """Invoke ffmpeg with the filter chain."""
-    cmd: list[str] = ["ffmpeg", "-hide_banner", "-y", "-i", str(src)]
+    # -ss/-to placed before -i for fast keyframe seek; audio keyframes are
+    # frequent enough that accuracy loss is negligible.
+    cmd: list[str] = ["ffmpeg", "-hide_banner", "-y"]
     if trim_start is not None:
         cmd += ["-ss", str(trim_start)]
     if trim_end is not None:
         cmd += ["-to", str(trim_end)]
     cmd += [
+        "-i", str(src),
         "-af", chain,
         "-ac", "1",                 # mono — audio VAE is single-channel
-        "-ar", str(sample_rate),    # source-rate, LTX resamples to 16k internally
+        "-ar", str(sample_rate),    # output rate; LTX resamples to 16k internally
         "-c:a", "pcm_s16le",        # WAV 16-bit; avoids MP3 inter-sample-peak overshoot
         str(dst),
     ]
@@ -178,7 +203,7 @@ def main() -> None:
         print(f"Wrote {args.output} ({args.output.stat().st_size / 1e6:.1f} MB)")
         return
 
-    before = _analyze(args.input)
+    before = _analyze(args.input, args.trim_start, args.trim_end)
     _run_ffmpeg(args.input, args.output, chain,
                 args.trim_start, args.trim_end, args.sample_rate)
     after = _analyze(args.output)

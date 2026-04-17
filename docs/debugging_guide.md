@@ -117,8 +117,7 @@ More overlap = more context carryover = smoother hand-off, at cost of
 
 **Second lever (Phase 2, parked)**: `LatentOverlapCrossfade` node — blends
 the overlap region in latent space instead of trimming. Not yet
-implemented; see `/home/fbliss/.claude/plans/partitioned-yawning-pond.md`
-for the spec.
+implemented; spec lives in the internal planning file (not in repo).
 
 **If you bump `overlap_seconds`**: the iteration grid shifts (stride
 changes from 17.88 → 16.88). Schedules pre-snapped to the old grid
@@ -515,7 +514,6 @@ in `internal/log/log_<date>.md` for future reference and move on.
 - Audio analysis pipeline: `docs/audio_analysis_guide.md`
 - LTX 2.3 model reference: `docs/ltx23_model_reference.md`
 - Profiling opt-in: `docs/profiling_guide.md`
-- Current plan + post-phase findings:
-  `/home/fbliss/.claude/plans/partitioned-yawning-pond.md`
+- Current plan + post-phase findings: internal planning file (not in repo)
 - Standup example schedules: `internal/prompt_comedy1.md`,
   `internal/prompt_comedy2.md`

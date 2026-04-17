@@ -6,6 +6,24 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `scripts/preprocess_audio_for_ltx.py`: CLI audio preprocessor. Applies a
+  5-stage EQ + loudnorm chain tuned for LTX 2.3's audio VAE characteristics
+  (16 kHz internal, n_fft=1024, mel_hop=160): HP 80 Hz, −3 dB @ 200 Hz
+  (de-boom), −2 dB @ 400 Hz (de-box), +4 dB @ 3 kHz (presence lift — F2/F3
+  formants), +3 dB @ 6.5 kHz (sibilance shelf — recover fricatives for
+  cross-attention). Outputs WAV to avoid MP3 inter-sample-peak overshoot.
+  Prints a before/after spectral-balance + SNR + level table. Addresses
+  recurring bass-heavy / dull-sibilance issues in non-music source material
+  that hurt lip sync. Requires ffmpeg + the `analysis` dep group.
+- `docs/debugging_guide.md`: symptom-first troubleshooting guide covering
+  the six layers of quality issues in this pipeline (prompt, decoder tiles,
+  iteration seams, schedule-boundary mix, audio, model-intrinsic), with
+  per-symptom diagnostic paths, five controlled diagnostic experiments,
+  known-good baselines for standup and music variants, and a "things that
+  look like bugs but aren't" section. Serves as the troubleshooting
+  landing page; cross-references all related docs.
+
 ### Fixed
 - **`TimestampPromptSchedule` blend_seconds jitter (Phase 1 of the structural
   fix).** Pre-fix, `blend_seconds` was sampled once per loop iteration at
