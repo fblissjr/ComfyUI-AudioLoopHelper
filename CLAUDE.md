@@ -29,7 +29,7 @@ Core nodes (nodes.py):
 - `ImageBlend` -- pixel-space lerp of two images by a factor. Pairs with KeyframeImageSchedule for smooth keyframe transitions.
 - `CachedTextEncode` -- drop-in replacement for CLIPTextEncode. LRU-caches Gemma output by `(id(clip), text)`. Big win on schedules where a prompt spans multiple iterations.
 - `IterationCleanup` -- LATENT passthrough that runs `gc.collect()` + `torch.cuda.empty_cache()`. Place near subgraph output to reduce allocator fragmentation between iterations. Modes: always / gpu_only / never.
-- `ProfileBegin` / `ProfileIterStep` / `ProfileEnd` -- three-node `torch.profiler` integration. All settings on `ProfileBegin` (master `enabled` toggle). `ProfileIterStep` inside loop body marks iteration boundaries. `ProfileEnd` after loop writes trace.json + summary.txt + memory_timeline.html. Record spans on our hot nodes via `torch.profiler.record_function`. See `docs/profiling_guide.md`.
+- `ProfileBegin` / `ProfileIterStep` / `ProfileEnd` -- three-node `torch.profiler` integration. **Opt-in via `scripts/apply_profiling_nodes.py`**; example workflows do NOT ship with profile nodes. `record_function` spans on hot nodes are runtime-gated via `_profile_span()` so they're zero-overhead (`nullcontext`) when no profiler is active. See `docs/profiling_guide.md`.
 
 Analysis nodes (nodes_analysis.py, torchaudio only):
 - `AudioPitchDetect` -- per-iteration F0 detection, vocal presence, male/female classification. Outputs FLOAT/BOOLEAN only.
@@ -60,7 +60,8 @@ value converter and default. Thin wrappers: `_parse_schedule` / `_match_schedule
 - **Never feed audio visualizations into video latent stream** -- DiT generates heatmap-looking frames.
 - **Never change LTXVAudioVideoMask (Node 606) wiring** -- audio_start_time = audio_end_time = window_size is intentional (empty mask range keeps audio fixed).
 - **Use LatentContextExtract/LatentOverlapTrim** instead of raw LTXVSelectLatents in latent-space subgraph -- they strip noise_mask automatically.
-- **Node 169 prompt MUST match schedule's 0:00 entry** to avoid visual discontinuity at ~20s.
+- **Node 169 prompt MUST match schedule's 0:00 entry** to avoid visual discontinuity at ~20s. Enforced structurally: `get_node_169_prompt` and `_generate_subject_schedule` both call `_build_prompt_for_section` via the SAME subdivision (`_prepare_sections`), so the first schedule entry is byte-exact to Node 169.
+- **Every generated prompt MUST contain "singing"** (or "are singing together" for multi-subject). LTX 2.3's audio-video joint cross-attention drives lip sync off the action verb; generic "performing" loses the signal. Enforced in `_SECTION_MODIFIERS` and `_build_action_phrase`; checked by `test_prompts_always_include_singing_verb_with_subject`.
 - **Always use WorkflowEditor** from `scripts/workflow_utils.py` for subgraph edits. Manual JSON surgery breaks links.
 
 ## ComfyUI gotchas
@@ -123,8 +124,10 @@ Companion custom nodes (not imported, used alongside in workflows):
 
 - `scripts/analyze_audio.py` -- ffmpeg-only energy/structure detection (no Python deps)
 - `scripts/analyze_audio_features.py` -- librosa: BPM, key, vocal F0, structure, JSON for LLM prompt generation
-- JSON export (`-j`) includes `llm_system_prompt` with all prompt rules. Paste into Claude/Gemini.
-- Full guide: `docs/audio_analysis_guide.md`
+- CLI flags: `--scene-diversity <tier><sub>` (default `2a`; tiers 1-6 performance_live → avant_garde; sub-letters add mood bundles). `--montage` (orthogonal; ~12s dwell, emotional-arc language, Arcane-style pacing).
+- Long sections auto-subdivided (~20s default, ~12s in montage mode) so a 3-min song yields 7+ entries instead of 4-5.
+- JSON export (`-j`) includes `llm_system_prompt` with HARD RULES R1-R8, an INFERENCE block (init image commits style/palette/setting/subjects — schedule drives camera/body/lighting/cuts/arc), tier semantics, and three worked examples. `workflow_context` surfaces `scene_diversity`, `scene_diversity_tier_name`, `scene_diversity_mood_bundle`, `montage`. Paste into Claude/Gemini.
+- Full guide: `docs/audio_analysis_guide.md`; LLM integration: `docs/analysis/llm_prompt_generation_guide.md`
 
 ## Debugging workflow regressions
 

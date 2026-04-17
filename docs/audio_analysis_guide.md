@@ -1,4 +1,4 @@
-Last updated: 2026-04-12
+Last updated: 2026-04-17
 
 # Audio Analysis Guide
 
@@ -36,6 +36,16 @@ uv run --group analysis python scripts/analyze_audio_features.py song.wav --trim
 uv run --group analysis python scripts/analyze_audio_features.py song.wav \
   --subject "a woman in her 30s with dark hair singing in a basement workshop"
 
+# Pick an ambition tier (default 2a). See "Scene-diversity taxonomy" below.
+uv run --group analysis python scripts/analyze_audio_features.py song.wav \
+  --subject "a woman singing in a workshop" --scene-diversity 3b
+
+# Montage mode: shorter dwell (~12s), emotional-arc language,
+# Arcane-style music-drives-narrative pacing.
+uv run --group analysis python scripts/analyze_audio_features.py song.wav \
+  --subject "a young woman walking through a snowy alley" \
+  --scene-diversity 4a --montage
+
 # Export JSON for LLM-assisted schedule generation (includes system prompt + workflow context)
 uv run --group analysis python scripts/analyze_audio_features.py song.wav -j analysis.json \
   --image-desc "description of your init image" --window 19.88 --overlap 2.0
@@ -55,35 +65,76 @@ Without `--subject`, the script outputs placeholder prompts:
 0:02-0:45: [VERSE - medium] describe action and audio here
 ```
 
-With `--subject`, the output has two clearly labeled sections:
+With `--subject`, the output has two clearly labeled sections. Every line
+contains `is singing` (singular) or `are singing together` (if the subject
+names 2+ people) — the singing verb keeps LTX 2.3's audio-video
+cross-attention signal for lip sync.
 
 **Node 169 (initial render prompt):**
 ```
-Style: cinematic. In a wide establishing shot, a woman singing in a workshop is beginning to perform softly. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
+Style: cinematic. In a wide establishing shot, static camera, locked off shot, a woman singing in a workshop is singing softly, easing into the song, static camera, mouth opening softly, handheld energy, rock-video motion. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
 ```
 
 **TimestampPromptSchedule (node 1558):**
 ```
-0:00-0:45: Style: cinematic. In a wide establishing shot, a woman singing in a workshop is beginning to perform softly. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
-0:45-1:18: Style: cinematic. In a medium shot, a woman singing in a workshop is performing. Warm lighting, steady energy. The voice fills the space. Soft ambient hum.
+0:00-0:22: Style: cinematic. In a wide establishing shot, static camera, locked off shot, a woman singing in a workshop is singing softly, easing into the song, static camera, mouth opening softly, handheld energy, rock-video motion. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
+0:22-0:45: Style: cinematic. In a wide establishing shot, static camera, locked off shot, a woman singing in a workshop is singing softly, easing into the song, slow dolly in, head tilted slightly, handheld energy, rock-video motion. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
+0:45-1:01: Style: cinematic. In a medium shot, a woman singing in a workshop is singing with a steady voice, static camera, head bobbing slightly, handheld energy, rock-video motion. Warm lighting, steady energy. The voice fills the space. Soft ambient hum.
+...
+1:39+: Style: cinematic. In a close-up, a woman singing in a workshop is singing with full power, voice rising, slow jib up, arms slightly raised, handheld energy, rock-video motion. Bright, dynamic lighting. The voice is powerful and resonant.
 ```
 
 Paste the node 169 prompt into node 169 (CLIPTextEncode). Paste the schedule
-into node 1558. The node 169 prompt matches the first schedule entry automatically.
+into node 1558. The node 169 prompt matches the first schedule entry
+byte-for-byte by construction (enforced in test suite).
+
+Long sections are automatically subdivided into ~20s chunks (~12s with
+`--montage`) so every iteration window gets its own prompt. A 3-minute
+song produces 7+ entries instead of 4-5.
 
 ### Section modifier mapping
 
-| Section | Framing | Lighting | Audio description |
-|---------|---------|----------|-------------------|
-| INTRO | Wide establishing shot, static camera | Soft, gentle | Quiet ambient tone |
-| VERSE | Medium shot | Warm, steady | Voice fills space |
-| CHORUS | Close-up | Bright, dynamic | Powerful and resonant |
-| BRIDGE | Wide shot | Moody, low contrast | Subdued, reflective |
-| OUTRO | Wide shot, dolly out | Fading, gentle | Sound fades, room tone |
-| BREAK | Medium shot, static | Dim, still | Instrumental moment |
+| Section | Framing | Lighting | Action | Audio description |
+|---------|---------|----------|--------|-------------------|
+| INTRO   | Wide establishing shot, static camera | Soft, gentle | is singing softly, easing into the song | Quiet ambient tone |
+| VERSE   | Medium shot | Warm, steady | is singing with a steady voice | Voice fills space |
+| CHORUS  | Close-up | Bright, dynamic | is singing with full power, voice rising | Powerful and resonant |
+| BRIDGE  | Wide shot | Moody, low contrast | is singing with quiet emotion | Subdued, reflective |
+| OUTRO   | Wide shot, dolly out | Fading, gentle | is singing the final notes, voice trailing off | Sound fades, room tone |
+| BREAK   | Medium shot, static | Dim, still | is singing softly, pausing in place | Instrumental moment |
 
 These follow LTX 2.3 i2v conventions from the prompt creation guide.
 "Dolly out" is avoided except for OUTRO (it can break limbs/faces).
+Multi-subject detection rewrites "is singing" to "are singing together".
+
+### Scene-diversity taxonomy
+
+`--scene-diversity <tier><sub>` controls ambition + flavor. Default `2a`.
+
+| Tier | Name | Maps to | Sub-variants |
+|------|------|---------|--------------|
+| 1 | performance_live      | `internal/prompt.md`   | 1a close-up concert, 1b wide stage, 1c studio-live |
+| 2 | performance_dynamic   | `internal/prompt2.md`  | 2a handheld energetic (DEFAULT), 2b steady-cam polished |
+| 3 | cinematic             | `internal/prompt3.md`  | 3a urban night, 3b natural outdoor, 3c interior character, 3d perf + b-roll |
+| 4 | narrative             | `internal/prompt4.md`  | 4a linear story, 4b flashback / dream |
+| 5 | stylized              | —                      | 5a noir monochrome, 5b surreal, 5c retro / period |
+| 6 | avant_garde           | —                      | (abstract / non-linear; no sub-letters) |
+
+Main tier selects which beat pools activate (camera, body, scene-shift,
+narrative, style, avant). Sub-letter adds a single mood-bundle phrase
+per prompt (palette / location / camera-style adjectives).
+
+### Montage mode
+
+`--montage` is orthogonal to the tier. When set:
+- Subdivision target drops from 20s → 12s (more cuts).
+- Each entry gets an emotional-arc beat ("the feeling building",
+  "catharsis arriving", "release easing into stillness").
+- The LLM system prompt adds the Arcane-style instruction: *"music drives
+  art drives narrative."*
+
+Works with any tier 2-6. Use when the video should advance an emotional
+beat per cut rather than dwell on a single shot.
 
 ## Runtime analysis: AudioPitchDetect
 

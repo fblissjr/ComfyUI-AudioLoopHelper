@@ -290,6 +290,177 @@ class TestGenerateScheduleSuggestion:
         for line in lines:
             assert ts_pattern.match(line), f"Line doesn't start with timestamp: {line}"
 
+    def test_prompts_always_include_singing_verb_with_subject(self):
+        """Every generated schedule line must contain the word 'singing'.
+
+        LTX 2.3's audio-video joint attention relies on the singing verb to
+        drive lip sync cross-attention. Generic 'is performing' loses the
+        signal.
+        """
+        subject = "a woman in a workshop"
+        schedule_text = generate_schedule_suggestion(
+            self._SECTIONS, subject=subject
+        )
+        for line in schedule_text.strip().splitlines():
+            assert "singing" in line.lower(), (
+                f"Line missing 'singing': {line!r}"
+            )
+
+    def test_single_character_subject_uses_is_singing(self):
+        """Single-subject prompts use 'is singing' (singular)."""
+        subject = "a woman in a workshop"
+        schedule_text = generate_schedule_suggestion(
+            self._SECTIONS, subject=subject
+        )
+        for line in schedule_text.strip().splitlines():
+            assert "is singing" in line.lower(), (
+                f"Line missing 'is singing' (singular): {line!r}"
+            )
+
+    def test_multi_character_subject_triggers_singing_together(self):
+        """Multi-subject prompts use 'are singing together' (group verb)."""
+        subject = "two men in an alleyway"
+        schedule_text = generate_schedule_suggestion(
+            self._SECTIONS, subject=subject
+        )
+        for line in schedule_text.strip().splitlines():
+            assert "are singing together" in line.lower(), (
+                f"Line missing 'are singing together': {line!r}"
+            )
+
+    def test_multi_character_and_conjunction(self):
+        """Subject with 'and' connector is detected as multi-character."""
+        subject = "a man and a woman on a rooftop"
+        schedule_text = generate_schedule_suggestion(
+            self._SECTIONS, subject=subject
+        )
+        for line in schedule_text.strip().splitlines():
+            assert "are singing together" in line.lower(), (
+                f"'and' conjunction not detected as multi-subject: {line!r}"
+            )
+
+    def test_three_minute_song_produces_many_prompts(self):
+        """A typical 3-min song (180s) should produce ~8 schedule entries,
+        not 4. Long sections get subdivided into ~25s chunks so each
+        iteration-sized window gets its own prompt.
+        """
+        sections = [
+            {"start": 0.0, "end": 20.0, "label": "INTRO", "level": "quiet"},
+            {"start": 20.0, "end": 75.0, "label": "VERSE", "level": "medium"},
+            {"start": 75.0, "end": 115.0, "label": "CHORUS", "level": "loud"},
+            {"start": 115.0, "end": 150.0, "label": "VERSE", "level": "medium"},
+            {"start": 150.0, "end": 180.0, "label": "OUTRO", "level": "quiet"},
+        ]
+        schedule = generate_schedule_suggestion(
+            sections, subject="a singer in a studio"
+        )
+        lines = schedule.strip().splitlines()
+        assert len(lines) >= 7, (
+            f"3-min song should produce 7+ entries after subdivision, got "
+            f"{len(lines)}: {lines}"
+        )
+
+    def test_long_section_subdivided(self):
+        """A 60s VERSE gets split into multiple entries, each ~25s."""
+        sections = [
+            {"start": 0.0, "end": 60.0, "label": "VERSE", "level": "medium"},
+        ]
+        schedule = generate_schedule_suggestion(
+            sections, subject="a singer in a studio"
+        )
+        lines = schedule.strip().splitlines()
+        # 60s / ~25s = 2-3 subdivisions
+        assert len(lines) >= 2, (
+            f"60s VERSE should subdivide into 2+ entries, got {len(lines)}"
+        )
+
+    def test_short_section_not_subdivided(self):
+        """Sections already shorter than ~30s stay as single entries."""
+        sections = [
+            {"start": 0.0, "end": 20.0, "label": "INTRO", "level": "quiet"},
+            {"start": 20.0, "end": 45.0, "label": "VERSE", "level": "medium"},
+        ]
+        schedule = generate_schedule_suggestion(
+            sections, subject="a singer in a studio"
+        )
+        lines = schedule.strip().splitlines()
+        assert len(lines) == 2, (
+            f"Short sections should not subdivide, got {len(lines)}: {lines}"
+        )
+
+    def test_diversity_tier_affects_beats(self):
+        """A higher-ambition tier (4 narrative) produces longer prompts
+        than tier 1 performance_live on the same section.
+        """
+        sections = [{"start": 0.0, "end": 20.0, "label": "VERSE", "level": "medium"}]
+        subject = "a singer in a studio"
+        tier_1 = generate_schedule_suggestion(sections, subject=subject, diversity="1a")
+        tier_4 = generate_schedule_suggestion(sections, subject=subject, diversity="4a")
+        # Tier 4 adds more beat pools (scene + narrative), so its prompt is
+        # noticeably longer.
+        assert len(tier_4) > len(tier_1), (
+            f"Tier 4 should be richer than tier 1.\n  1a: {tier_1!r}\n  4a: {tier_4!r}"
+        )
+        # Tier 1 is still a valid singing prompt
+        assert "is singing" in tier_1
+        assert "is singing" in tier_4
+
+    def test_sub_letter_adds_mood_bundle(self):
+        """Sub-letter selects a mood bundle that appears in the prompt.
+        3a (urban night) vs 3b (natural outdoor) differ in their mood phrase.
+        """
+        sections = [{"start": 0.0, "end": 20.0, "label": "VERSE", "level": "medium"}]
+        subject = "a singer"
+        schedule_3a = generate_schedule_suggestion(sections, subject=subject, diversity="3a")
+        schedule_3b = generate_schedule_suggestion(sections, subject=subject, diversity="3b")
+        # 3a and 3b both tier-3 so beat pools match; only mood bundle
+        # differs. Therefore schedules must differ in the mood phrase.
+        assert schedule_3a != schedule_3b
+        # 3a mentions "neon" or "urban"; 3b mentions "outdoor" or "natural"
+        assert any(t in schedule_3a.lower() for t in ("neon", "urban"))
+        assert any(t in schedule_3b.lower() for t in ("outdoor", "natural"))
+
+    def test_montage_flag_shortens_dwell(self):
+        """Enabling montage on the same song produces more schedule entries
+        (shorter dwell).
+        """
+        sections = [
+            {"start": 0.0, "end": 30.0, "label": "INTRO", "level": "quiet"},
+            {"start": 30.0, "end": 120.0, "label": "VERSE", "level": "medium"},
+            {"start": 120.0, "end": 180.0, "label": "CHORUS", "level": "loud"},
+            {"start": 180.0, "end": 210.0, "label": "OUTRO", "level": "quiet"},
+        ]
+        subject = "a singer"
+        normal = generate_schedule_suggestion(sections, subject=subject)
+        montage = generate_schedule_suggestion(sections, subject=subject, montage=True)
+        n_normal = len(normal.strip().splitlines())
+        n_montage = len(montage.strip().splitlines())
+        assert n_montage > n_normal, (
+            f"Montage should produce more entries than normal, "
+            f"got normal={n_normal}, montage={n_montage}"
+        )
+
+    def test_montage_adds_emotional_arc_language(self):
+        """Montage mode must inject emotional-arc beats per entry."""
+        sections = [
+            {"start": 0.0, "end": 60.0, "label": "VERSE", "level": "medium"},
+        ]
+        schedule = generate_schedule_suggestion(
+            sections, subject="a singer", montage=True
+        )
+        lower = schedule.lower()
+        assert any(
+            t in lower
+            for t in ("building", "collecting", "gathering", "tension", "release", "feeling")
+        ), f"Montage missing emotional-arc language: {schedule!r}"
+
+    def test_diversity_default_is_2a_when_none_passed(self):
+        """Omitting diversity defaults to '2a' (tier 2, handheld energetic)."""
+        sections = [{"start": 0.0, "end": 20.0, "label": "VERSE", "level": "medium"}]
+        schedule = generate_schedule_suggestion(sections, subject="a singer")
+        # 2a mood bundle mentions "handheld" or "rock-video"
+        assert any(t in schedule.lower() for t in ("handheld", "rock-video"))
+
 
 # --- Node 169 prompt ---
 
@@ -322,6 +493,28 @@ class TestGetNode169Prompt:
         # Extract prompt text after the timestamp
         first_prompt = first_line.split(": ", 1)[1] if ": " in first_line else first_line
         assert prompt_169 == first_prompt
+
+    def test_node_169_bit_exact_match_across_subjects(self):
+        """Bit-exact equality required across varied subjects (single +
+        multi-character) so the ~20s seam hand-off is seamless.
+        """
+        for subject in [
+            "a woman in a workshop",
+            "a man playing guitar on stage",
+            "two men in an alleyway",
+            "a man and a woman on a rooftop",
+        ]:
+            prompt_169 = get_node_169_prompt(self._SECTIONS, subject=subject)
+            schedule = generate_schedule_suggestion(
+                self._SECTIONS, subject=subject
+            )
+            first_line = schedule.strip().splitlines()[0]
+            first_prompt = first_line.split(": ", 1)[1]
+            assert prompt_169 == first_prompt, (
+                f"Mismatch for subject {subject!r}:\n"
+                f"  node_169: {prompt_169!r}\n"
+                f"  first_schedule: {first_prompt!r}"
+            )
 
     def test_empty_sections(self):
         assert get_node_169_prompt([]) == ""
@@ -401,5 +594,147 @@ class TestFormatJsonReport:
         )
         prompt = report["llm_system_prompt"]
         assert "dolly out" in prompt.lower()
-        assert "present-progressive" in prompt.lower()
+        assert "present progressive" in prompt.lower()
         assert "frozen" in prompt.lower()
+
+    def test_llm_system_prompt_enforces_singing_verb(self):
+        """System prompt must explicitly tell the LLM to use 'is singing' or
+        'are singing together' so outputs don't drift to generic 'performs'.
+        """
+        report = format_json_report(
+            bpm_result={"bpm": 120.0, "beat_times": []},
+            key_result={"key": "G Major", "confidence": 0.85},
+            sections=[],
+            duration=180.0,
+        )
+        prompt = report["llm_system_prompt"]
+        assert "is singing" in prompt.lower()
+        assert "are singing together" in prompt.lower()
+
+    def test_llm_system_prompt_enforces_node_169_identity(self):
+        """System prompt must state node_169_prompt = first schedule entry
+        verbatim, not just 'should match'.
+        """
+        report = format_json_report(
+            bpm_result={"bpm": 120.0, "beat_times": []},
+            key_result={"key": "G Major", "confidence": 0.85},
+            sections=[],
+            duration=180.0,
+        )
+        prompt = report["llm_system_prompt"]
+        lower = prompt.lower()
+        assert "identical" in lower or "exactly" in lower or "verbatim" in lower
+
+    def test_llm_system_prompt_contains_few_shot_examples(self):
+        """System prompt must include at least one worked example (single +
+        multi-character) so LLMs have a concrete target format.
+        """
+        report = format_json_report(
+            bpm_result={"bpm": 120.0, "beat_times": []},
+            key_result={"key": "G Major", "confidence": 0.85},
+            sections=[],
+            duration=180.0,
+        )
+        prompt = report["llm_system_prompt"]
+        lower = prompt.lower()
+        assert "example" in lower
+        # At least one example should show the "are singing together" pattern
+        assert "are singing together" in lower
+
+    def test_llm_system_prompt_contains_inference_block(self):
+        """System prompt must tell the LLM what is inferable from the init
+        image (style, palette, subject appearance) vs what the schedule
+        drives (camera, body, lighting shifts, cuts, arc). This keeps the
+        schedule as a temporal delta layer instead of fighting the image.
+        """
+        report = format_json_report(
+            bpm_result={"bpm": 120.0, "beat_times": []},
+            key_result={"key": "G Major", "confidence": 0.85},
+            sections=[],
+            duration=180.0,
+        )
+        prompt = report["llm_system_prompt"]
+        lower = prompt.lower()
+        # The inference block must say what the image already commits
+        assert "init image" in lower
+        assert "do not re-describe" in lower or "do not re describe" in lower
+        # And what the schedule drives instead
+        assert "camera" in lower and "lighting" in lower
+        # Style-family examples (at least one)
+        assert any(
+            t in lower
+            for t in ("comic", "graphic-novel", "graphic novel", "animated", "live-action")
+        )
+
+    def test_llm_system_prompt_contains_ambition_tiers(self):
+        """System prompt must document the 6-tier scene_diversity taxonomy
+        so the LLM can match output ambition to the user's choice.
+        """
+        report = format_json_report(
+            bpm_result={"bpm": 120.0, "beat_times": []},
+            key_result={"key": "G Major", "confidence": 0.85},
+            sections=[],
+            duration=180.0,
+        )
+        prompt = report["llm_system_prompt"]
+        lower = prompt.lower()
+        for term in (
+            "performance_live",
+            "performance_dynamic",
+            "cinematic",
+            "narrative",
+            "stylized",
+            "avant",
+        ):
+            assert term in lower, f"Missing tier {term!r} in system prompt"
+
+    def test_llm_system_prompt_contains_montage_semantics(self):
+        """System prompt must describe montage as an orthogonal pacing
+        flag — emotional arc, shorter dwell, music-drives-narrative feel.
+        """
+        report = format_json_report(
+            bpm_result={"bpm": 120.0, "beat_times": []},
+            key_result={"key": "G Major", "confidence": 0.85},
+            sections=[],
+            duration=180.0,
+        )
+        prompt = report["llm_system_prompt"]
+        lower = prompt.lower()
+        assert "montage" in lower
+        # Emotional-arc language markers
+        assert "emotional" in lower
+        # Should call out shorter dwell / faster cuts
+        assert "12s" in lower or "12 s" in lower or "shorter" in lower or "faster" in lower
+
+    def test_workflow_context_surfaces_diversity_and_montage(self):
+        """workflow_context carries scene_diversity + montage so the LLM
+        knows which tier/sub-letter to target.
+        """
+        report = format_json_report(
+            bpm_result={"bpm": 120.0, "beat_times": []},
+            key_result={"key": "G Major", "confidence": 0.85},
+            sections=[],
+            duration=180.0,
+            diversity="3b",
+            montage=True,
+        )
+        ctx = report["workflow_context"]
+        assert ctx["scene_diversity"] == "3b"
+        assert ctx["scene_diversity_tier_name"] == "cinematic"
+        assert ctx["montage"] is True
+        # Mood bundle label for 3b should surface something outdoor-ish
+        assert ctx["scene_diversity_mood_bundle"] is not None
+        assert "outdoor" in ctx["scene_diversity_mood_bundle"].lower()
+
+    def test_workflow_context_defaults_to_2a_without_diversity(self):
+        """If diversity is unset, default '2a' (performance_dynamic) shows."""
+        report = format_json_report(
+            bpm_result={"bpm": 120.0, "beat_times": []},
+            key_result={"key": "G Major", "confidence": 0.85},
+            sections=[],
+            duration=180.0,
+        )
+        ctx = report["workflow_context"]
+        assert ctx["scene_diversity"] == "2a"
+        assert ctx["scene_diversity_tier_name"] == "performance_dynamic"
+        assert ctx["montage"] is False
