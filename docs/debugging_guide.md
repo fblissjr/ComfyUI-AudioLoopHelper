@@ -72,11 +72,34 @@ With widgets `[tile_size, overlap, temporal_size, temporal_overlap]`:
 
 Current workflow default is `[512, 64, 64, 8]` → `(64-8)/25 = 2.24s` per tile → a seam approximately every 2.24s. That's the symptom.
 
-**Fix (production)**: set node 1604's widgets to `[512, 64, 512, 64]`.
-This gives tile stride = `448/25 = 17.92s`, which **aligns decoder tile
+**Fix (production, shipped in default workflows)**: node 1604's widgets
+are now `[512, 64, 512, 64]` across all example workflows. This gives
+tile stride = `448/25 = 17.92s`, which **aligns decoder tile
 boundaries with iteration-loop boundaries** (stride_seconds = 17.88 by
-default). Decoder seams now co-locate with iteration seams instead of
-adding new seam positions.
+default at `overlap_seconds=2`). Decoder seams now co-locate with
+iteration seams instead of adding new seam positions.
+
+**Maintenance invariant**: if you change `overlap_seconds`, the
+`VAEDecodeTiled` widgets must change too to preserve alignment.
+Rule: `(temporal_size − temporal_overlap) / fps ≈ window_seconds − overlap_seconds`.
+Specific values at `window_seconds=19.88, fps=25`:
+
+| `overlap_seconds` | Iter stride | Target tile stride | `temporal_size, temporal_overlap` |
+|---|---|---|---|
+| **2.0 (default)** | **17.88 s** | **17.92 s** | **`512, 64`** |
+| 3.0 | 16.88 s | 16.96 s | `480, 56` |
+| 4.0 | 15.88 s | 15.92 s | `448, 50` |
+| 1.0 | 18.88 s | 18.88 s | `544, 72` |
+
+If you change overlap and forget to update the decoder, the tile and
+iteration strides drift apart over the video. Empirical test on a 3-min
+run confirmed this: `overlap=3` with decoder widgets `[512, 64, 512, 64]`
+produces ~1s drift per iteration, re-introducing mid-iteration seams
+that grow over time. Reverting overlap to 2 tightens alignment back to
+0.04s and seams resolve.
+
+Not currently enforced in code — a `scripts/check_stride_alignment.py`
+pre-flight validator would be a worthwhile addition.
 
 If `[512, 64, 512, 64]` OOMs: step down to `[512, 64, 256, 32]`
 (tile stride 8.96s — one mid-iteration seam per iteration; still
@@ -421,12 +444,13 @@ Widgets are in **pixel frames** at the decoder output:
 
 - `tile_size`: spatial tile dimension (pixels). Default 512.
 - `overlap`: spatial overlap (pixels). Default 64. Constraint: ≤ tile_size/4.
-- `temporal_size`: pixel frames per temporal tile. **Default in older
-  workflows = 64, which produces seams every 2.24 s. Set to 512 or
-  higher.**
+- `temporal_size`: pixel frames per temporal tile. **Current example
+  workflows ship with 512 (tile stride 17.92 s, aligned to iteration
+  stride). If you change `overlap_seconds`, recompute per the
+  maintenance invariant above.**
 - `temporal_overlap`: pixel frames overlapped between adjacent
-  temporal tiles. **Default = 8; increase to 64 for `temporal_size=512`**.
-  Constraint: ≤ temporal_size/4.
+  temporal tiles. **64 when temporal_size=512**. Constraint:
+  ≤ temporal_size/4.
 
 At 25 fps, `temporal_size=512, temporal_overlap=64` gives tile stride
 = `(512-64)/25 = 17.92 s`, which aligns with loop iteration boundaries

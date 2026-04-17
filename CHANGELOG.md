@@ -6,6 +6,21 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **Aligned `VAEDecodeTiled` temporal stride with iteration stride across all
+  4 example workflows.** Widget values `[512, 64, 64, 8]` → `[512, 64, 512, 64]`.
+  Old default produced tile stride 2.24s → ~80 mid-video seams on a 3-min
+  run. New values give tile stride 17.92s, matching the iteration stride of
+  17.88s at `window_seconds=19.88, overlap_seconds=2`. Decoder seams now
+  co-locate with iteration seams (~10 total seam positions instead of ~90).
+  Empirically confirmed via test runs. See `docs/debugging_guide.md` for the
+  maintenance invariant that must hold if `overlap_seconds` ever changes.
+- Shortened negative prompt across all 4 workflows: dropped `"fourth
+  character"` (vestige from multi-subject music video defaults, irrelevant
+  for most use cases). New text:
+  `still image with no motion, subtitles, deformed facial features, extra
+  limbs, disfigured hands, duplicate character, twin, clone`
+
 ### Added
 - `scripts/preprocess_audio_for_ltx.py`: CLI audio preprocessor. Applies a
   5-stage EQ + loudnorm chain tuned for LTX 2.3's audio VAE characteristics
