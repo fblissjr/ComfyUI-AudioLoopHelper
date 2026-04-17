@@ -17,7 +17,7 @@ imports analysis nodes from nodes_analysis.py.
 
 Core nodes (nodes.py):
 - `AudioLoopController` -- core: 8 outputs. overlap_seconds (slot 7) auto-wires to LTXVAudioVideoMask video_start_time.
-- `TimestampPromptSchedule` -- per-iteration prompt from timestamp ranges, with blend support
+- `TimestampPromptSchedule` -- per-iteration prompt from timestamp ranges. `snap_boundaries=True` default snaps boundaries to the stride grid so every iteration runs on one pure prompt. `blend_seconds` raised-cosine-ramps across multiple iterations; values 0 < x < stride are auto-clamped to stride with a one-time warning (see docs/prompt_creation_guide.md and the Phase 1 findings in the plan).
 - `ConditioningBlend` -- lerps two conditioning tensors (works with LTX Gemma 3 and CLIP)
 - `AudioLoopPlanner` -- displays iteration timeline for planning
 - `AudioDuration` -- extracts duration/sample_rate from audio tensor
@@ -47,7 +47,7 @@ value converter and default. Thin wrappers: `_parse_schedule` / `_match_schedule
 - Stride = `window_seconds - overlap_seconds`. overlap_frames = `round(overlap_seconds * fps)`.
 - start_index is clamped so at least 0.5s of audio always remains (prevents mel crash on final iteration).
 - TimestampPromptSchedule only runs in loop iterations, NOT the initial render. Node 169 handles initial ~20s.
-- **Prompt changes cause style drift even at CFG 1.0.** Use ConditioningBlend with blend_seconds > 0.
+- **Prompt changes cause style drift even at CFG 1.0.** Default mitigation: `snap_boundaries=True` + identical subject across entries. For cross-fade at visible seams, set `blend_seconds ≥ stride_seconds` (sub-stride values are auto-clamped — they can't produce smooth ramps at iteration resolution).
 - LTX 2.3 uses Gemma 3 text encoder (NOT CLIP). Format: `[tensor, {"attention_mask": mask}]`, no pooled_output. Standard ConditioningAverage won't work.
 - **Audio path is sacred.** Audio enters via `LTXVAudioVAEEncode -> LTXVConcatAVLatent`. Never feed visualizations into the video latent stream.
 - Video VAE formula: `latent = (pixel - 1) // 8 + 1`. NOT `pixel // 8`.
