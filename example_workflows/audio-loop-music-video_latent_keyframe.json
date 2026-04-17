@@ -4287,7 +4287,7 @@
     },
     {
       "id": 1597,
-      "type": "VAEDecodeTiled",
+      "type": "LTXVTiledVAEDecode",
       "pos": [
         5460,
         6000
@@ -4301,19 +4301,19 @@
       "mode": 4,
       "inputs": [
         {
-          "name": "samples",
-          "type": "LATENT",
-          "link": 2982
-        },
-        {
           "name": "vae",
           "type": "VAE",
           "link": 2980
+        },
+        {
+          "name": "latents",
+          "type": "LATENT",
+          "link": 2982
         }
       ],
       "outputs": [
         {
-          "name": "IMAGE",
+          "name": "image",
           "type": "IMAGE",
           "links": [
             2979
@@ -4321,21 +4321,23 @@
         }
       ],
       "properties": {
-        "cnr_id": "comfy-core",
+        "cnr_id": "ComfyUI-LTXVideo",
         "ver": "0.18.5",
-        "Node name for S&R": "VAEDecodeTiled"
+        "Node name for S&R": "LTXVTiledVAEDecode"
       },
       "widgets_values": [
-        512,
-        64,
-        512,
-        64
+        2,
+        2,
+        1,
+        true,
+        "auto",
+        "auto"
       ],
       "title": "Decode Upscaled"
     },
     {
       "id": 1604,
-      "type": "VAEDecodeTiled",
+      "type": "LTXVTiledVAEDecode",
       "pos": [
         3800,
         4500
@@ -4349,19 +4351,19 @@
       "mode": 0,
       "inputs": [
         {
-          "name": "samples",
-          "type": "LATENT",
-          "link": 2995
-        },
-        {
           "name": "vae",
           "type": "VAE",
           "link": 2988
+        },
+        {
+          "name": "latents",
+          "type": "LATENT",
+          "link": 2995
         }
       ],
       "outputs": [
         {
-          "name": "IMAGE",
+          "name": "image",
           "type": "IMAGE",
           "links": [
             2989
@@ -4370,14 +4372,16 @@
       ],
       "title": "Final VAE Decode (once)",
       "properties": {
-        "cnr_id": "comfy-core",
-        "Node name for S&R": "VAEDecodeTiled"
+        "cnr_id": "ComfyUI-LTXVideo",
+        "Node name for S&R": "LTXVTiledVAEDecode"
       },
       "widgets_values": [
-        512,
-        64,
-        512,
-        64
+        2,
+        2,
+        1,
+        true,
+        "auto",
+        "auto"
       ]
     },
     {
@@ -5503,7 +5507,7 @@
       1598,
       0,
       1597,
-      1,
+      0,
       "VAE"
     ],
     [
@@ -5535,7 +5539,7 @@
       1591,
       0,
       1597,
-      0,
+      1,
       "LATENT"
     ],
     [
@@ -5543,7 +5547,7 @@
       1598,
       0,
       1604,
-      1,
+      0,
       "VAE"
     ],
     [
@@ -5575,7 +5579,7 @@
       1605,
       0,
       1604,
-      0,
+      1,
       "LATENT"
     ],
     [
@@ -7264,7 +7268,7 @@
         },
         "class_type": "LTXVGemmaCLIPModelLoader",
         "_meta": {
-          "title": "🅛🅣🅧 Gemma 3 Model Loader"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Gemma 3 Model Loader"
         }
       },
       "3": {
@@ -7350,7 +7354,7 @@
         },
         "class_type": "LTXVAudioVAELoader",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Audio VAE Loader"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Audio VAE Loader"
         }
       },
       "14": {
@@ -7366,7 +7370,7 @@
         },
         "class_type": "LTXVAudioVAEDecode",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Audio VAE Decode"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Audio VAE Decode"
         }
       },
       "15": {
@@ -7395,7 +7399,7 @@
         },
         "class_type": "VHS_VideoCombine",
         "_meta": {
-          "title": "Video Combine 🎥🅥🅗🅢"
+          "title": "Video Combine \ud83c\udfa5\ud83c\udd65\ud83c\udd57\ud83c\udd62"
         }
       },
       "17": {
@@ -7420,7 +7424,7 @@
         },
         "class_type": "MultimodalGuider",
         "_meta": {
-          "title": "🅛🅣🅧 Multimodal Guider"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Multimodal Guider"
         }
       },
       "18": {
@@ -7437,7 +7441,7 @@
         },
         "class_type": "GuiderParameters",
         "_meta": {
-          "title": "🅛🅣🅧 Guider Parameters"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Guider Parameters"
         }
       },
       "19": {
@@ -7450,7 +7454,7 @@
         },
         "class_type": "GuiderParameters",
         "_meta": {
-          "title": "🅛🅣🅧 Guider Parameters"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Guider Parameters"
         }
       },
       "21": {
@@ -7509,7 +7513,7 @@
         },
         "class_type": "LTXVEmptyLatentAudio",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Empty Latent Audio"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Empty Latent Audio"
         }
       },
       "27": {
@@ -7538,7 +7542,7 @@
         },
         "class_type": "LTXVConcatAVLatent",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Concat AV Latent"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Concat AV Latent"
         }
       },
       "29": {
@@ -7554,7 +7558,7 @@
         },
         "class_type": "LTXVSeparateAVLatent",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Separate AV Latent"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Separate AV Latent"
         }
       },
       "41": {

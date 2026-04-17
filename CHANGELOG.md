@@ -7,6 +7,28 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- **Default decoder in example workflows is now `LTXVTiledVAEDecode` from
+  `ComfyUI-LTXVideo`** (Phase DR1 of the decoder-reliability plan). Spatial-only
+  tiling — no temporal tiling at all, so no possibility of mid-video temporal
+  tile seams regardless of `AudioLoopController.overlap_seconds`. Eliminates
+  the fragile stride-alignment coordination invariant between decoder widgets
+  and loop overlap. All 6 `VAEDecodeTiled` instances across the 4 example
+  workflows swapped.
+- **`scripts/apply_ltx_decoder.py`** (new): idempotent patcher that swaps
+  `VAEDecodeTiled` → `LTXVTiledVAEDecode` across workflows. `--revert` flag
+  restores the generic decoder with stride-aligned widgets. Round-trip is
+  byte-identical. Uses `WorkflowEditor` from `scripts/workflow_utils.py`.
+- **`scripts/validate_workflow_decoder.py`** (new): check-only validator.
+  Verifies each workflow is either on `LTXVTiledVAEDecode` (preferred) or
+  on `VAEDecodeTiled` with widgets aligned to the iteration stride derived
+  from `AudioLoopController`. Emits actionable warnings with expected widget
+  values when misaligned. Exits non-zero on failure so it can wire into CI.
+- `docs/debugging_guide.md`: demoted stride-alignment invariant to fallback-
+  only status. LTX decoder is now primary recommendation; stride table
+  retained for users who must stay on `VAEDecodeTiled` for VRAM or legacy
+  reasons.
+- `CLAUDE.md`: noted `LTXVTiledVAEDecode` is the default decoder.
+
 - **Aligned `VAEDecodeTiled` temporal stride with iteration stride across all
   4 example workflows.** Widget values `[512, 64, 64, 8]` → `[512, 64, 512, 64]`.
   Old default produced tile stride 2.24s → ~80 mid-video seams on a 3-min

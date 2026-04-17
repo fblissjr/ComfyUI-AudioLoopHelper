@@ -72,34 +72,63 @@ With widgets `[tile_size, overlap, temporal_size, temporal_overlap]`:
 
 Current workflow default is `[512, 64, 64, 8]` → `(64-8)/25 = 2.24s` per tile → a seam approximately every 2.24s. That's the symptom.
 
-**Fix (production, shipped in default workflows)**: node 1604's widgets
-are now `[512, 64, 512, 64]` across all example workflows. This gives
-tile stride = `448/25 = 17.92s`, which **aligns decoder tile
-boundaries with iteration-loop boundaries** (stride_seconds = 17.88 by
-default at `overlap_seconds=2`). Decoder seams now co-locate with
-iteration seams instead of adding new seam positions.
+**Fix (production, shipped in default workflows)**: node 1604 (and
+node 1597) are now `LTXVTiledVAEDecode` (from `ComfyUI-LTXVideo`)
+across all example workflows — **spatial-only tiling, no temporal
+tiling at all**. No temporal tile boundaries exist, so there are no
+mid-video decoder seams of any stride. This eliminates the class of
+problem structurally.
 
-**Maintenance invariant**: if you change `overlap_seconds`, the
-`VAEDecodeTiled` widgets must change too to preserve alignment.
-Rule: `(temporal_size − temporal_overlap) / fps ≈ window_seconds − overlap_seconds`.
+Widgets on the LTX decoder: `[horizontal_tiles=2, vertical_tiles=2,
+overlap=1, last_frame_fix=true, working_device="auto", working_dtype="auto"]`.
+
+To apply or revert the swap against any workflow:
+
+```bash
+# Apply: VAEDecodeTiled → LTXVTiledVAEDecode
+uv run python scripts/apply_ltx_decoder.py
+
+# Revert: restore VAEDecodeTiled with stride-aligned widgets
+uv run python scripts/apply_ltx_decoder.py --revert
+```
+
+Both directions are idempotent (re-run is a no-op). Round-trip is
+byte-identical.
+
+To check any workflow's decoder configuration:
+
+```bash
+uv run python scripts/validate_workflow_decoder.py
+```
+
+Warns on misaligned VAEDecodeTiled widgets; emits OK for
+LTXVTiledVAEDecode regardless of overlap_seconds.
+
+### Fallback: staying on generic VAEDecodeTiled
+
+If you need to stay on the generic `VAEDecodeTiled` for any reason
+(VRAM constraints where LTX's spatial-only tiling doesn't fit, legacy
+workflow compatibility), you must keep widget values aligned with the
+iteration stride. Rule:
+`(temporal_size − temporal_overlap) / fps ≈ window_seconds − overlap_seconds`.
+
 Specific values at `window_seconds=19.88, fps=25`:
 
 | `overlap_seconds` | Iter stride | Target tile stride | `temporal_size, temporal_overlap` |
 |---|---|---|---|
-| **2.0 (default)** | **17.88 s** | **17.92 s** | **`512, 64`** |
+| 2.0 | 17.88 s | 17.92 s | `512, 64` |
 | 3.0 | 16.88 s | 16.96 s | `480, 56` |
 | 4.0 | 15.88 s | 15.92 s | `448, 50` |
 | 1.0 | 18.88 s | 18.88 s | `544, 72` |
 
-If you change overlap and forget to update the decoder, the tile and
-iteration strides drift apart over the video. Empirical test on a 3-min
-run confirmed this: `overlap=3` with decoder widgets `[512, 64, 512, 64]`
-produces ~1s drift per iteration, re-introducing mid-iteration seams
-that grow over time. Reverting overlap to 2 tightens alignment back to
-0.04s and seams resolve.
+If you change overlap and forget to update the decoder, tile and
+iteration strides drift apart over the video — ~1s per iteration per
+1s of overlap delta, re-introducing mid-iteration seams that grow
+over time. Use `scripts/validate_workflow_decoder.py` to catch drift
+early.
 
-Not currently enforced in code — a `scripts/check_stride_alignment.py`
-pre-flight validator would be a worthwhile addition.
+**The `LTXVTiledVAEDecode` swap eliminates this whole concern.** Prefer
+the structural path unless VRAM forces the fallback.
 
 If `[512, 64, 512, 64]` OOMs: step down to `[512, 64, 256, 32]`
 (tile stride 8.96s — one mid-iteration seam per iteration; still
@@ -444,13 +473,12 @@ Widgets are in **pixel frames** at the decoder output:
 
 - `tile_size`: spatial tile dimension (pixels). Default 512.
 - `overlap`: spatial overlap (pixels). Default 64. Constraint: ≤ tile_size/4.
-- `temporal_size`: pixel frames per temporal tile. **Current example
-  workflows ship with 512 (tile stride 17.92 s, aligned to iteration
-  stride). If you change `overlap_seconds`, recompute per the
-  maintenance invariant above.**
-- `temporal_overlap`: pixel frames overlapped between adjacent
-  temporal tiles. **64 when temporal_size=512**. Constraint:
-  ≤ temporal_size/4.
+- `temporal_size`: pixel frames per temporal tile. Only relevant if
+  you're on the generic `VAEDecodeTiled` fallback; LTX's decoder has
+  no temporal tiling. Current example workflows use `LTXVTiledVAEDecode`
+  by default.
+- `temporal_overlap`: pixel frames overlapped between adjacent temporal
+  tiles. Same caveat as above. Constraint: ≤ temporal_size/4.
 
 At 25 fps, `temporal_size=512, temporal_overlap=64` gives tile stride
 = `(512-64)/25 = 17.92 s`, which aligns with loop iteration boundaries
