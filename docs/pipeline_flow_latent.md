@@ -542,7 +542,7 @@ Output Assembly:
 #### Node 154 -- KSamplerSelect
 - **Type**: `KSamplerSelect` (ComfyUI core)
 - **What**: Selects the sampling algorithm
-- **Widgets**: `sampler_name`: `euler_ancestral`
+- **Widgets**: `sampler_name`: `euler`
 - **Outputs**: SAMPLER -> #161 SamplerCustomAdvanced (slot 2), #576 Set_sampler
 
 ### Node 161 -- SamplerCustomAdvanced (Initial Render)
@@ -1087,7 +1087,7 @@ The upscale chain is bypassed because per-loop VAE round-trip quality loss and V
 
 | Widget | Node | Default | What It Controls | Valid Range |
 |--------|------|---------|-----------------|-------------|
-| `sampler_name` | #154 KSamplerSelect | `euler_ancestral` | Sampling algorithm | Any ComfyUI sampler |
+| `sampler_name` | #154 KSamplerSelect | `euler` | Sampling algorithm | Any ComfyUI sampler |
 | `scheduler` | #1421 BasicScheduler | `linear_quadratic` | Sigma schedule shape | Any ComfyUI scheduler |
 | `steps` | #1421 BasicScheduler | `8` | Number of denoising steps per window | 1+ |
 | `denoise` | #1421 BasicScheduler | `1` | Denoise strength (1.0 = full denoise) | 0.0 -- 1.0 |

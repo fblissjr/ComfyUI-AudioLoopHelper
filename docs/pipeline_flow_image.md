@@ -901,7 +901,7 @@ Stores the sampler from Node 154.
 
 | Input | Type | Source | Value |
 |-------|------|--------|-------|
-| sampler_name | COMBO (widget) | -- | `euler_ancestral` |
+| sampler_name | COMBO (widget) | -- | `euler` |
 
 **Outputs:** SAMPLER to Node 161, Node 576 (Set_sampler).
 
@@ -1727,7 +1727,7 @@ Output would feed into Node 617 instead of Node 1507 if enabled.
 | `height` | 445 ImageResizeKJv2 | `480` | Output video height in pixels | Multiple of 32 |
 | `length` | 526 PrimitiveNode | `497` | Frames per window (497 = 8*62+1) | 8n+1 values |
 | `window_size_seconds` | 688 FloatConstant | `19.88` | Duration of each generation window | Must match length/fps |
-| `sampler_name` | 154 KSamplerSelect | `euler_ancestral` | Sampling algorithm | euler, euler_ancestral, dpm_2, etc. |
+| `sampler_name` | 154 KSamplerSelect | `euler` | Sampling algorithm | euler, euler_ancestral, dpm_2, etc. |
 | `scheduler` | 1421 BasicScheduler | `linear_quadratic` | Sigma schedule type | linear, linear_quadratic, etc. |
 | `steps` | 1421 BasicScheduler | `8` | Denoising steps per window | 1 - 100 |
 | `shift` | 1513 ModelSamplingSD3 | `13` | Noise schedule shift | 0 - 100 |

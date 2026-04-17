@@ -382,8 +382,8 @@ Keep your best prompt variation and test these one at a time:
 
 | Node | Setting | Default | Try | Expected effect |
 |------|---------|---------|-----|-----------------|
-| 154 (KSamplerSelect) | sampler | euler_ancestral | **euler** | More deterministic. Less noise per step = more consistent between loop iterations. Try this first. |
-| 154 | sampler | euler_ancestral | **dpmpp_2m** | Faster convergence. May produce cleaner results in fewer steps. |
+| 154 (KSamplerSelect) | sampler | euler | **dpmpp_2m** | Faster convergence. May produce cleaner results in fewer steps. |
+| 154 | sampler | euler | **euler_ancestral** | Adds stochasticity. Usually hurts iteration-to-iteration identity on the distilled 8-step schedule — only try if the output looks too smooth/plasticky and you want more texture. |
 | 1513 (ModelSamplingSD3) | shift | 13 | **9** | Lower shift = smoother denoising schedule. May reduce artifacts at edges. |
 | 1513 | shift | 13 | **7** | Even lower. More gradual denoising. Test if 9 helps. |
 | 1421 (BasicScheduler) | steps | 8 | **10** | More steps = better quality, ~25% slower per iteration. |
@@ -393,7 +393,7 @@ Keep your best prompt variation and test these one at a time:
 **Testing rules:**
 - Change ONE value at a time. Compare output to previous best.
 - Use the same seed, audio, and prompt for fair comparison.
-- If `euler` helps consistency, keep it and move to shift testing.
+- `euler` is the default; move straight to shift testing.
 - If quality is fine at 8 steps, don't increase -- each step costs ~7.5s of GPU time.
 
 ### Phase 3: Overlap and blend tuning (if transitions are rough)

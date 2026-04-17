@@ -120,7 +120,7 @@ Example: 168s audio after trim → 168 * 25 = 4200 → ((4200-1)//8)*8+1 = 4193 
 | # | Node Type | Widget Values | Notes |
 |---|-----------|---------------|-------|
 | 28 | ModelSamplingSD3 | shift: 13 | Input: MODEL from #9 |
-| 29 | KSamplerSelect | sampler: euler_ancestral | Try euler if jitter |
+| 29 | KSamplerSelect | sampler: euler | Deterministic; `euler_ancestral` tends to compound noise across iterations on the 8-step distilled schedule |
 | 30 | ManualSigmas | sigmas: `1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0` | 8-step distilled schedule |
 | 31 | RandomNoise | seed: your seed | |
 | 32 | CFGGuider | cfg: 1.0 | Input: model from #28, positive from #19 output 0, negative from #19 output 1 |
@@ -187,7 +187,7 @@ and tuning guidance.
 | cond_image_strength | 1.0 | #33. Init image influence. |
 | adain_factor | 0.0 | #33. Set 0.1-0.3 if colors oversaturate across tiles. |
 | shift | 13 | #28 ModelSamplingSD3. Try 9 for smoother results. |
-| sampler | euler_ancestral | #29. Try euler for more consistency. |
+| sampler | euler | #29. Deterministic across iterations; `euler_ancestral` compounds injected noise on the 8-step distilled schedule. |
 | sigmas | distilled 8-step | #30. Don't change unless experimenting. |
 | cfg | 1.0 | #32. LTX 2.3 is distilled, NAG handles guidance. |
 
