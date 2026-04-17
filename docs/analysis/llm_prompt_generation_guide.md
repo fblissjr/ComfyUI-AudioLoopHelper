@@ -1,4 +1,4 @@
-Last updated: 2026-04-12
+Last updated: 2026-04-17
 
 # LLM Prompt Generation Guide
 
@@ -21,15 +21,24 @@ uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
   --trim 10 \
   --subject "a woman in her 30s with dark hair singing in a basement workshop" \
   --image-desc "Woman sitting on wooden chair, dark hair pulled back, vintage dress, dimly lit basement, Christmas lights on exposed beams, concrete walls" \
+  --scene-diversity 2a \
   --window 19.88 \
   --overlap 2.0 \
   -j analysis.json
 ```
 
+`--scene-diversity <tier><sub>` picks the ambition level + flavor
+(default `2a`; see `docs/audio_analysis_guide.md` for the full 6-tier
+taxonomy). `--montage` is an orthogonal flag for Arcane-style pacing.
+
 This produces a JSON file containing:
 - Audio analysis (BPM, key, sections, vocal F0)
-- Workflow timing context (trim, window, stride, what node 169 covers)
-- A complete LLM system prompt with all prompt engineering rules
+- Workflow timing context (trim, window, stride, what node 169 covers,
+  `scene_diversity`, `scene_diversity_tier_name`,
+  `scene_diversity_mood_bundle`, `montage`)
+- A complete LLM system prompt with all prompt engineering rules,
+  tier semantics, and an INFERENCE block describing what the init
+  image encodes vs what the schedule should drive
 
 ## Step 2: Paste into your LLM
 
@@ -87,28 +96,80 @@ Use the VLM output as the `--image-desc` and `--subject` CLI args and in
 your LLM user prompt. This gives the LLM precise visual traits to repeat
 in every schedule entry, preserving character identity across the full video.
 
-## The 17 prompt rules (summary)
+## The system prompt structure
 
-These are embedded in the system prompt. The LLM follows them automatically.
-Reference for understanding why prompts look the way they do:
+The embedded `llm_system_prompt` is organized into three parts the LLM
+reads as one document:
 
-1. **Subject anchoring**: describe WHO (traits, clothing) not WHERE (setting)
-2. **Present-progressive verbs**: "is singing," "is playing"
-3. **Ambient sounds WITH actions**: weave chronologically, not at the end
-4. **No song dynamics**: don't describe "voice surging" -- model hears the audio
-5. **Describe non-track ambience**: "soft room tone," "faint hum of lights"
-6. **No meta-language**: no "The scene opens with..."
-7. **~200 words max per entry**: single paragraph, no markdown
-8. **Camera motion only when intended**: default to static camera
-9. **Avoid dolly out**: breaks limbs/faces. Exception: OUTRO
-10. **Style prefix**: "Style: cinematic." unless image establishes it
-11. **Identical subject in every entry**: only vary framing, camera, lighting, body language
-12. **Multi-person: "singing together"**: position-anchor each person
-13. **Node 169 = schedule 0:00**: must match to avoid discontinuity at ~20s
-14. **Physical cues over emotions**: "chin trembles" not "singing sadly"
-15. **Vocal delivery description**: "in a low gravelly voice," "brisk rhythmic delivery"
-16. **Action before dialogue**: "The man leans forward and sings: 'lyrics'"
-17. **Over-emoting prevention**: add to negative prompt: "exaggerated expressions, warped facial features, identity drift"
+### INFERENCE block (what the image already commits to)
+
+The init image anchors **style family** (live-action / animated / comic /
+graphic-novel / 3D-render / stop-motion), **color palette**, **setting**
+(indoor/outdoor, urban/natural, wardrobe, era), and **subject appearance
+and count**. The LLM is told: do **NOT** re-describe these. Re-describing
+invites the text conditioning to fight what the image already commits to
+(e.g. writing "comic-book style" on a photorealistic image forces a
+tug-of-war).
+
+What the schedule **should** drive: camera framing / motion, body
+beats, lighting *shifts over time* (not palette restatement), scene
+cuts, emotional arc. Schedule entries are a **delta layer** over the
+visual baseline the image provides.
+
+Style-appropriate beat pools: animated/comic → speed lines, panel
+transitions, supersaturation, impact frames. Live-action → rack focus,
+practical lighting shifts, handheld / dolly moves. Infer from the image
+which pool applies.
+
+### HARD RULES R1-R8
+
+1. **R1 — Singing verb is mandatory.** Every entry contains "is
+   singing..." (single) or "are singing together..." (multi). Drives LTX
+   2.3's audio-video cross-attention for lip sync. No "performing",
+   "vocalizing", generic verbs. For instrumental scenes use "is playing
+   <instrument>".
+2. **R2 — Node 169 = first schedule entry, byte-exact.** The LLM MUST
+   copy the first schedule entry verbatim into `node_169_prompt`. Any
+   drift causes a visible seam at the ~20s loop-entry boundary.
+3. **R3 — Identical subject across all entries.** Only vary framing,
+   camera, lighting, body language, performance beats. Never
+   re-describe the environment (image sets it).
+4. **R4 — Multi-person position-anchoring.** Describe each person by
+   position + wardrobe inside the subject string ("the man on the left
+   in the dark jacket..."). No bare "crowd", "group", "duo".
+5. **R5 — No meta-language.** No "The scene opens with...", "Cut
+   to...", "camera shows...". Every entry begins "Style: cinematic."
+   and moves straight to subject + action.
+6. **R6 — Audio direction.** Do NOT describe the song (voice surging,
+   music swelling — the model hears it). DO describe ambient/diegetic
+   sounds not in the audio track (room tone, fluorescent hum). Vocal
+   delivery qualifiers ("in a low gravelly voice") are encouraged.
+7. **R7 — Camera motion.** Default "static camera, locked off shot".
+   Available: dolly in, dolly left/right, jib up/down, focus shift.
+   AVOID dolly out (breaks limbs/faces) except for the final OUTRO.
+8. **R8 — One paragraph, ~200 words max.** No markdown or bullets.
+   Present progressive throughout.
+
+### AMBITION TIERS + MONTAGE
+
+`workflow_context.scene_diversity` (e.g. `"3b"`) tells the LLM which
+ambition ceiling to target:
+
+- Tier 1 performance_live → single-camera concert feel
+- Tier 2 performance_dynamic → camera + body beats rotate (DEFAULT)
+- Tier 3 cinematic → + environmental storytelling / scene shifts
+- Tier 4 narrative → + physical-action arc / loose story
+- Tier 5 stylized → + genre overlay (noir / surreal / retro)
+- Tier 6 avant_garde → non-linear, abstract, performative
+
+Sub-letters (1a/1b/1c, 3a-3d, etc.) add mood bundles — lighting
+palette, location keywords, camera-style adjectives.
+
+`workflow_context.montage = true` is orthogonal to tier. When set,
+each entry must advance an emotional beat (not merely describe a
+scene), use emotional-arc language ("the feeling building", "catharsis
+arriving", "release easing into stillness"), and dwell ~12s instead of
+~20s. Arcane-style music-drives-narrative pacing.
 
 ## Common mistakes
 
