@@ -5,6 +5,31 @@ Last updated: 2026-04-17
 Capture per-kernel and per-node timing across the audio loop so you can
 make data-driven decisions about where to spend optimization effort.
 
+## Profiler is opt-in
+
+As of this release, **no example workflow ships with profiler nodes
+wired in**. Runtime `torch.profiler.record_function` spans on hot nodes
+(`CachedTextEncode`, `IterationCleanup`, `LatentContextExtract`,
+`LatentOverlapTrim`) are now gated by a runtime check — they return a
+singleton `nullcontext` when no profiler is active, so you pay zero
+overhead in the common (no-profile) case.
+
+To profile a workflow:
+
+```bash
+# 1. Insert profile nodes into the latent workflow
+uv run python scripts/apply_profiling_nodes.py
+
+# 2. Run the workflow in ComfyUI (ProfileBegin is enabled=True by default)
+
+# 3. Remove profile nodes when done
+uv run python scripts/remove_profiling_nodes.py
+```
+
+Both scripts are idempotent. Running `apply` twice is a no-op; running
+`remove` on a clean workflow is a no-op. The round-trip preserves node
+and link count exactly (only link IDs renumber).
+
 ## What you get
 
 Three output files per profile run, in a timestamped subdirectory of

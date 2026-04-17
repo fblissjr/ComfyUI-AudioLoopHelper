@@ -7,6 +7,62 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Prompt generation rework in `scripts/analyze_audio_features.py`:
+  - Unified `_build_prompt_for_section` is the single source of truth for
+    Node 169 and the first schedule entry; they are now byte-exact equal
+    by construction (no drift possible). Enforced by new tests.
+  - Every prompt now contains an explicit "singing" verb. Single-subject
+    uses "is singing ..."; multi-subject (detected via heuristic:
+    "two/three/four/both/and/duo/pair" + plural nouns) uses "are singing
+    together ...". This keeps LTX 2.3's audio-video joint cross-attention
+    signal intact — generic "is performing" kills lip sync.
+  - Long sections (>30s normal, >18s in montage mode) are subdivided into
+    ~20s chunks (~12s in montage) via `_subdivide_long_sections` so a
+    3-minute song produces 7+ entries instead of 4-5, with each dwell
+    matching the iteration window.
+  - Scene-diversity taxonomy: `--scene-diversity <tier><sub>` with tiers
+    1-6 (performance_live → avant_garde, mapped to internal/prompt*.md
+    patterns) and sub-letters for mood bundles (3a urban night, 3b
+    natural outdoor, etc.). Default: `2a`.
+  - `--montage` orthogonal flag: shortens dwell, adds emotional-arc
+    language ("the feeling building", "catharsis arriving"), Arcane-style
+    music-drives-narrative pacing. Layers on any tier 2-6.
+  - Rewritten `_LLM_SYSTEM_PROMPT` with strict schema, hard rules R1-R8,
+    an INFERENCE block telling the LLM what the init image already
+    encodes (style / palette / setting / subject appearance — DO NOT
+    re-describe) vs what the schedule should drive (camera / body /
+    lighting shifts / cuts / arc — describe these), tier/sub-letter
+    semantics, and three worked examples (single, multi-character,
+    montage).
+  - `workflow_context` in JSON export now surfaces `scene_diversity`,
+    `scene_diversity_tier_name`, `scene_diversity_mood_bundle`, and
+    `montage` so the LLM knows the target ambition level.
+- `scripts/remove_profiling_nodes.py`: idempotent inverse of
+  `apply_profiling_nodes.py`. Round-trip (remove → apply → remove) is
+  structurally identity-preserving.
+- 15 new tests in `tests/test_audio_features.py` covering singing-verb
+  enforcement, multi-subject detection, subdivision behavior, diversity
+  tiers, sub-letter mood bundles, montage dwell, inference block in the
+  LLM system prompt, and the ambition-tier / montage semantics.
+
+### Changed
+- Profiler nodes are now OPT-IN. No example workflow ships with
+  ProfileBegin / ProfileIterStep / ProfileEnd wired in. Users who want
+  to profile run `scripts/apply_profiling_nodes.py`, run their workflow,
+  then `scripts/remove_profiling_nodes.py`. `docs/profiling_guide.md`
+  updated to reflect this.
+- `torch.profiler.record_function` calls in `CachedTextEncode`,
+  `IterationCleanup`, `LatentContextExtract`, and `LatentOverlapTrim`
+  are now gated by `_profile_span()` — returns a singleton
+  `nullcontext()` when no profiler is active, so instrumented nodes have
+  zero overhead in the common case. When profiling IS active, the
+  spans appear in the trace as before.
+- `TimestampPromptSchedule` (1558) and `AudioLoopPlanner` (1560)
+  un-bypassed (mode 4 → 0) in all four example workflows so users get
+  the full feature set by default. Bypassed-by-default was an artifact
+  of development.
+
+### Added
 - End-to-end profiling via three coordinated nodes:
   - `ProfileBegin_AudioLoop`: starts `torch.profiler` before the loop. All
     settings live here (enabled toggle, output dir, warmup/active iteration

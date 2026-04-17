@@ -1,4 +1,4 @@
-Last updated: 2026-04-14
+Last updated: 2026-04-17
 
 # Prompt Workflow: End to End
 
@@ -151,6 +151,7 @@ uv run --group analysis python scripts/analyze_audio_features.py \
   --trim 5 \
   --subject "a young disheveled man in olive-green clothing sitting in a dark alleyway" \
   --image-desc "A young man with messy brown hair in dirty olive-green jacket, slumped against wet brick wall. Dim blue-white light from right. Dark grimy alleyway at night." \
+  --scene-diversity 3a \
   --window 19.88 \
   --overlap 2.0 \
   -j analysis.json
@@ -164,6 +165,8 @@ uv run --group analysis python scripts/analyze_audio_features.py \
 | `--subject "..."` | Yes | The VLM subject phrase from step 2 |
 | `--image-desc "..."` | Yes | The VLM image description from step 2 |
 | `-j analysis.json` | Yes | JSON output path (this is what you send to the LLM) |
+| `--scene-diversity <code>` | No | Ambition tier + flavor. Default `2a` (performance-dynamic). See `audio_analysis_guide.md#scene-diversity-taxonomy` for all tiers 1-6 + sub-letters. |
+| `--montage` | No | Arcane-style pacing: ~12s dwell, emotional-arc language. Works with any tier 2-6. |
 | `--window 19.88` | No | Window seconds (default 19.88, rarely change) |
 | `--overlap 2.0` | No | Overlap seconds (default 2.0) |
 | `--vocal-track path` | No | Separated vocal track for cleaner F0 analysis |
@@ -174,7 +177,9 @@ uv run --group analysis python scripts/analyze_audio_features.py \
 The output `analysis.json` has everything the LLM needs:
 
 - **Audio analysis**: BPM, key, sections (VERSE/CHORUS/BRIDGE/etc.), vocal F0
-- **Workflow timing**: trim offset, window/stride/overlap, what node 169 covers
+- **Workflow timing**: trim offset, window/stride/overlap, what node 169 covers,
+  `scene_diversity`, `scene_diversity_tier_name`,
+  `scene_diversity_mood_bundle`, `montage` flag
 - **`llm_system_prompt`**: All 17 prompt engineering rules for LTX 2.3 i2v
 - **`init_image_description`**: Your VLM output, passed through for LLM context
 - **`subject`**: Your subject phrase, passed through for LLM context
