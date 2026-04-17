@@ -7,6 +7,15 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- **Default sampler in example workflows is now `euler` (was `euler_ancestral`).**
+  On LTX 2.3 distilled at 8 steps with `linear_quadratic, 8, 1`, the schedule
+  plateaus at σ ≈ 0.99 for 5 steps before collapsing. Ancestral re-noise scales
+  with sigma, so `euler_ancestral` injects near-maximum noise during those
+  warmup steps and the 3-step commit phase doesn't have runway to average it
+  out — that compounds into subject-identity drift across loop iterations.
+  Deterministic `euler` integrates the same ODE cleanly. All 4 example
+  workflows updated; `docs/pipeline_flow_*.md`, `docs/prompt_creation_guide.md`,
+  and `docs/latent_loop_build_guide.md` updated to match.
 - **Default decoder in example workflows is now `LTXVTiledVAEDecode` from
   `ComfyUI-LTXVideo`** (Phase DR1 of the decoder-reliability plan). Spatial-only
   tiling — no temporal tiling at all, so no possibility of mid-video temporal
