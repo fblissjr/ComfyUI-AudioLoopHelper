@@ -53,50 +53,35 @@ _FPS = 25.0
 _ALIGNMENT_TOLERANCE_S = 0.1
 
 
-def _find_loop_controller(wf: dict) -> dict | None:
-    for n in wf.get("nodes", []):
-        if n.get("id") == _LOOP_CONTROLLER_ID and n.get("type") == "AudioLoopController":
-            return n
-    # Fallback: any AudioLoopController (in case the node id differs).
-    for n in wf.get("nodes", []):
-        if n.get("type") == "AudioLoopController":
-            return n
-    return None
+_DECODER_TYPES = ("VAEDecodeTiled", "LTXVTiledVAEDecode", "LTXVSpatioTemporalTiledVAEDecode")
 
 
-def _get_window_and_overlap(wf: dict) -> tuple[float, float] | None:
-    """Pull window_seconds and overlap_seconds from the AudioLoopController.
+def _get_window_and_overlap(ed: WorkflowEditor) -> tuple[float, float] | None:
+    """Pull window_seconds and overlap_seconds from AudioLoopController.
 
-    AudioLoopController widgets order per nodes.py:
-        [current_iteration, window_seconds, overlap_seconds, seed, fps]
-    But current_iteration is a widget-input (linked from TensorLoopOpen),
-    so it may not appear in widgets_values depending on ComfyUI's
-    serialization. We search by position in the widgets_values list,
-    allowing for either 4 or 5 widget entries.
+    Widget order per nodes.py: [current_iteration, window_seconds,
+    overlap_seconds, seed, fps]. current_iteration is a widget-input
+    (linked from TensorLoopOpen) and may or may not appear in
+    widgets_values depending on ComfyUI's serialization, so we try both
+    4- and 5-entry layouts and gate on a sanity range.
     """
-    node = _find_loop_controller(wf)
-    if node is None:
+    controllers = ed.find_nodes_by_type("AudioLoopController")
+    if not controllers:
         return None
+    node = next((n for n in controllers if n.get("id") == _LOOP_CONTROLLER_ID), controllers[0])
     widgets = node.get("widgets_values")
     if not widgets:
         return None
-    # Try positions [1,2] (with current_iteration) and [0,1] (without).
     for w_start in (1, 0):
         if len(widgets) > w_start + 1:
             try:
                 w = float(widgets[w_start])
                 o = float(widgets[w_start + 1])
-                # Sanity: window is typically ~20, overlap typically 1-5
                 if 5.0 <= w <= 60.0 and 0.0 <= o <= w - 1.0:
                     return w, o
             except (TypeError, ValueError):
                 continue
     return None
-
-
-def _find_decoder_nodes(wf: dict) -> list[dict]:
-    decoder_types = ("VAEDecodeTiled", "LTXVTiledVAEDecode", "LTXVSpatioTemporalTiledVAEDecode")
-    return [n for n in wf.get("nodes", []) if n.get("type") in decoder_types]
 
 
 def _expected_stride_widgets(iter_stride_s: float) -> tuple[int, int]:
@@ -161,7 +146,7 @@ def validate_workflow(path: Path) -> bool:
     ed = WorkflowEditor(path)
     print(f"=== {path.name} ===")
 
-    params = _get_window_and_overlap(ed.wf)
+    params = _get_window_and_overlap(ed)
     if params is None:
         print(f"  ⚠ could not find AudioLoopController widget values; skipping stride check")
         return False
@@ -172,7 +157,7 @@ def validate_workflow(path: Path) -> bool:
         f"iter_stride={iter_stride_s:.2f}s"
     )
 
-    decoders = _find_decoder_nodes(ed.wf)
+    decoders = [n for t in _DECODER_TYPES for n in ed.find_nodes_by_type(t)]
     if not decoders:
         print(f"  ⚠ no VAE decoder nodes found")
         return False

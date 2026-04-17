@@ -11,9 +11,6 @@ to go back to the generic decoder with the aligned widget values.
 Usage:
     uv run python scripts/apply_ltx_decoder.py            # apply
     uv run python scripts/apply_ltx_decoder.py --revert   # restore
-
-Context: Phase DR1 of the decoder-reliability track. See the plan file
-for full spec and rationale.
 """
 
 import argparse
@@ -26,14 +23,13 @@ WORKFLOWS = sorted((REPO_ROOT / "example_workflows").glob(
     "audio-loop-music-video_*.json"
 ))
 
-# LTXVTiledVAEDecode defaults — 2×2 spatial tiles, 1 latent-frame overlap,
-# last_frame_fix on (works around LTX's final-frame quirk), auto
-# device/dtype. See ComfyUI-LTXVideo/tiled_vae_decode.py for the widget
-# schema.
+# Schema: [horizontal_tiles, vertical_tiles, overlap, last_frame_fix,
+# working_device, working_dtype]. last_frame_fix works around an LTX
+# quirk on the final frame. See ComfyUI-LTXVideo/tiled_vae_decode.py.
 _LTX_WIDGETS = [2, 2, 1, True, "auto", "auto"]
 
-# The VAEDecodeTiled widgets we're replacing — aligned for
-# overlap_seconds=2 per the prior widget-fix commit.
+# Fallback widgets for --revert: tile stride (512-64)/25 = 17.92s, aligned
+# with iter stride at window=19.88, overlap=2.
 _GENERIC_WIDGETS = [512, 64, 512, 64]
 
 _GENERIC_TYPE = "VAEDecodeTiled"
@@ -63,32 +59,26 @@ def _swap_to_ltx(node: dict, links: list) -> bool:
             f"got {node.get('type')!r}"
         )
 
-    # Capture current input links by name. VAEDecodeTiled's inputs are
-    # [samples, vae] -> slots [0, 1].
     inputs = node.get("inputs") or []
     samples_link = next((i.get("link") for i in inputs if i.get("name") == "samples"), None)
     vae_link = next((i.get("link") for i in inputs if i.get("name") == "vae"), None)
 
-    # Reorder + rename for LTX schema: [vae, latents] -> slots [0, 1].
     node["inputs"] = [
         {"name": "vae", "type": "VAE", "link": vae_link},
         {"name": "latents", "type": "LATENT", "link": samples_link},
     ]
 
-    # Update the top-level links array: swap target_slot for this node's
-    # two inbound links. The samples input (was slot 0) becomes latents
-    # at slot 1; the vae input (was slot 1) becomes slot 0.
+    # Input-slot order differs between the two decoders, so every top-
+    # level link targeting this node needs its target_slot swapped.
     node_id = node["id"]
     for link in links:
         if not (isinstance(link, list) and len(link) >= 5 and link[3] == node_id):
             continue
-        old_slot = link[4]
-        if old_slot == 0:       # was samples -> now latents at slot 1
+        if link[4] == 0:
             link[4] = 1
-        elif old_slot == 1:     # was vae -> now vae at slot 0
+        elif link[4] == 1:
             link[4] = 0
 
-    # Output stays at slot 0, just rename for consistency with LTX node.
     outputs = node.get("outputs") or []
     if outputs:
         outputs[0]["name"] = "image"
@@ -104,11 +94,7 @@ def _swap_to_ltx(node: dict, links: list) -> bool:
 
 
 def _swap_to_generic(node: dict, links: list) -> bool:
-    """Inverse of `_swap_to_ltx` — restore `VAEDecodeTiled` with the
-    stride-aligned widget values we'd had before DR1.
-
-    Returns True if swapped, False if already generic.
-    """
+    """Inverse of `_swap_to_ltx` — restore VAEDecodeTiled with stride-aligned widgets."""
     if node.get("type") == _GENERIC_TYPE:
         return False
     if node.get("type") != _LTX_TYPE:
@@ -130,10 +116,9 @@ def _swap_to_generic(node: dict, links: list) -> bool:
     for link in links:
         if not (isinstance(link, list) and len(link) >= 5 and link[3] == node_id):
             continue
-        old_slot = link[4]
-        if old_slot == 0:       # was vae at slot 0 -> now slot 1
+        if link[4] == 0:
             link[4] = 1
-        elif old_slot == 1:     # was latents at slot 1 -> now samples at slot 0
+        elif link[4] == 1:
             link[4] = 0
 
     outputs = node.get("outputs") or []
@@ -151,28 +136,21 @@ def _swap_to_generic(node: dict, links: list) -> bool:
 
 
 def patch_workflow(path: Path, revert: bool = False) -> int:
-    """Run the swap across every decoder node in one workflow.
-
-    Returns the number of nodes modified.
-    """
+    """Swap every decoder node in one workflow. Returns count modified."""
     ed = WorkflowEditor(path)
-    target_type = _GENERIC_TYPE if revert else _LTX_TYPE
     source_type = _LTX_TYPE if revert else _GENERIC_TYPE
     swap = _swap_to_generic if revert else _swap_to_ltx
 
-    count = 0
-    for node in ed.wf.get("nodes", []):
-        if node.get("type") == source_type:
-            if swap(node, ed.wf.get("links", [])):
-                count += 1
+    links = ed.wf.get("links", [])
+    count = sum(1 for node in ed.find_nodes_by_type(source_type) if swap(node, links))
 
     action = "reverted" if revert else "swapped"
-    already = f"{target_type} nodes already present"
     if count:
         ed.save()
         print(f"  {action} {count} node(s) in {path.name}")
     else:
-        print(f"  {path.name}: no {source_type} nodes to {action} ({already})")
+        target_type = _GENERIC_TYPE if revert else _LTX_TYPE
+        print(f"  {path.name}: no {source_type} nodes ({target_type} already present)")
     return count
 
 
