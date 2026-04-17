@@ -270,43 +270,50 @@ def detect_structure_librosa(audio: np.ndarray, sr: int, window_s: float = 2.0) 
 
 
 # Section-to-prompt modifier mapping for LTX 2.3 i2v conventions.
-# Camera motions from CLAUDE.md prompt guide. Avoid dolly out (breaks limbs/faces)
-# except for OUTRO where it's the expected visual pattern.
+#
+# The action phrases use "singing" explicitly because LTX 2.3's audio-video
+# joint attention drives lip sync off the text's action verb. Generic "is
+# performing" loses the cross-attention signal. _build_action_phrase() below
+# rewrites these to group form ("are singing together...") when the subject
+# is detected as multi-character.
+#
+# Camera motions from CLAUDE.md prompt guide. Avoid dolly out (breaks limbs
+# and faces) except for OUTRO where it's the expected visual pattern.
 _SECTION_MODIFIERS = {
     "INTRO": {
         "framing": "In a wide establishing shot, static camera, locked off shot,",
         "lighting": "Soft lighting, gentle.",
-        "energy_verb": "is beginning to perform softly",
+        "action": "is singing softly, easing into the song",
         "audio_desc": "Quiet ambient tone, gentle room presence.",
     },
     "VERSE": {
         "framing": "In a medium shot,",
         "lighting": "Warm lighting, steady energy.",
-        "energy_verb": "is performing",
+        "action": "is singing with a steady voice",
         "audio_desc": "The voice fills the space. Soft ambient hum.",
     },
     "CHORUS": {
         "framing": "In a close-up,",
         "lighting": "Bright, dynamic lighting.",
-        "energy_verb": "is performing with intensity",
+        "action": "is singing with full power, voice rising",
         "audio_desc": "The voice is powerful and resonant.",
     },
     "BRIDGE": {
         "framing": "In a wide shot,",
         "lighting": "Moody, low contrast lighting.",
-        "energy_verb": "is performing with quiet emotion",
+        "action": "is singing with quiet emotion",
         "audio_desc": "Subdued melody, reflective atmosphere.",
     },
     "OUTRO": {
         "framing": "In a wide shot, dolly out, camera pulling back,",
         "lighting": "Fading, gentle lighting.",
-        "energy_verb": "is performing softly, trailing off",
+        "action": "is singing the final notes, voice trailing off",
         "audio_desc": "The sound fades quietly. Room tone settles.",
     },
     "BREAK": {
         "framing": "In a medium shot, static camera,",
         "lighting": "Dim lighting, still.",
-        "energy_verb": "pauses, swaying gently",
+        "action": "is singing softly, pausing in place",
         "audio_desc": "Brief instrumental moment, ambient quiet.",
     },
 }
@@ -315,15 +322,337 @@ _SECTION_MODIFIERS = {
 _DEFAULT_MODIFIER = {
     "framing": "In a medium shot,",
     "lighting": "Natural lighting.",
-    "energy_verb": "is performing",
+    "action": "is singing with steady delivery",
     "audio_desc": "Music continues.",
 }
+
+
+def _is_multi_subject(subject: str) -> bool:
+    """Heuristic: does the subject description name multiple people?
+
+    True when the subject contains words that imply 2+ people. Used to pick
+    the group-verb form ("are singing together") instead of the singular
+    ("is singing"). Conservative -- false negatives just produce the
+    singular verb, which is still valid output.
+    """
+    lower = subject.lower()
+    # Explicit plural markers
+    for marker in (" two ", " three ", " four ", " both ", " and ", " duo ", " pair "):
+        if marker in f" {lower} ":
+            # "and" without a person/noun after it is a common false trigger,
+            # but since prompts almost always put "and" between subjects
+            # ("a man and a woman"), the heuristic is accurate enough in practice.
+            return True
+    # "people" / "men" / "women" (plural nouns) at the start also indicate group
+    for word in lower.split():
+        if word in {"men", "women", "people", "singers", "performers", "couple"}:
+            return True
+    return False
+
+
+def _build_action_phrase(base_action: str, multi: bool) -> str:
+    """Rewrite a singular action phrase ("is singing ...") to group form
+    when multi-character. For the group form, also tack on "together" so
+    the cross-attention signal stays clear.
+    """
+    if not multi:
+        return base_action
+    # Replace the leading "is singing" with "are singing together"
+    if base_action.startswith("is singing"):
+        rest = base_action[len("is singing") :]
+        return "are singing together" + rest
+    # Fallback for any non-singing action phrase
+    return base_action.replace("is ", "are ", 1) + " together"
+
+
+# Scene-diversity taxonomy: tier (1-6) + sub-letter flavor.
+#
+# The tier is the AMBITION CEILING -- which beat pools layer onto the base
+# section modifier. The sub-letter is a MOOD BUNDLE that biases lighting /
+# location / style flavor (applied as a single extra phrase per prompt, so
+# adjacent entries don't get mud-mouthed with it).
+#
+# Mapping to internal/ prompt docs:
+#   1  performance_live        ~ internal/prompt.md   (static, safe)
+#   2  performance_dynamic     ~ internal/prompt2.md  (camera + body beats)
+#   3  cinematic               ~ internal/prompt3.md  (+ scene shifts)
+#   4  narrative               ~ internal/prompt4.md  (+ physical-action arc)
+#   5  stylized                (beyond prompt4: genre overlay)
+#   6  avant_garde             (beyond prompt4: abstract / non-linear)
+#
+# Montage is ORTHOGONAL to the tier (see `montage` flag): a structural
+# property that shortens dwell and layers emotional-arc language on top of
+# whichever tier is active.
+_DIVERSITY_TIERS: dict[int, str] = {
+    1: "performance_live",
+    2: "performance_dynamic",
+    3: "cinematic",
+    4: "narrative",
+    5: "stylized",
+    6: "avant_garde",
+}
+
+_DEFAULT_DIVERSITY = "2a"
+
+# Which beat pools each tier activates. Later tiers inherit earlier pools.
+# "camera"/"body" are gentle motion variation; "scene" is atmospheric;
+# "narrative" is physical-action arc; "style" is genre overlay (tier 5+);
+# "avant" is abstract/non-linear framing (tier 6).
+_TIER_POOLS: dict[int, tuple[str, ...]] = {
+    1: ("camera",),
+    2: ("camera", "body"),
+    3: ("camera", "body", "scene"),
+    4: ("camera", "body", "scene", "narrative"),
+    5: ("camera", "body", "scene", "narrative", "style"),
+    6: ("camera", "body", "scene", "narrative", "style", "avant"),
+}
+
+# Variant-indexed beat pools: cycled via variant % len(beats). Each list
+# supplies short phrases that ADD detail; the base modifier stays the
+# primary descriptor.
+_DYNAMIC_CAMERA_BEATS = {
+    "INTRO": ["static camera", "slow dolly in", "static camera, locked off shot"],
+    "VERSE": ["static camera", "slow dolly in", "slight focus shift"],
+    "CHORUS": ["static camera", "slow jib up", "slow dolly in"],
+    "BRIDGE": ["static camera", "slow focus shift", "static camera, locked off shot"],
+    "OUTRO": ["dolly out, camera pulling back", "dolly out slowly", "camera pulling back"],
+    "BREAK": ["static camera", "slight focus shift", "static camera"],
+}
+
+_DYNAMIC_BODY_BEATS = {
+    "INTRO": ["mouth opening softly", "head tilted slightly", "eyes half-closed"],
+    "VERSE": ["head bobbing slightly", "leaning forward", "slight sway at the shoulders"],
+    "CHORUS": ["eyes wide, mouth open", "arms slightly raised", "chest forward, head tilted back"],
+    "BRIDGE": ["eyes closed briefly", "head lowered", "hands at the sides"],
+    "OUTRO": ["shoulders easing", "gaze dropping", "breath settling"],
+    "BREAK": ["still pose", "gentle sway", "steady posture"],
+}
+
+_SCENE_SHIFT_BEATS = {
+    "INTRO": ["the atmosphere quiet and still", "soft ambient glow", "cool muted tones"],
+    "VERSE": ["warm steady ambience", "subtle reflections catching the light", "light shifting gently"],
+    "CHORUS": ["colors intensifying", "bright accents across the scene", "energetic highlights in the frame"],
+    "BRIDGE": ["shadows lengthening", "moody low-key tones", "atmosphere tightening"],
+    "OUTRO": ["colors fading toward stillness", "light softening", "warmth draining from the scene"],
+    "BREAK": ["brief pocket of quiet", "ambience settling", "stillness in the frame"],
+}
+
+_NARRATIVE_BEATS = {
+    "INTRO": ["standing in place", "turning slowly toward the camera", "settling into position"],
+    "VERSE": ["shifting weight between feet", "taking a half-step forward", "steadying the stance"],
+    "CHORUS": ["leaning into the performance", "stepping forward decisively", "raising the head higher"],
+    "BRIDGE": ["pulling back, looking inward", "pausing mid-motion", "gathering for what comes next"],
+    "OUTRO": ["easing back, gaze softening", "settling into stillness", "slowly letting go"],
+    "BREAK": ["holding position", "a brief pause", "holding the moment"],
+}
+
+# Tier 5 stylized overlay beats -- genre / treatment flavor that layers ON
+# TOP of tier 4. Picked once per prompt (not per-section), so the overlay
+# rotates across variants keeping tone consistent within a section.
+_STYLE_BEATS = {
+    "INTRO": ["treated with a stylized overlay", "with a graphic-design feel", "with stylized color treatment"],
+    "VERSE": ["with stylized color treatment", "with a graphic-design feel", "treated with a stylized overlay"],
+    "CHORUS": ["with a heightened stylized overlay", "with bold graphic accents", "with a treated color bath"],
+    "BRIDGE": ["with a low-saturation stylized look", "with a noir-inflected treatment", "with a muted palette overlay"],
+    "OUTRO": ["with color draining to a treated palette", "with a stylized wash", "with stylized fade treatment"],
+    "BREAK": ["with a still stylized overlay", "with muted treatment", "with a subdued stylized flourish"],
+}
+
+# Tier 6 avant-garde beats -- abstract / non-linear framing that further
+# departs from literal depiction. Still anchored on the singing subject so
+# lip sync cross-attention survives.
+_AVANT_BEATS = {
+    "INTRO": ["composition edging toward abstraction", "frame feeling unmoored", "composition leaning graphic and flat"],
+    "VERSE": ["composition breaking from literal space", "frame tilting off-axis", "composition drifting toward the abstract"],
+    "CHORUS": ["composition fragmenting with rhythm", "frame pulsing with form", "composition collapsing toward pure shape"],
+    "BRIDGE": ["composition dissolving inward", "frame softening into suggestion", "composition quieting to essentials"],
+    "OUTRO": ["composition resolving toward pure form", "frame collapsing to a gesture", "composition settling into stillness"],
+    "BREAK": ["composition holding a single abstract beat", "frame pausing on pure form", "composition steady and reduced"],
+}
+
+# Dispatch table: tier-pool name -> beats-by-label dict. _build_prompt_for_section
+# iterates the tier's active pools in `_TIER_POOLS` order and looks up beats here.
+_POOL_BEATS: dict[str, dict] = {
+    "camera": _DYNAMIC_CAMERA_BEATS,
+    "body": _DYNAMIC_BODY_BEATS,
+    "scene": _SCENE_SHIFT_BEATS,
+    "narrative": _NARRATIVE_BEATS,
+    "style": _STYLE_BEATS,
+    "avant": _AVANT_BEATS,
+}
+
+# Montage emotional-arc beats. Applied ONLY when `montage=True`. These carry
+# the "music drives art drives narrative" feeling, biased by section.
+_MONTAGE_ARC_BEATS = {
+    "INTRO": ["the feeling gathering", "a quiet build beginning", "stillness about to break"],
+    "VERSE": ["the feeling building", "tension collecting beat by beat", "momentum gathering"],
+    "CHORUS": ["the feeling releasing", "the emotional peak landing", "catharsis arriving"],
+    "BRIDGE": ["the feeling turning inward", "a moment of reckoning", "the emotional pivot"],
+    "OUTRO": ["the feeling settling", "release easing into stillness", "the final emotional note"],
+    "BREAK": ["a held breath between beats", "stillness in the emotional arc", "a pause before the next swell"],
+}
+
+# Sub-letter mood bundles. Appended as a SINGLE phrase to the extras, so the
+# prompt doesn't get mud-mouthed. Keyed by f"{tier}{letter}" for clarity.
+# Missing sub-letters fall back to "" (no flavor note, still valid).
+_MOOD_BUNDLES: dict[str, str] = {
+    "1a": "tight performance framing, sweat visible",
+    "1b": "wide stage framing, warm stage wash",
+    "1c": "controlled studio lighting, subtle film grain",
+    "2a": "handheld energy, rock-video motion",
+    "2b": "smooth dolly motion, pop-video polish",
+    "3a": "urban night palette, neon reflections",
+    "3b": "natural-light palette, open outdoor feel",
+    "3c": "quiet interior palette, introspective framing",
+    "3d": "classic performance + b-roll intercut feel",
+    "4a": "linear story beat progression",
+    "4b": "dreamlike flashback tint, memory-tinged overlay",
+    "5a": "noir monochrome, high contrast",
+    "5b": "surreal saturated palette",
+    "5c": "retro period grain, period wardrobe feel",
+    "6a": "abstract non-literal framing",
+}
+
+
+def _parse_diversity(value: str | None) -> tuple[int, str | None]:
+    """Parse a diversity spec like '3b' or '4' into (tier, sub_letter).
+
+    Falls back to _DEFAULT_DIVERSITY on malformed input rather than raising,
+    so CLI callers get lenient behavior.
+    """
+    v = (value or _DEFAULT_DIVERSITY).strip().lower()
+    try:
+        tier = int(v[0])
+    except (ValueError, IndexError):
+        tier = int(_DEFAULT_DIVERSITY[0])
+    if tier not in _DIVERSITY_TIERS:
+        tier = int(_DEFAULT_DIVERSITY[0])
+    sub = v[1:] if len(v) > 1 else None
+    return tier, sub
+
+
+def _pick_beat(beats_by_label: dict, label: str, variant: int) -> str:
+    """Return the variant-th beat for this label, with cycling fallback."""
+    beats = beats_by_label.get(label)
+    if not beats:
+        return ""
+    return beats[variant % len(beats)]
+
+
+def _build_prompt_for_section(
+    section: dict,
+    subject: str,
+    diversity: str = _DEFAULT_DIVERSITY,
+    montage: bool = False,
+) -> str:
+    """Build the prompt string for one section.
+
+    Single source of truth shared by `get_node_169_prompt` and
+    `_generate_subject_schedule` — ensures Node 169 equals the first
+    schedule entry byte-for-byte (CLAUDE.md constraint).
+    """
+    mods = _SECTION_MODIFIERS.get(section["label"], _DEFAULT_MODIFIER)
+    multi = _is_multi_subject(subject)
+    action = _build_action_phrase(mods["action"], multi)
+    label = section["label"]
+    variant = section.get("variant", 0)
+    tier, sub = _parse_diversity(diversity)
+    pools = _TIER_POOLS.get(tier, _TIER_POOLS[2])
+
+    extras: list[str] = []
+    for pool in pools:
+        beat = _pick_beat(_POOL_BEATS[pool], label, variant)
+        if beat:
+            extras.append(beat)
+
+    # Mood bundle — one phrase per prompt, keyed by full "tier+sub" code.
+    if sub:
+        mood = _MOOD_BUNDLES.get(f"{tier}{sub}")
+        if mood:
+            extras.append(mood)
+
+    # Montage arc — one emotional-arc phrase per prompt, orthogonal to tier.
+    if montage:
+        beat = _pick_beat(_MONTAGE_ARC_BEATS, label, variant)
+        if beat:
+            extras.append(beat)
+
+    extras_text = f", {', '.join(extras)}" if extras else ""
+
+    return (
+        f"Style: cinematic. {mods['framing']} {subject} {action}{extras_text}. "
+        f"{mods['lighting']} {mods['audio_desc']}"
+    )
+
+
+# Each schedule entry should cover roughly one iteration window so the
+# prompt changes keep pace with the visual loop. Our loop stride is
+# ~18.88s; target a schedule entry every ~20s and split anything over
+# ~30s. Without this, raw section detection can produce single entries
+# spanning 1-2 minutes which feels static.
+_SCHEDULE_TARGET_SECONDS = 20.0
+_SCHEDULE_SPLIT_THRESHOLD_SECONDS = 30.0
+
+# Montage mode uses faster cuts — subdivide anything over ~18s and target
+# ~12s per entry so the emotional arc progresses more briskly.
+_MONTAGE_TARGET_SECONDS = 12.0
+_MONTAGE_SPLIT_THRESHOLD_SECONDS = 18.0
+
+
+def _subdivide_long_sections(
+    sections: list[dict],
+    target: float = _SCHEDULE_TARGET_SECONDS,
+    split_above: float = _SCHEDULE_SPLIT_THRESHOLD_SECONDS,
+) -> list[dict]:
+    """Split sections longer than `split_above` into ~target-sized chunks.
+
+    Returns a new list. Sections already short enough pass through with
+    `variant=0`. Longer sections become N chunks where N is
+    round(duration / target), each getting the same label/level and an
+    incrementing variant index.
+    """
+    result: list[dict] = []
+    for s in sections:
+        dur = s["end"] - s["start"]
+        if dur <= split_above:
+            result.append({**s, "variant": 0})
+            continue
+        n = max(2, int(round(dur / target)))
+        chunk_dur = dur / n
+        for i in range(n):
+            result.append({
+                "start": s["start"] + i * chunk_dur,
+                "end": s["start"] + (i + 1) * chunk_dur,
+                "label": s["label"],
+                "level": s["level"],
+                "variant": i,
+            })
+    return result
+
+
+def _prepare_sections(sections: list[dict], montage: bool) -> list[dict]:
+    """Apply subdivision with mode-appropriate dwell target.
+
+    Shared between the schedule builder and get_node_169_prompt so the
+    first chunk (Node 169) sees the SAME subdivision the schedule sees.
+    That's the invariant documented in CLAUDE.md: Node 169 MUST equal the
+    first schedule entry byte-for-byte.
+    """
+    if montage:
+        return _subdivide_long_sections(
+            sections,
+            target=_MONTAGE_TARGET_SECONDS,
+            split_above=_MONTAGE_SPLIT_THRESHOLD_SECONDS,
+        )
+    return _subdivide_long_sections(sections)
 
 
 def generate_schedule_suggestion(
     sections: list[dict],
     subject: str = "",
     trim_offset: float = 0.0,
+    diversity: str = _DEFAULT_DIVERSITY,
+    montage: bool = False,
 ) -> str:
     """Generate a TimestampPromptSchedule text block from sections.
 
@@ -332,22 +661,31 @@ def generate_schedule_suggestion(
     description wrapped with section-appropriate camera, lighting, and
     energy modifiers. Copy-pasteable into TimestampPromptSchedule.
 
+    `diversity` and `montage` control the ambition / pacing of the output
+    — see `_build_prompt_for_section`.
+
     Args:
         sections: list of dicts with start, end, label, level keys.
         subject: scene description (e.g., "a woman singing in a workshop").
             If empty, falls back to placeholder output.
         trim_offset: seconds to subtract from timestamps.
+        diversity: tier+sub-letter code (e.g., "3b"). Default "2a".
+        montage: when True, cuts faster and adds emotional-arc language.
     """
+    prepared = _prepare_sections(sections, montage)
     if not subject:
-        return _generate_placeholder_schedule(sections, trim_offset)
-
-    return _generate_subject_schedule(sections, subject, trim_offset)
+        return _generate_placeholder_schedule(prepared, trim_offset)
+    return _generate_subject_schedule(
+        prepared, subject, trim_offset, diversity, montage
+    )
 
 
 def get_node_169_prompt(
     sections: list[dict],
     subject: str = "",
     trim_offset: float = 0.0,
+    diversity: str = _DEFAULT_DIVERSITY,
+    montage: bool = False,
 ) -> str:
     """Extract the node 169 initial render prompt.
 
@@ -360,22 +698,22 @@ def get_node_169_prompt(
     if not sections:
         return ""
 
-    # Find the first section that starts at or after the trim offset
+    prepared = _prepare_sections(sections, montage)
+
+    # Find the first prepared chunk that survives the trim offset.
     first_section = None
-    for s in sections:
+    for s in prepared:
         if s["end"] - trim_offset > 0:
             first_section = s
             break
     if not first_section:
-        first_section = sections[0]
+        first_section = prepared[0]
 
     if not subject:
         return f"[{first_section['label']} - {first_section['level']}] describe initial scene"
 
-    mods = _SECTION_MODIFIERS.get(first_section["label"], _DEFAULT_MODIFIER)
-    return (
-        f"Style: cinematic. {mods['framing']} {subject} {mods['energy_verb']}. "
-        f"{mods['lighting']} {mods['audio_desc']}"
+    return _build_prompt_for_section(
+        first_section, subject, diversity=diversity, montage=montage
     )
 
 
@@ -413,16 +751,24 @@ def _generate_placeholder_schedule(
 
 
 def _generate_subject_schedule(
-    sections: list[dict], subject: str, trim_offset: float
+    sections: list[dict],
+    subject: str,
+    trim_offset: float,
+    diversity: str,
+    montage: bool,
 ) -> str:
-    """Full prompt schedule with subject wrapped in section modifiers."""
-    def build(s):
-        mods = _SECTION_MODIFIERS.get(s["label"], _DEFAULT_MODIFIER)
-        return (
-            f"Style: cinematic. {mods['framing']} {subject} {mods['energy_verb']}. "
-            f"{mods['lighting']} {mods['audio_desc']}"
-        )
-    return _build_schedule(sections, trim_offset, build)
+    """Full prompt schedule with subject wrapped in section modifiers.
+
+    Uses the SAME builder as `get_node_169_prompt` so the first schedule
+    line is bit-exact equal to Node 169. See `_build_prompt_for_section`.
+    """
+    return _build_schedule(
+        sections,
+        trim_offset,
+        lambda s: _build_prompt_for_section(
+            s, subject, diversity=diversity, montage=montage
+        ),
+    )
 
 
 def _fmt_ts(seconds: float) -> str:
@@ -435,57 +781,224 @@ def _fmt_ts(seconds: float) -> str:
 _LLM_SYSTEM_PROMPT = """\
 You are a video prompt engineer for LTX 2.3, an audio-visual video generation model.
 
-WORKFLOW CONTEXT:
-- Image-to-video (i2v): an init_image provides the first frame
-- A full audio track (song or dialogue) is FROZEN as conditioning (noise=0)
-- The model generates ONLY video, using audio cross-attention for lip sync and rhythm
-- Video is generated in ~20-second windows with overlapping loop iterations
-- The init_image anchors spatial composition throughout
+WORKFLOW CONTEXT
+- Image-to-video (i2v): an init_image provides the first frame.
+- A full audio track is FROZEN as conditioning (noise=0).
+- The model generates ONLY video; audio-video cross-attention drives lip sync.
+- Video is generated in ~20-second windows with overlapping loop iterations.
+- The init_image anchors spatial composition throughout.
 
-You will produce TWO outputs:
-1. "node_169_prompt": A single prompt for the initial ~20 seconds of video
-2. "schedule": A TimestampPromptSchedule with one entry per song section
+INPUTS YOU RECEIVE
+1. This analysis JSON (sections, BPM, key, vocal F0, workflow context).
+2. The init_image (first frame) — pasted alongside this system prompt.
+3. A subject string describing the singer(s).
 
-PROMPT RULES:
+YOU PRODUCE TWO OUTPUTS
+1. node_169_prompt: one paragraph for the initial ~20s.
+2. schedule: TimestampPromptSchedule, one entry per song section (further
+   subdivided so entries dwell ~20s each — or ~12s in montage mode).
 
-Subject anchoring:
-- Describe WHO is in the frame: key visual traits (clothing, hair, position, distinguishing features).
-- Do NOT re-describe the environment/setting -- it's established by the init_image.
-- Keep the subject description IDENTICAL in every entry. Only vary: framing, camera, lighting, body language.
-- For multiple people: "singing together" or "performing together" in EVERY entry. Position-anchor each person ("the man on the left in the dark jacket, the woman on the right with short hair"). Never use "crowd" or "group."
+==========================================================================
+INFERENCE: WHAT THE INIT IMAGE ENCODES (DO NOT RE-DESCRIBE)
+==========================================================================
+The init image already commits the model to:
+  - Style family (live-action, animated, comic / graphic-novel, 3D-render,
+    stop-motion, painterly, etc.)
+  - Color palette and overall mood
+  - Setting (indoor/outdoor, urban/natural, wardrobe, era)
+  - Subject appearance (face, body, clothing, number of people)
 
-Action and language:
-- Present-progressive verbs: "is singing," "is playing," "are swaying."
-- Physical cues over emotions: "slight tremble of the chin, eyes half-closed" NOT "singing sadly." Describe only observable behavior.
-- Put action before dialogue: "The man leans forward and sings: 'exact lyrics'" not lyrics first.
-- No meta-language: no "The scene opens with..." or "Cut to..." Start directly.
-- Single paragraph per entry. No markdown, headings, or bullet points. Target ~200 words max.
+Do NOT re-describe these in the schedule. Re-describing them wastes tokens
+and invites the text-conditioning to fight what the image already commits
+to (e.g. writing "photorealistic" on a comic-style init forces a tug-of-war).
 
-Audio in prompts:
-- Do NOT describe the song's audio dynamics ("voice surging," "music swelling"). The model hears the actual audio via frozen latents.
-- DO describe ambient sounds NOT in the audio track: "soft room tone," "faint hum of fluorescent lights," "muted city sounds outside."
-- Weave ambient sounds WITH actions chronologically, not in a block at the end.
-- For singing/dialogue: optionally include exact lyrics in quotes for precision lip sync. Format: The woman sings: "exact words here."
-- Describe vocal delivery quality: "in a low gravelly voice," "with bright clear tone," "brisk rhythmic delivery."
+WHAT THE SCHEDULE DRIVES (DO DESCRIBE)
+  - Camera framing and motion over time.
+  - Body language / performance beats.
+  - Lighting SHIFTS (accents brightening, shadows lengthening), not a
+    literal restatement of the palette.
+  - Scene cuts, location shifts (textual — init anchors are still primary).
+  - Emotional arc.
 
-Camera and style:
-- Style prefix: Start with "Style: cinematic." unless the image establishes a different style.
-- Camera motion only when specified by the song energy. Available: static camera, dolly in, dolly left/right, jib up/down, focus shift.
-- AVOID dolly out -- it breaks limbs and faces. Exception: final OUTRO can use dolly out.
-- Default to "static camera, locked off shot" for stability.
+STYLE-APPROPRIATE BEAT POOLS (pick the pool matching the image):
+  - Animated / comic / graphic-novel: speed lines, panel transitions,
+    supersaturation, impact frames, silhouetted accents, motion blur lines.
+  - Live-action cinematic: rack focus, practical lighting, handheld/dolly,
+    lens flares, shallow depth of field.
+  - 3D-render / stylized: stylized color treatment, stylized shadows,
+    treated palette overlay.
+Infer from the image which pool applies; mixing pools across entries reads
+as visual chaos.
 
-Timing rules:
-- node_169_prompt MUST closely match the schedule's first (0:00) entry to avoid visual discontinuity at the ~20-second mark.
-- Use the section labels and energy levels from the analysis to guide framing: quiet sections get wider/static shots, loud sections get close-ups and dynamic framing.
-- Consolidate adjacent sections of the same type (multiple consecutive VERSE entries become one range).
+==========================================================================
+HARD RULES (non-negotiable)
+==========================================================================
 
-FORMAT your output as:
-node_169_prompt: <single paragraph>
+R1. The singing verb drives lip sync. EVERY entry MUST contain an explicit
+    form of "singing":
+    - Single performer: "is singing ..." (present progressive).
+    - Multiple performers: "are singing together ..." (group verb, always
+      with "together"). Use this form whenever the subject names 2+
+      people (e.g. "two men", "a man and a woman", "the duo").
+    Do NOT substitute "is performing", "is vocalizing", or any generic
+    verb. If the scene is explicitly instrumental, use "is playing
+    <instrument>" and skip "singing".
+
+R2. node_169_prompt MUST be IDENTICAL, character-for-character, to the
+    first schedule entry's prompt text (everything after the timestamp
+    and colon). Copy it verbatim. Any drift causes a visible seam at
+    the ~20s boundary when the loop starts. Do not summarize, shorten,
+    or rephrase.
+
+R3. Keep the SUBJECT description identical across every entry. Only vary:
+    framing, camera, lighting, body language, performance beats. Do NOT
+    re-describe the environment (the init_image sets it).
+
+R4. For multi-person scenes: position-anchor each person explicitly
+    ("the man on the left in the dark jacket, the woman on the right
+    with short hair") inside the subject string. Do NOT use "crowd",
+    "group", or undescribed collectives.
+
+R5. No meta-language. No "The scene opens with...", "Cut to...",
+    "camera shows...". Begin each prompt with "Style: cinematic." and
+    move straight to subject + action.
+
+R6. Audio direction:
+    - Do NOT describe the song itself ("voice surging", "music
+      swelling") — the model already hears the audio.
+    - DO describe ambient / diegetic sounds that are NOT in the audio
+      track ("soft room tone", "faint hum of fluorescent lights").
+    - Vocal delivery qualifiers are encouraged: "in a low gravelly
+      voice", "with bright clear tone", "brisk rhythmic delivery".
+
+R7. Camera motion:
+    - Default: "static camera, locked off shot".
+    - Available motions: dolly in, dolly left, dolly right, jib up,
+      jib down, focus shift.
+    - AVOID dolly out — it breaks limbs and faces. Exception: the
+      final OUTRO entry may use it for fade-out.
+
+R8. One paragraph per entry, no markdown or bullets, ~200 words max.
+    Use "is singing" in the present progressive tense — not past tense
+    ("sang") and not generic nouns ("singer").
+
+==========================================================================
+AMBITION TIERS (scene_diversity)
+==========================================================================
+The caller passes a scene_diversity code in workflow_context. Match your
+output's ambition to that tier. Tiers layer ON TOP of each other — tier 3
+includes tier 2 includes tier 1, etc. Sub-letters are mood bundles.
+
+  1 performance_live      single-camera concert feel
+     1a close-up concert    (tight framing, sweat/mouth detail)
+     1b wide stage          (band-room feel, warm stage wash)
+     1c studio-live         (controlled lighting, subtle film grain)
+  2 performance_dynamic   camera + body beats rotate (DEFAULT)
+     2a handheld energetic  (shaky, MTV-rock)
+     2b steady-cam polished (smooth dolly, pop-video polish)
+  3 cinematic             + environmental storytelling / scene shifts
+     3a urban night         (neon, rain, street)
+     3b natural outdoor     (golden hour, landscape)
+     3c interior character  (domestic, emotional, introspective)
+     3d performance + b-roll (classic radio-single format)
+  4 narrative             + physical-action arc / loose story
+     4a linear story
+     4b flashback / dream structure
+  5 stylized              + genre overlay (noir, sci-fi, surreal)
+     5a noir / monochrome
+     5b surreal / dreamlike
+     5c retro / period
+  6 avant_garde           non-linear, abstract, performative
+
+MONTAGE FLAG (orthogonal)
+If montage=true, each entry must:
+  - Advance an emotional BEAT (not merely describe a scene).
+  - Use emotional-arc language: "the feeling building", "tension
+    releasing", "a held breath", "catharsis arriving".
+  - Dwell ~12s instead of ~20s (more entries for the same duration).
+Montage is structural pacing, not a tier — it layers over whichever tier
+is active. Think Arcane (Netflix) music-driven montages: music drives
+art drives narrative drives emotion.
+
+==========================================================================
+WORKED EXAMPLE — single character, tier 2a (default)
+==========================================================================
+Input subject: "a woman in her 30s with dark hair"
+Analysis: INTRO 0:00-0:20, VERSE 0:20-1:00, CHORUS 1:00-2:00, OUTRO 2:00+
+scene_diversity: 2a
+
+Output:
+
+node_169_prompt: Style: cinematic. In a wide establishing shot, static camera, locked off shot, a woman in her 30s with dark hair is singing softly, easing into the song, static camera, mouth opening softly, handheld energy, rock-video motion. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
 
 schedule:
-<timestamp entries, one per line>
-<format: M:SS-M:SS: prompt text>
-<last entry uses M:SS+: prompt text>"""
+0:00-0:20: Style: cinematic. In a wide establishing shot, static camera, locked off shot, a woman in her 30s with dark hair is singing softly, easing into the song, static camera, mouth opening softly, handheld energy, rock-video motion. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
+0:20-1:00: Style: cinematic. In a medium shot, a woman in her 30s with dark hair is singing with a steady voice, static camera, head bobbing slightly, handheld energy, rock-video motion. Warm lighting, steady energy. The voice fills the space. Soft ambient hum.
+1:00-2:00: Style: cinematic. In a close-up, a woman in her 30s with dark hair is singing with full power, voice rising, static camera, eyes wide, mouth open, handheld energy, rock-video motion. Bright, dynamic lighting. The voice is powerful and resonant.
+2:00+: Style: cinematic. In a wide shot, dolly out, camera pulling back, a woman in her 30s with dark hair is singing the final notes, voice trailing off, dolly out, camera pulling back, shoulders easing, handheld energy, rock-video motion. Fading, gentle lighting. The sound fades quietly. Room tone settles.
+
+(Note: first schedule line is byte-exact to node_169_prompt — that is R2.)
+
+==========================================================================
+WORKED EXAMPLE — multi-character, tier 3b (cinematic, natural outdoor)
+==========================================================================
+Input subject: "two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt"
+Analysis: INTRO 0:00-0:28, VERSE 0:28-1:15, CHORUS 1:15-2:05, OUTRO 2:05+
+scene_diversity: 3b
+
+Output:
+
+node_169_prompt: Style: cinematic. In a wide establishing shot, static camera, locked off shot, two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt are singing together softly, easing into the song, static camera, mouth opening softly, the atmosphere quiet and still, natural-light palette, open outdoor feel. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
+
+schedule:
+0:00-0:28: Style: cinematic. In a wide establishing shot, static camera, locked off shot, two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt are singing together softly, easing into the song, static camera, mouth opening softly, the atmosphere quiet and still, natural-light palette, open outdoor feel. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
+0:28-1:15: Style: cinematic. In a medium shot, two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt are singing together with a steady voice, static camera, head bobbing slightly, warm steady ambience, natural-light palette, open outdoor feel. Warm lighting, steady energy. The voice fills the space. Soft ambient hum.
+1:15-2:05: Style: cinematic. In a close-up, two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt are singing together with full power, voice rising, static camera, eyes wide, mouth open, colors intensifying, natural-light palette, open outdoor feel. Bright, dynamic lighting. The voice is powerful and resonant.
+2:05+: Style: cinematic. In a wide shot, dolly out, camera pulling back, two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt are singing together the final notes, voice trailing off, dolly out, camera pulling back, shoulders easing, colors fading toward stillness, natural-light palette, open outdoor feel. Fading, gentle lighting. The sound fades quietly. Room tone settles.
+
+(Note: "are singing together" in every entry. First line byte-exact to
+node_169_prompt. The subject is identical across all entries.)
+
+==========================================================================
+WORKED EXAMPLE — montage, tier 4a (narrative + montage pacing)
+==========================================================================
+Input subject: "a young woman walking through a snowy alley at dusk"
+Analysis: INTRO 0:00-0:12, VERSE 0:12-1:00, CHORUS 1:00-2:00, OUTRO 2:00+
+scene_diversity: 4a
+montage: true
+
+Each entry must advance an emotional beat, not just describe a scene.
+Dwell times shrink to ~12s so more entries cover the same runtime.
+
+node_169_prompt: Style: cinematic. In a wide establishing shot, static camera, locked off shot, a young woman walking through a snowy alley at dusk is singing softly, easing into the song, static camera, mouth opening softly, the atmosphere quiet and still, standing in place, linear story beat progression, the feeling gathering. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
+
+schedule:
+0:00-0:12: <byte-exact copy of node_169_prompt above>
+0:12-0:24: Style: cinematic. In a medium shot, a young woman walking through a snowy alley at dusk is singing with a steady voice, slow dolly in, leaning forward, subtle reflections catching the light, taking a half-step forward, linear story beat progression, tension collecting beat by beat. Warm lighting, steady energy. The voice fills the space. Soft ambient hum.
+... (more short entries as the song progresses) ...
+2:00+: Style: cinematic. In a wide shot, dolly out, camera pulling back, a young woman walking through a snowy alley at dusk is singing the final notes, voice trailing off, dolly out, camera pulling back, shoulders easing, colors fading toward stillness, easing back, gaze softening, linear story beat progression, release easing into stillness. Fading, gentle lighting. The sound fades quietly. Room tone settles.
+
+(Note: montage entries layer emotional-arc language — "the feeling
+gathering", "tension collecting", "release easing into stillness" —
+ON TOP of the tier-4 narrative beats. That combination is what gives
+Arcane-style music-driven sequences their emotional density.)
+
+==========================================================================
+OUTPUT FORMAT
+==========================================================================
+
+node_169_prompt: <single paragraph, MUST equal the first schedule prompt verbatim>
+
+schedule:
+<M:SS-M:SS: prompt>
+<M:SS-M:SS: prompt>
+...
+<M:SS+: prompt>   # last entry is open-ended
+
+Use the analysis's section labels and energy levels to choose framing
+(quiet → wider / static; loud → close-up / dynamic). Subdivide long
+sections so each entry dwells roughly the iteration window (~20s
+default, ~12s in montage mode)."""
 
 
 def format_json_report(
@@ -499,6 +1012,8 @@ def format_json_report(
     overlap_seconds: float = 2.0,
     subject: str = "",
     init_image_description: str = "",
+    diversity: str = _DEFAULT_DIVERSITY,
+    montage: bool = False,
 ) -> dict:
     """Build structured JSON report for LLM consumption.
 
@@ -526,6 +1041,10 @@ def format_json_report(
             "classification": f0_result.get("classification", "unknown"),
         }
 
+    tier, sub = _parse_diversity(diversity)
+    tier_name = _DIVERSITY_TIERS.get(tier, "performance_dynamic")
+    mood_bundle = _MOOD_BUNDLES.get(f"{tier}{sub}") if sub else None
+
     report["workflow_context"] = {
         "trim_offset": trim_offset,
         "window_seconds": window_seconds,
@@ -538,6 +1057,10 @@ def format_json_report(
         "schedule_starts_at": f"trimmed {_fmt_ts(stride)} (iteration 1)",
         "subject": subject,
         "init_image_description": init_image_description,
+        "scene_diversity": f"{tier}{sub or ''}",
+        "scene_diversity_tier_name": tier_name,
+        "scene_diversity_mood_bundle": mood_bundle,
+        "montage": montage,
     }
 
     report["llm_system_prompt"] = _LLM_SYSTEM_PROMPT
@@ -557,6 +1080,8 @@ def format_markdown_report(
     window_seconds: float = 19.88,
     overlap_seconds: float = 2.0,
     init_image_description: str = "",
+    diversity: str = _DEFAULT_DIVERSITY,
+    montage: bool = False,
 ) -> str:
     """Format a human-readable markdown report."""
     lines = []
@@ -594,7 +1119,10 @@ def format_markdown_report(
     lines.append("Paste this into node 169 (CLIPTextEncode). Covers the first ~20 seconds.")
     lines.append("")
     lines.append("```")
-    lines.append(get_node_169_prompt(sections, subject=subject, trim_offset=trim_offset))
+    lines.append(get_node_169_prompt(
+        sections, subject=subject, trim_offset=trim_offset,
+        diversity=diversity, montage=montage,
+    ))
     lines.append("```")
     lines.append("")
 
@@ -604,7 +1132,10 @@ def format_markdown_report(
     lines.append("Paste this into the schedule text box:")
     lines.append("")
     lines.append("```")
-    lines.append(generate_schedule_suggestion(sections, subject=subject, trim_offset=trim_offset))
+    lines.append(generate_schedule_suggestion(
+        sections, subject=subject, trim_offset=trim_offset,
+        diversity=diversity, montage=montage,
+    ))
     lines.append("```")
     lines.append("")
 
@@ -619,6 +1150,7 @@ def format_markdown_report(
         trim_offset=trim_offset, window_seconds=window_seconds,
         overlap_seconds=overlap_seconds, subject=subject,
         init_image_description=init_image_description,
+        diversity=diversity, montage=montage,
     )
     if orjson:
         lines.append(orjson.dumps(json_report, option=orjson.OPT_INDENT_2).decode())
@@ -753,6 +1285,27 @@ def main():
     parser.add_argument("--overlap", type=float, default=2.0,
                         help="Overlap seconds (default: 2.0) -- for stride calculation in JSON")
     parser.add_argument("--sr", type=int, default=22050, help="Sample rate (default: 22050)")
+    parser.add_argument(
+        "--scene-diversity",
+        default=_DEFAULT_DIVERSITY,
+        help=(
+            "Ambition tier + optional sub-letter flavor. "
+            "Tiers: 1=performance-live, 2=performance-dynamic (default), "
+            "3=cinematic, 4=narrative, 5=stylized, 6=avant-garde. "
+            "Sub-letters add mood bundles (e.g. 3a urban-night, 3b natural, "
+            "3c interior, 3d perf+b-roll; 4a linear, 4b flashback; "
+            "5a noir, 5b surreal, 5c retro)."
+        ),
+    )
+    parser.add_argument(
+        "--montage",
+        action="store_true",
+        help=(
+            "Orthogonal flag: music-video-montage pacing. Cuts faster "
+            "(~12s per entry vs ~20s) and adds emotional-arc language "
+            "('building', 'release', 'stillness'). Works with any tier."
+        ),
+    )
     args = parser.parse_args()
 
     if not os.path.exists(args.audio_path):
@@ -781,6 +1334,8 @@ def main():
         window_seconds=args.window,
         overlap_seconds=args.overlap,
         init_image_description=args.image_desc or "",
+        diversity=args.scene_diversity,
+        montage=args.montage,
     )
 
     if args.output:
@@ -803,6 +1358,8 @@ def main():
             overlap_seconds=args.overlap,
             subject=args.subject or "",
             init_image_description=args.image_desc or "",
+            diversity=args.scene_diversity,
+            montage=args.montage,
         )
         if orjson:
             data = orjson.dumps(json_report, option=orjson.OPT_INDENT_2)
