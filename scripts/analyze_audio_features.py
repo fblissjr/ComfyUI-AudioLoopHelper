@@ -882,6 +882,25 @@ R8. One paragraph per entry, no markdown or bullets, ~200 words max.
     Use "is singing" in the present progressive tense — not past tense
     ("sang") and not generic nouns ("singer").
 
+R9. Schedule timestamps MUST fall on integer multiples of
+    `workflow_context.stride_seconds` — the loop advances in fixed
+    stride-sized steps (typically ~17-19s). Boundaries that fall
+    mid-stride cause one iteration to run on a mixed conditioning that
+    looks discontinuous on video.
+    - Truncate to integer seconds, then snap to the nearest multiple of
+      stride_seconds (in seconds, then format as M:SS).
+    - Example: stride_seconds = 17.88. Natural boundaries at 0, 18, 36,
+      54, 71, 89, 107, 125, 143, 161, 179, ... (i * 17.88, truncated
+      to integer seconds → "0:00", "0:17", "0:35", "0:53", "1:11",
+      "1:29", "1:47", "2:05", "2:23", "2:41", "2:59", ...).
+    - If a natural scene transition doesn't land on a stride multiple
+      (e.g. a punchline at 0:55 when the grid is at 0:53), round DOWN
+      to the nearest grid point — do NOT split a stride window.
+    - The runtime auto-snaps as a safety net, so mismatched timestamps
+      won't crash. But emitting pre-snapped schedules means the user's
+      workflow widget shows exactly what will run (no silent runtime
+      drift), which is strictly better.
+
 ==========================================================================
 AMBITION TIERS (scene_diversity)
 ==========================================================================
@@ -1153,7 +1172,7 @@ def format_markdown_report(
         diversity=diversity, montage=montage,
     )
     if orjson:
-        lines.append(orjson.dumps(json_report, option=orjson.OPT_INDENT_2).decode())
+        lines.append(orjson.dumps(json_report, option=orjson.OPT_INDENT_2 | orjson.OPT_SERIALIZE_NUMPY).decode())
     else:
         import json
         lines.append(json.dumps(json_report, indent=2))
@@ -1362,7 +1381,7 @@ def main():
             montage=args.montage,
         )
         if orjson:
-            data = orjson.dumps(json_report, option=orjson.OPT_INDENT_2)
+            data = orjson.dumps(json_report, option=orjson.OPT_INDENT_2 | orjson.OPT_SERIALIZE_NUMPY)
         else:
             import json
             data = json.dumps(json_report, indent=2).encode()
