@@ -48,7 +48,10 @@ To use prompt scheduling:
    ```
 2. Paste the **Node 169** output into node 169 (CLIPTextEncode)
 3. Paste the **TimestampPromptSchedule** output into node 1558's schedule text box
-4. Set `blend_seconds` to **5.0** on node 1558 for smooth transitions
+4. Leave `blend_seconds` at **0** (default) — with `snap_boundaries=True` (also default)
+   and an identical subject across entries, hard switches at snapped boundaries
+   are clean. Enable cross-fade by setting `blend_seconds >= stride_seconds`
+   (typically ~18s) only if you see a visible seam at a prompt transition.
 5. Run. The loop auto-stops when it reaches the end of the audio.
 
 ## Nodes
@@ -99,7 +102,8 @@ Supports gradual blending between prompts at transitions via `blend_seconds`.
 | current_iteration | INT | From TensorLoopOpen |
 | stride_seconds | FLOAT | From AudioLoopController |
 | schedule | STRING | Timestamp-based prompt schedule (see format below) |
-| blend_seconds | FLOAT | Transition duration (default 0 = hard switch). Set to e.g. 5.0 to blend over 5 seconds before each boundary. |
+| blend_seconds | FLOAT | Transition duration. Default 0 = hard switch at each snapped boundary. Values in `(0, stride_seconds)` are auto-clamped up to `stride_seconds` with a one-time warning — smaller values cannot produce smooth ramps at iteration resolution. Values `>= stride_seconds` produce a raised-cosine ramp centered on each boundary, spanning multiple iterations. |
+| snap_boundaries | BOOLEAN | Default True. Snaps schedule boundaries to iteration multiples of `stride_seconds` so every iteration runs on one pure prompt (no mid-iteration conditioning mix). Turn off only if you need sub-stride timing precision and accept the jitter risk (re-enables the legacy spike-blend path). |
 
 **Outputs:**
 
@@ -284,7 +288,7 @@ visually grounded in different reference images.
 | current_iteration | INT | From TensorLoopOpen (0 = initial render) |
 | stride_seconds | FLOAT | From AudioLoopController |
 | schedule | STRING | Timestamp-to-image-index schedule (see below) |
-| blend_seconds | FLOAT | Transition duration (default 0 = hard cut). Set to e.g. 5.0 to blend over ~5 seconds before each boundary. |
+| blend_seconds | FLOAT | Transition duration (default 0 = hard cut). Uses the legacy spike-blend path — setting values smaller than `stride_seconds` produces per-iteration jitter (same failure mode that `TimestampPromptSchedule` solves via `snap_boundaries`). For smooth cross-fading, set to ≥ `stride_seconds` (~18). `KeyframeImageSchedule` parity with `snap_boundaries` is tracked as a Phase 1.5 follow-up. |
 
 **Outputs:**
 
@@ -498,8 +502,10 @@ Tips:
 - **Keep the core subject consistent** across all schedule entries. Only
   vary framing, lighting, and energy. Different subjects = different text
   embeddings = style drift even at CFG 1.0.
-- Use **blend_seconds** (e.g., 5.0) to smooth transitions. This prevents
-  the hard conditioning switch that causes style jumps at boundaries.
+- With `snap_boundaries=True` (default) + identical subject across entries,
+  hard switches at iteration boundaries are visually clean — cross-fading
+  typically isn't needed. If you do see a visible seam at a prompt
+  transition, enable cross-fade by setting `blend_seconds >= stride_seconds`.
 - The init_image anchors the first frame of the first pass via
   LTXVImgToVideoInplaceKJ. The extension subgraph also uses the
   init_image as a guide at frame -1 each loop iteration via
@@ -507,17 +513,22 @@ Tips:
 
 ### blend_seconds (TimestampPromptSchedule)
 
-Controls how gradually prompt transitions happen.
+Controls how gradually prompt transitions happen. Paired with
+`snap_boundaries` (default True), which forces schedule boundaries to land
+on integer multiples of `stride_seconds` so every iteration runs on one
+pure prompt (no mid-iteration conditioning mix).
 
 | Value | Effect |
 |-------|--------|
-| **0** | **Hard switch (default).** Prompt changes instantly at timestamp boundaries. Can cause style drift. |
-| 3-5 | Gradual blend over 3-5 seconds. Good starting point. |
-| 10+ | Very slow transition. Useful when prompts differ significantly. |
+| **0** | **Hard switch (default).** Prompt changes at each snapped boundary. Clean when subject is identical across entries — recommended starting point. |
+| `(0, stride_seconds)` | **Auto-clamped up to `stride_seconds`** with a one-time console warning. Values smaller than stride can't produce smooth ramps at iteration resolution (the pre-fix behavior here was the source of the jitter bug). |
+| `stride_seconds` (≈18) | Raised-cosine ramp spanning exactly one iteration on each side of the boundary. Use if you see a visible seam at transitions. |
+| `2 * stride_seconds` (≈36) | Wider raised-cosine ramp, softer cross-fade across multiple iterations. Reduces distinctness of adjacent prompts. |
 
-The blend_factor ramps linearly from 0 to 1 over `blend_seconds` before
-each timestamp boundary. At 0, only the current prompt's conditioning is
-used. At 1, fully transitioned to the next prompt.
+With `snap_boundaries=False` (legacy path), `blend_seconds` uses the old
+spike-blend behavior — blend_factor ramps linearly from 0 to 1 in the
+`blend_seconds` window BEFORE the boundary, then snaps. Not recommended;
+causes per-iteration jitter when `blend_seconds < stride_seconds`.
 
 ## Audio feature analysis (offline)
 
