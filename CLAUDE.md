@@ -110,7 +110,7 @@ uv run --group dev --group analysis python -m pytest tests/ -v --rootdir=.
 
 Companion custom nodes (not imported, used alongside in workflows):
 - ComfyUI-NativeLooping_testing -- TensorLoopOpen/Close
-- ComfyUI-LTXVideo -- LTXVAddLatentGuide, LTXVCropGuides, LTXVPreprocess
+- ComfyUI-LTXVideo -- LTXVAddLatentGuide, LTXVCropGuides, LTXVPreprocess, LTXVTiledVAEDecode (default decoder in our example workflows — spatial-only tiling, no temporal-tile seams; swap via `scripts/apply_ltx_decoder.py --revert` if you need the generic VAEDecodeTiled fallback)
 - ComfyUI-KJNodes -- Set/Get nodes, FloatConstant, LTX2_NAG, LTXVImgToVideoInplaceKJ, LTXVAddGuideMulti (multi-guide, up to 20), LTXVAddGuidesFromBatch
 - ComfyUI-VideoHelperSuite -- VHS_VideoCombine
 - ComfyUI-MelBandRoFormer -- vocal separation (hardcoded `dim=384, depth=6, num_stems=1`)
