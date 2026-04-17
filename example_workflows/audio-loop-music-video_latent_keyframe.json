@@ -3060,7 +3060,7 @@
       ],
       "flags": {},
       "order": 81,
-      "mode": 4,
+      "mode": 0,
       "inputs": [
         {
           "name": "audio",
@@ -3817,7 +3817,7 @@
       ],
       "flags": {},
       "order": 80,
-      "mode": 4,
+      "mode": 0,
       "inputs": [
         {
           "name": "current_iteration",
