@@ -4,13 +4,11 @@ Covers the Phase 1 fix for the `blend_seconds` jitter bug — see
 `/home/fbliss/.claude/plans/partitioned-yawning-pond.md`.
 """
 
-import math
-
 import pytest
 
 from nodes import (
+    BlendShape,
     _match_schedule_with_next_generic,
-    _parse_schedule,
     _snap_schedule_to_iterations,
 )
 
@@ -187,7 +185,7 @@ class TestRaisedCosineBlend:
         ]
         iters = [i * stride for i in range(8)]
 
-        def effectives(shape: str) -> list[float]:
+        def effectives(shape: BlendShape) -> list[float]:
             out = []
             for t in iters:
                 pre, post, bf = _match_schedule_with_next_generic(
@@ -306,23 +304,38 @@ class TestTimestampPromptScheduleIntegration:
         assert result_clamped[2] == pytest.approx(result_explicit[2], abs=1e-9)
 
     def test_no_clamp_when_snap_disabled(self):
-        """snap_boundaries=False → no clamp (user explicitly opted out)."""
+        """snap_boundaries=False → blend_seconds is passed through unchanged.
+
+        Verifies the clamp ONLY fires on the snap path. With snap off, a
+        sub-stride blend_seconds value should produce the legacy spike
+        result with its ORIGINAL (unclamped) value — we confirm by matching
+        the output against a direct spike computation at that same value.
+        """
         import nodes
+        from nodes import _match_schedule_with_next_generic, _parse_schedule
+
         nodes._get_warned_keys().discard("blend_seconds_clamped")
 
-        # With snap off, blend_seconds=5 stays 5 (legacy spike behavior).
-        # We verify via the behavior difference: with snap off at iter 1
-        # (current_time=17.88, boundary at 15 after PARSING but not snapped),
-        # actually we need a setup where snap would change boundaries.
-        # Simpler: just assert no crash and that blend_factor differs
-        # between snap=False (spike) and snap=True (raised-cosine) on the
-        # same inputs near a boundary.
-        res_with_snap = self._execute(
-            current_iteration=1, blend_seconds=10.0, snap_boundaries=True,
-        )
+        # stride=17.88, blend_seconds=5 (sub-stride). With snap=False the
+        # clamp must NOT fire — the node should call spike with blend=5.
         res_no_snap = self._execute(
-            current_iteration=1, blend_seconds=10.0, snap_boundaries=False,
+            current_iteration=1, blend_seconds=5.0, snap_boundaries=False,
         )
-        # They should differ at least in one of the returned fields
-        # (different blend shapes + different entry boundaries).
+        # Independently compute what spike with blend=5 produces on the
+        # UN-snapped entries, and verify the node's output matches exactly.
+        entries = _parse_schedule(self._make_schedule_text())
+        expected = _match_schedule_with_next_generic(
+            entries, current_time=17.88, blend_seconds=5.0, default="",
+            blend_shape="spike",
+        )
+        assert res_no_snap[0] == expected[0]  # prompt
+        assert res_no_snap[1] == expected[1]  # next_prompt
+        assert res_no_snap[2] == pytest.approx(expected[2], abs=1e-9)
+
+        # Regression anchor: with snap=True at the same blend=5, behavior
+        # MUST differ (either clamped or shape-different).
+        nodes._get_warned_keys().discard("blend_seconds_clamped")
+        res_with_snap = self._execute(
+            current_iteration=1, blend_seconds=5.0, snap_boundaries=True,
+        )
         assert res_with_snap != res_no_snap
