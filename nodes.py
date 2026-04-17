@@ -13,6 +13,7 @@ import gc
 import math
 import re
 from collections import OrderedDict
+from contextlib import nullcontext
 
 import torch
 from typing_extensions import override
@@ -748,6 +749,19 @@ class ConditioningBlend(io.ComfyNode):
         return io.NodeOutput(out)
 
 
+# Singleton nullcontext avoids per-call allocation on the hot path.
+_NULL_CTX = nullcontext()
+
+
+def _profile_span(name: str):
+    # _PROFILER_STATE is a module-level alias to the dict attached to `torch`
+    # (bound later in this module). Using it here skips the getattr lookup
+    # that _get_profiler_state does on every hot-path call.
+    if _PROFILER_STATE.get("profiler") is None:
+        return _NULL_CTX
+    return torch.profiler.record_function(name)
+
+
 class LatentContextExtract(io.ComfyNode):
     """Extracts the last N latent frames as context for the next loop iteration.
 
@@ -780,7 +794,7 @@ class LatentContextExtract(io.ComfyNode):
 
     @classmethod
     def execute(cls, latent: dict, overlap_latent_frames: int) -> io.NodeOutput:
-        with torch.profiler.record_function("LatentContextExtract"):
+        with _profile_span("LatentContextExtract"):
             s = latent.copy()
             video = s["samples"]
             frames = video.shape[2]
@@ -825,7 +839,7 @@ class LatentOverlapTrim(io.ComfyNode):
 
     @classmethod
     def execute(cls, latent: dict, overlap_latent_frames: int) -> io.NodeOutput:
-        with torch.profiler.record_function("LatentOverlapTrim"):
+        with _profile_span("LatentOverlapTrim"):
             s = latent.copy()
             video = s["samples"]
 
@@ -1152,7 +1166,7 @@ class CachedTextEncode(io.ComfyNode):
 
         # Only the miss path hits GPU (Gemma encode) -- that's the only
         # branch worth a named span in the profile trace.
-        with torch.profiler.record_function("CachedTextEncode.miss"):
+        with _profile_span("CachedTextEncode.miss"):
             tokens = clip.tokenize(text)
             cond = clip.encode_from_tokens_scheduled(tokens)
             _COND_CACHE[key] = cond
@@ -1206,7 +1220,7 @@ class IterationCleanup(io.ComfyNode):
 
     @classmethod
     def execute(cls, latent, mode: str) -> io.NodeOutput:
-        with torch.profiler.record_function("IterationCleanup"):
+        with _profile_span("IterationCleanup"):
             if mode == "always":
                 gc.collect()
                 if torch.cuda.is_available():
