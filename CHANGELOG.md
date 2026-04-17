@@ -6,6 +6,41 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **`TimestampPromptSchedule` blend_seconds jitter (Phase 1 of the structural
+  fix).** Pre-fix, `blend_seconds` was sampled once per loop iteration at
+  `current_iteration * stride_seconds`. Values smaller than the loop stride
+  (e.g. the then-documented recommendation of 5.0 with stride ~17.88)
+  produced a single-iteration "spike" in blend_factor surrounded by zero-
+  blend iterations — visible as jitter on one ~18s segment of video. The
+  old tooltip prose recommended 5.0, actively leading users into the
+  failure mode.
+  - New `snap_boundaries` widget on `TimestampPromptSchedule` (default
+    `True`) rounds every schedule boundary to the nearest integer multiple
+    of `stride_seconds` via new `_snap_schedule_to_iterations` helper.
+    Every iteration now runs on exactly one pure prompt — no mid-iteration
+    mixed conditioning.
+  - New raised-cosine blend ramp (formula: `0.5 * (1 - cos(π * dt))`)
+    centered on each boundary, spanning `±blend_seconds/2`. Smooth in
+    derivative across multiple iterations when `blend_seconds ≥ stride`.
+  - Sub-stride `blend_seconds` (`0 < x < stride_seconds`) is now
+    auto-clamped upward to `stride_seconds` with a one-time console
+    warning. Smaller values mathematically cannot produce smooth ramps at
+    iteration resolution.
+  - Legacy "spike" blend preserved behind `snap_boundaries=False` for
+    backcompat. `KeyframeImageSchedule` continues to use the spike path
+    (no `snap_boundaries` widget yet; candidate for Phase 1.5 follow-up).
+  - `_LLM_SYSTEM_PROMPT` gained rule **R9**: schedule timestamps must
+    fall on integer multiples of `workflow_context.stride_seconds` so the
+    LLM emits pre-snapped schedules (the runtime snap is a safety net).
+    Same rule added to `docs/system_prompt.md` for the standup variant.
+  - 20 new tests in `tests/test_schedule_snapping.py` covering snap math,
+    raised-cosine ramp, auto-clamp, spike backcompat, and node integration.
+  - Docs updated: `docs/prompt_creation_guide.md` no longer recommends
+    `blend_seconds=5` (it was the worst-case value); documents the clamp,
+    the new widget, and the cross-fade recipe. `internal/prompt_comedy1.md`
+    corrected with a v1→v2 note.
+
 ### Added
 - Prompt generation rework in `scripts/analyze_audio_features.py`:
   - Unified `_build_prompt_for_section` is the single source of truth for

@@ -101,7 +101,8 @@ via `_build_prompt_for_section` + shared `_prepare_sections`.
 | Setting | Start with | Range | Notes |
 |---------|-----------|-------|-------|
 | overlap_seconds | **2.0** | 1.0-3.0 | Start at 2.0. Increase to 3.0 if jitter between iterations. |
-| blend_seconds | **5.0** | 0-10.0 | Start at 5.0. Increase to 10.0 if style drifts at prompt boundaries. Set 0 to disable blending. |
+| blend_seconds | **0.0** | 0 or ≥ stride_seconds | Start at 0 (hard switch). For cross-fade, use **≥ stride_seconds** (typically ~17-19s). Values between 0 and stride_seconds are auto-clamped to stride_seconds with a one-time warning — smaller values can't produce smooth ramps at iteration resolution (they used to cause jitter in pre-fix builds). |
+| snap_boundaries | **True** | True/False | Leave on. Rounds schedule boundaries to the iteration grid so every iteration runs on one pure prompt. Turning it off re-enables the legacy spike-blend path and is only useful if you want sub-stride timing precision and accept the jitter risk. |
 | node 567 start_index | **10** | 0-30 | Seconds to skip. Match to your song's instrumental intro length. |
 | node 169 prompt | — | — | Must closely match the 0:00 schedule entry AND the init_image. |
 
@@ -139,8 +140,13 @@ generates both node_169_prompt and the schedule. See
 - First run: no prompt schedule (static prompt, blend_seconds=0).
   Verify the base loop works and consistency holds.
 - Second run: add prompt schedule with conservative changes
-  (same subject, vary only framing). blend_seconds=5.0.
-- Third run: add lighting variations. Increase blend_seconds if drift appears.
+  (same subject, vary only framing). Keep blend_seconds=0 — snapped
+  boundaries + identical subject keeps transitions clean without
+  cross-fading.
+- Third run: add lighting variations. If you see a visible seam at
+  prompt transitions, enable cross-fade by setting blend_seconds to
+  stride_seconds or higher (typically ~18-20s). Values below stride
+  are auto-clamped.
 
 ---
 
@@ -366,7 +372,9 @@ still image with no motion, subtitles, text, scene change, blurry, out of focus,
 1. **Variation 1** (framing only) -- establish baseline consistency
 2. If stable, try **Variation 2** (energy-matched) -- more dynamic
 3. If still stable, try **Variation 3** (lighting) -- most visual variation
-4. If any variation causes drift, increase `blend_seconds` or `overlap_seconds`
+4. If any variation causes drift, try `overlap_seconds` bump first; for
+   prompt-transition seams, set `blend_seconds` to stride_seconds or above
+   (below-stride values are auto-clamped anyway)
 
 ### Phase 2: Sampler tuning (after finding a good prompt)
 
@@ -393,6 +401,7 @@ Keep your best prompt variation and test these one at a time:
 | Setting | Default | Try | When |
 |---------|---------|-----|------|
 | overlap_seconds | 2.0 | **3.0** | Jitter between iterations (not at prompt boundaries) |
-| blend_seconds | 5.0 | **10.0** | Style drift specifically at prompt transition timestamps |
-| blend_seconds | 5.0 | **0** | Disable blending to isolate whether prompts or overlap cause issues |
+| blend_seconds | 0.0 | **≥ stride_seconds** | Style drift specifically at prompt transition timestamps — a cross-fade across ≥1 iteration smooths the hand-off |
+| blend_seconds | any | **0** | Disable blending to isolate whether prompts or overlap cause issues |
+| snap_boundaries | True | **False** | Only if you need sub-stride timing precision AND the jitter is acceptable (legacy spike-blend path) |
 | overlap_seconds | 2.0 | **1.0** | If results are good and you want faster coverage (fewer iterations) |
