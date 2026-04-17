@@ -12,18 +12,23 @@ Four workflow variants included:
 - **Image workflow** (`audio-loop-music-video_image.json`) -- tested/working.
   Per-iteration VAE decode/encode. Proven lip sync. Per-iteration AdaIN for
   color drift prevention (factor=0.2, bypassable).
-- **Image + per-step AdaIN** (`audio-loop-music-video_image_adain_perstep.json`) --
-  experimental. Same as image workflow plus LTXVPerStepAdainPatcher on the model
-  chain. Corrects color drift during denoising, not just after. Use this if
-  per-iteration AdaIN alone isn't enough.
-- **Latent workflow** (`audio-loop-music-video_latent.json`) -- UNTESTED.
-  Operates in latent space using LatentContextExtract and LatentOverlapTrim.
-  No per-iteration VAE round-trip. Per-iteration AdaIN included. Use at your
-  own risk until testing confirms lip sync parity.
+- **Latent workflow** (`audio-loop-music-video_latent.json`) -- **tested/working**
+  (primary recommended for most use cases). Operates in latent space via
+  LatentContextExtract and LatentOverlapTrim. No per-iteration VAE
+  round-trip, so no compounding encode/decode drift. Uses LTXVTiledVAEDecode
+  (spatial-only tiling, no temporal-tile seams).
 - **Latent + keyframe schedule** (`audio-loop-music-video_latent_keyframe.json`) --
   UNTESTED. Latent workflow plus KeyframeImageSchedule + ImageBlend wired to
   the subgraph init_image input. Different reference images per song section
   (verse/chorus/bridge) for actual scene changes, not just lighting shifts.
+- **Image + per-step AdaIN** (`audio-loop-music-video_image_adain_perstep.json`) --
+  experimental, status uncertain. Same as image workflow plus
+  LTXVPerStepAdainPatcher on the model chain — applies AdaIN at every
+  denoising step (inside the sampler), not just between iterations.
+  Originally added when per-iteration AdaIN alone wasn't enough to suppress
+  color drift. On current post-DR1 workflows the baseline drift sources are
+  much smaller, so this variant may be redundant. Not recently tested; use
+  only if you're specifically debugging per-step color drift.
 
 Workflow adapted from [kijai's LTX 2.3 long loop extension test](https://github.com/kijai/ComfyUI-NativeLooping_testing/blob/main/ltx23_long_loop_extension_test.json).
 
