@@ -4367,8 +4367,8 @@
       "widgets_values": [
         512,
         64,
-        64,
-        8
+        512,
+        64
       ],
       "title": "Decode Upscaled"
     },
