@@ -3878,7 +3878,9 @@
       "widgets_values": [
         1,
         18.88,
-        "0:00+: video of a woman passionately singing alone"
+        "0:00+: video of a woman passionately singing alone",
+        0.0,
+        true
       ],
       "color": "#233",
       "bgcolor": "#355"

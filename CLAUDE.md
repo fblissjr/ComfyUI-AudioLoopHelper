@@ -24,7 +24,7 @@ Core nodes (nodes.py):
 - `LatentContextExtract` -- extracts tail latent frames + strips noise_mask
 - `LatentOverlapTrim` -- trims overlap latent frames + strips noise_mask
 - `StripLatentNoiseMask` -- low-level noise_mask removal utility
-- `KeyframeImageSchedule` -- per-iteration keyframe image selection from timestamp schedule (like TimestampPromptSchedule but for images). Outputs image/next_image/blend_factor.
+- `KeyframeImageSchedule` -- per-iteration keyframe image selection from timestamp schedule (like TimestampPromptSchedule but for images). Outputs image/next_image/blend_factor. **Still uses the legacy spike-blend path** (no `snap_boundaries` widget yet); sub-stride `blend_seconds` produces jitter. Phase 1.5 follow-up in the plan.
 - `VideoFrameExtract` -- extracts frame from reference video at current iteration's timestamp for video-to-video conditioning
 - `ImageBlend` -- pixel-space lerp of two images by a factor. Pairs with KeyframeImageSchedule for smooth keyframe transitions.
 - `CachedTextEncode` -- drop-in replacement for CLIPTextEncode. LRU-caches Gemma output by `(id(clip), text)`. Big win on schedules where a prompt spans multiple iterations.
