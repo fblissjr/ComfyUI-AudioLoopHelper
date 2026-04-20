@@ -7,6 +7,24 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **`example_workflows/audio-loop-music-video_latent_upstream.json`**
+  — new sibling of the latent workflow that swaps in Lightricks's
+  distilled-1.1 sampling package (their 2026-04-13 release) verbatim
+  from `LTX-2.3_T2V_I2V_Single_Stage_Distilled_Full.json`. Preserves
+  our audio-loop architecture (AudioLoopController, TensorLoopOpen/
+  Close, LTXVConcatAVLatent, extension subgraph, LatentOverlapTrim)
+  and swaps only the sampling stack: removes ModelSamplingSD3 + shift,
+  removes BasicScheduler + linear_quadratic, removes CFGGuider; adds
+  `LTXVScheduler [15, 2.05, 0.95, True, 0.1]` (15-step dynamic-shift
+  rectified-flow schedule), `MultimodalGuider skip_blocks="28"` with
+  chained `GuiderParameters` (AUDIO cfg=7 / stg=1 / rescale=0.7,
+  VIDEO cfg=3 / stg=1 / rescale=0.9); changes `KSamplerSelect` to
+  `euler_ancestral_cfg_pp`; bypasses `LTX2_NAG` (MultimodalGuider's
+  STG handles guidance). Intended as an A/B target against the
+  committed `_latent.json` to see whether the upstream distilled-1.1
+  package delivers better lip-sync / visual quality than our
+  known-working 8-step euler baseline. Built via
+  `scripts/apply_upstream_sampling_package.py` (re-runnable).
 - **`--style` flag on `analyze_audio_features.py`.** Choices:
   `cinematic` (default, photoreal anchor), `realistic`, `illustrated`
   (painterly / animated inits), `painterly` (digital painting inits),
