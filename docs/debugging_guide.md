@@ -1,4 +1,4 @@
-Last updated: 2026-04-17
+Last updated: 2026-04-20
 
 # Debugging Guide: Quality Problems in the Audio-Loop Pipeline
 
@@ -51,6 +51,10 @@ often reveals the next one. That's not a regression — it's progress.
 | Output prompts don't land at the times I wrote in the schedule | Runtime schedule snap to iteration grid | [Schedule timing surprises](#schedule-timing-surprises) |
 | Wide shot wasn't what I wanted | Prompt said "wide shot" or "wide stage framing"; for standup/dialogue, keep it to medium/close-up | [Lip sync failures](#lip-sync-failures) |
 | Big jump at the boundary where a prompt changes | Prompt delta too large, or blend_seconds mis-set | [Iteration-boundary seams](#iteration-boundary-seams) + [Blend_seconds pitfalls](#blend_seconds-pitfalls) |
+| First few seconds have no motion / frozen frames | `LTXVPreprocess img_compression` widget is `0` — preprocessing is skipped, model treats pristine init as "stay here" | [Frozen first frames](#frozen-first-frames) |
+| Illustrated init progressively becomes photoreal / "broadway musical" over iterations | LTX 2.3's audio-video cross-attention has photoreal-trained prior; `Style: illustrated.` at CFG=1 can't overcome it | [Style drift toward photoreal](#style-drift-toward-photoreal) |
+| Lip-sync desyncs progressively over 10 iterations | Integer-latent stride drift (fixed 2026-04-20 in `AudioLoopController`) | [Lip-sync drift over iterations](#lip-sync-drift-over-iterations) |
+| Resolution-related sampling oddness | `ImageResizeKJv2` width/height not divisible by 32 (single-stage) or 64 (distilled) | [Resolution alignment](#resolution-alignment) |
 
 ---
 
@@ -397,6 +401,114 @@ mode is now auto-clamped.
   adjacent prompts. Rarely needed for our workflows.
 - `blend_seconds` between 0 and `stride_seconds`: auto-clamped to
   stride with warning (don't do this on purpose).
+
+### Frozen first frames
+
+**Symptom**: the first 1-3 seconds of the video show no motion; the
+init image appears to "hold" before movement begins.
+
+**Root cause**: `LTXVPreprocess` (node 446) `img_compression` widget
+is `0`. Looking at `comfy_extras/nodes_lt.py:577-588`:
+
+```python
+def preprocess(image, crf=29):
+    if crf == 0:
+        return image  # SKIPS preprocessing entirely
+    ...  # Otherwise: JPEG-like compression added
+```
+
+LTX 2.3 is trained on conditioning images that have compression
+artifacts. Feeding a pristine (uncompressed) image is out-of-
+distribution; the model's response to "perfectly clean init" is to
+hold exactly on it until the sigma schedule forces it to diverge.
+
+**Fix**: set `LTXVPreprocess.img_compression` to `18` (Lightricks'
+upstream 2.3 value in `LTX-2.3_T2V_I2V_Single_Stage_Distilled_Full.json`).
+`35` is the comfy-core generic LTX default if 18 feels too aggressive.
+
+**Verification**: Re-run. The first frames should show ambient motion
+(eye saccade, slight head sway, hair movement) instead of a held still.
+
+### Style drift toward photoreal
+
+**Symptom**: an illustrated / painterly init image progressively
+becomes photoreal across the 10-iteration loop. "Human mouth
+superimposed over illustration" early; "broadway musical staging" by
+iteration 10.
+
+**Root cause**: LTX 2.3's audio-video cross-attention was trained
+predominantly on photoreal footage. The singing-mouth pathway has a
+photoreal prior baked into the transformer weights. Text conditioning
+at CFG=1 (`Style: illustrated.`) is too weak to overcome it. The
+prior compounds across iterations because each iter's output becomes
+next iter's context latent.
+
+**First-line fix**: match init-image style family to training
+distribution. Use a cinematic / photoreal init image and set
+`--style cinematic` in the generator. This removes the gradient the
+drift was running down.
+
+**Partial mitigations** (if you want to stick with illustrated):
+
+- Stack anti-photoreal terms in the negative prompt (node 507):
+  `photorealistic, realistic skin, film grain, cinematic lighting,
+  live-action footage, theatrical stage lighting, broadway musical`.
+  The negative path specifically suppresses these concepts; effect
+  is modest but free.
+- Try the `_latent_stg.json` variant (STG quality lift preserves
+  per-attention-block style identity better than NAG in some cases).
+- Lower `overlap_seconds` has a secondary effect: each iteration
+  starts more freshly from the init-image-anchored first frame,
+  bleeding less photoreal accumulation. Tradeoff: more iteration
+  seams, less subject continuity.
+
+**Structural fix** (not yet built): multi-image-guide per iteration
+via KJNodes' `LTXVAddGuideMulti`. Places the init image as a guide
+at frames 0, 15, 30, 45... within each iteration window, constantly
+re-anchoring style. Requires extension-subgraph surgery.
+
+### Lip-sync drift over iterations
+
+**Symptom**: lip-sync is tight in iterations 1-5 but visibly desyncs
+by iteration 9-10. Worse at higher `overlap_seconds` values.
+
+**Root cause (pre-2026-04-20)**: `AudioLoopController` computed
+stride as `window_seconds - overlap_seconds` (continuous seconds)
+but each iteration's trimmed latent contributes exactly
+`new_latent_frames * 8` pixels to the final decoded video
+(integer-latent quanta). At `overlap=2` this was 0.04s/iter drift;
+at `overlap=4`, 0.12s/iter = ~1.3s cumulative desync over 10 iters.
+
+**Fix (2026-04-20 onward)**: `AudioLoopController.execute` now
+derives stride from integer-latent counts. The `overlap_seconds`
+widget is a TARGET; outputs reflect the EFFECTIVE quantized value.
+Audio advance per iteration exactly matches video pixel advance
+regardless of overlap.
+
+**How to verify the fix is active**: `AudioLoopPlanner` summary
+should show `stride_seconds = 17.92` at `window=19.88, overlap=2`
+(not 17.88). Locked in by `tests/test_audio_loop_controller.py`.
+
+**If you still see drift post-fix**: check that your ComfyUI
+instance has reloaded the updated `nodes.py`. ComfyUI caches custom
+node code; restart ComfyUI entirely if you just pulled.
+
+### Resolution alignment
+
+**Symptom**: subtle sampling artifacts or off-distribution output
+that doesn't match LTX's usual quality.
+
+**Root cause**: `ImageResizeKJv2` widget is at a resolution that
+isn't divisible by 32 (single-stage requirement) or 64 (distilled
+two-stage requirement, per `coderef/LTX-2/packages/ltx-pipelines/
+src/ltx_pipelines/utils/helpers.py:325`).
+
+**Fix**: set `ImageResizeKJv2` width and height to multiples of 64.
+Common LTX-compliant resolutions: `832x448` (default, 1.857 aspect),
+`832x576` (1.444), `896x512` (1.75), `1024x576` (exact 16:9).
+
+**Validate**: run `uv run python scripts/validate_workflow_resolution.py`.
+Exits non-zero if any workflow fails.
 
 ---
 
