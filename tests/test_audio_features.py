@@ -469,6 +469,42 @@ class TestGenerateScheduleSuggestion:
         assert any(t in schedule_3a.lower() for t in ("neon", "urban"))
         assert any(t in schedule_3b.lower() for t in ("outdoor", "natural"))
 
+    def test_companion_animal_triggers_plural_verb(self):
+        """`a woman with her cat` should emit `are singing together`, not
+        `is singing`, so LTX's audio-video cross-attention animates the
+        animal's mouth too. Extends the multi-subject heuristic beyond
+        humans-only.
+        """
+        sections = [{"start": 0.0, "end": 20.0, "label": "VERSE", "level": "medium"}]
+        subject = "a warrior woman with her orange tabby cat"
+        schedule = generate_schedule_suggestion(sections, subject=subject)
+        assert "are singing together" in schedule
+        assert " is singing " not in schedule
+
+    def test_single_human_stays_singular(self):
+        """Baseline: subject without companion or plural markers stays singular."""
+        sections = [{"start": 0.0, "end": 20.0, "label": "VERSE", "level": "medium"}]
+        schedule = generate_schedule_suggestion(sections, subject="a woman in her 30s with dark hair")
+        # "with dark hair" should NOT trigger multi-subject (hair isn't an animal)
+        assert "is singing" in schedule
+        assert "are singing together" not in schedule
+
+    def test_json_report_omits_vocal_f0_classification(self):
+        """As of 2026-04-20, `classification` (male/female) is no longer
+        exported. Invites the LLM to second-guess the init image; median_hz
+        and mean_hz are sufficient for any downstream pitch-aware logic.
+        """
+        report = format_json_report(
+            bpm_result={"bpm": 120.0, "beat_times": []},
+            key_result={"key": "G Major", "confidence": 0.85},
+            sections=[],
+            f0_result={"median_f0": 180.0, "mean_f0": 200.0, "classification": "female"},
+            duration=180.0,
+        )
+        assert "vocal_f0" in report
+        assert "median_hz" in report["vocal_f0"]
+        assert "classification" not in report["vocal_f0"]
+
     def test_montage_flag_shortens_dwell(self):
         """Enabling montage on the same song produces more schedule entries
         (shorter dwell).

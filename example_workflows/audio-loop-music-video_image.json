@@ -1715,7 +1715,7 @@
         "Node name for S&R": "UNETLoader"
       },
       "widgets_values": [
-        "diffusion_models/ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors",
+        "ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors",
         "default"
       ],
       "color": "#223",

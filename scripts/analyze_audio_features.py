@@ -330,26 +330,46 @@ _DEFAULT_MODIFIER = {
 }
 
 
-def _is_multi_subject(subject: str) -> bool:
-    """Heuristic: does the subject description name multiple people?
+_COMPANION_ANIMAL_WORDS = frozenset({
+    "cat", "cats", "kitten", "kittens",
+    "dog", "dogs", "puppy", "puppies",
+    "bird", "birds", "parrot", "owl", "raven", "crow", "hawk",
+    "rabbit", "bunny", "fox", "wolf",
+    "horse", "pony",
+    "dragon", "dragonet", "familiar",
+})
 
-    True when the subject contains words that imply 2+ people. Used to pick
-    the group-verb form ("are singing together") instead of the singular
-    ("is singing"). Conservative -- false negatives just produce the
-    singular verb, which is still valid output.
+
+def _is_multi_subject(subject: str) -> bool:
+    """Heuristic: does the subject description name multiple subjects?
+
+    True when the subject contains markers implying 2+ singing entities
+    (humans OR companion animals). Used to pick the group-verb form
+    ("are singing together") instead of the singular ("is singing").
+    Conservative -- false negatives just produce the singular verb, which
+    is still valid output.
     """
     lower = subject.lower()
-    # Explicit plural markers
+    # Explicit plural / conjunction markers (multi-human common case).
     for marker in (" two ", " three ", " four ", " both ", " and ", " duo ", " pair "):
         if marker in f" {lower} ":
-            # "and" without a person/noun after it is a common false trigger,
-            # but since prompts almost always put "and" between subjects
-            # ("a man and a woman"), the heuristic is accurate enough in practice.
             return True
-    # "people" / "men" / "women" (plural nouns) at the start also indicate group
-    for word in lower.split():
+    # Plural nouns at any position also indicate group.
+    words = lower.split()
+    for word in words:
         if word in {"men", "women", "people", "singers", "performers", "couple"}:
             return True
+    # Companion-animal pattern: "<person> ... <conjunction> ... <animal>".
+    # Flag as multi when the subject names an animal AND any earlier
+    # position has a conjunction word ("with", "and", "alongside",
+    # "accompanied"). LTX's audio-video cross-attention needs the plural
+    # verb to animate the animal's mouth as well as the human's.
+    # Avoids false-positives like "a woman with dark hair" (no animal word).
+    for i, word in enumerate(words):
+        if word.strip(".,") in _COMPANION_ANIMAL_WORDS:
+            preceding_tokens = words[:i]
+            if any(kw in preceding_tokens for kw in ("with", "and", "alongside", "accompanied")):
+                return True
     return False
 
 
@@ -1147,10 +1167,15 @@ def format_json_report(
     }
 
     if f0_result:
+        # Note: `classification` (male/female) was historically exported but
+        # dropped 2026-04-20. The init image commits subject appearance; the
+        # LLM would second-guess the image based on this audio-derived cue
+        # (e.g. male F0 on a female-presenting init), introducing
+        # unnecessary conflict. Median/mean Hz are still useful for any
+        # downstream BPM/pitch-aware logic.
         report["vocal_f0"] = {
             "median_hz": f0_result.get("median_f0", 0.0),
             "mean_hz": f0_result.get("mean_f0", 0.0),
-            "classification": f0_result.get("classification", "unknown"),
         }
 
     tier, sub = _parse_diversity(diversity)
