@@ -6,6 +6,48 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **`--style` flag on `analyze_audio_features.py`.** Choices:
+  `cinematic` (default, photoreal anchor), `realistic`, `illustrated`
+  (painterly / animated inits), `painterly` (digital painting inits),
+  `animated`, `none` (omit prefix entirely when the init image strongly
+  commits style). Threads through `_build_prompt_for_section`,
+  `get_node_169_prompt`, `generate_schedule_suggestion`,
+  `format_json_report`, `format_markdown_report`, and surfaces in
+  `workflow_context.style` so LLM-driven schedule generation can apply
+  R5 correctly. Fixes the "subject drifts toward photoreal" failure
+  mode on non-photoreal init images that `Style: cinematic.` was
+  causing.
+
+### Changed
+- **Canonical camera phrasings in generator output.** `_DYNAMIC_CAMERA_BEATS`
+  now only emits byte-exact LTX 2.3 camera keywords from the README
+  table (`static camera, locked off shot`, `dolly in, camera pushing
+  forward`, `jib up, camera rising up`, `focus shift, rack focus`,
+  etc.). Off-list phrasings like `slow dolly in`, `slight focus shift`,
+  `slow jib up` are removed — LTX does not reliably follow
+  non-canonical camera direction.
+- **No more dolly-out in generator output.** `_SECTION_MODIFIERS.OUTRO`
+  framing changed from `"In a wide shot, dolly out, camera pulling back"`
+  to `"In a close-up, static camera, locked off shot"`. Dolly-out
+  shrinks the face over an 18s sampler pass and loses lip-sync
+  cross-attention signal; held close-up + audio fade is the safer
+  outro. `_DYNAMIC_CAMERA_BEATS.OUTRO` also static-only. Worked
+  examples in `_LLM_SYSTEM_PROMPT` updated to match.
+- **LLM system prompt rules tightened.** R5 now permits style variation
+  based on `workflow_context.style` + explicitly allows `Cut to ...`
+  language on entries after the first. R7 rewritten as the canonical
+  camera list + hard-bans dolly-out even on OUTRO. R9 references
+  `stride_seconds` as the EFFECTIVE stride post-integer-latent
+  quantization with the example grid updated to stride=17.92 (the
+  actual stride at window=19.88, overlap=2).
+- **`workflow_context` JSON fields updated.** `overlap_seconds` split
+  into `overlap_seconds_target` (user widget value) and
+  `overlap_seconds_effective` (post-quantization — what the node
+  actually uses). `stride_seconds` now computed via
+  `_effective_stride_seconds` helper that mirrors
+  `nodes.AudioLoopController.execute`. New `style` field.
+
 ### Fixed
 - **`AudioLoopController` lip-sync drift at higher overlap values.** Stride
   was previously computed as `window_seconds - overlap_seconds` (continuous

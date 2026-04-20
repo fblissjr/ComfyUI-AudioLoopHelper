@@ -305,7 +305,10 @@ _SECTION_MODIFIERS = {
         "audio_desc": "Subdued melody, reflective atmosphere.",
     },
     "OUTRO": {
-        "framing": "In a wide shot, dolly out, camera pulling back,",
+        # Held close-up with no camera move. Dolly-out shrinks the face
+        # over an 18s sampler pass and loses lip-sync signal; let the
+        # audio fade close the sequence instead of the camera.
+        "framing": "In a close-up, static camera, locked off shot,",
         "lighting": "Fading, gentle lighting.",
         "action": "is singing the final notes, voice trailing off",
         "audio_desc": "The sound fades quietly. Room tone settles.",
@@ -394,6 +397,48 @@ _DIVERSITY_TIERS: dict[int, str] = {
 
 _DEFAULT_DIVERSITY = "2a"
 
+# Style prefix applied to every generated prompt. The Gemma 3 text encoder
+# treats these as strong direction anchors; `cinematic` in particular
+# pulls toward photoreal film-look, which fights non-photoreal init
+# images (illustrations, paintings, 3D renders) and drives subject
+# drift toward live-action over loop iterations. Pick the anchor that
+# agrees with the init image's style family. Use `none` to omit the
+# prefix entirely when the init image strongly commits style on its own.
+_STYLE_PREFIXES: dict[str, str] = {
+    "cinematic": "Style: cinematic. ",
+    "realistic": "Style: realistic. ",
+    "illustrated": "Style: illustrated. ",
+    "painterly": "Style: painterly illustration. ",
+    "animated": "Style: animated. ",
+    "none": "",
+}
+
+_DEFAULT_STYLE = "cinematic"
+
+
+def _style_prefix(style: str) -> str:
+    """Return the Style: prefix for the given style family (or ''). Falls back to default on unknown."""
+    return _STYLE_PREFIXES.get(style, _STYLE_PREFIXES[_DEFAULT_STYLE])
+
+
+def _effective_stride_seconds(window_seconds: float, overlap_seconds: float, fps: int = 25) -> float:
+    """Stride in seconds that AudioLoopController actually uses.
+
+    Matches the integer-latent quantization performed by
+    `nodes.AudioLoopController.execute` so `workflow_context.stride_seconds`
+    reflects what will run, not the naive `window - overlap`. See
+    CLAUDE.md "Stride is derived from integer-latent counts".
+    """
+    window_px = max(1, round(window_seconds * fps))
+    overlap_px = max(0, round(overlap_seconds * fps))
+    scale = 8  # LTX video VAE temporal compression
+    window_latents = (window_px - 1) // scale + 1
+    overlap_latents = (overlap_px - 1) // scale + 1 if overlap_px > 0 else 0
+    if overlap_latents >= window_latents:
+        overlap_latents = window_latents - 1
+    new_latents = window_latents - overlap_latents
+    return new_latents * scale / fps
+
 # Which beat pools each tier activates. Later tiers inherit earlier pools.
 # "camera"/"body" are gentle motion variation; "scene" is atmospheric;
 # "narrative" is physical-action arc; "style" is genre overlay (tier 5+);
@@ -410,13 +455,31 @@ _TIER_POOLS: dict[int, tuple[str, ...]] = {
 # Variant-indexed beat pools: cycled via variant % len(beats). Each list
 # supplies short phrases that ADD detail; the base modifier stays the
 # primary descriptor.
+# All beats here use byte-exact canonical LTX 2.3 phrasings (see README
+# "Camera motion keywords"). LTX does not reliably follow off-list
+# phrasings like "slow dolly in" or "slight handheld sway". Never emit
+# "dolly out, camera pulling back" — see _SECTION_MODIFIERS.OUTRO and
+# R7 in _LLM_SYSTEM_PROMPT for the rationale.
 _DYNAMIC_CAMERA_BEATS = {
-    "INTRO": ["static camera", "slow dolly in", "static camera, locked off shot"],
-    "VERSE": ["static camera", "slow dolly in", "slight focus shift"],
-    "CHORUS": ["static camera", "slow jib up", "slow dolly in"],
-    "BRIDGE": ["static camera", "slow focus shift", "static camera, locked off shot"],
-    "OUTRO": ["dolly out, camera pulling back", "dolly out slowly", "camera pulling back"],
-    "BREAK": ["static camera", "slight focus shift", "static camera"],
+    "INTRO": ["static camera, locked off shot"],
+    "VERSE": [
+        "static camera, locked off shot",
+        "focus shift, rack focus",
+        "dolly in, camera pushing forward",
+        "jib up, camera rising up",
+        "dolly left, camera tracking left",
+    ],
+    # Chorus holds still — the performance drives the visual energy,
+    # not the camera. Moving camera on the chorus steals attention.
+    "CHORUS": ["static camera, locked off shot"],
+    "BRIDGE": [
+        "static camera, locked off shot",
+        "focus shift, rack focus",
+        "jib down, camera lowering down",
+    ],
+    # No dolly-out. Held close-up is the outro move.
+    "OUTRO": ["static camera, locked off shot"],
+    "BREAK": ["static camera, locked off shot"],
 }
 
 _DYNAMIC_BODY_BEATS = {
@@ -544,6 +607,7 @@ def _build_prompt_for_section(
     subject: str,
     diversity: str = _DEFAULT_DIVERSITY,
     montage: bool = False,
+    style: str = _DEFAULT_STYLE,
 ) -> str:
     """Build the prompt string for one section.
 
@@ -580,7 +644,7 @@ def _build_prompt_for_section(
     extras_text = f", {', '.join(extras)}" if extras else ""
 
     return (
-        f"Style: cinematic. {mods['framing']} {subject} {action}{extras_text}. "
+        f"{_style_prefix(style)}{mods['framing']} {subject} {action}{extras_text}. "
         f"{mods['lighting']} {mods['audio_desc']}"
     )
 
@@ -653,6 +717,7 @@ def generate_schedule_suggestion(
     trim_offset: float = 0.0,
     diversity: str = _DEFAULT_DIVERSITY,
     montage: bool = False,
+    style: str = _DEFAULT_STYLE,
 ) -> str:
     """Generate a TimestampPromptSchedule text block from sections.
 
@@ -676,7 +741,7 @@ def generate_schedule_suggestion(
     if not subject:
         return _generate_placeholder_schedule(prepared, trim_offset)
     return _generate_subject_schedule(
-        prepared, subject, trim_offset, diversity, montage
+        prepared, subject, trim_offset, diversity, montage, style
     )
 
 
@@ -686,6 +751,7 @@ def get_node_169_prompt(
     trim_offset: float = 0.0,
     diversity: str = _DEFAULT_DIVERSITY,
     montage: bool = False,
+    style: str = _DEFAULT_STYLE,
 ) -> str:
     """Extract the node 169 initial render prompt.
 
@@ -713,7 +779,7 @@ def get_node_169_prompt(
         return f"[{first_section['label']} - {first_section['level']}] describe initial scene"
 
     return _build_prompt_for_section(
-        first_section, subject, diversity=diversity, montage=montage
+        first_section, subject, diversity=diversity, montage=montage, style=style
     )
 
 
@@ -756,6 +822,7 @@ def _generate_subject_schedule(
     trim_offset: float,
     diversity: str,
     montage: bool,
+    style: str = _DEFAULT_STYLE,
 ) -> str:
     """Full prompt schedule with subject wrapped in section modifiers.
 
@@ -766,7 +833,7 @@ def _generate_subject_schedule(
         sections,
         trim_offset,
         lambda s: _build_prompt_for_section(
-            s, subject, diversity=diversity, montage=montage
+            s, subject, diversity=diversity, montage=montage, style=style
         ),
     )
 
@@ -859,9 +926,19 @@ R4. For multi-person scenes: position-anchor each person explicitly
     with short hair") inside the subject string. Do NOT use "crowd",
     "group", or undescribed collectives.
 
-R5. No meta-language. No "The scene opens with...", "Cut to...",
-    "camera shows...". Begin each prompt with "Style: cinematic." and
-    move straight to subject + action.
+R5. Begin each prompt with the style prefix indicated in
+    `workflow_context.style` (e.g. "Style: illustrated." for
+    painterly / animated inits, "Style: cinematic." for live-action
+    photoreal inits). Match the prefix to the init image's style
+    family — `cinematic` is a strong photoreal anchor and will fight
+    illustrated / painterly / 3D-render init images, causing subject
+    drift toward live-action over loop iterations. When
+    `workflow_context.style == "none"` omit the prefix entirely
+    (init image alone carries style). After the prefix, move
+    straight to subject + action. "Cut to ..." is permitted on
+    entries AFTER the first to re-frame iteration-boundary seams as
+    intentional edits — but the first entry / Node 169 must NOT use
+    "Cut to" because it's the sequence opener, not a cut.
 
 R6. Audio direction:
     - Do NOT describe the song itself ("voice surging", "music
@@ -871,12 +948,22 @@ R6. Audio direction:
     - Vocal delivery qualifiers are encouraged: "in a low gravelly
       voice", "with bright clear tone", "brisk rhythmic delivery".
 
-R7. Camera motion:
-    - Default: "static camera, locked off shot".
-    - Available motions: dolly in, dolly left, dolly right, jib up,
-      jib down, focus shift.
-    - AVOID dolly out — it breaks limbs and faces. Exception: the
-      final OUTRO entry may use it for fade-out.
+R7. Camera motion — use ONLY the canonical LTX 2.3 phrasings, byte-exact:
+    - "static camera, locked off shot" (default)
+    - "dolly in, camera pushing forward"
+    - "dolly left, camera tracking left"
+    - "dolly right, camera tracking right"
+    - "jib up, camera rising up"
+    - "jib down, camera lowering down"
+    - "focus shift, rack focus"
+    Do NOT emit off-list phrasings like "slight handheld sway",
+    "slow dolly in", "pan left", "zoom in" — LTX does not reliably
+    follow non-canonical camera direction.
+    NEVER emit "dolly out, camera pulling back" — it shrinks the
+    face over an 18s sampler pass, loses lip-sync cross-attention
+    signal, and breaks limbs. The outro should be a held close-up
+    with `static camera, locked off shot`; let the audio fade close
+    the sequence, not the camera.
 
 R8. One paragraph per entry, no markdown or bullets, ~200 words max.
     Use "is singing" in the present progressive tense — not past tense
@@ -884,15 +971,16 @@ R8. One paragraph per entry, no markdown or bullets, ~200 words max.
 
 R9. Schedule timestamps MUST fall on integer multiples of
     `workflow_context.stride_seconds` — the loop advances in fixed
-    stride-sized steps (typically ~17-19s). Boundaries that fall
-    mid-stride cause one iteration to run on a mixed conditioning that
-    looks discontinuous on video.
-    - Truncate to integer seconds, then snap to the nearest multiple of
-      stride_seconds (in seconds, then format as M:SS).
-    - Example: stride_seconds = 17.88. Natural boundaries at 0, 18, 36,
-      54, 71, 89, 107, 125, 143, 161, 179, ... (i * 17.88, truncated
-      to integer seconds → "0:00", "0:17", "0:35", "0:53", "1:11",
-      "1:29", "1:47", "2:05", "2:23", "2:41", "2:59", ...).
+    stride-sized steps. `stride_seconds` is the EFFECTIVE stride
+    after integer-latent quantization (not `window - overlap`);
+    AudioLoopController guarantees audio advances by exactly this
+    many seconds per iteration so lip-sync stays aligned.
+    Boundaries that fall mid-stride cause one iteration to run on
+    mixed conditioning that looks discontinuous on video.
+    - Multiply stride_seconds by 0, 1, 2, 3, ..., truncate each to
+      integer seconds, format as M:SS.
+    - Example: stride_seconds = 17.92 → 0:00, 0:17, 0:35, 0:53,
+      1:11, 1:29, 1:47, 2:05, 2:23, 2:41, 2:59, ...
     - If a natural scene transition doesn't land on a stride multiple
       (e.g. a punchline at 0:55 when the grid is at 0:53), round DOWN
       to the nearest grid point — do NOT split a stride window.
@@ -954,7 +1042,7 @@ schedule:
 0:00-0:20: Style: cinematic. In a wide establishing shot, static camera, locked off shot, a woman in her 30s with dark hair is singing softly, easing into the song, static camera, mouth opening softly, handheld energy, rock-video motion. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
 0:20-1:00: Style: cinematic. In a medium shot, a woman in her 30s with dark hair is singing with a steady voice, static camera, head bobbing slightly, handheld energy, rock-video motion. Warm lighting, steady energy. The voice fills the space. Soft ambient hum.
 1:00-2:00: Style: cinematic. In a close-up, a woman in her 30s with dark hair is singing with full power, voice rising, static camera, eyes wide, mouth open, handheld energy, rock-video motion. Bright, dynamic lighting. The voice is powerful and resonant.
-2:00+: Style: cinematic. In a wide shot, dolly out, camera pulling back, a woman in her 30s with dark hair is singing the final notes, voice trailing off, dolly out, camera pulling back, shoulders easing, handheld energy, rock-video motion. Fading, gentle lighting. The sound fades quietly. Room tone settles.
+2:00+: Style: cinematic. In a close-up, static camera, locked off shot, a woman in her 30s with dark hair is singing the final notes, voice trailing off, held close-up, shoulders easing, handheld energy, rock-video motion. Fading, gentle lighting. The sound fades quietly. Room tone settles.
 
 (Note: first schedule line is byte-exact to node_169_prompt — that is R2.)
 
@@ -973,7 +1061,7 @@ schedule:
 0:00-0:28: Style: cinematic. In a wide establishing shot, static camera, locked off shot, two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt are singing together softly, easing into the song, static camera, mouth opening softly, the atmosphere quiet and still, natural-light palette, open outdoor feel. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
 0:28-1:15: Style: cinematic. In a medium shot, two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt are singing together with a steady voice, static camera, head bobbing slightly, warm steady ambience, natural-light palette, open outdoor feel. Warm lighting, steady energy. The voice fills the space. Soft ambient hum.
 1:15-2:05: Style: cinematic. In a close-up, two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt are singing together with full power, voice rising, static camera, eyes wide, mouth open, colors intensifying, natural-light palette, open outdoor feel. Bright, dynamic lighting. The voice is powerful and resonant.
-2:05+: Style: cinematic. In a wide shot, dolly out, camera pulling back, two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt are singing together the final notes, voice trailing off, dolly out, camera pulling back, shoulders easing, colors fading toward stillness, natural-light palette, open outdoor feel. Fading, gentle lighting. The sound fades quietly. Room tone settles.
+2:05+: Style: cinematic. In a close-up, static camera, locked off shot, two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt are singing together the final notes, voice trailing off, held close-up, shoulders easing, colors fading toward stillness, natural-light palette, open outdoor feel. Fading, gentle lighting. The sound fades quietly. Room tone settles.
 
 (Note: "are singing together" in every entry. First line byte-exact to
 node_169_prompt. The subject is identical across all entries.)
@@ -995,7 +1083,7 @@ schedule:
 0:00-0:12: <byte-exact copy of node_169_prompt above>
 0:12-0:24: Style: cinematic. In a medium shot, a young woman walking through a snowy alley at dusk is singing with a steady voice, slow dolly in, leaning forward, subtle reflections catching the light, taking a half-step forward, linear story beat progression, tension collecting beat by beat. Warm lighting, steady energy. The voice fills the space. Soft ambient hum.
 ... (more short entries as the song progresses) ...
-2:00+: Style: cinematic. In a wide shot, dolly out, camera pulling back, a young woman walking through a snowy alley at dusk is singing the final notes, voice trailing off, dolly out, camera pulling back, shoulders easing, colors fading toward stillness, easing back, gaze softening, linear story beat progression, release easing into stillness. Fading, gentle lighting. The sound fades quietly. Room tone settles.
+2:00+: Style: cinematic. In a close-up, static camera, locked off shot, a young woman walking through a snowy alley at dusk is singing the final notes, voice trailing off, held close-up, shoulders easing, colors fading toward stillness, easing back, gaze softening, linear story beat progression, release easing into stillness. Fading, gentle lighting. The sound fades quietly. Room tone settles.
 
 (Note: montage entries layer emotional-arc language — "the feeling
 gathering", "tension collecting", "release easing into stillness" —
@@ -1033,6 +1121,7 @@ def format_json_report(
     init_image_description: str = "",
     diversity: str = _DEFAULT_DIVERSITY,
     montage: bool = False,
+    style: str = _DEFAULT_STYLE,
 ) -> dict:
     """Build structured JSON report for LLM consumption.
 
@@ -1043,7 +1132,11 @@ def format_json_report(
 
     Returns a dict (caller serializes with orjson or stdlib json).
     """
-    stride = window_seconds - overlap_seconds
+    # Effective stride = what AudioLoopController actually uses post integer-latent
+    # quantization. Matches `nodes.AudioLoopController.execute`. This is the grid
+    # the LLM must snap schedule timestamps to (see R9 in _LLM_SYSTEM_PROMPT).
+    stride = _effective_stride_seconds(window_seconds, overlap_seconds)
+    effective_overlap_seconds = window_seconds - stride
 
     report = {
         "duration": round(duration, 2),
@@ -1067,8 +1160,9 @@ def format_json_report(
     report["workflow_context"] = {
         "trim_offset": trim_offset,
         "window_seconds": window_seconds,
-        "overlap_seconds": overlap_seconds,
-        "stride_seconds": round(stride, 2),
+        "overlap_seconds_target": overlap_seconds,
+        "overlap_seconds_effective": round(effective_overlap_seconds, 3),
+        "stride_seconds": round(stride, 3),
         "initial_render_covers": (
             f"trimmed 0:00 to {_fmt_ts(window_seconds)} "
             f"(song {_fmt_ts(trim_offset)} to {_fmt_ts(trim_offset + window_seconds)})"
@@ -1076,6 +1170,7 @@ def format_json_report(
         "schedule_starts_at": f"trimmed {_fmt_ts(stride)} (iteration 1)",
         "subject": subject,
         "init_image_description": init_image_description,
+        "style": style,
         "scene_diversity": f"{tier}{sub or ''}",
         "scene_diversity_tier_name": tier_name,
         "scene_diversity_mood_bundle": mood_bundle,
@@ -1101,6 +1196,7 @@ def format_markdown_report(
     init_image_description: str = "",
     diversity: str = _DEFAULT_DIVERSITY,
     montage: bool = False,
+    style: str = _DEFAULT_STYLE,
 ) -> str:
     """Format a human-readable markdown report."""
     lines = []
@@ -1140,7 +1236,7 @@ def format_markdown_report(
     lines.append("```")
     lines.append(get_node_169_prompt(
         sections, subject=subject, trim_offset=trim_offset,
-        diversity=diversity, montage=montage,
+        diversity=diversity, montage=montage, style=style,
     ))
     lines.append("```")
     lines.append("")
@@ -1153,7 +1249,7 @@ def format_markdown_report(
     lines.append("```")
     lines.append(generate_schedule_suggestion(
         sections, subject=subject, trim_offset=trim_offset,
-        diversity=diversity, montage=montage,
+        diversity=diversity, montage=montage, style=style,
     ))
     lines.append("```")
     lines.append("")
@@ -1169,7 +1265,7 @@ def format_markdown_report(
         trim_offset=trim_offset, window_seconds=window_seconds,
         overlap_seconds=overlap_seconds, subject=subject,
         init_image_description=init_image_description,
-        diversity=diversity, montage=montage,
+        diversity=diversity, montage=montage, style=style,
     )
     if orjson:
         lines.append(orjson.dumps(json_report, option=orjson.OPT_INDENT_2 | orjson.OPT_SERIALIZE_NUMPY).decode())
@@ -1325,6 +1421,18 @@ def main():
             "('building', 'release', 'stillness'). Works with any tier."
         ),
     )
+    parser.add_argument(
+        "--style",
+        default=_DEFAULT_STYLE,
+        choices=sorted(_STYLE_PREFIXES.keys()),
+        help=(
+            "Style prefix for every generated prompt. `cinematic` (default) "
+            "is a strong photoreal anchor; use `illustrated`, `painterly`, "
+            "or `animated` when the init image is non-photoreal (drawings, "
+            "paintings, 3D renders). `none` omits the prefix entirely — "
+            "best when the init image strongly commits style on its own."
+        ),
+    )
     args = parser.parse_args()
 
     if not os.path.exists(args.audio_path):
@@ -1355,6 +1463,7 @@ def main():
         init_image_description=args.image_desc or "",
         diversity=args.scene_diversity,
         montage=args.montage,
+        style=args.style,
     )
 
     if args.output:
@@ -1379,6 +1488,7 @@ def main():
             init_image_description=args.image_desc or "",
             diversity=args.scene_diversity,
             montage=args.montage,
+            style=args.style,
         )
         if orjson:
             data = orjson.dumps(json_report, option=orjson.OPT_INDENT_2 | orjson.OPT_SERIALIZE_NUMPY)

@@ -228,7 +228,7 @@ class TestGenerateScheduleSuggestion:
             )
 
     def test_subject_includes_style_prefix(self):
-        """With subject, each line should contain 'Style: cinematic.'"""
+        """With subject, each line should contain 'Style: cinematic.' by default."""
         subject = "a person playing guitar on stage"
         schedule_text = generate_schedule_suggestion(
             self._SECTIONS, subject=subject
@@ -238,6 +238,47 @@ class TestGenerateScheduleSuggestion:
             assert "Style: cinematic" in line, (
                 f"Missing style prefix in: {line}"
             )
+
+    def test_style_flag_applies_illustrated_prefix(self):
+        """`style='illustrated'` should produce `Style: illustrated.` in every entry."""
+        subject = "a warrior and her cat"
+        schedule_text = generate_schedule_suggestion(
+            self._SECTIONS, subject=subject, style="illustrated"
+        )
+        lines = schedule_text.strip().splitlines()
+        for line in lines:
+            assert "Style: illustrated" in line
+            assert "Style: cinematic" not in line
+
+    def test_style_none_omits_prefix_entirely(self):
+        """`style='none'` should produce entries with no `Style:` prefix at all."""
+        subject = "a warrior and her cat"
+        schedule_text = generate_schedule_suggestion(
+            self._SECTIONS, subject=subject, style="none"
+        )
+        lines = schedule_text.strip().splitlines()
+        for line in lines:
+            prompt_part = line.split(": ", 1)[1] if ": " in line else line
+            assert not prompt_part.startswith("Style:"), (
+                f"Expected no Style prefix, got: {prompt_part[:40]}"
+            )
+
+    def test_style_painterly_uses_full_phrase(self):
+        """`style='painterly'` uses the multi-word `painterly illustration` phrase."""
+        subject = "a warrior"
+        schedule_text = generate_schedule_suggestion(
+            self._SECTIONS, subject=subject, style="painterly"
+        )
+        assert "Style: painterly illustration" in schedule_text
+
+    def test_style_unknown_falls_back_to_default(self):
+        """An unknown style value should not crash; it falls back to default."""
+        subject = "a warrior"
+        schedule_text = generate_schedule_suggestion(
+            self._SECTIONS, subject=subject, style="wat-is-this"
+        )
+        # Default is cinematic.
+        assert "Style: cinematic" in schedule_text
 
     def test_chorus_has_close_up(self):
         """CHORUS sections should suggest close-up framing."""
@@ -252,16 +293,24 @@ class TestGenerateScheduleSuggestion:
             f"No close-up suggested for chorus. Lines: {lines}"
         )
 
-    def test_outro_has_fadeout_camera(self):
-        """OUTRO sections should suggest dolly out or pulling back."""
+    def test_outro_uses_held_close_up(self):
+        """OUTRO should be a held close-up, not dolly-out.
+
+        Dolly-out shrinks the face over an 18s sampler pass and loses
+        lip-sync cross-attention signal. OUTRO framing is close-up +
+        static. Fade is handled by the audio closing, not the camera.
+        """
         subject = "a singer on stage"
         schedule_text = generate_schedule_suggestion(
             self._SECTIONS, subject=subject
         )
         lines = schedule_text.strip().splitlines()
-        last_line = lines[-1]
-        assert "dolly" in last_line.lower() or "pulling" in last_line.lower() or "fade" in last_line.lower(), (
-            f"No fadeout camera in outro: {last_line}"
+        last_line = lines[-1].lower()
+        assert "close-up" in last_line and "static camera" in last_line, (
+            f"OUTRO should be held close-up + static: {last_line}"
+        )
+        assert "dolly out" not in last_line and "pulling back" not in last_line, (
+            f"OUTRO must not use dolly-out: {last_line}"
         )
 
     def test_verse_has_medium_shot(self):
@@ -565,9 +614,16 @@ class TestFormatJsonReport:
         ctx = report["workflow_context"]
         assert ctx["trim_offset"] == 10.0
         assert ctx["window_seconds"] == 19.88
-        assert ctx["stride_seconds"] == pytest.approx(17.88)
+        # Effective stride after integer-latent quantization: window=497 pixels,
+        # overlap=50 pixels → 7 latents trimmed from 63 → 56 latents remain →
+        # 56 * 8 / 25 = 17.92s (not 17.88 naive window - overlap). Matches
+        # what AudioLoopController.execute actually uses.
+        assert ctx["stride_seconds"] == pytest.approx(17.92)
+        assert ctx["overlap_seconds_target"] == 2.0
+        assert ctx["overlap_seconds_effective"] == pytest.approx(1.96)
         assert ctx["subject"] == "a man playing guitar"
         assert ctx["init_image_description"] == "Man with acoustic guitar, dim room"
+        assert ctx["style"] == "cinematic"  # default
 
     def test_llm_system_prompt_present(self):
         """Report should include llm_system_prompt string."""
