@@ -63,9 +63,12 @@ value converter and default. Thin wrappers: `_parse_schedule` / `_match_schedule
 - **Node 169 prompt MUST match schedule's 0:00 entry** to avoid visual discontinuity at ~20s. Enforced structurally: `get_node_169_prompt` and `_generate_subject_schedule` both call `_build_prompt_for_section` via the SAME subdivision (`_prepare_sections`), so the first schedule entry is byte-exact to Node 169.
 - **Every generated prompt MUST contain "singing"** (or "are singing together" for multi-subject). LTX 2.3's audio-video joint cross-attention drives lip sync off the action verb; generic "performing" loses the signal. Enforced in `_SECTION_MODIFIERS` and `_build_action_phrase`; checked by `test_prompts_always_include_singing_verb_with_subject`.
 - **Always use WorkflowEditor** from `scripts/workflow_utils.py` for subgraph edits. Manual JSON surgery breaks links.
-- **Distilled 8-step sampling is a tuned package.** Shipped defaults: sampler `euler`, scheduler `linear_quadratic, 8, 1`, shift 13, CFG 1.0, `LTXVTiledVAEDecode` widgets `[2, 2, 1, true, "auto", "auto"]`. Don't go >8 steps on the distilled model (over-denoises). Don't use `euler_ancestral` — ancestral re-noise scales with sigma and the schedule plateaus at σ≈0.99 for 5 steps, so injected noise during warmup doesn't have runway to average out → iteration-to-iteration subject drift.
+- **Distilled 8-step sampling reverse-engineered to pure-pipeline sigmas.** The shipped chain (`BasicScheduler linear_quadratic, 8, 1` + `ModelSamplingSD3 shift=13` + `KSamplerSelect euler` + `CFGGuider CFG=1`) produces bit-exact `DISTILLED_SIGMAS` from `coderef/LTX-2/packages/ltx-pipelines/src/ltx_pipelines/utils/constants.py:16` = `[1.0, 0.994, 0.988, 0.981, 0.975, 0.909, 0.725, 0.422, 0.0]`. Verify via `VisualizeSigmasKJ` before touching any part of this chain. Decoder: `LTXVTiledVAEDecode [2, 2, 1, true, "auto", "auto"]`. Don't use `euler_ancestral` — plateau at σ≈0.99 for 5 steps amplifies re-noise → iteration drift.
+- **LTX 2.3 audio-video cross-attention is photoreal-trained.** Illustrated / painterly / 3D-render inits progressively drift toward photoreal across loop iterations ("broadway musical" failure mode). `Style: illustrated.` at CFG=1 is too weak to overcome the trained prior. First-line fix: match init-image style family to training distribution (use cinematic / photoreal init). Structural fix (not yet built): multi-image-guide per iteration via KJNodes' `LTXVAddGuideMulti` to re-anchor illustrated style mid-iteration.
+- **ComfyUI-LTXVideo upstream `LTX-2.3_T2V_I2V_Single_Stage_Distilled_Full.json` runs the distilled LoRA on the FULL 22B model**, not the merged distilled checkpoint. Its 15-step `LTXVScheduler` + `MultimodalGuider` stack is NOT authoritative for `ltx-2.3-22b-distilled-1.1.safetensors`. The authoritative distilled path is 8 fixed sigmas + `SimpleDenoiser` (no guidance) per `coderef/LTX-2/packages/ltx-pipelines/src/ltx_pipelines/distilled.py`. Don't copy upstream's 15-step sampling stack when running the merged checkpoint.
+- **LTX 2.3 resolution must be divisible by 32** (single-stage, our case) or **64** (distilled two-stage) per `coderef/LTX-2/packages/ltx-pipelines/src/ltx_pipelines/utils/helpers.py:325`. ComfyUI doesn't enforce; off-grid resolutions silently degrade output. `scripts/validate_workflow_resolution.py` checks. Current default `832x448` (div-by-64).
 - **`snap_boundaries=True` (default) means changing `overlap_seconds` does NOT require re-authoring the prompt schedule.** The node rounds schedule timestamps to the actual iteration stride at runtime. One-widget change; no mental math on the grid.
-- **Batch widget edits across the 4 example workflows:** `python3 -c` one-liner that loads each JSON, mutates `widgets_values` on the target node type, and writes back with `json.dumps(wf, indent=2) + "\n"`. Preserves structure cleanly.
+- **Batch widget edits across example workflows:** `python3 -c` one-liner that loads each JSON, mutates `widgets_values` on the target node type, and writes back with `json.dumps(wf, indent=2) + "\n"`. Preserves structure cleanly.
 
 ## ComfyUI gotchas
 
@@ -78,6 +81,7 @@ value converter and default. Thin wrappers: `_parse_schedule` / `_match_schedule
 - **Removing a subgraph component input shifts all higher slot indices.** Decrement `origin_slot` references.
 - **ComfyUI execution engine evaluates downstream conditioning graphs before upstream sampling.** Extra nodes in conditioning path can corrupt initial render.
 - **torchaudio detect_pitch_frequency on silence gives false positives.** Gate with RMS energy check (< 0.005).
+- **`LTXVPreprocess img_compression=0` SKIPS preprocessing entirely** (see `comfy_extras/nodes_lt.py:577-588`). Feeds pristine init image to i2v → model treats as "stay exactly here" → frozen first frames. Use 18 (Lightricks upstream 2.3 value) or 35 (comfy-core default).
 - Pyright `reportIncompatibleMethodOverride` on `execute()` is a false positive.
 - Module constants must be defined BEFORE functions that reference them (project convention).
 - **Scrub workflows before open-sourcing:** filenames, paths, UUIDs, image previews, creative prompts.
@@ -102,12 +106,16 @@ uv run --group dev --group analysis python -m pytest tests/ -v --rootdir=.
 - `__init__.py` guards ComfyUI-only import with try/except for pytest.
 - `nodes.py` has try/except for `comfy_api` with `_IOStub`/`_Passthrough` fallback for test imports.
 - `tests/conftest.py` adds `scripts/` to sys.path.
-- `tests/test_audio_features.py` -- 33 tests (offline analysis)
-- `tests/test_audio_analysis_nodes.py` -- 9 tests (runtime AudioPitchDetect)
-- `tests/test_keyframe_nodes.py` -- 28 tests (KeyframeImageSchedule, VideoFrameExtract, ImageBlend)
-- `tests/test_cache_nodes.py` -- 13 tests (CachedTextEncode LRU, IterationCleanup modes)
-- `tests/test_profile_nodes.py` -- 7 tests (ProfileBegin / ProfileIterStep / ProfileEnd disabled paths)
-- `tests/test_workflows.py` -- workflow JSON structural validation
+- `tests/test_audio_features.py` -- offline analysis (style flag, companion-animal detection, diversity tiers, montage, subdivision, LLM system prompt rules, JSON export shape)
+- `tests/test_audio_analysis_nodes.py` -- runtime AudioPitchDetect (9 tests)
+- `tests/test_audio_loop_controller.py` -- AudioLoopController integer-latent stride invariants (20 tests — zero-drift across overlap values 0-5s, effective-vs-target overlap reporting, edge cases)
+- `tests/test_keyframe_nodes.py` -- KeyframeImageSchedule, VideoFrameExtract, ImageBlend (28 tests)
+- `tests/test_cache_nodes.py` -- CachedTextEncode LRU, IterationCleanup modes (13 tests)
+- `tests/test_profile_nodes.py` -- ProfileBegin/ProfileIterStep/ProfileEnd disabled paths (7 tests)
+- `tests/test_schedule_snapping.py` -- TimestampPromptSchedule snap + raised-cosine blend (20 tests)
+- `tests/test_decoder_validator.py` -- DR1 decoder widget alignment (6 tests)
+- `tests/test_workflows.py` -- workflow JSON structural validation (parametrized over all example_workflows/*.json)
+- Total: 170 tests (2026-04-20).
 
 ## Dependencies
 
@@ -127,16 +135,16 @@ Companion custom nodes (not imported, used alongside in workflows):
 
 - `scripts/analyze_audio.py` -- ffmpeg-only energy/structure detection (no Python deps)
 - `scripts/analyze_audio_features.py` -- librosa: BPM, key, vocal F0, structure, JSON for LLM prompt generation
-- CLI flags: `--scene-diversity <tier><sub>` (default `2a`; tiers 1-6 performance_live → avant_garde; sub-letters add mood bundles). `--montage` (orthogonal; ~12s dwell, emotional-arc language, Arcane-style pacing).
+- CLI flags: `--scene-diversity <tier><sub>` (default `2a`; tiers 1-6 performance_live → avant_garde; sub-letters add mood bundles). `--montage` (orthogonal; ~12s dwell, emotional-arc language, Arcane-style pacing). `--style <cinematic|realistic|illustrated|painterly|animated|none>` (default `cinematic`; match init-image style family to avoid photoreal drift — see Critical Constraints).
 - Long sections auto-subdivided (~20s default, ~12s in montage mode) so a 3-min song yields 7+ entries instead of 4-5.
-- JSON export (`-j`) includes `llm_system_prompt` with HARD RULES R1-R8, an INFERENCE block (init image commits style/palette/setting/subjects — schedule drives camera/body/lighting/cuts/arc), tier semantics, and three worked examples. `workflow_context` surfaces `scene_diversity`, `scene_diversity_tier_name`, `scene_diversity_mood_bundle`, `montage`. Paste into Claude/Gemini.
+- JSON export (`-j`) includes `llm_system_prompt` with HARD RULES R1-R9 (R9 = snap timestamps to `stride_seconds` grid; R7 = canonical camera list + no-dolly-out), an INFERENCE block (init image commits style/palette/setting/subjects — schedule drives camera/body/lighting/cuts/arc), tier semantics, and three worked examples. `workflow_context` surfaces `style`, `scene_diversity`, `scene_diversity_tier_name`, `scene_diversity_mood_bundle`, `montage`, `overlap_seconds_target` (widget value) + `overlap_seconds_effective` (post-integer-latent quantization), and `stride_seconds` (effective, matches `AudioLoopController`'s quantized stride). Paste into Claude/Gemini.
 - Full guide: `docs/audio_analysis_guide.md`; LLM integration: `docs/analysis/llm_prompt_generation_guide.md`
 
 ## Debugging workflow regressions
 
 Compare against known-working workflow JSON (keep copies in `internal/scratch/`).
-Change ONE setting at a time. Run `scripts/test_workflow_integrity.py` after every edit.
-LTX-2_00032.json and LTX-2_00040.json are confirmed working (April 9, 2026).
+Change ONE setting at a time. Run `uv run --group dev --group analysis python -m pytest tests/test_workflows.py --rootdir=.` after every edit. `scripts/validate_workflow_resolution.py` additionally checks LTX-compliant div-by-32/64 dimensions.
+LTX-2_00032.json and LTX-2_00040.json are confirmed working (April 9, 2026). For session-specific symptom→fix recipes see `docs/debugging_guide.md`.
 
 ## Documentation index
 
@@ -169,9 +177,10 @@ LTX-2_00032.json and LTX-2_00040.json are confirmed working (April 9, 2026).
 - `docs/analysis/kjnodes_multiframe_guide_analysis.md` -- LTXVAddGuideMulti (up to 20 guides), LTXVAddGuidesFromBatch
 
 ### Example workflows
-- `example_workflows/audio-loop-music-video_image.json` -- IMAGE loop (tested/working, per-iteration AdaIN)
-- `example_workflows/audio-loop-music-video_latent.json` -- LATENT loop (UNTESTED, per-iteration AdaIN)
-- `example_workflows/audio-loop-music-video_latent_keyframe.json` -- LATENT loop + per-iteration keyframe image schedule (UNTESTED). Uses KeyframeImageSchedule + ImageBlend instead of constant Get_input_image.
+- `example_workflows/audio-loop-music-video_image.json` -- IMAGE loop (per-iteration AdaIN)
+- `example_workflows/audio-loop-music-video_latent.json` -- LATENT loop (per-iteration AdaIN). Primary working baseline.
+- `example_workflows/audio-loop-music-video_latent_keyframe.json` -- LATENT loop + per-iteration keyframe image schedule via `KeyframeImageSchedule` + `ImageBlend` (instead of constant `Get_input_image`).
+- `example_workflows/audio-loop-music-video_latent_stg.json` -- LATENT loop with STG-hybrid sampling: preserves authoritative distilled-1.1 sigma schedule (`linear_quadratic, 8, 1` + shift=13) but swaps `CFGGuider` for `MultimodalGuider` + `GuiderParameters` (cfg=1, stg=1 on both modalities) for STG quality lift on top of the correct noise prediction. NAG bypassed. Built via `scripts/apply_stg_hybrid_package.py`. A/B target against the baseline `_latent.json`.
 - `example_workflows/audio-loop-music-video_image_adain_perstep.json` -- IMAGE + per-step AdaIN (experimental)
 - `example_workflows/upscale-loop-output.json` -- separate upscale workflow (when built)
 
