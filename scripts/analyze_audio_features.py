@@ -1167,12 +1167,8 @@ def format_json_report(
     }
 
     if f0_result:
-        # Note: `classification` (male/female) was historically exported but
-        # dropped 2026-04-20. The init image commits subject appearance; the
-        # LLM would second-guess the image based on this audio-derived cue
-        # (e.g. male F0 on a female-presenting init), introducing
-        # unnecessary conflict. Median/mean Hz are still useful for any
-        # downstream BPM/pitch-aware logic.
+        # `classification` (male/female) dropped 2026-04-20 — tempted the LLM
+        # to second-guess init image's subject cues. See CLAUDE.md.
         report["vocal_f0"] = {
             "median_hz": f0_result.get("median_f0", 0.0),
             "mean_hz": f0_result.get("mean_f0", 0.0),

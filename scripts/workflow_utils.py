@@ -54,6 +54,51 @@ class WorkflowEditor:
         self.wf["last_node_id"] = nid
         return nid
 
+    def remove_node_and_links(self, node_id: int):
+        """Remove a node plus every top-level link touching it.
+
+        Callers must re-wire any surviving input/output slots before use —
+        this helper only detaches.
+        """
+        for link in list(self.wf["links"]):
+            if not isinstance(link, list):
+                continue
+            lid, src, _, tgt, _, _ = link
+            if src == node_id or tgt == node_id:
+                self.remove_link(lid)
+        self.wf["nodes"] = [n for n in self.wf["nodes"] if n["id"] != node_id]
+
+    def add_top_level_node(
+        self,
+        node_type: str,
+        pos: list,
+        size: list,
+        inputs: list,
+        outputs: list,
+        widgets_values: list,
+        properties: dict | None = None,
+        title: str | None = None,
+    ) -> int:
+        """Append a new top-level node with the given shape. Returns assigned ID."""
+        nid = self.next_node_id()
+        node = {
+            "id": nid,
+            "type": node_type,
+            "pos": pos,
+            "size": size,
+            "flags": {},
+            "order": 0,
+            "mode": 0,
+            "inputs": inputs,
+            "outputs": outputs,
+            "properties": properties or {"Node name for S&R": node_type},
+            "widgets_values": widgets_values,
+        }
+        if title:
+            node["title"] = title
+        self.add_node(node)
+        return nid
+
     # --- Link operations (top-level) ---
 
     def next_link_id(self) -> int:

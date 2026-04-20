@@ -502,8 +502,9 @@ class TestGenerateScheduleSuggestion:
             duration=180.0,
         )
         assert "vocal_f0" in report
-        assert "median_hz" in report["vocal_f0"]
-        assert "classification" not in report["vocal_f0"]
+        # Exact-set assertion: future additions to vocal_f0 must be
+        # intentional (update this test).
+        assert set(report["vocal_f0"].keys()) == {"median_hz", "mean_hz"}
 
     def test_montage_flag_shortens_dwell(self):
         """Enabling montage on the same song produces more schedule entries
