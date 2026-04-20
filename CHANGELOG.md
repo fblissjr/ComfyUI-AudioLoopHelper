@@ -6,6 +6,23 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **`AudioLoopController` lip-sync drift at higher overlap values.** Stride
+  was previously computed as `window_seconds - overlap_seconds` (continuous
+  seconds), but each iteration's trimmed latent contributes exactly
+  `new_latent_frames * 8` pixels to the final decoded video (integer-latent
+  quanta). That mismatch accumulated ~0.04s/iter drift at overlap=2 and
+  ~0.12s/iter at overlap=4 — up to ~1.3s total desync over a 10-iteration
+  3-minute loop, manifesting as lip-sync going completely off. Stride is
+  now derived from integer-latent counts so audio advance per iteration
+  exactly matches video pixel advance; lip-sync stays aligned for any
+  overlap value. User's `overlap_seconds` widget is now a TARGET; outputs
+  reflect the EFFECTIVE quantized value (e.g. widget 2.0 → effective 1.96s,
+  widget 4.0 → effective 3.88s). Default widget value raised from 1.0 → 2.0
+  in `AudioLoopController` schema + both latent example workflows. New
+  test file `tests/test_audio_loop_controller.py` (20 tests) locks in
+  zero-drift invariants across overlap values 0-5s and iteration counts.
+
 ### Changed
 - **Default sampler in example workflows is now `euler` (was `euler_ancestral`).**
   On LTX 2.3 distilled at 8 steps with `linear_quadratic, 8, 1`, the schedule

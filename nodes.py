@@ -412,13 +412,17 @@ class AudioLoopController(io.ComfyNode):
                 ),
                 io.Float.Input(
                     "overlap_seconds",
-                    default=1.0,
+                    default=2.0,
                     min=0.0,
                     step=0.01,
                     tooltip=(
-                        "Overlap between consecutive windows in seconds. "
-                        "Stride is computed as window - overlap. "
-                        "overlap_frames output auto-computes the frame count at 25fps."
+                        "Target overlap between consecutive windows in seconds. "
+                        "Internally quantized to the nearest integer latent frame "
+                        "(LTX video VAE: 8 pixel frames per latent frame). "
+                        "Outputs reflect the EFFECTIVE quantized values so that "
+                        "audio stride exactly matches what the video decoder "
+                        "emits per iteration — prevents lip-sync drift that "
+                        "would otherwise accumulate from integer-latent rounding."
                     ),
                 ),
                 io.Audio.Input("audio", tooltip="The audio track being used for generation."),
@@ -458,19 +462,40 @@ class AudioLoopController(io.ComfyNode):
                 ),
                 io.Float.Output(
                     "stride_seconds",
-                    tooltip="Computed stride (window - overlap). Wire to TimestampPromptSchedule and AudioLoopPlanner.",
+                    tooltip=(
+                        "Effective stride per iteration in seconds. Computed as "
+                        "(new_latent_frames * 8) / fps where new_latent_frames = "
+                        "window_latents - overlap_latents. Matches exactly what "
+                        "the video decoder emits per iteration, so audio advances "
+                        "by the same number of real frames. Wire to "
+                        "TimestampPromptSchedule and AudioLoopPlanner."
+                    ),
                 ),
                 io.Int.Output(
                     "overlap_frames",
-                    tooltip="overlap_seconds * fps. Wire to extension component's overlap_frames input.",
+                    tooltip=(
+                        "Effective overlap in pixel frames (window_frames - "
+                        "stride_frames). Wire to extension component's "
+                        "overlap_frames input."
+                    ),
                 ),
                 io.Int.Output(
                     "overlap_latent_frames",
-                    tooltip="overlap_frames in latent space ((pixel-1)//8+1). Wire to LatentContextExtract / LatentOverlapTrim.",
+                    tooltip=(
+                        "Number of leading latents to trim each iteration "
+                        "((overlap_frames - 1)//8 + 1). Wire to "
+                        "LatentContextExtract / LatentOverlapTrim."
+                    ),
                 ),
                 io.Float.Output(
                     "overlap_seconds",
-                    tooltip="Pass-through of overlap_seconds input. Wire to Extension subgraph's video_start_time on LTXVAudioVideoMask.",
+                    tooltip=(
+                        "Effective overlap in seconds (after latent quantization). "
+                        "May differ slightly from the input widget because we snap "
+                        "to integer latent boundaries to guarantee lip-sync "
+                        "stays aligned. Wire to Extension subgraph's "
+                        "video_start_time on LTXVAudioVideoMask."
+                    ),
                 ),
             ],
         )
@@ -486,7 +511,27 @@ class AudioLoopController(io.ComfyNode):
         fps: int,
     ) -> io.NodeOutput:
         audio_duration = _audio_duration(audio)
-        stride = window_seconds - overlap_seconds
+
+        # Stride must match the video decoder's per-iteration pixel output
+        # exactly, else lip-sync drifts. Derive from integer-latent counts
+        # (not `window - overlap` seconds). See CLAUDE.md "Stride is derived
+        # from integer-latent counts" and tests/test_audio_loop_controller.py
+        # for the full derivation.
+        window_pixel_frames = max(1, round(window_seconds * fps))
+        overlap_pixel_frames = max(0, round(overlap_seconds * fps))
+
+        window_latent_frames = (window_pixel_frames - 1) // LTX_TEMPORAL_SCALE + 1
+        overlap_latent_frames = (overlap_pixel_frames - 1) // LTX_TEMPORAL_SCALE + 1 if overlap_pixel_frames > 0 else 0
+        # Require at least 1 new latent frame per iteration to make progress.
+        if overlap_latent_frames >= window_latent_frames:
+            overlap_latent_frames = window_latent_frames - 1
+
+        new_latent_frames = window_latent_frames - overlap_latent_frames
+        stride_pixel_frames = new_latent_frames * LTX_TEMPORAL_SCALE
+        stride = stride_pixel_frames / fps
+
+        effective_overlap_pixel_frames = window_pixel_frames - stride_pixel_frames
+        effective_overlap_seconds = effective_overlap_pixel_frames / fps
 
         start_index = current_iteration * stride
 
@@ -503,13 +548,17 @@ class AudioLoopController(io.ComfyNode):
         should_stop = next_start >= audio_duration
 
         iteration_seed = seed + current_iteration
-        overlap_frames = round(overlap_seconds * fps)
 
-        # Video VAE: first pixel frame → 1 latent frame, then 1 latent per 8 pixels.
-        # Formula: latent = (pixel - 1) // scale + 1. Matches vae.downscale_index_formula.
-        overlap_latent_frames = (overlap_frames - 1) // LTX_TEMPORAL_SCALE + 1
-
-        return io.NodeOutput(start_index, should_stop, float(audio_duration), iteration_seed, stride, overlap_frames, overlap_latent_frames, overlap_seconds)
+        return io.NodeOutput(
+            start_index,
+            should_stop,
+            float(audio_duration),
+            iteration_seed,
+            stride,
+            effective_overlap_pixel_frames,
+            overlap_latent_frames,
+            effective_overlap_seconds,
+        )
 
 
 class TimestampPromptSchedule(io.ComfyNode):

@@ -44,7 +44,7 @@ value converter and default. Thin wrappers: `_parse_schedule` / `_match_schedule
 ## Key patterns
 
 - AUDIO type: `{"waveform": Tensor, "sample_rate": int}`. Duration = `waveform.shape[-1] / sample_rate`.
-- Stride = `window_seconds - overlap_seconds`. overlap_frames = `round(overlap_seconds * fps)`.
+- **Stride is derived from integer-latent counts**, not from `window - overlap` seconds. `AudioLoopController` computes `new_latent_frames = window_latents - overlap_latents`, then `stride_seconds = new_latent_frames * 8 / fps`. The user's `overlap_seconds` widget is a TARGET; the node outputs the EFFECTIVE quantized overlap. This guarantees audio advances per iteration by the same number of real pixel frames the video decoder emits, so lip-sync cannot drift regardless of overlap value. Prior to 2026-04-20 the node used `stride = window - overlap` directly, which accumulated ~0.04s/iter drift at overlap=2 and ~0.12s/iter at overlap=4 because of the sequence-start-vs-mid-sequence latent interpretation mismatch. Tests: `tests/test_audio_loop_controller.py`.
 - start_index is clamped so at least 0.5s of audio always remains (prevents mel crash on final iteration).
 - TimestampPromptSchedule only runs in loop iterations, NOT the initial render. Node 169 handles initial ~20s.
 - **Prompt changes cause style drift even at CFG 1.0.** Default mitigation: `snap_boundaries=True` + identical subject across entries. For cross-fade at visible seams, set `blend_seconds ≥ stride_seconds` (sub-stride values are auto-clamped — they can't produce smooth ramps at iteration resolution).
