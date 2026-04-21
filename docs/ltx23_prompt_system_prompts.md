@@ -1,6 +1,14 @@
-Last updated: 2026-04-09
+Last updated: 2026-04-21
 
 # LTX 2.3 Prompt Generation System Prompts
+
+> **Historical reference — raw Lightricks i2v/t2v system prompts.**
+> For schedule construction in this project, start with
+> `prompt_creation_guide.md` (prompt rules + variation patterns) or
+> `analysis/llm_prompt_generation_guide.md` (17 hard rules + examples).
+> Those docs incorporate the project-specific constraints (frozen
+> audio, `snap_boundaries`, canonical camera vocabulary) that the raw
+> upstream prompts don't know about.
 
 These are the official system prompts for generating video prompts for LTX 2.3.
 Use them as reference when writing prompts for the TimestampPromptSchedule node.

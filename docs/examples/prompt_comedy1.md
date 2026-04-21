@@ -107,8 +107,8 @@ fine for standup; notes below explain when to deviate.
 | Widget | Node | Start value | Standup note |
 |--------|------|-------------|--------------|
 | `window_seconds` | AudioLoopController | **19.88** | Default. Don't change unless you know why. Loop iteration length. |
-| `overlap_seconds` | AudioLoopController | **2.0** | Default. Overlap between iterations. Stride = 19.88 − 2.0 = 17.88s per iteration. Bump to **3.0** *only* if you see identity twitches at iteration boundaries (rare with a static stage + sustained subject). More overlap = smoother continuity but less new content per iteration. |
-| `blend_seconds` | TimestampPromptSchedule | **0.0** | **CORRECTION from v1.** Post-Phase-1 fix: values between 0 and stride_seconds (~17.88s) are auto-clamped to stride_seconds because they can't produce smooth ramps at iteration resolution. Start at 0 (hard switch) — with snapped boundaries + identical subject across entries, transitions are clean without cross-fade. Only bump to **≥ stride_seconds** (e.g. 20) if you see a visible seam at prompt boundaries, and only if the cross-fade is worth diluting shorter entries. |
+| `overlap_seconds` | AudioLoopController | **2.0** | Default. Target overlap between iterations. Effective stride = **17.92s** per iteration (integer-latent quantized; see `docs/debugging_guide.md`). Bump to **3.0** *only* if you see identity twitches at iteration boundaries (rare with a static stage + sustained subject). More overlap = smoother continuity but less new content per iteration. |
+| `blend_seconds` | TimestampPromptSchedule | **0.0** | **CORRECTION from v1.** Post-Phase-1 fix: values between 0 and stride_seconds (~17.92s) are auto-clamped to stride_seconds because they can't produce smooth ramps at iteration resolution. Start at 0 (hard switch) — with snapped boundaries + identical subject across entries, transitions are clean without cross-fade. Only bump to **≥ stride_seconds** (e.g. 20) if you see a visible seam at prompt boundaries, and only if the cross-fade is worth diluting shorter entries. |
 | `snap_boundaries` | TimestampPromptSchedule | **True** | Leave on. Rounds schedule boundaries to the iteration grid so every iteration runs on exactly one prompt (no mixed conditioning). Turning it off re-enables the legacy spike-blend behavior and is only useful if you want sub-stride timing precision AND accept the jitter risk. |
 | `start_index` (trim) | node 567 | **0** | Audio is already trimmed per filename `norm_trimmed`. If your source has applause/music intro before the routine starts, set to the seconds to skip. |
 | `fps` | (LTX default) | **25** | Per LTX-2's training configs and `ltx-pipelines/README.md` — 25 fps is what the model was trained at. Don't use 24. |
@@ -135,7 +135,7 @@ If you run this and see **iteration-boundary twitches** on the
 comedian's face, bump `overlap_seconds` to 3.0 first (costs you ~1s
 of new content per iteration in exchange for smoother identity). If
 you see **visible seams at prompt-schedule boundaries** (at snapped
-timestamps), try `blend_seconds = stride_seconds` (~17.88) for a
+timestamps), try `blend_seconds = stride_seconds` (~17.92) for a
 smooth cross-fade across one iteration on each side. Higher values
 (up to 2-3x stride) give softer ramps but dilute the distinctness
 of adjacent prompts — trade-off.

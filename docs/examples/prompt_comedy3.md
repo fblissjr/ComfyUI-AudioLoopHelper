@@ -98,8 +98,8 @@ Three points on the spectrum:
 **`[512, 64, 512, 64]` is the right production answer.** It:
 
 - Eliminates mid-iteration decode seams entirely (tile stride 17.92 s
-  > iteration stride 17.88 s at overlap=2, so each iteration fits
-  inside one temporal decode tile).
+  matches iteration stride 17.92 s at overlap=2 exactly, so each
+  iteration fits inside one temporal decode tile).
 - Decode boundaries coincide with iteration boundaries. The model
   already has seam-like behavior at iteration boundaries (latent
   hand-off between independently-sampled iterations); decoder seams
@@ -228,7 +228,7 @@ iteration hand-offs."
 v3 lines run ~40-60 words vs v2's ~70-90. Cleaner, faster to read,
 less token budget spent on repeat boilerplate.
 
-## Schedule — overlap = 2 (stride = 17.88)
+## Schedule — overlap = 2 (stride = 17.92)
 
 Grid boundaries at `0:00, 0:17, 0:35, 0:53, 1:11, 1:29, 1:47, 2:05,
 2:23, 2:41, 2:58+`. Matches current workflow default.
@@ -250,7 +250,7 @@ schedule:
 2:58+: Style: cinematic. In a wide shot, slow dolly out, a male standup comedian in a striped sweater at a stand-up comedy club is reacting to the crowd, stepping back from the mic stand. Warm stage wash. Room tone settling.
 ```
 
-## Schedule — overlap = 2 + node 567 trim = 5s (trimmed audio, stride 17.88)
+## Schedule — overlap = 2 + node 567 trim = 5s (trimmed audio, stride 17.92)
 
 With `node 567 TrimAudioDuration.start=5`, video-t=0 maps to routine-t=5.
 Entry verbs need to shift to match what the audio actually plays at each
@@ -263,7 +263,7 @@ mic-clipping burst, room noise before the comedian starts) and you
 want to skip it for cleaner generation starting at "comedian speaking"
 rather than "crowd applauding."
 
-Iteration grid unchanged (stride still 17.88) — the trim only shifts
+Iteration grid unchanged (stride still 17.92) — the trim only shifts
 WHICH audio plays at each video timestamp, not the timing of the loop
 itself.
 
@@ -289,7 +289,7 @@ Key verb shifts from the untrimmed variant:
 - **Entry 6**: `"is smiling wryly, looking out into the audience"` → `"is telling a joke, looking out into the audience"`. The trimmed content puts this window in active speech, not a pause.
 - **Final entry**: `2:58+` → `2:59+`. Total trimmed audio is 179s, 1s later than untrimmed.
 
-## Schedule — overlap = 3 (stride = 16.88)
+## Schedule — overlap = 3 (stride = 16.96)
 
 Different grid. Boundaries at `0:00, 0:16, 0:33, 0:50, 1:07, 1:24,
 1:41, 1:58, 2:15, 2:31, 2:48+`. Use this schedule if you bumped
@@ -348,8 +348,8 @@ uv run python scripts/apply_ltx_decoder.py --revert
 ```
 
 This restores `VAEDecodeTiled` with widgets `[512, 64, 512, 64]`
-(tile stride 17.92s, aligned to `overlap_seconds=2`'s iteration
-stride of 17.88s). If you change `overlap_seconds` after this, you
+(tile stride 17.92s, exactly matches `overlap_seconds=2`'s iteration
+stride of 17.92s). If you change `overlap_seconds` after this, you
 must recompute widgets per the table in `docs/debugging_guide.md`
 or risk re-introducing mid-video seams.
 

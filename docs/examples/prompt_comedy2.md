@@ -23,7 +23,7 @@ changes:
    face across iterations.
 
 2. **Post-Phase-1 fixes** — all boundaries pre-snapped to the iteration
-   grid (stride = 17.88s); subject string byte-exact across every
+   grid (stride = 17.92s); subject string byte-exact across every
    entry; no mid-window camera moves (static camera throughout except
    the final OUTRO dolly-out); dolly-out reserved for the final entry
    only per R7. `node_169_prompt` now explicitly provided, byte-exact

@@ -1,4 +1,4 @@
-Last updated: 2026-04-20
+Last updated: 2026-04-21
 
 # Prompt schedule examples
 
@@ -41,7 +41,8 @@ the specific assets.
 | `prompt_comedy1.md` | Early standup test |
 | `prompt_comedy2.md` | Iteration on v1 |
 | `prompt_comedy3.md` | Post-DR1 with widget trim variants |
-| `prompt_comedy4.md` | **Current reference** — introduced the "Cut to ..." iteration-boundary technique that carries through to all action/music prompts |
+| `prompt_comedy4.md` | Introduced the "Cut to ..." iteration-boundary technique that carries through to all action/music prompts |
+| `prompt_comedy5.md` | **Unusual-character adaptation** — how to rewrite v4's subject blocks when the init image is outside LTX's typical training distribution (oversized cranium, loud patterned clothing) |
 
 ## Patterns that transfer
 

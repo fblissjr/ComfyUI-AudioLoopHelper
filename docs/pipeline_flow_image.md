@@ -1,6 +1,13 @@
-Last updated: 2026-04-11
+Last updated: 2026-04-21
 
 # Pipeline Flow: IMAGE-based Music Video Workflow
+
+> **Reference only.** The LATENT loop (`pipeline_flow_latent.md` →
+> `audio-loop-music-video_latent.json`) is the primary working baseline
+> per CLAUDE.md — it eliminates the per-iteration VAE round-trip that
+> this IMAGE path incurs. This document traces the IMAGE path for
+> historical completeness and for anyone running the `_image.json`
+> workflow.
 
 Complete start-to-end pipeline document for `example_workflows/audio-loop-music-video_image.json`.
 Every node is documented in execution order, grouped by stage.

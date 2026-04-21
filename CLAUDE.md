@@ -148,6 +148,27 @@ Compare against known-working workflow JSON (keep copies in `internal/scratch/`)
 Change ONE setting at a time. Run `uv run --group dev --group analysis python -m pytest tests/test_workflows.py --rootdir=.` after every edit. `scripts/validate_workflow_resolution.py` additionally checks LTX-compliant div-by-32/64 dimensions.
 LTX-2_00032.json and LTX-2_00040.json are confirmed working (April 9, 2026). For session-specific symptom→fix recipes see `docs/debugging_guide.md`.
 
+## Documentation conventions
+
+- **Active planning lives in gitignored `internal/`.** Feature roadmaps,
+  validation plans, Phase-N decision trees → `internal/PLAN.md` (or
+  equivalent). Promote a doc to `docs/` only when the feature ships
+  AND stabilizes. This prevents the "stale plan orphaned in user docs"
+  class that produced `docs/PLAN.md` pre-2026-04-21.
+- **Case studies live in pairs.** Unscrubbed working version in
+  `internal/prompts/` or `internal/postmortem_*.md`; scrubbed public
+  version in `docs/examples/` or `docs/debugging_guide.md` as a "Case
+  studies" entry. Privacy scrub removes filenames, absolute paths
+  under `/home/`, username, UUIDs, real asset names.
+- **Breaking changes trigger a docs sweep.** When a change alters a
+  formula, value, or constraint that's referenced in prose (not just
+  code), add the old-value phrase to
+  `scripts/validate_docs_consistency.py`'s `STALE_PATTERNS`. The test
+  in `tests/test_docs_consistency.py` fails loudly until every stale
+  claim is updated or marked with a `HISTORICAL_MARKERS` substring
+  ("pre-YYYY-MM-DD", "(continuous seconds)", etc.).
+- **Last-updated date at top of every doc.** Format: `Last updated: YYYY-MM-DD`.
+
 ## Documentation index
 
 ### User-facing guides
@@ -167,8 +188,7 @@ LTX-2_00032.json and LTX-2_00040.json are confirmed working (April 9, 2026). For
 - `docs/upscale_guide.md` -- separate upscale workflow build guide
 
 ### Video-only (LTXVLoopingSampler, not for music video)
-- `docs/latent_loop_build_guide.md` -- build guide
-- `docs/ltxv_looping_sampler_settings.md` -- parameter reference
+- `docs/latent_loop_build_guide.md` -- build guide + full parameter reference (settings doc merged in 2026-04-21)
 
 ### Analysis and research
 - `docs/analysis/ltx23_gaps_analysis.md` -- capability gaps, LTXVLoopingSampler AV incompatibility
@@ -183,8 +203,8 @@ LTX-2_00032.json and LTX-2_00040.json are confirmed working (April 9, 2026). For
 - `docs/examples/README.md` -- index of all case studies with patterns-that-transfer summary
 - `docs/examples/music_prompt*.md` -- vocal-driven music videos (v1-v3 illustrated→cinematic)
 - `docs/examples/action_prompt*.md` -- instrumental action sequences (v1-v6, including v5's 20-iter rapid-cut architecture and v6's frozen-audio insight)
-- `docs/examples/prompt_comedy*.md` -- standup/dialogue (v4 introduced "Cut to ..." iteration-boundary technique)
-- Scrubbed copies; working versions with actual asset names live in `internal/` (gitignored)
+- `docs/examples/prompt_comedy*.md` -- standup/dialogue (v4 introduced "Cut to ..." iteration-boundary technique; v5 covers unusual-character init-image adaptation)
+- Scrubbed copies; working versions with actual asset names live in `internal/prompts/` (gitignored)
 
 ### Example workflows
 - `example_workflows/audio-loop-music-video_image.json` -- IMAGE loop (per-iteration AdaIN)
@@ -200,6 +220,8 @@ LTX-2_00032.json and LTX-2_00040.json are confirmed working (April 9, 2026). For
 - `<comfyui_custom_nodes>/ComfyUI-LTXVideo/` -- ComfyUI LTX integration. Guide nodes at `guide.py`, `latents.py`, samplers at `looping_sampler.py`
 
 ### Internal (gitignored)
+- `internal/PLAN.md` -- active planning roadmap (Phase 1 validation pending)
 - `internal/postmortem_v0408_session.md` -- debugging history (6 issues)
 - `internal/postmortem_v0409_latent_rework.md` -- latent rework (5 issues, noise_mask root cause)
-- `internal/workflow_pipeline_trace.md` -- superseded pipeline trace (historical)
+- `internal/audio_analysis_evolution.md` -- original critique of the audio→prompt pipeline (heuristic vs learned gap)
+- `internal/prompts/` -- unscrubbed working versions of the `docs/examples/` case studies plus legacy prompt drafts

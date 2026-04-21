@@ -1,4 +1,4 @@
-Last updated: 2026-04-20
+Last updated: 2026-04-21
 
 # Debugging Guide: Quality Problems in the Audio-Loop Pipeline
 
@@ -113,17 +113,22 @@ LTXVTiledVAEDecode regardless of overlap_seconds.
 If you need to stay on the generic `VAEDecodeTiled` for any reason
 (VRAM constraints where LTX's spatial-only tiling doesn't fit, legacy
 workflow compatibility), you must keep widget values aligned with the
-iteration stride. Rule:
-`(temporal_size − temporal_overlap) / fps ≈ window_seconds − overlap_seconds`.
+iteration stride. Rule: tile stride (pixel frames) must match the
+effective iteration stride reported by `AudioLoopController`. Since the
+2026-04-20 integer-latent fix, stride is quantized to LTX's 8-pixel
+temporal boundary, so the widget math is:
+`(temporal_size − temporal_overlap) / fps = stride_seconds` (where
+`stride_seconds` is the controller's `stride_seconds` output, NOT
+`window − overlap`).
 
 Specific values at `window_seconds=19.88, fps=25`:
 
-| `overlap_seconds` | Iter stride | Target tile stride | `temporal_size, temporal_overlap` |
-|---|---|---|---|
-| 2.0 | 17.88 s | 17.92 s | `512, 64` |
-| 3.0 | 16.88 s | 16.96 s | `480, 56` |
-| 4.0 | 15.88 s | 15.92 s | `448, 50` |
-| 1.0 | 18.88 s | 18.88 s | `544, 72` |
+| `overlap_seconds` (target) | Iter stride | `temporal_size, temporal_overlap` |
+|---|---|---|
+| 1.0 | 18.88 s | `544, 72` |
+| 2.0 | 17.92 s | `512, 64` |
+| 3.0 | 16.96 s | `480, 56` |
+| 4.0 | 16.00 s | `448, 48` |
 
 If you change overlap and forget to update the decoder, tile and
 iteration strides drift apart over the video — ~1s per iteration per
@@ -151,7 +156,7 @@ can cause the symptom you're trying to fix.
 
 ### Iteration-boundary seams
 
-**What it looks like**: identity or color hand-off every ~17.88 s
+**What it looks like**: identity or color hand-off every ~17.92 s
 (at default `overlap_seconds=2.0`). Becomes more visible after
 decoder-tile seams are fixed, because it was masked by them before.
 
@@ -164,9 +169,9 @@ point, producing a small visible cut.
 
 | `overlap_seconds` | Stride | Iterations per 3 min | Trade-off |
 |---|---|---|---|
-| 2.0 (default) | 17.88 s | ~10 | Baseline |
-| **3.0** | **16.88 s** | **~11** | **Recommended when iteration seams are visible** |
-| 4.0 | 15.88 s | ~12 | Very smooth transitions, ~20% more compute than default |
+| 2.0 (default) | 17.92 s | ~10 | Baseline |
+| **3.0** | **16.96 s** | **~11** | **Recommended when iteration seams are visible** |
+| 4.0 | 16.00 s | ~12 | Very smooth transitions, ~20% more compute than default |
 
 More overlap = more context carryover = smoother hand-off, at cost of
 ~1 s less new content per iteration and slightly more compute.
@@ -176,7 +181,7 @@ the overlap region in latent space instead of trimming. Not yet
 implemented; spec lives in the internal planning file (not in repo).
 
 **If you bump `overlap_seconds`**: the iteration grid shifts (stride
-changes from 17.88 → 16.88). Schedules pre-snapped to the old grid
+changes from 17.92 → 16.96). Schedules pre-snapped to the old grid
 will get runtime-snapped to the new grid. See [Schedule timing
 surprises](#schedule-timing-surprises) for what that means.
 
@@ -346,13 +351,15 @@ Or prompt boundaries aren't exactly where your audio's section
 boundaries are.
 
 **Root cause**: with `snap_boundaries=True` (default), the runtime
-snaps every schedule boundary to the nearest integer multiple of
-`stride_seconds = window_seconds − overlap_seconds`. Default at
-`overlap=2.0`: stride = 17.88. At `overlap=3.0`: stride = 16.88.
+snaps every schedule boundary to the nearest integer multiple of the
+`stride_seconds` output from `AudioLoopController`. Stride is quantized
+to LTX's 8-pixel temporal boundary (see the lip-sync drift section
+below for the derivation). At `window=19.88, fps=25`: `overlap=2.0`
+→ stride = **17.92 s**; `overlap=3.0` → stride = **16.96 s**.
 
-With stride = 17.88:
-- 1:15 = 75 s → 75 / 17.88 = 4.19 → rounds to 4 → 4 × 17.88 = 71.52 s = `1:11`
-- So your 1:15 entry actually starts at 1:11.
+With stride = 17.92:
+- 1:15 = 75 s → 75 / 17.92 = 4.185 → rounds to 4 → 4 × 17.92 = 71.68 s ≈ `1:12`
+- So your 1:15 entry actually starts at 1:12.
 
 This is **intentional** — it prevents mid-iteration mixed conditioning
 (the jitter source Phase 1 fixed). But it means the widget text and
@@ -362,8 +369,8 @@ boundary.
 **Fix options**:
 
 1. **Accept and regenerate**: re-snap your schedule to the current
-   stride grid before pasting into the widget. For stride=17.88, valid
-   boundaries are 0:00, 0:17, 0:35, 0:53, 1:11, 1:29, 1:47, 2:05, ...
+   stride grid before pasting into the widget. For stride=17.92, valid
+   boundaries are 0:00, 0:18, 0:36, 0:54, 1:12, 1:30, 1:47, 2:05, ...
    Rule R9 in the LLM system prompt instructs the LLM to emit
    pre-snapped schedules.
 2. **Accept and shift the interpretation**: leave the widget as-is,
@@ -593,8 +600,9 @@ Widgets are in **pixel frames** at the decoder output:
   tiles. Same caveat as above. Constraint: ≤ temporal_size/4.
 
 At 25 fps, `temporal_size=512, temporal_overlap=64` gives tile stride
-= `(512-64)/25 = 17.92 s`, which aligns with loop iteration boundaries
-(17.88 s at default `overlap_seconds=2`).
+= `(512-64)/25 = 17.92 s`, which exactly matches loop iteration stride
+at default `overlap_seconds=2` (integer-latent quantized, see
+`AudioLoopController`).
 
 ---
 
@@ -670,6 +678,118 @@ in `internal/log/log_<date>.md` for future reference and move on.
 
 ---
 
+## Case studies: architectural lessons
+
+Three past incidents whose lessons keep recurring. Each shows a class
+of bug that won't surface on a local reproduction — you have to think
+about it ahead of time.
+
+### CS1: Stale `noise_mask` corrupts later iterations
+
+**Context.** Latent-space loop rework (2026-04-09). Reimplemented the
+extension subgraph to pass LATENT between iterations instead of IMAGE,
+eliminating the per-iteration VAE round-trip. Initial render was
+clean; iterations 2-N had a persistent ~5s lip-sync offset regardless
+of `start_index` or `overlap_seconds`.
+
+**Investigation.** Ruled out `TrimAudioDuration` math, `start_index`
+clamp, audio VAE temporal alignment, mel hop. All matched v0408
+(IMAGE loop, working). The only architectural difference was the
+latent-vs-image context path.
+
+**Root cause.** `VAEEncode` returns `{"samples": t}` and implicitly
+DROPS any `noise_mask` key (`nodes.py:366`). `LTXVSelectLatents`, by
+contrast, PRESERVES `noise_mask` when it slices
+(`latents.py:83-84`). In the LATENT loop, each iteration's context
+tail carried the PREVIOUS iteration's `noise_mask`.
+`LTXVAudioVideoMask` then cloned the stale mask instead of creating a
+fresh all-zeros one (`ltxv_nodes.py:246`). The sampler saw corrupted
+mask semantics and the "audio is fixed" invariant (mask=0) leaked
+into zones the next iteration shouldn't treat as fixed.
+
+**Structural fix.** Two new nodes encapsulate the boundary hygiene:
+`LatentContextExtract` (slice tail frames + strip mask) and
+`LatentOverlapTrim` (skip first N frames + strip mask). Both produce
+the same shape as `VAEEncode` — no mask key — so downstream
+`LTXVAudioVideoMask` always creates a fresh mask.
+
+**Transferable lesson.** Metadata-passing custom nodes inherit
+everything the source dict holds. If a replacement path skips a node
+that implicitly sanitized the dict (e.g. `VAEEncode` stripping
+`noise_mask`), every downstream consumer needs an explicit
+equivalent. When replacing a lossy step with a lossless one, audit
+what the lossy step was hiding.
+
+### CS2: Loop-body node must handle past-end-of-data
+
+**Context.** 10-second audio file tested against a default
+`window=19.88, overlap=2.0` loop. Sampler crashed on the first
+iteration's `LTXVAudioVAEEncode` with:
+`RuntimeError: padding (512, 512) at dimension 2 of input [1, 2, 1]`.
+
+**Investigation.** Traced through `AudioLoopController`'s
+`should_stop` logic. `should_stop = True` on iteration 0 (because
+`next_start > audio_duration`), so the loop would exit after one
+iteration — correct. But the body still ran once, and
+`TrimAudioDuration` produced a 1-sample waveform for the final
+window's audio slice. Mel STFT needs >1024 samples.
+
+**Root cause.** `TensorLoopClose` checks `should_stop` AFTER the loop
+body executes, not before. The body ALWAYS runs at least once, and
+must tolerate whatever `start_index` the controller emits on that
+last-but-unused iteration.
+
+**Structural fix.** `AudioLoopController.execute` clamps
+`start_index` so at least 0.5s of audio always remains:
+
+```python
+min_audio_seconds = 0.5
+max_start = max(0.0, audio_duration - min_audio_seconds)
+start_index = min(start_index, max_start)
+```
+
+**Transferable lesson.** Any node that emits an index / offset /
+start time into a loop body must produce a value that keeps the body
+executable, even on the iteration where `should_stop` is already
+true. `TensorLoopClose` doesn't skip — it runs, then checks. Defensive
+clamping at the emitting node is the correct location; "the consumer
+shouldn't ask for bad input" is brittle.
+
+### CS3: Extra conditioning node corrupts the initial render
+
+**Context.** v0407 added `LTXVConditioning` (Node 1587) between
+`CLIPTextEncode` and the Extension subgraph to propagate `frame_rate`
+metadata (fixing a text2video-looking initial render from missing
+metadata). That fix worked for the regression it targeted, but
+introduced a new symptom: the 0-19.88s initial render had zero lip
+sync. Loop iterations 2-N were fine.
+
+**Investigation.** Compared against `LTX-2_00032.json`
+(known-working, 2026-04-09). Same model, same sampler, same audio,
+same image — only difference was Node 1587 in the conditioning path.
+
+**Root cause.** ComfyUI's execution engine evaluates downstream
+conditioning graphs before upstream sampling. Node 1587 sat in the
+conditioning path feeding the Extension subgraph AND the initial-
+render sampler. Its presence caused the conditioning graph (including
+the Extension) to evaluate before the initial render's sampler ran,
+corrupting the audio-video cross-attention state for iteration 0.
+
+**Structural fix.** Bypass Node 1587. Wire `Get_base_cond_pos` /
+`Get_base_cond_neg` directly to Extension #843. `frame_rate` metadata
+was already being added upstream (via a different `LTXVConditioning`
+in the initial-render path) — the Extension didn't need its own.
+
+**Transferable lesson.** A conditioning-path node that "looks
+harmless" can change graph evaluation order. If two samplers share a
+conditioning ancestry, adding a node in the shared ancestor forces
+the ancestor to evaluate sooner. Cross-check against a
+known-working JSON (keep copies under `internal/scratch/`) on any
+conditioning-path edit; diff the execution order, not just the node
+graph.
+
+---
+
 ## Cross-references
 
 - Prompt rules + widget guidance: `docs/prompt_creation_guide.md`
@@ -678,6 +798,7 @@ in `internal/log/log_<date>.md` for future reference and move on.
 - Audio analysis pipeline: `docs/audio_analysis_guide.md`
 - LTX 2.3 model reference: `docs/ltx23_model_reference.md`
 - Profiling opt-in: `docs/profiling_guide.md`
-- Current plan + post-phase findings: internal planning file (not in repo)
-- Standup example schedules: `internal/prompt_comedy1.md`,
-  `internal/prompt_comedy2.md`
+- Current plan + post-phase findings: `internal/PLAN.md` (not in repo)
+- Standup example schedules: `docs/examples/prompt_comedy1.md` ...
+  `docs/examples/prompt_comedy5.md` (public); unscrubbed originals
+  at `internal/prompts/` (gitignored)

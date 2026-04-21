@@ -120,8 +120,8 @@ R9. Schedule timestamps MUST fall on integer multiples of the loop's
     stride-sized steps; boundaries that fall mid-stride cause one
     iteration to run on a mixed conditioning that looks jittery on
     video. Snap each boundary DOWN to the nearest stride multiple
-    before formatting as M:SS. Example with stride=17.88: valid
-    boundaries are 0:00, 0:17, 0:35, 0:53, 1:11, 1:29, 1:47, 2:05,
+    before formatting as M:SS. Example with stride=17.92: valid
+    boundaries are 0:00, 0:18, 0:36, 0:54, 1:12, 1:30, 1:47, 2:05,
     2:23, 2:41, 2:59. Round down — don't split an iteration just to
     hit an "ideal" timing.
 

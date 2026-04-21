@@ -70,7 +70,7 @@ boundary seam as an intentional edit.
 - **Subject string (byte-exact, identity-anchoring)**:
   `a male standup comedian in a striped sweater at a stand-up comedy club`
 - **Schedule timestamps**: grid-aligned for `overlap_seconds=2`
-  (stride=17.88s). If you run at `overlap=3`, see v3 for the
+  (stride=17.92s). If you run at `overlap=3`, see v3 for the
   alternative grid.
 
 ## Schedule

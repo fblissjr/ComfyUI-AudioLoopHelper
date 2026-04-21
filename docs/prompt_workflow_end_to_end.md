@@ -299,7 +299,7 @@ Song: |--skip--|----initial render (node 169)----|--loop iteration 1--|--iter 2-
 
 - Node 169 prompt = schedule's 0:00 entry (must match to avoid discontinuity)
 - Schedule timestamps are in TRIMMED space (--trim already subtracted)
-- Loop iteration 1 fires at ~0:18 trimmed time (stride = window - overlap)
+- Loop iteration 1 fires at ~0:18 trimmed time (stride = integer-latent quantized from window + overlap; ~17.92s at default)
 
 ---
 
