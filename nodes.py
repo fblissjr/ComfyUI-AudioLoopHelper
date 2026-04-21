@@ -14,6 +14,7 @@ import math
 import re
 from collections import OrderedDict
 from contextlib import nullcontext
+from typing import NamedTuple
 
 import torch
 from typing_extensions import override
@@ -45,6 +46,57 @@ except ImportError:
 
 
 LTX_TEMPORAL_SCALE = 8  # LTX 2.3 VAE temporal compression factor (pixel_frames // 8 = latent_frames)
+
+
+class LoopGeometry(NamedTuple):
+    """Integer-latent loop geometry derived from user widget values."""
+    window_pixel_frames: int
+    overlap_pixel_frames: int
+    window_latent_frames: int
+    overlap_latent_frames: int
+    new_latent_frames: int
+    stride_pixel_frames: int
+    stride_seconds: float
+    effective_overlap_pixel_frames: int
+    effective_overlap_seconds: float
+    overlap_clamped: bool
+
+
+def _compute_loop_geometry(
+    window_seconds: float, overlap_seconds: float, fps: int
+) -> LoopGeometry:
+    """Derive stride from integer-latent counts, not seconds.
+
+    Per-iter video pixel advance must match audio advance exactly, else
+    lip-sync drifts. `overlap_clamped` is True when the requested overlap
+    was reduced to `window_latents-1` to guarantee at least one new latent
+    per iteration. See CLAUDE.md "Stride is derived from integer-latent
+    counts" and tests/test_audio_loop_controller.py.
+    """
+    window_px = max(1, round(window_seconds * fps))
+    overlap_px = max(0, round(overlap_seconds * fps))
+    window_latents = (window_px - 1) // LTX_TEMPORAL_SCALE + 1
+    overlap_latents = (
+        (overlap_px - 1) // LTX_TEMPORAL_SCALE + 1 if overlap_px > 0 else 0
+    )
+    clamped = False
+    if overlap_latents >= window_latents:
+        overlap_latents = window_latents - 1
+        clamped = True
+    new_latents = window_latents - overlap_latents
+    stride_px = new_latents * LTX_TEMPORAL_SCALE
+    return LoopGeometry(
+        window_pixel_frames=window_px,
+        overlap_pixel_frames=overlap_px,
+        window_latent_frames=window_latents,
+        overlap_latent_frames=overlap_latents,
+        new_latent_frames=new_latents,
+        stride_pixel_frames=stride_px,
+        stride_seconds=stride_px / fps,
+        effective_overlap_pixel_frames=window_px - stride_px,
+        effective_overlap_seconds=(window_px - stride_px) / fps,
+        overlap_clamped=clamped,
+    )
 
 
 def _compute_tile_count(audio_duration: float, stride: float) -> int:
@@ -511,53 +563,30 @@ class AudioLoopController(io.ComfyNode):
         fps: int,
     ) -> io.NodeOutput:
         audio_duration = _audio_duration(audio)
+        g = _compute_loop_geometry(window_seconds, overlap_seconds, fps)
 
-        # Stride must match the video decoder's per-iteration pixel output
-        # exactly, else lip-sync drifts. Derive from integer-latent counts
-        # (not `window - overlap` seconds). See CLAUDE.md "Stride is derived
-        # from integer-latent counts" and tests/test_audio_loop_controller.py
-        # for the full derivation.
-        window_pixel_frames = max(1, round(window_seconds * fps))
-        overlap_pixel_frames = max(0, round(overlap_seconds * fps))
-
-        window_latent_frames = (window_pixel_frames - 1) // LTX_TEMPORAL_SCALE + 1
-        overlap_latent_frames = (overlap_pixel_frames - 1) // LTX_TEMPORAL_SCALE + 1 if overlap_pixel_frames > 0 else 0
-        # Require at least 1 new latent frame per iteration to make progress.
-        if overlap_latent_frames >= window_latent_frames:
-            overlap_latent_frames = window_latent_frames - 1
-
-        new_latent_frames = window_latent_frames - overlap_latent_frames
-        stride_pixel_frames = new_latent_frames * LTX_TEMPORAL_SCALE
-        stride = stride_pixel_frames / fps
-
-        effective_overlap_pixel_frames = window_pixel_frames - stride_pixel_frames
-        effective_overlap_seconds = effective_overlap_pixel_frames / fps
-
-        start_index = current_iteration * stride
+        start_index = current_iteration * g.stride_seconds
 
         # Clamp start_index so TrimAudioDuration always has enough audio
         # for the mel spectrogram (needs >1024 samples). Without this,
         # the loop body crashes on the final iteration because
         # TensorLoopClose checks should_stop AFTER the body executes.
-        min_audio_seconds = 0.5  # ~22050 samples at 44.1kHz, well above mel minimum
+        min_audio_seconds = 0.5
         max_start = max(0.0, audio_duration - min_audio_seconds)
         start_index = min(start_index, max_start)
 
-        # Stop if the NEXT iteration would start past the audio.
-        next_start = (current_iteration + 1) * stride
+        next_start = (current_iteration + 1) * g.stride_seconds
         should_stop = next_start >= audio_duration
-
-        iteration_seed = seed + current_iteration
 
         return io.NodeOutput(
             start_index,
             should_stop,
             float(audio_duration),
-            iteration_seed,
-            stride,
-            effective_overlap_pixel_frames,
-            overlap_latent_frames,
-            effective_overlap_seconds,
+            seed + current_iteration,
+            g.stride_seconds,
+            g.effective_overlap_pixel_frames,
+            g.overlap_latent_frames,
+            g.effective_overlap_seconds,
         )
 
 
@@ -1792,12 +1821,14 @@ class AudioLoopHelperExtension(ComfyExtension):
     @override
     async def get_node_list(self) -> list[type[io.ComfyNode]]:
         from .nodes_analysis import AudioPitchDetect
+        from .nodes_validation import LoopConfigValidator
 
         return [
             AudioLoopController,
             TimestampPromptSchedule,
             ConditioningBlend,
             AudioLoopPlanner,
+            LoopConfigValidator,
             ScheduleToMultiPrompt,
             LatentContextExtract,
             LatentOverlapTrim,

@@ -7,6 +7,22 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **`LoopConfigValidator` node (`nodes_validation.py`) + new example
+  workflow `audio-loop-music-video_latent_validator.json`.** Shows the
+  exact integer-latent math `AudioLoopController` performs and flags
+  configurations likely to cause silent failures: invalid length
+  (`(length-1) % 8 != 0`), length vs `window*fps` disagreement,
+  resolution not div-by-32/64, effective overlap drift from target
+  (with reachable values near target), iteration seams landing on
+  prompt-schedule boundaries (the `action_prompt6` failure pattern),
+  thin-context-on-short-window, audio too short. Outputs diagnostic
+  text plus `ok: BOOLEAN` / `warnings: INT` / `errors: INT` /
+  `effective_stride_seconds: FLOAT` for downstream gating. 24 new
+  tests. Rebuild via `uv run python scripts/apply_config_validator.py`.
+- **`_compute_loop_geometry` helper + `LoopGeometry` NamedTuple in
+  `nodes.py`.** Single source of truth for the integer-latent stride
+  math so `AudioLoopController` and `LoopConfigValidator` cannot drift
+  apart.
 - **`scripts/validate_docs_consistency.py` + `tests/test_docs_consistency.py`.**
   Grep-based guard against known-stale phrases in `docs/`. Catches the
   pre-2026-04-20 stride formula (`stride = window − overlap`) and raw
