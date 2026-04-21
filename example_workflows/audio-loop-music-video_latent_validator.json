@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1616,
-  "last_link_id": 3048,
+  "last_node_id": 1617,
+  "last_link_id": 3050,
   "nodes": [
     {
       "id": 252,
@@ -3932,6 +3932,14 @@
             "name": "seed"
           },
           "link": 2938
+        },
+        {
+          "name": "overlap_seconds",
+          "type": "FLOAT",
+          "link": 3048,
+          "widget": {
+            "name": "overlap_seconds"
+          }
         }
       ],
       "outputs": [
@@ -4622,6 +4630,14 @@
           "widget": {
             "name": "height"
           }
+        },
+        {
+          "name": "overlap_seconds",
+          "type": "FLOAT",
+          "link": 3049,
+          "widget": {
+            "name": "overlap_seconds"
+          }
         }
       ],
       "outputs": [
@@ -4629,7 +4645,7 @@
           "name": "report",
           "type": "STRING",
           "links": [
-            3048
+            3050
           ]
         },
         {
@@ -4672,6 +4688,40 @@
     },
     {
       "id": 1616,
+      "type": "FloatConstant",
+      "pos": [
+        1400,
+        4200
+      ],
+      "size": [
+        260,
+        58
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "value",
+          "type": "FLOAT",
+          "links": [
+            3048,
+            3049
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "FloatConstant",
+        "cnr_id": "comfyui-kjnodes"
+      },
+      "widgets_values": [
+        2.0
+      ],
+      "title": "overlap_seconds"
+    },
+    {
+      "id": 1617,
       "type": "PreviewAny",
       "pos": [
         2520,
@@ -4688,7 +4738,7 @@
         {
           "name": "source",
           "type": "*",
-          "link": 3048
+          "link": 3050
         }
       ],
       "outputs": [],
@@ -5708,9 +5758,25 @@
     ],
     [
       3048,
+      1616,
+      0,
+      1582,
+      4,
+      "FLOAT"
+    ],
+    [
+      3049,
+      1616,
+      0,
+      1615,
+      5,
+      "FLOAT"
+    ],
+    [
+      3050,
       1615,
       0,
-      1616,
+      1617,
       0,
       "STRING"
     ]

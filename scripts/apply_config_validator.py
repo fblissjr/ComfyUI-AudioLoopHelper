@@ -1,9 +1,11 @@
 """Add LoopConfigValidator + PreviewAny to a latent workflow.
 
 Loads example_workflows/audio-loop-music-video_latent.json, adds the
-validator node wired to the same audio / window source that feeds
-AudioLoopController, plus widget inputs for length/schedule/etc. the
-user edits directly. Saves as a new file.
+validator node wired to the same audio / window / length / resolution
+sources that feed AudioLoopController + EmptyLTXVLatentVideo. Also
+converts AudioLoopController.overlap_seconds from widget to linked
+input and creates a shared FloatConstant feeding both the controller
+and the validator — one widget to change, zero sync risk.
 
 Run:
     uv run python scripts/apply_config_validator.py
@@ -41,6 +43,25 @@ def _node_input_source(ed: WorkflowEditor, node_id: int, input_name: str) -> tup
             link = _link_from(ed, link_id)
             return link[1], link[2]
     raise ValueError(f"{node['type']} has no input named {input_name}")
+
+
+def _ensure_widget_input(node: dict, name: str, dtype: str) -> int:
+    """Promote a widget-only parameter to a linked input slot.
+
+    ComfyUI encodes widget-converted-to-input as an entry in `node.inputs`
+    carrying `"widget": {"name": ...}`; widgets_values is unchanged (acts
+    as the default when no link is present). Returns the input slot index.
+    """
+    for i, inp in enumerate(node.get("inputs", [])):
+        if inp.get("name") == name:
+            return i
+    node.setdefault("inputs", []).append({
+        "name": name,
+        "type": dtype,
+        "link": None,
+        "widget": {"name": name},
+    })
+    return len(node["inputs"]) - 1
 
 
 def main() -> None:
@@ -122,6 +143,30 @@ def main() -> None:
     # ImageResizeKJv2 outputs: 0=IMAGE, 1=width, 2=height.
     ed.add_link(resize["id"], 1, validator_id, 3, "INT")
     ed.add_link(resize["id"], 2, validator_id, 4, "INT")
+
+    # Shared overlap_seconds source: one FloatConstant feeds both controller
+    # and validator so the two can't drift. Controller's widget value stays
+    # as the fallback default; the link overrides it at execution.
+    overlap_const_id = ed.add_top_level_node(
+        node_type="FloatConstant",
+        pos=[1400, 4200],
+        size=[260, 58],
+        inputs=[],
+        outputs=[{"name": "value", "type": "FLOAT", "links": []}],
+        widgets_values=[2.0],
+        properties={
+            "Node name for S&R": "FloatConstant",
+            "cnr_id": "comfyui-kjnodes",
+        },
+        title="overlap_seconds",
+    )
+
+    ctrl_overlap_slot = _ensure_widget_input(alc, "overlap_seconds", "FLOAT")
+    val_overlap_slot = _ensure_widget_input(
+        ed.find_node(validator_id), "overlap_seconds", "FLOAT"
+    )
+    ed.add_link(overlap_const_id, 0, alc["id"], ctrl_overlap_slot, "FLOAT")
+    ed.add_link(overlap_const_id, 0, validator_id, val_overlap_slot, "FLOAT")
 
     preview_id = ed.add_top_level_node(
         node_type="PreviewAny",
