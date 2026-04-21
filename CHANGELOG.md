@@ -109,6 +109,20 @@ This project uses [Semantic Versioning](https://semver.org/).
   `nodes.AudioLoopController.execute`. New `style` field.
 
 ### Fixed
+- **Audio VAE loader crash after comfy core commit `ad94d472`.**
+  That commit refactored `comfy.ldm.lightricks.vae.audio_vae.AudioVAE`
+  so `__init__` takes only `metadata` — weights load via the standard
+  `VAE` wrapper in `comfy/sd.py`. ComfyUI-KJNodes `VAELoaderKJ`
+  (`nodes/nodes.py:2455`) still calls `AudioVAE(sd, metadata)` and
+  crashes with `TypeError: AudioVAE.__init__() takes 2 positional
+  arguments but 3 were given`. All 5 example workflows used
+  `VAELoaderKJ` for the audio VAE (node id 1538) and broke. Fix: swap
+  node 1538 from `VAELoaderKJ` → comfy core `VAELoader` (which detects
+  LTX audio weights natively and picks the right decode path). Video-
+  VAE loader (node id 1537) hits the still-working `else` branch in
+  `VAELoaderKJ` and is left untouched. `scripts/apply_audio_vae_fix.py`
+  (new): idempotent patcher with `--revert` flag for users on older
+  comfy core.
 - **`AudioLoopController` lip-sync drift at higher overlap values.** Stride
   was previously computed as `window_seconds - overlap_seconds` (continuous
   seconds), but each iteration's trimmed latent contributes exactly
