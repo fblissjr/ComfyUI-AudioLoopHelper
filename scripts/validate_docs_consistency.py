@@ -28,6 +28,21 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DOCS_DIR = REPO_ROOT / "docs"
 
+# (old_value, overlap_seconds, new_value) for the 2026-04-20
+# integer-latent stride fix at window=19.88, fps=25.
+_STRIDE_FIXES: tuple[tuple[float, float, float], ...] = (
+    (17.88, 2.0, 17.92),
+    (16.88, 3.0, 16.96),
+    (15.88, 4.0, 16.00),
+)
+
+
+def _stride_value_pattern(old: float) -> str:
+    # Lookaround only forbids ADJACENT digits — so "17.88s" and
+    # "17.88 seconds" both trip, but "117.88" and "17.881" do not.
+    return rf"(?<![\d.]){old}(?!\d)"
+
+
 # Regex → reason. Each regex is applied per-line.
 STALE_PATTERNS: dict[str, str] = {
     # Pre-2026-04-20 stride formula (continuous seconds rather than
@@ -40,22 +55,13 @@ STALE_PATTERNS: dict[str, str] = {
     r"window_seconds\s*[-−]\s*overlap_seconds": (
         "pre-2026-04-20 stride formula; integer-latent quantized now"
     ),
-    # Pre-fix stride values at window=19.88, fps=25. Guards use
-    # lookbehind/lookahead that only forbid ADJACENT DIGITS — so
-    # "17.88s" and "17.88 seconds" both trip, but embedded values
-    # like "117.88" or "17.881" do not.
-    r"(?<![\d.])17\.88(?!\d)": (
-        "pre-fix stride at overlap=2.0; current effective stride "
-        "is 17.92 (integer-latent quantized)"
-    ),
-    r"(?<![\d.])16\.88(?!\d)": (
-        "pre-fix stride at overlap=3.0; current effective stride "
-        "is 16.96"
-    ),
-    r"(?<![\d.])15\.88(?!\d)": (
-        "pre-fix stride at overlap=4.0; current effective stride "
-        "is 16.00"
-    ),
+    **{
+        _stride_value_pattern(old): (
+            f"pre-fix stride at overlap={overlap}; current "
+            f"effective stride is {new:.2f}"
+        )
+        for old, overlap, new in _STRIDE_FIXES
+    },
 }
 
 # Substrings that flag a line as a historical callout — all stale

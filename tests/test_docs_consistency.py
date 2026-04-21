@@ -9,18 +9,15 @@ edit STALE_PATTERNS / HISTORICAL_MARKERS in
 `scripts/validate_docs_consistency.py`.
 """
 
-from pathlib import Path
-
 import pytest
 
 from validate_docs_consistency import (
     HISTORICAL_MARKERS,
+    REPO_ROOT,
     STALE_PATTERNS,
     scan_docs,
     scan_text,
 )
-
-REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_docs_have_no_stale_stride_formula():

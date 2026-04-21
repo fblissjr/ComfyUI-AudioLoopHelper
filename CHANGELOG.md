@@ -7,6 +7,37 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **`scripts/validate_docs_consistency.py` + `tests/test_docs_consistency.py`.**
+  Grep-based guard against known-stale phrases in `docs/`. Catches the
+  pre-2026-04-20 stride formula (`stride = window − overlap`) and raw
+  pre-fix stride values (`17.88` / `16.88` / `15.88`) from re-entering
+  public prose after the integer-latent quantization fix landed.
+  Historical-marker list (`(not 17.88)`, `pre-2026-04-20`, `(continuous
+  seconds)`) lets legitimate fix-verification callouts through. 11 new
+  tests wired into the standard pytest run; `main()` exit code makes
+  the script CI-friendly standalone.
+- **`docs/debugging_guide.md` — "Case studies: architectural lessons"
+  section.** Three public case studies promoted from internal
+  postmortems: stale `noise_mask` leaking across iterations (why
+  `LatentContextExtract` / `LatentOverlapTrim` exist), loop-body
+  past-end-of-data handling (why `AudioLoopController` clamps
+  `start_index`), and shared-conditioning-ancestry execution order
+  (why conditioning-path edits need a known-working diff). Each has a
+  consistent symptom → investigation → root cause → structural fix →
+  transferable lesson shape.
+- **`CLAUDE.md` — "Documentation conventions" section.** Four rules:
+  active planning docs live in gitignored `internal/`, promote to
+  `docs/` only when shipped and stable; case studies come in scrubbed
+  public + unscrubbed internal pairs; breaking changes trigger a docs
+  sweep via the new validator; last-updated date at top of every doc.
+  Prevents the "stale plan orphaned in user docs" class that produced
+  `docs/PLAN.md`.
+- **`docs/examples/prompt_comedy5.md`.** New public case study on
+  adapting the v4 schedule structure to an init image whose subject is
+  outside LTX's typical training distribution (oversized cranium,
+  floral-patterned clothing). Explains why the subject-block rewrite is
+  mandatory (text/image conflict destroys identity anchoring) and how
+  to guard against commit-phase head-shape normalization.
 - **`--style` flag on `analyze_audio_features.py`.** Choices:
   `cinematic` (default, photoreal anchor), `realistic`, `illustrated`
   (painterly / animated inits), `painterly` (digital painting inits),
@@ -20,6 +51,35 @@ This project uses [Semantic Versioning](https://semver.org/).
   causing.
 
 ### Changed
+- **Docs audit: stale stride values corrected across 7 docs.** The
+  2026-04-20 integer-latent fix changed the effective stride from the
+  pre-fix continuous-seconds values (`17.88`, `16.88`, `15.88` at
+  overlap 2/3/4) to integer-latent quantized values (`17.92`, `16.96`,
+  `16.00`). Propagation lagged in `debugging_guide.md` (6 locations),
+  `docs/examples/prompt_comedy{1,2,3,4}.md`, `docs/system_prompt.md`,
+  and `docs/prompt_workflow_end_to_end.md`. All updated. Historical
+  comparison callouts (`(not 17.88)`, pre-fix section headings) kept
+  as-is for the fix-verification narrative.
+- **Merged `docs/ltxv_looping_sampler_settings.md` into
+  `docs/latent_loop_build_guide.md`.** Both documented the same
+  AV-incompatible `LTXVLoopingSampler`; one combined doc replaces the
+  pair. Full parameter tuning tables (`temporal_overlap_cond_strength`,
+  `adain_factor`, `temporal_overlap`, `temporal_tile_size`) retained
+  inline.
+- **Moved `docs/PLAN.md` → `internal/PLAN.md`.** Active Phase 1/2/3
+  roadmap with pending user-validation work belongs in gitignored
+  internal notes, not user-facing docs. Adds a `ACTIVE — Phase 1
+  validation pending` banner at the top.
+- **Historical banners on `docs/pipeline_flow_image.md` and
+  `docs/ltx23_prompt_system_prompts.md`.** Flags the IMAGE loop as
+  reference-only (LATENT is primary per CLAUDE.md) and flags the raw
+  Lightricks i2v/t2v system prompts as historical (current schedule
+  construction starts at `prompt_creation_guide.md` /
+  `analysis/llm_prompt_generation_guide.md`).
+- **`CLAUDE.md` documentation index pruned.** Removed
+  `ltxv_looping_sampler_settings.md` entry (merged), extended the
+  prompt_comedy entry to cover v5, and repointed the internal-versions
+  pointer at the new `internal/prompts/` subfolder.
 - **Canonical camera phrasings in generator output.** `_DYNAMIC_CAMERA_BEATS`
   now only emits byte-exact LTX 2.3 camera keywords from the README
   table (`static camera, locked off shot`, `dolly in, camera pushing
