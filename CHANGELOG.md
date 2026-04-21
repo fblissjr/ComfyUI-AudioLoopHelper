@@ -119,10 +119,15 @@ This project uses [Semantic Versioning](https://semver.org/).
   `VAELoaderKJ` for the audio VAE (node id 1538) and broke. Fix: swap
   node 1538 from `VAELoaderKJ` → comfy core `VAELoader` (which detects
   LTX audio weights natively and picks the right decode path). Video-
-  VAE loader (node id 1537) hits the still-working `else` branch in
-  `VAELoaderKJ` and is left untouched. `scripts/apply_audio_vae_fix.py`
-  (new): idempotent patcher with `--revert` flag for users on older
-  comfy core.
+  VAE loader (node id 1537) also swapped to core `VAELoader` for
+  consistency and future-proofing — `VAELoaderKJ` offers no value
+  over core `VAELoader` for LTX 2.3 (its `device` widget is moot
+  because core's audio branch sets `disable_offload=True`, and its
+  `weight_dtype` widget is moot because `working_dtypes=[float32]`
+  is hard-coded in `comfy/sd.py:823`). One less KJNodes dependency
+  in the VAE path. `scripts/apply_audio_vae_fix.py` (new): idempotent
+  patcher covering both loader nodes, with `--revert` flag for users
+  on older comfy core.
 - **`AudioLoopController` lip-sync drift at higher overlap values.** Stride
   was previously computed as `window_seconds - overlap_seconds` (continuous
   seconds), but each iteration's trimmed latent contributes exactly

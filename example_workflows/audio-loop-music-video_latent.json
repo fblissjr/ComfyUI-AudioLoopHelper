@@ -1799,7 +1799,7 @@
     },
     {
       "id": 1537,
-      "type": "VAELoaderKJ",
+      "type": "VAELoader",
       "pos": [
         -1921.3714099162587,
         5011.312014057029
@@ -1822,14 +1822,12 @@
         }
       ],
       "properties": {
-        "cnr_id": "comfyui-kjnodes",
+        "cnr_id": "comfy-core",
         "ver": "068d4fee62d379723dd96dd3e768ed807f7d7135",
-        "Node name for S&R": "VAELoaderKJ"
+        "Node name for S&R": "VAELoader"
       },
       "widgets_values": [
-        "vae/LTX23_video_vae_bf16.safetensors",
-        "main_device",
-        "bf16"
+        "vae/LTX23_video_vae_bf16.safetensors"
       ]
     },
     {

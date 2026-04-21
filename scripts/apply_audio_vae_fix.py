@@ -1,4 +1,4 @@
-"""Swap the KJNodes `VAELoaderKJ` audio-VAE loader → comfy core `VAELoader`.
+"""Swap KJNodes `VAELoaderKJ` → comfy core `VAELoader` for both VAEs.
 
 ComfyUI core commit `ad94d472` ("Make the ltx audio vae more native")
 refactored `comfy.ldm.lightricks.vae.audio_vae.AudioVAE` so that
@@ -8,15 +8,16 @@ calls `AudioVAE(sd, metadata)` (nodes/nodes.py:2455) and crashes with
 `TypeError: AudioVAE.__init__() takes 2 positional arguments but 3
 were given` when loading an LTX audio VAE.
 
-The video-VAE path in `VAELoaderKJ` still works (hits the standard
-`VAE()` branch) — this script only patches the audio-VAE loader
-(node id 1538 in our workflows) and leaves the video-VAE loader
-alone. Comfy core's `VAELoader` detects LTX audio weights
-automatically and picks the right decode path.
+This script swaps both VAE loaders (audio node 1538 and video node
+1537) to core `VAELoader`. The audio swap is the crash fix; the
+video swap is consistency + future-proofing (`VAELoaderKJ` adds zero
+value over core `VAELoader` for LTX 2.3 — `device` override is
+moot because core's audio branch sets `disable_offload=True`, and
+`weight_dtype` override is moot because `working_dtypes=[float32]`
+is hard-coded). One less KJNodes dependency in the VAE path.
 
 Idempotent in both directions. Run without args to apply; pass
---revert to restore the KJNodes loader for users on older
-comfy core.
+--revert to restore the KJNodes loaders.
 
 Usage:
     uv run python scripts/apply_audio_vae_fix.py            # apply
@@ -33,7 +34,9 @@ WORKFLOWS = sorted((REPO_ROOT / "example_workflows").glob(
     "audio-loop-music-video_*.json"
 ))
 
-_AUDIO_VAE_NODE_ID = 1538
+# 1537 = video VAE, 1538 = audio VAE. Both loaded via VAELoaderKJ
+# historically; both moving to core VAELoader post `ad94d472`.
+_VAE_NODE_IDS: tuple[int, ...] = (1537, 1538)
 
 _KJ_TYPE = "VAELoaderKJ"
 _CORE_TYPE = "VAELoader"
@@ -86,21 +89,25 @@ def _swap_to_kj(node: dict) -> bool:
 def patch_workflow(path: Path, revert: bool = False) -> int:
     ed = WorkflowEditor(path)
     swap = _swap_to_kj if revert else _swap_to_core
-    node = next(
-        (n for n in ed.wf["nodes"] if n.get("id") == _AUDIO_VAE_NODE_ID),
-        None,
-    )
-    if node is None:
-        print(f"  {path.name}: no node id={_AUDIO_VAE_NODE_ID}; skipping")
-        return 0
-    if not swap(node):
-        target_type = _KJ_TYPE if revert else _CORE_TYPE
-        print(f"  {path.name}: node {_AUDIO_VAE_NODE_ID} already {target_type}")
-        return 0
-    ed.save()
-    action = "reverted" if revert else "swapped"
-    print(f"  {action} node {_AUDIO_VAE_NODE_ID} in {path.name}")
-    return 1
+    target_type = _KJ_TYPE if revert else _CORE_TYPE
+    changed = 0
+    for node_id in _VAE_NODE_IDS:
+        node = next(
+            (n for n in ed.wf["nodes"] if n.get("id") == node_id),
+            None,
+        )
+        if node is None:
+            print(f"  {path.name}: no node id={node_id}; skipping")
+            continue
+        if swap(node):
+            action = "reverted" if revert else "swapped"
+            print(f"  {action} node {node_id} in {path.name}")
+            changed += 1
+        else:
+            print(f"  {path.name}: node {node_id} already {target_type}")
+    if changed:
+        ed.save()
+    return changed
 
 
 def main() -> None:
