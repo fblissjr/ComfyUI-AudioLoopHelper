@@ -4,6 +4,7 @@ __pycache__
 .history
 .vscode
 .claude
+.claude.local.md
 internal/
 coderef/
 .pytest_cache

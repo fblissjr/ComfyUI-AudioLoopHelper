@@ -168,6 +168,7 @@ LTX-2_00032.json and LTX-2_00040.json are confirmed working (April 9, 2026). For
   claim is updated or marked with a `HISTORICAL_MARKERS` substring
   ("pre-YYYY-MM-DD", "(continuous seconds)", etc.).
 - **Last-updated date at top of every doc.** Format: `Last updated: YYYY-MM-DD`.
+- **internal skill state is gitignored.** Any Claude Code hooks/agents/skills placed there are local-only. Team-shareable automations belong in `scripts/` or a tracked plugin.
 
 ## Documentation index
 
