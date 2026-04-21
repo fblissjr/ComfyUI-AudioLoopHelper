@@ -2,10 +2,12 @@
 latent workflow. Keeps the authoritative distilled-1.1 sigma chain
 (`BasicScheduler linear_quadratic, 8, 1` + `ModelSamplingSD3 shift=13`
 + `KSamplerSelect euler`) and swaps `CFGGuider` for `MultimodalGuider`
-+ two `GuiderParameters` (AUDIO/VIDEO both cfg=1, stg=1, modality=1)
-so only STG (Spatial-Temporal Guidance) contributes — pure quality
-lift on top of the correct noise prediction. Bypasses `LTX2_NAG`.
-Re-runnable: `uv run python scripts/apply_stg_hybrid_package.py`.
++ two `GuiderParameters` (AUDIO/VIDEO both cfg=2, stg=1, modality=1):
+mild CFG forces the guider's `noise_pred_neg` branch to run (cfg=1.0
+hits an unbound-variable bug in the KJ guider at
+`ComfyUI-LTXVideo/guiders/multimodal_guider.py:269`), and STG is the
+primary quality lift. Bypasses `LTX2_NAG`. Re-runnable:
+`uv run python scripts/apply_stg_hybrid_package.py`.
 """
 
 from workflow_utils import WorkflowEditor
@@ -54,9 +56,9 @@ def transform(src_path: str, dst_path: str) -> None:
         outputs=[
             {"name": "GUIDER_PARAMETERS", "type": "GUIDER_PARAMETERS", "links": []},
         ],
-        widgets_values=["AUDIO", 1, 1, True, 0.7, 1, 0, True],
+        widgets_values=["AUDIO", 2, 1, True, 0.7, 1, 0, True],
         properties={"Node name for S&R": "GuiderParameters"},
-        title="GuiderParameters (AUDIO, STG-only)",
+        title="GuiderParameters (AUDIO, STG-primary cfg=2)",
     )
     video_params_id = ed.add_top_level_node(
         node_type="GuiderParameters",
@@ -68,9 +70,9 @@ def transform(src_path: str, dst_path: str) -> None:
         outputs=[
             {"name": "GUIDER_PARAMETERS", "type": "GUIDER_PARAMETERS", "links": []},
         ],
-        widgets_values=["VIDEO", 1, 1, True, 0.9, 1, 0, True],
+        widgets_values=["VIDEO", 2, 1, True, 0.9, 1, 0, True],
         properties={"Node name for S&R": "GuiderParameters"},
-        title="GuiderParameters (VIDEO, STG-only)",
+        title="GuiderParameters (VIDEO, STG-primary cfg=2)",
     )
     ed.add_link(audio_params_id, 0, video_params_id, 0, "GUIDER_PARAMETERS")
 

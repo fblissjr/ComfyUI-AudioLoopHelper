@@ -4545,7 +4545,7 @@
       },
       "widgets_values": [
         "AUDIO",
-        1,
+        2,
         1,
         true,
         0.7,
@@ -4553,7 +4553,7 @@
         0,
         true
       ],
-      "title": "GuiderParameters (AUDIO, STG-only)"
+      "title": "GuiderParameters (AUDIO, STG-primary cfg=2)"
     },
     {
       "id": 1616,
@@ -4591,7 +4591,7 @@
       },
       "widgets_values": [
         "VIDEO",
-        1,
+        2,
         1,
         true,
         0.9,
@@ -4599,7 +4599,7 @@
         0,
         true
       ],
-      "title": "GuiderParameters (VIDEO, STG-only)"
+      "title": "GuiderParameters (VIDEO, STG-primary cfg=2)"
     },
     {
       "id": 1617,
