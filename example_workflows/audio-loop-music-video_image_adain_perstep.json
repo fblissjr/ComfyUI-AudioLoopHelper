@@ -1843,7 +1843,7 @@
     },
     {
       "id": 1537,
-      "type": "VAELoader",
+      "type": "VAELoaderKJ",
       "pos": [
         -1921.3714099162587,
         5011.312014057029
@@ -1866,17 +1866,19 @@
         }
       ],
       "properties": {
-        "cnr_id": "comfy-core",
+        "cnr_id": "comfyui-kjnodes",
         "ver": "068d4fee62d379723dd96dd3e768ed807f7d7135",
-        "Node name for S&R": "VAELoader"
+        "Node name for S&R": "VAELoaderKJ"
       },
       "widgets_values": [
-        "vae/LTX23_video_vae_bf16.safetensors"
+        "vae/LTX23_video_vae_bf16.safetensors",
+        "main_device",
+        "bf16"
       ]
     },
     {
       "id": 1538,
-      "type": "VAELoader",
+      "type": "VAELoaderKJ",
       "pos": [
         -1894.3810781660818,
         5211.751531003164
@@ -1899,12 +1901,14 @@
         }
       ],
       "properties": {
-        "cnr_id": "comfy-core",
+        "cnr_id": "comfyui-kjnodes",
         "ver": "068d4fee62d379723dd96dd3e768ed807f7d7135",
-        "Node name for S&R": "VAELoader"
+        "Node name for S&R": "VAELoaderKJ"
       },
       "widgets_values": [
-        "vae/LTX23_audio_vae_bf16.safetensors"
+        "vae/LTX23_audio_vae_bf16.safetensors",
+        "main_device",
+        "bf16"
       ]
     },
     {

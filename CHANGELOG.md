@@ -109,25 +109,26 @@ This project uses [Semantic Versioning](https://semver.org/).
   `nodes.AudioLoopController.execute`. New `style` field.
 
 ### Fixed
-- **Audio VAE loader crash after comfy core commit `ad94d472`.**
-  That commit refactored `comfy.ldm.lightricks.vae.audio_vae.AudioVAE`
-  so `__init__` takes only `metadata` — weights load via the standard
-  `VAE` wrapper in `comfy/sd.py`. ComfyUI-KJNodes `VAELoaderKJ`
-  (`nodes/nodes.py:2455`) still calls `AudioVAE(sd, metadata)` and
-  crashes with `TypeError: AudioVAE.__init__() takes 2 positional
-  arguments but 3 were given`. All 5 example workflows used
-  `VAELoaderKJ` for the audio VAE (node id 1538) and broke. Fix: swap
-  node 1538 from `VAELoaderKJ` → comfy core `VAELoader` (which detects
-  LTX audio weights natively and picks the right decode path). Video-
-  VAE loader (node id 1537) also swapped to core `VAELoader` for
-  consistency and future-proofing — `VAELoaderKJ` offers no value
-  over core `VAELoader` for LTX 2.3 (its `device` widget is moot
-  because core's audio branch sets `disable_offload=True`, and its
-  `weight_dtype` widget is moot because `working_dtypes=[float32]`
-  is hard-coded in `comfy/sd.py:823`). One less KJNodes dependency
-  in the VAE path. `scripts/apply_audio_vae_fix.py` (new): idempotent
-  patcher covering both loader nodes, with `--revert` flag for users
-  on older comfy core.
+- **Audio VAE loader crash after comfy core commit `ad94d472`** —
+  resolved upstream. That commit refactored
+  `comfy.ldm.lightricks.vae.audio_vae.AudioVAE` so `__init__` takes
+  only `metadata` (weights load via the `VAE` wrapper in
+  `comfy/sd.py`). ComfyUI-KJNodes `VAELoaderKJ` still called
+  `AudioVAE(sd, metadata)` and crashed with `TypeError:
+  AudioVAE.__init__() takes 2 positional arguments but 3 were
+  given`. All 5 example workflows use `VAELoaderKJ` for both VAE
+  loaders (node ids 1537 video, 1538 audio), so audio-VAE init
+  crashed. **Kijai shipped the upstream fix** (KJNodes `6ec4d67`
+  "Fix audio VAE for latest comfy") that adapts detection logic and
+  dual-paths against both old and new `AudioVAE` APIs. Example
+  workflows stay on `VAELoaderKJ` — kijai's implementation has the
+  right standalone-LTXV-VAE loading logic that comfy core's generic
+  `VAELoader` is still missing (core's LTX detection in
+  `comfy/sd.py:616` targets older LTXV 1.x keys, not LTX 2.3).
+  `scripts/apply_audio_vae_fix.py` kept in-repo as an emergency
+  lever: `--revert` returns to `VAELoaderKJ` (current default);
+  running without `--revert` swaps to core `VAELoader` for users
+  stuck on a broken KJNodes + post-`ad94d472` comfy combo.
 - **`AudioLoopController` lip-sync drift at higher overlap values.** Stride
   was previously computed as `window_seconds - overlap_seconds` (continuous
   seconds), but each iteration's trimmed latent contributes exactly
