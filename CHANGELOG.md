@@ -38,6 +38,21 @@ This project uses [Semantic Versioning](https://semver.org/).
   workflows via `scripts/apply_batch_encode_fix.py`.
 
 ### Changed
+- **Every shipped music-video workflow migrated to the batch-encode
+  path.** Previously only `_latent.json` had been rewired; now
+  `_image.json`, `_image_adain_perstep.json`, `_latent_keyframe.json`,
+  `_latent_stg.json`, and `_latent_validator.json` all use
+  `TimestampPromptScheduleBatchEncode` + `ConditioningSelectByIteration`.
+  `scripts/apply_batch_encode_fix.py` now also sweeps orphaned
+  `CachedTextEncode_AudioLoop` / `TimestampPromptSchedule` nodes by
+  type (the ID-based pass missed variant-specific IDs — e.g. 'Next
+  Prompt Encode' was 1604 in `_image.json` vs 1607 elsewhere).
+- **MelBand vocal separation bypassed by default in every workflow**
+  (`mode=4` on `MelBandRoFormerModelLoader` and `MelBandRoFormerSampler`)
+  AND `Set_actual_audio` explicitly wired from `TrimAudioDuration(567)`
+  directly rather than through the bypassed sampler. Explicit wiring
+  makes the graph readable without relying on bypass-passthrough slot
+  mapping. Apply via `scripts/apply_melband_default_off.py`.
 - **`example_workflows/audio-loop-music-video_latent.json` rewired.**
   Primary working baseline now uses the batch-encode path. The inner
   subgraph is unchanged; the only rewire is on the positive

@@ -39,6 +39,12 @@ NODES_TO_REMOVE = {
     1588: "Get_base_cond_pos (Static Mode) -- dead",
 }
 
+# Types left over from the legacy schedule/encode chain. Variants gave
+# their instances different IDs (e.g. 'Next Prompt Encode' was 1604 in
+# _image.json vs 1607 elsewhere), so an ID-based pass alone misses
+# stragglers — sweep by type after the main removal.
+_LEGACY_ORPHAN_TYPES = ("CachedTextEncode_AudioLoop", "TimestampPromptSchedule")
+
 # Source nodes the new encoder + selector will wire into. All must
 # exist before we mutate anything, else partial migration is possible.
 CLIP_LOADER_ID = 416           # DualCLIPLoader; slot 0 = CLIP
@@ -94,6 +100,19 @@ def _assert_required_nodes_present(ed: WorkflowEditor) -> None:
         )
 
 
+def _remove_nodes_by_type(
+    ed: WorkflowEditor, types: tuple[str, ...], reason: str,
+) -> list[int]:
+    removed: list[int] = []
+    for node_type in types:
+        for node in list(ed.find_nodes_by_type(node_type)):
+            nid = node["id"]
+            print(f"  remove {node_type}(id={nid}): {reason}")
+            ed.remove_node_and_links(nid)
+            removed.append(nid)
+    return removed
+
+
 def _remove_legacy_nodes(ed: WorkflowEditor) -> list[int]:
     removed: list[int] = []
     for nid, reason in NODES_TO_REMOVE.items():
@@ -104,6 +123,9 @@ def _remove_legacy_nodes(ed: WorkflowEditor) -> list[int]:
         print(f"  remove node {nid}: {reason}")
         ed.remove_node_and_links(nid)
         removed.append(nid)
+    removed.extend(_remove_nodes_by_type(
+        ed, _LEGACY_ORPHAN_TYPES, "orphan after migration",
+    ))
     return removed
 
 
@@ -178,7 +200,15 @@ def rewire(path: Path) -> None:
     ed = WorkflowEditor(path)
 
     if _already_migrated(ed):
-        print(f"{path.name}: already migrated (batch encoder present), skipping.")
+        swept = _remove_nodes_by_type(
+            ed, _LEGACY_ORPHAN_TYPES,
+            "orphan (missed by ID-based pass in an earlier migration)",
+        )
+        if swept:
+            print(f"{path.name}: cleaned {len(swept)} orphan(s), skipping full migration.")
+            ed.save()
+        else:
+            print(f"{path.name}: already migrated, no orphans, skipping.")
         return
 
     _assert_required_nodes_present(ed)

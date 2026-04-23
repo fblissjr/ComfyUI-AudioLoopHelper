@@ -2,7 +2,7 @@
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
   "last_node_id": 1616,
-  "last_link_id": 3048,
+  "last_link_id": 3049,
   "nodes": [
     {
       "id": 252,
@@ -803,7 +803,7 @@
       ],
       "flags": {},
       "order": 3,
-      "mode": 0,
+      "mode": 4,
       "inputs": [],
       "outputs": [
         {
@@ -836,7 +836,7 @@
       ],
       "flags": {},
       "order": 47,
-      "mode": 0,
+      "mode": 4,
       "inputs": [
         {
           "name": "model",
@@ -853,9 +853,7 @@
         {
           "name": "vocals",
           "type": "AUDIO",
-          "links": [
-            2893
-          ]
+          "links": []
         },
         {
           "name": "instruments",
@@ -2397,7 +2395,7 @@
         {
           "name": "AUDIO",
           "type": "AUDIO",
-          "link": 2893
+          "link": 3049
         }
       ],
       "outputs": [
@@ -3166,7 +3164,8 @@
             1561,
             1580,
             2907,
-            2935
+            2935,
+            3049
           ]
         }
       ],
@@ -4835,14 +4834,6 @@
       "MODEL"
     ],
     [
-      2893,
-      569,
-      0,
-      640,
-      0,
-      "AUDIO"
-    ],
-    [
       2821,
       640,
       0,
@@ -5225,6 +5216,14 @@
       843,
       6,
       "CONDITIONING"
+    ],
+    [
+      3049,
+      567,
+      0,
+      640,
+      0,
+      "AUDIO"
     ]
   ],
   "groups": [

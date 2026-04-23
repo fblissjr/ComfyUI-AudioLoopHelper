@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1605,
-  "last_link_id": 2999,
+  "last_node_id": 1607,
+  "last_link_id": 3006,
   "nodes": [
     {
       "id": 252,
@@ -99,48 +99,6 @@
       ]
     },
     {
-      "id": 575,
-      "type": "SetNode",
-      "pos": [
-        286.0861499262885,
-        4905.442767902779
-      ],
-      "size": [
-        210,
-        60
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 68,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "GUIDER",
-          "type": "GUIDER",
-          "link": 1574
-        }
-      ],
-      "outputs": [
-        {
-          "name": "*",
-          "type": "*",
-          "links": null
-        }
-      ],
-      "title": "Set_guider",
-      "properties": {
-        "Node name for S&R": "SetNode",
-        "aux_id": "kijai/ComfyUI-KJNodes",
-        "previousName": "guider"
-      },
-      "widgets_values": [
-        "guider"
-      ],
-      "color": "#3c7878",
-      "bgcolor": "#1c453b"
-    },
-    {
       "id": 576,
       "type": "SetNode",
       "pos": [
@@ -218,8 +176,7 @@
           "name": "GUIDER",
           "type": "GUIDER",
           "links": [
-            370,
-            1574
+            370
           ]
         }
       ],
@@ -316,48 +273,6 @@
       },
       "widgets_values": [
         "base_cond_neg"
-      ],
-      "color": "#332922",
-      "bgcolor": "#593930"
-    },
-    {
-      "id": 645,
-      "type": "SetNode",
-      "pos": [
-        -294.4672828721041,
-        5220.154376092981
-      ],
-      "size": [
-        210,
-        60
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 57,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "CONDITIONING",
-          "type": "CONDITIONING",
-          "link": 1688
-        }
-      ],
-      "outputs": [
-        {
-          "name": "*",
-          "type": "*",
-          "links": null
-        }
-      ],
-      "title": "Set_base_cond_pos",
-      "properties": {
-        "Node name for S&R": "SetNode",
-        "aux_id": "kijai/ComfyUI-KJNodes",
-        "previousName": "base_cond_pos"
-      },
-      "widgets_values": [
-        "base_cond_pos"
       ],
       "color": "#332922",
       "bgcolor": "#593930"
@@ -640,8 +555,7 @@
           "type": "CONDITIONING",
           "links": [
             1451,
-            1509,
-            1688
+            1509
           ]
         },
         {
@@ -932,7 +846,7 @@
       ],
       "flags": {},
       "order": 3,
-      "mode": 0,
+      "mode": 4,
       "inputs": [],
       "outputs": [
         {
@@ -965,7 +879,7 @@
       ],
       "flags": {},
       "order": 47,
-      "mode": 0,
+      "mode": 4,
       "inputs": [
         {
           "name": "model",
@@ -982,9 +896,7 @@
         {
           "name": "vocals",
           "type": "AUDIO",
-          "links": [
-            2893
-          ]
+          "links": []
         },
         {
           "name": "instruments",
@@ -1932,8 +1844,7 @@
           "links": [
             1256,
             1360,
-            2902,
-            2994
+            3000
           ]
         }
       ],
@@ -2403,41 +2314,6 @@
       "bgcolor": "#335"
     },
     {
-      "id": 647,
-      "type": "GetNode",
-      "pos": [
-        2594.6054966413517,
-        4402.96456243685
-      ],
-      "size": [
-        210,
-        60
-      ],
-      "flags": {
-        "collapsed": false
-      },
-      "order": 20,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "CONDITIONING",
-          "type": "CONDITIONING",
-          "links": []
-        }
-      ],
-      "title": "Get_base_cond_pos",
-      "properties": {
-        "Node name for S&R": "GetNode",
-        "aux_id": "kijai/ComfyUI-KJNodes"
-      },
-      "widgets_values": [
-        "base_cond_pos"
-      ],
-      "color": "#332922",
-      "bgcolor": "#593930"
-    },
-    {
       "id": 648,
       "type": "GetNode",
       "pos": [
@@ -2565,7 +2441,7 @@
         {
           "name": "AUDIO",
           "type": "AUDIO",
-          "link": 2893
+          "link": 3006
         }
       ],
       "outputs": [
@@ -3331,7 +3207,8 @@
             1561,
             1580,
             2907,
-            2935
+            2935,
+            3006
           ]
         }
       ],
@@ -3344,55 +3221,6 @@
         5,
         300
       ]
-    },
-    {
-      "id": 1559,
-      "type": "CachedTextEncode_AudioLoop",
-      "pos": [
-        2897.4792724623944,
-        5206.886032930646
-      ],
-      "size": [
-        300,
-        88
-      ],
-      "flags": {},
-      "order": 83,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "clip",
-          "type": "CLIP",
-          "link": 2902
-        },
-        {
-          "name": "text",
-          "type": "STRING",
-          "widget": {
-            "name": "text"
-          },
-          "link": 2905
-        }
-      ],
-      "outputs": [
-        {
-          "name": "CONDITIONING",
-          "type": "CONDITIONING",
-          "links": [
-            2996
-          ]
-        }
-      ],
-      "title": "Loop Prompt Encode",
-      "properties": {
-        "cnr_id": "comfyui-audioloophelper",
-        "Node name for S&R": "CachedTextEncode_AudioLoop"
-      },
-      "widgets_values": [
-        ""
-      ],
-      "color": "#233",
-      "bgcolor": "#355"
     },
     {
       "id": 1540,
@@ -3502,7 +3330,7 @@
         {
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 2999
+          "link": 3005
         },
         {
           "name": "negative",
@@ -3699,8 +3527,8 @@
           "name": "current_iteration",
           "type": "INT",
           "links": [
-            2904,
-            2936
+            2936,
+            3004
           ]
         }
       ],
@@ -3847,87 +3675,6 @@
       "bgcolor": "#353"
     },
     {
-      "id": 1558,
-      "type": "TimestampPromptSchedule",
-      "pos": [
-        1265.6416629236387,
-        4923.573665967082
-      ],
-      "size": [
-        643.5441645675226,
-        471.743280145457
-      ],
-      "flags": {},
-      "order": 80,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "current_iteration",
-          "type": "INT",
-          "widget": {
-            "name": "current_iteration"
-          },
-          "link": 2904
-        },
-        {
-          "name": "stride_seconds",
-          "type": "FLOAT",
-          "widget": {
-            "name": "stride_seconds"
-          },
-          "link": 2945
-        }
-      ],
-      "outputs": [
-        {
-          "name": "prompt",
-          "type": "STRING",
-          "links": [
-            2905
-          ]
-        },
-        {
-          "name": "next_prompt",
-          "type": "STRING",
-          "links": [
-            2995
-          ],
-          "slot_index": 1,
-          "shape": 3
-        },
-        {
-          "name": "blend_factor",
-          "type": "FLOAT",
-          "links": [
-            2998
-          ],
-          "slot_index": 2,
-          "shape": 3
-        },
-        {
-          "name": "current_time",
-          "type": "FLOAT",
-          "links": null,
-          "slot_index": 3
-        }
-      ],
-      "title": "Prompt Schedule - Timestamp Ranges",
-      "properties": {
-        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
-        "ver": "5fdb6942bce83bd76d3ac6316944924648ae08d7",
-        "Node name for S&R": "TimestampPromptSchedule"
-      },
-      "widgets_values": [
-        1,
-        18.88,
-        "0:00+: video of a woman passionately singing alone",
-        0.0,
-        true
-      ],
-      "color": "#233",
-      "bgcolor": "#355"
-    },
-    {
       "id": 1582,
       "type": "AudioLoopController",
       "pos": [
@@ -3990,7 +3737,9 @@
         {
           "name": "audio_duration",
           "type": "FLOAT",
-          "links": null
+          "links": [
+            3002
+          ]
         },
         {
           "name": "iteration_seed",
@@ -4003,8 +3752,8 @@
           "name": "stride_seconds",
           "type": "FLOAT",
           "links": [
-            2945,
-            2946
+            2946,
+            3001
           ]
         },
         {
@@ -4130,39 +3879,6 @@
       ],
       "color": "#233",
       "bgcolor": "#355"
-    },
-    {
-      "id": 1588,
-      "type": "GetNode",
-      "pos": [
-        2897.4792724623944,
-        5086.886032930646
-      ],
-      "size": [
-        210,
-        58
-      ],
-      "flags": {},
-      "order": 22,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "CONDITIONING",
-          "type": "CONDITIONING",
-          "links": []
-        }
-      ],
-      "title": "Get_base_cond_pos (Static Mode)",
-      "properties": {
-        "Node name for S&R": "GetNode",
-        "aux_id": "kijai/ComfyUI-KJNodes"
-      },
-      "widgets_values": [
-        "base_cond_pos"
-      ],
-      "color": "#223322",
-      "bgcolor": "#335533"
     },
     {
       "id": 1598,
@@ -4375,53 +4091,6 @@
       "title": "Decode Upscaled"
     },
     {
-      "id": 1604,
-      "type": "CachedTextEncode_AudioLoop",
-      "pos": [
-        2897.4792724623944,
-        5326.886032930646
-      ],
-      "size": [
-        300,
-        88
-      ],
-      "flags": {},
-      "order": 91,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "clip",
-          "type": "CLIP",
-          "link": 2994
-        },
-        {
-          "name": "text",
-          "type": "STRING",
-          "widget": {
-            "name": "text"
-          },
-          "link": 2995
-        }
-      ],
-      "outputs": [
-        {
-          "name": "CONDITIONING",
-          "type": "CONDITIONING",
-          "links": [
-            2997
-          ]
-        }
-      ],
-      "title": "Next Prompt Encode",
-      "properties": {
-        "cnr_id": "comfyui-audioloophelper",
-        "Node name for S&R": "CachedTextEncode_AudioLoop"
-      },
-      "widgets_values": [
-        "(next prompt - auto-filled by TimestampPromptSchedule)"
-      ]
-    },
-    {
       "id": 1605,
       "type": "ConditioningBlend",
       "pos": [
@@ -4439,12 +4108,12 @@
         {
           "name": "conditioning_a",
           "type": "CONDITIONING",
-          "link": 2996
+          "link": null
         },
         {
           "name": "conditioning_b",
           "type": "CONDITIONING",
-          "link": 2997
+          "link": null
         },
         {
           "name": "blend_factor",
@@ -4452,7 +4121,7 @@
           "widget": {
             "name": "blend_factor"
           },
-          "link": 2998
+          "link": null
         }
       ],
       "outputs": [
@@ -4472,6 +4141,132 @@
       "widgets_values": [
         0.0
       ]
+    },
+    {
+      "id": 1606,
+      "type": "TimestampPromptScheduleBatchEncode",
+      "pos": [
+        -960,
+        4780
+      ],
+      "size": [
+        400,
+        190
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 3000
+        },
+        {
+          "name": "schedule",
+          "type": "STRING",
+          "widget": {
+            "name": "schedule"
+          },
+          "link": null
+        },
+        {
+          "name": "stride_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "stride_seconds"
+          },
+          "link": 3001
+        },
+        {
+          "name": "audio_duration",
+          "type": "FLOAT",
+          "widget": {
+            "name": "audio_duration"
+          },
+          "link": 3002
+        },
+        {
+          "name": "snap_boundaries",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "snap_boundaries"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "conditioning_list",
+          "type": "*",
+          "links": [
+            3003
+          ]
+        },
+        {
+          "name": "iteration_count",
+          "type": "INT",
+          "links": []
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-audioloophelper",
+        "Node name for S&R": "TimestampPromptScheduleBatchEncode"
+      },
+      "widgets_values": [
+        "0:00+: video of a woman passionately singing alone",
+        17.92,
+        180.0,
+        true
+      ],
+      "title": "Prompt Schedule (Batch Encode)"
+    },
+    {
+      "id": 1607,
+      "type": "ConditioningSelectByIteration",
+      "pos": [
+        -520,
+        4780
+      ],
+      "size": [
+        290,
+        78
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "conditioning_list",
+          "type": "*",
+          "link": 3003
+        },
+        {
+          "name": "current_iteration",
+          "type": "INT",
+          "widget": {
+            "name": "current_iteration"
+          },
+          "link": 3004
+        }
+      ],
+      "outputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "links": [
+            3005
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-audioloophelper",
+        "Node name for S&R": "ConditioningSelectByIteration"
+      },
+      "widgets_values": [
+        0
+      ],
+      "title": "Conditioning Select (by Iteration)"
     }
   ],
   "links": [
@@ -4740,14 +4535,6 @@
       "MODEL"
     ],
     [
-      1574,
-      153,
-      0,
-      575,
-      0,
-      "GUIDER"
-    ],
-    [
       1575,
       154,
       0,
@@ -4786,14 +4573,6 @@
       617,
       1,
       "AUDIO"
-    ],
-    [
-      1688,
-      164,
-      0,
-      645,
-      0,
-      "CONDITIONING"
     ],
     [
       1689,
@@ -5020,14 +4799,6 @@
       "MODEL"
     ],
     [
-      2893,
-      569,
-      0,
-      640,
-      0,
-      "AUDIO"
-    ],
-    [
       2821,
       640,
       0,
@@ -5140,30 +4911,6 @@
       "IMAGE"
     ],
     [
-      2902,
-      416,
-      0,
-      1559,
-      0,
-      "CLIP"
-    ],
-    [
-      2904,
-      1539,
-      3,
-      1558,
-      0,
-      "INT"
-    ],
-    [
-      2905,
-      1558,
-      0,
-      1559,
-      1,
-      "STRING"
-    ],
-    [
       2907,
       567,
       0,
@@ -5241,14 +4988,6 @@
       0,
       843,
       11,
-      "FLOAT"
-    ],
-    [
-      2945,
-      1582,
-      4,
-      1558,
-      1,
       "FLOAT"
     ],
     [
@@ -5372,52 +5111,68 @@
       "FLOAT"
     ],
     [
-      2994,
-      416,
-      0,
-      1604,
-      0,
-      "CLIP"
-    ],
-    [
-      2995,
-      1558,
-      1,
-      1604,
-      1,
-      "STRING"
-    ],
-    [
-      2996,
-      1559,
-      0,
-      1605,
-      0,
-      "CONDITIONING"
-    ],
-    [
-      2997,
-      1604,
-      0,
-      1605,
-      1,
-      "CONDITIONING"
-    ],
-    [
-      2998,
-      1558,
-      2,
-      1605,
-      2,
-      "FLOAT"
-    ],
-    [
       2999,
       1605,
       0,
       843,
       6,
       "CONDITIONING"
+    ],
+    [
+      3000,
+      416,
+      0,
+      1606,
+      0,
+      "CLIP"
+    ],
+    [
+      3001,
+      1582,
+      4,
+      1606,
+      2,
+      "FLOAT"
+    ],
+    [
+      3002,
+      1582,
+      2,
+      1606,
+      3,
+      "FLOAT"
+    ],
+    [
+      3003,
+      1606,
+      0,
+      1607,
+      0,
+      "*"
+    ],
+    [
+      3004,
+      1539,
+      3,
+      1607,
+      1,
+      "INT"
+    ],
+    [
+      3005,
+      1607,
+      0,
+      843,
+      6,
+      "CONDITIONING"
+    ],
+    [
+      3006,
+      567,
+      0,
+      640,
+      0,
+      "AUDIO"
     ]
   ],
   "groups": [

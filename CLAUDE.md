@@ -90,6 +90,7 @@ value converter and default. Thin wrappers: `_parse_schedule` / `_match_schedule
 - Pyright `reportIncompatibleMethodOverride` on `execute()` is a false positive.
 - Module constants must be defined BEFORE functions that reference them (project convention).
 - **Scrub workflows before open-sourcing:** filenames, paths, UUIDs, image previews, creative prompts.
+- **TensorLoop framework-cache invalidation is transitive.** Any node whose inputs transitively depend on `TensorLoopOpen.current_iteration` (e.g. anything wired through `AudioLoopController`) gets framework-cache-invalidated every iteration even if its OUTPUT values don't change. If you want "run once per workflow" behavior, memoize INSIDE the node on an `id(clip)`-keyed LRU + add `IS_CHANGED` (see `TimestampPromptScheduleBatchEncode` pattern), OR break the dependency chain by wiring from non-loop-dependent sources.
 - Validate workflow JSON after edits: `python3 -c "import json; json.load(open('file.json'))"`
 
 ## Subgraph editing
@@ -121,7 +122,9 @@ uv run --group dev --group analysis python -m pytest tests/ -v --rootdir=.
 - `tests/test_batch_encode.py` -- `TimestampPromptScheduleBatchEncode` + `ConditioningSelectByIteration` parity, dedup, clamp, end-to-end integration asserting CLIP encode called exactly once per unique prompt (12 tests)
 - `tests/test_decoder_validator.py` -- DR1 decoder widget alignment (6 tests)
 - `tests/test_workflows.py` -- workflow JSON structural validation (parametrized over all example_workflows/*.json)
-- Total: 218 tests (2026-04-22).
+- Total: 220 tests (2026-04-22).
+- **Test shape for memoization fixes.** When a fix's correctness depends on "node runs once across the loop", the red test MUST exercise REPEATED `execute()` calls with identical inputs — single-call tests can't detect framework-cache-invalidation. Canonical shape: `tests/test_batch_encode.py::TestBatchEncoderCaching`.
+- **`id()`-keyed module caches need an autouse clear-fixture in their test files.** `_COND_CACHE`, `_BATCH_ENCODE_CACHE` key on `id(clip)`. Production CLIP is 15 GB and never recycles; pytest's tiny `FakeCLIP` gets GC'd rapidly and Python address recycling produces ghost hits across tests. Pattern: autouse fixture calling `nodes._CACHE_NAME.clear()` before + after each test (see `tests/test_batch_encode.py:17`).
 
 ## Dependencies
 
@@ -130,7 +133,7 @@ Companion custom nodes (not imported, used alongside in workflows):
 - ComfyUI-LTXVideo -- LTXVAddLatentGuide, LTXVCropGuides, LTXVPreprocess, LTXVTiledVAEDecode (default decoder in our example workflows — spatial-only tiling, no temporal-tile seams; swap via `scripts/apply_ltx_decoder.py --revert` if you need the generic VAEDecodeTiled fallback)
 - ComfyUI-KJNodes -- Set/Get nodes, FloatConstant, LTX2_NAG, LTXVImgToVideoInplaceKJ, LTXVAddGuideMulti (multi-guide, up to 20), LTXVAddGuidesFromBatch
 - ComfyUI-VideoHelperSuite -- VHS_VideoCombine
-- ComfyUI-MelBandRoFormer -- vocal separation (hardcoded `dim=384, depth=6, num_stems=1`)
+- ComfyUI-MelBandRoFormer -- vocal separation (hardcoded `dim=384, depth=6, num_stems=1`). **Bypassed by default** (`mode=4`) in every shipped workflow as of 2026-04-22, AND `Set_actual_audio` is explicitly wired from `TrimAudioDuration`(567) directly rather than through the bypassed sampler — explicit wiring makes the graph readable without relying on ComfyUI's bypass-passthrough slot mapping. Re-enabling separation is a two-step manual edit: flip either MelBand node back to `mode=0` AND re-route the `Set_actual_audio` link through `MelBandRoFormerSampler`(569) output 0. Worthwhile for clean-vocal tracks where lip-sync benefits; overhead for instrumental-only or speech-only. Re-apply defaults via `scripts/apply_melband_default_off.py`.
 
 ### Dependency boundary
 - **Offline scripts** (scripts/): librosa allowed via optional `analysis` dep group.
