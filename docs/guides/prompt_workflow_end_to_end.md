@@ -1,4 +1,4 @@
-Last updated: 2026-04-17
+Last updated: 2026-04-23 (absorbed llm_prompt_generation_guide.md; dropped duplicated sections)
 
 # Prompt Workflow: End to End
 
@@ -7,9 +7,8 @@ pasted into the workflow." Covers init image preparation, VLM description
 extraction, audio analysis, LLM schedule generation, and workflow insertion.
 
 Related docs (detailed reference, not required reading):
-- `prompt_creation_guide.md` -- prompt rules, variation patterns, examples
-- `analysis/llm_prompt_generation_guide.md` -- LLM system prompt details, 17 rules
-- `audio_analysis_guide.md` -- offline/runtime analysis, AudioPitchDetect wiring
+- `docs/guides/prompt_creation_guide.md` -- prompt rules, variation patterns, examples
+- `docs/guides/audio_analysis_guide.md` -- offline/runtime analysis, AudioPitchDetect wiring
 
 ## Prerequisites
 
@@ -180,7 +179,7 @@ The output `analysis.json` has everything the LLM needs:
 - **Workflow timing**: trim offset, window/stride/overlap, what node 169 covers,
   `scene_diversity`, `scene_diversity_tier_name`,
   `scene_diversity_mood_bundle`, `montage` flag
-- **`llm_system_prompt`**: All 17 prompt engineering rules for LTX 2.3 i2v
+- **`llm_system_prompt`**: All 9 prompt engineering rules (R1-R9) for LTX 2.3 i2v
 - **`init_image_description`**: Your VLM output, passed through for LLM context
 - **`subject`**: Your subject phrase, passed through for LLM context
 
@@ -307,54 +306,101 @@ Song: |--skip--|----initial render (node 169)----|--loop iteration 1--|--iter 2-
 
 ---
 
-## Variation patterns (quick reference)
+## System prompt reference
 
-| Pattern | What varies | Risk | Start here? |
-|---------|-------------|------|-------------|
-| A: Framing only | Shot type (medium, close-up, wide) | Lowest | Yes |
-| B: Framing + energy | Shot type + body language cues | Moderate | After A works |
-| C: Framing + energy + lighting | Everything above + lighting shifts | Highest drift risk | After B works |
+The `llm_system_prompt` field embedded in the analyzer JSON is
+organized into three parts the LLM reads as one document. You don't
+need to read this to use the pipeline — you only need it if you're
+debugging LLM output or writing a variant system prompt (e.g. the
+standup version in `docs/reference/standup_system_prompt.md`).
 
-Use blend_seconds >= 5.0 for patterns B and C. See `prompt_creation_guide.md`
-for full examples of each.
+### INFERENCE block (what the init image already commits to)
+
+The init image anchors **style family** (live-action / animated / comic
+/ graphic-novel / 3D-render / stop-motion), **color palette**, **setting**
+(indoor/outdoor, urban/natural, wardrobe, era), and **subject appearance
+and count**. The LLM is told: do NOT re-describe these. Re-describing
+invites the text conditioning to fight what the image already commits
+to (e.g. writing "comic-book style" on a photorealistic image forces a
+tug-of-war).
+
+What the schedule **should** drive: camera framing / motion, body
+beats, lighting *shifts over time* (not palette restatement), scene
+cuts, emotional arc. Schedule entries are a delta layer over the
+visual baseline the image provides.
+
+Style-appropriate beat pools: animated/comic → speed lines, panel
+transitions, supersaturation, impact frames. Live-action → rack focus,
+practical lighting shifts, handheld / dolly moves. The LLM infers from
+the image which pool applies.
+
+### Hard rules R1-R8
+
+1. **R1 — Singing verb is mandatory.** Every entry contains "is
+   singing..." (single) or "are singing together..." (multi). Drives
+   LTX 2.3's audio-video cross-attention for lip sync. No
+   "performing", "vocalizing", generic verbs. For instrumental scenes
+   use "is playing <instrument>".
+2. **R2 — Node 169 = first schedule entry, byte-exact.** The LLM MUST
+   copy the first schedule entry verbatim into `node_169_prompt`. Any
+   drift causes a visible seam at the ~20s loop-entry boundary.
+3. **R3 — Identical subject across all entries.** Only vary framing,
+   camera, lighting, body language, performance beats. Never
+   re-describe the environment (image sets it).
+4. **R4 — Multi-person position-anchoring.** Describe each person by
+   position + wardrobe inside the subject string ("the man on the
+   left in the dark jacket..."). No bare "crowd", "group", "duo".
+5. **R5 — No meta-language.** No "The scene opens with...", "Cut
+   to...", "camera shows...". Every entry begins "Style: cinematic."
+   (or omits Style: when the init image commits style strongly) and
+   moves straight to subject + action.
+6. **R6 — Audio direction.** Do NOT describe the song (voice surging,
+   music swelling — the frozen audio latent already carries that).
+   DO describe ambient/diegetic sounds not in the audio track (room
+   tone, fluorescent hum, rain). Vocal delivery qualifiers ("in a
+   low gravelly voice") are encouraged when relevant.
+7. **R7 — Camera motion.** Default "static camera, locked off shot".
+   Available: dolly in, dolly left/right, jib up/down, focus shift.
+   AVOID dolly out (breaks limbs/faces) except for the final OUTRO.
+8. **R8 — One paragraph, ~200 words max.** No markdown or bullets.
+   Present progressive throughout.
+
+9. **R9 — Snap to stride grid.** Schedule timestamps are snapped to
+   the effective `stride_seconds` grid at runtime. The LLM doesn't
+   have to hand-align perfectly, but getting close reduces the shift
+   at snap time.
+
+### Ambition tiers and montage
+
+`workflow_context.scene_diversity` (e.g. `"3b"`) tells the LLM which
+ambition ceiling to target:
+
+- Tier 1 performance_live → single-camera concert feel
+- Tier 2 performance_dynamic → camera + body beats rotate (DEFAULT)
+- Tier 3 cinematic → + environmental storytelling / scene shifts
+- Tier 4 narrative → + physical-action arc / loose story
+- Tier 5 stylized → + genre overlay (noir / surreal / retro)
+- Tier 6 avant_garde → non-linear, abstract, performative
+
+Sub-letters (1a/1b/1c, 3a-3d, etc.) add mood bundles — lighting
+palette, location keywords, camera-style adjectives.
+
+`workflow_context.montage = true` is orthogonal to tier. When set,
+each entry must advance an emotional beat (not merely describe a
+scene), use emotional-arc language ("the feeling building",
+"catharsis arriving", "release easing into stillness"), and dwell
+~12s instead of ~20s. Arcane-style music-drives-narrative pacing.
 
 ---
 
-## Multi-person notes
+## Variation patterns, multi-person rules, troubleshooting
 
-See `prompt_creation_guide.md` Multi-character scenes section for comprehensive
-rules, negative prompt additions, and worked examples (3 cartoon characters).
+Moved to `docs/guides/prompt_creation_guide.md` to avoid duplication.
+That doc covers:
 
-### In every schedule entry
-
-- Always say "singing together" or "performing together"
-- Position-anchor each person: "the man on the left", "the woman on the right"
-- Never use "crowd", "group", "people", "others"
-
-### Don't direct individual actions
-
-"The man raises his hand while the woman turns" tends to produce artifacts.
-Keep them as a unit: "performing together", "swaying in sync", "leaning forward."
-The audio conditioning handles who's actually singing.
-
-### Negative prompt additions
-
-Add to your negative prompt for multi-person scenes:
-
-```
-duplicate character, clone, twin, extra characters, additional people,
-new figures appearing, background characters, wrong number of characters
-```
-
----
-
-## Troubleshooting
-
-| Problem | Likely cause | Fix |
-|---------|-------------|-----|
-| Visual jump at ~20 seconds | node 169 prompt differs from schedule 0:00 | Make them match |
-| Identity drift across iterations | Subject description varies between entries | Copy-paste identical subject block |
-| Scene "restarts" at prompt transitions | Setting re-described in schedule entries | Remove environment descriptions |
-| Limbs/faces distort | Dolly out used in non-OUTRO section | Switch to static camera |
-| Style shifts despite same subject | Lighting or energy words too different | Use Pattern A first, add variation gradually |
-| Prompt too long, output degraded | Over-describing (>200 words per entry) | Cut to essentials: subject + action + ambient |
+- Full worked examples of Patterns A / B / C (framing-only →
+  framing+energy → framing+energy+lighting) across two songs.
+- Multi-character scenes: position-anchoring, "singing together",
+  negative-prompt additions, worked examples (3 cartoon characters).
+- Troubleshooting table covering identity drift, iteration-boundary
+  seams, dolly-out distortions, length-over-200w degradation.

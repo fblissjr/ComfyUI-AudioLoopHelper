@@ -115,7 +115,7 @@ Output Assembly:
   | model | MODEL | #1523 LTX2AttentionTunerPatch (slot 0) |
   | nag_cond_video | CONDITIONING | #507 CLIPTextEncode (slot 0) -- negative prompt text |
   | nag_cond_audio | CONDITIONING | **unwired** (null) -- not used; audio guidance not needed for music video |
-- **Widgets**: `nag_scale`: `11`, `nag_init_scale`: `0.25`, `nag_sigma_end`: `2.5`, `rescale_cfg`: `true`
+- **Widgets**: `nag_scale`: `11`, `nag_alpha`: `0.25`, `nag_tau`: `2.5`, `inplace`: `true` (KJNodes default from when full 22B was primary; **for merged distilled-1.1 dial `nag_scale` to 3-7** per `docs/reference/nag_technical_reference.md`)
 - **Outputs**:
   | Output | Type | Connected To |
   |--------|------|-------------|
@@ -1111,10 +1111,10 @@ The upscale chain is bypassed because per-loop VAE round-trip quality loss and V
 
 | Widget | Node | Default | What It Controls | Valid Range |
 |--------|------|---------|-----------------|-------------|
-| `nag_scale` | #508 LTX2_NAG | `11` | NAG guidance strength (replaces CFG for distilled models) | 0+ |
-| `nag_init_scale` | #508 LTX2_NAG | `0.25` | Initial NAG scale at high sigma | 0+ |
-| `nag_sigma_end` | #508 LTX2_NAG | `2.5` | Sigma below which NAG is fully active | 0+ |
-| `rescale_cfg` | #508 LTX2_NAG | `true` | Whether to rescale CFG output | true/false |
+| `nag_scale` | #508 LTX2_NAG | `11` (dial to 3-7 for distilled-1.1) | Negative-guidance strength. See `docs/reference/nag_technical_reference.md` for the full math + why the 3-7 range for distilled. | 0+ |
+| `nag_alpha` | #508 LTX2_NAG | `0.25` | Mixing coefficient between guided and positive attention. | 0-1 |
+| `nag_tau` | #508 LTX2_NAG | `2.5` | Norm-clipping threshold (prevents guidance growing unbounded). | 0+ |
+| `inplace` | #508 LTX2_NAG | `true` | In-place tensor ops (lower VRAM, minor rounding diff). | true/false |
 
 ### Model Optimization
 
@@ -1182,18 +1182,20 @@ The upscale chain is bypassed because per-loop VAE round-trip quality loss and V
 
 ## Custom Node Source Locations
 
+Paths are given relative to your ComfyUI install root (`<comfyui>`).
+
 | Package | Source Path |
 |---------|------------|
-| AudioLoopHelper (our nodes) | `<home>/ComfyUI/custom_nodes/ComfyUI-AudioLoopHelper/nodes.py` |
-| NativeLooping | `<home>/ComfyUI/custom_nodes/ComfyUI-NativeLooping_testing/nodes.py` |
-| KJNodes (LTX) | `<home>/ComfyUI/custom_nodes/ComfyUI-KJNodes/nodes/ltxv_nodes.py` |
-| KJNodes (model opt) | `<home>/ComfyUI/custom_nodes/ComfyUI-KJNodes/nodes/model_optimization_nodes.py` |
-| ComfyUI-LTXVideo | `<home>/ComfyUI/custom_nodes/ComfyUI-LTXVideo/latents.py` |
-| VideoHelperSuite | `<home>/ComfyUI/custom_nodes/ComfyUI-VideoHelperSuite/` |
-| MelBandRoFormer | `<home>/ComfyUI/custom_nodes/ComfyUI-MelBandRoFormer/nodes.py` |
-| ComfyUI core (LTX) | `<home>/ComfyUI/comfy_extras/nodes_lt.py` |
-| ComfyUI core (latent) | `<home>/ComfyUI/comfy_extras/nodes_latent.py` |
-| ComfyUI core (nodes) | `<home>/ComfyUI/nodes.py` |
+| AudioLoopHelper (our nodes) | `<comfyui>/custom_nodes/ComfyUI-AudioLoopHelper/nodes.py` |
+| NativeLooping | `<comfyui>/custom_nodes/ComfyUI-NativeLooping_testing/nodes.py` |
+| KJNodes (LTX) | `<comfyui>/custom_nodes/ComfyUI-KJNodes/nodes/ltxv_nodes.py` |
+| KJNodes (model opt) | `<comfyui>/custom_nodes/ComfyUI-KJNodes/nodes/model_optimization_nodes.py` |
+| ComfyUI-LTXVideo | `<comfyui>/custom_nodes/ComfyUI-LTXVideo/latents.py` |
+| VideoHelperSuite | `<comfyui>/custom_nodes/ComfyUI-VideoHelperSuite/` |
+| MelBandRoFormer | `<comfyui>/custom_nodes/ComfyUI-MelBandRoFormer/nodes.py` |
+| ComfyUI core (LTX) | `<comfyui>/comfy_extras/nodes_lt.py` |
+| ComfyUI core (latent) | `<comfyui>/comfy_extras/nodes_latent.py` |
+| ComfyUI core (nodes) | `<comfyui>/nodes.py` |
 
 ---
 

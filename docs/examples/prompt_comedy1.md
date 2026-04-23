@@ -6,7 +6,7 @@ Last updated: 2026-04-17 (post-DR1 status: decoder is now LTXVTiledVAEDecode; wi
 > `LTXVTiledVAEDecode` (no temporal tiling, no stride invariant).
 > Widget recommendations below remain correct post-DR1 (they were
 > already Phase-1-aware). See `prompt_comedy4.md` for the current
-> richer schedule and `docs/debugging_guide.md` for current workflow
+> richer schedule and `docs/guides/debugging_guide.md` for current workflow
 > guidance.
 
 Original date: 2026-04-17
@@ -16,7 +16,7 @@ Original date: 2026-04-17
 Companion example to `prompt.md` / `prompt2.md` / `prompt3.md` /
 `prompt4.md`, but for the **standup comedy** domain rather than music
 video. Demonstrates the LLM-mediated path with a custom system prompt
-(see `docs/system_prompt.md`) working around the music-centric default
+(see `docs/reference/standup_system_prompt.md`) working around the music-centric default
 `llm_system_prompt`.
 
 ## Inputs
@@ -41,7 +41,7 @@ video. Demonstrates the LLM-mediated path with a custom system prompt
    the audio analysis JSON.
 2. Discarded the auto-embedded `llm_system_prompt` (music-specific).
 3. Fed the remaining JSON + init image + creative direction to Gemini,
-   using the standup system prompt from `docs/system_prompt.md`.
+   using the standup system prompt from `docs/reference/standup_system_prompt.md`.
 4. Corrected one critical issue in Gemini's output (timestamp format:
    Gemini emitted bare decimal seconds like `15.98-35.00` instead of
    M:SS; our `_fmt_ts` truncates to integer M:SS by convention) and
@@ -107,7 +107,7 @@ fine for standup; notes below explain when to deviate.
 | Widget | Node | Start value | Standup note |
 |--------|------|-------------|--------------|
 | `window_seconds` | AudioLoopController | **19.88** | Default. Don't change unless you know why. Loop iteration length. |
-| `overlap_seconds` | AudioLoopController | **2.0** | Default. Target overlap between iterations. Effective stride = **17.92s** per iteration (integer-latent quantized; see `docs/debugging_guide.md`). Bump to **3.0** *only* if you see identity twitches at iteration boundaries (rare with a static stage + sustained subject). More overlap = smoother continuity but less new content per iteration. |
+| `overlap_seconds` | AudioLoopController | **2.0** | Default. Target overlap between iterations. Effective stride = **17.92s** per iteration (integer-latent quantized; see `docs/guides/debugging_guide.md`). Bump to **3.0** *only* if you see identity twitches at iteration boundaries (rare with a static stage + sustained subject). More overlap = smoother continuity but less new content per iteration. |
 | `blend_seconds` | TimestampPromptSchedule | **0.0** | **CORRECTION from v1.** Post-Phase-1 fix: values between 0 and stride_seconds (~17.92s) are auto-clamped to stride_seconds because they can't produce smooth ramps at iteration resolution. Start at 0 (hard switch) — with snapped boundaries + identical subject across entries, transitions are clean without cross-fade. Only bump to **≥ stride_seconds** (e.g. 20) if you see a visible seam at prompt boundaries, and only if the cross-fade is worth diluting shorter entries. |
 | `snap_boundaries` | TimestampPromptSchedule | **True** | Leave on. Rounds schedule boundaries to the iteration grid so every iteration runs on exactly one prompt (no mixed conditioning). Turning it off re-enables the legacy spike-blend behavior and is only useful if you want sub-stride timing precision AND accept the jitter risk. |
 | `start_index` (trim) | node 567 | **0** | Audio is already trimmed per filename `norm_trimmed`. If your source has applause/music intro before the routine starts, set to the seconds to skip. |
@@ -144,7 +144,7 @@ of adjacent prompts — trade-off.
 
 - **Timestamp-format drift** was the only critical LLM failure. Worth
   adding an explicit "truncate decimal seconds, never emit bare
-  seconds" rule to `docs/system_prompt.md` before the next run —
+  seconds" rule to `docs/reference/standup_system_prompt.md` before the next run —
   Gemini in particular tends to preserve input decimal precision unless
   told otherwise.
 - **Section-label interpretation was the real test.** Gemini correctly
@@ -156,7 +156,7 @@ of adjacent prompts — trade-off.
   "energy proxies, not structural roles."
 - **Verb pool rotation** was good: 9 unique standup verbs across 10
   entries, no repetition in adjacent entries. The pool in
-  `docs/system_prompt.md` is the right size for ~10-entry runs; scale
+  `docs/reference/standup_system_prompt.md` is the right size for ~10-entry runs; scale
   the pool if your routine produces more entries.
 - **Crowd state variation** worked as intended (R4): rotated through
   laughter, attentive silence, sipping drinks, whispering, wiping eyes,
@@ -169,7 +169,7 @@ of adjacent prompts — trade-off.
   wall`) so the performance verb attaches cleanly.
 - **Mood-bundle consistency**: Gemini initially included
   `Wide stage framing, warm stage wash.` in only 3 of 10 entries. The
-  music examples in `docs/analysis/llm_prompt_generation_guide.md`
+  music examples in `docs/guides/prompt_workflow_end_to_end.md`
   show mood bundles in **every** entry — consistent with a signature.
   Correction harmonized to all entries.
 

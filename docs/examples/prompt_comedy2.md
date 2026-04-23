@@ -156,7 +156,7 @@ identity-drift jump at each boundary.
   is explicitly dropped from this version** because it contradicts the
   tight image. That's a generic lesson: mood bundles are advisory;
   drop them when they fight the actual image composition. Candidate
-  for a `docs/system_prompt.md` refinement.
+  for a `docs/reference/standup_system_prompt.md` refinement.
 - **Entry 2:41-2:58 is new** (v1 collapsed after snap; v2 restores it).
   We could consider whether the raw LLM should have generated for this
   dwell in the first place — might be a signal that R9 (pre-snap

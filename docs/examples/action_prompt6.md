@@ -10,8 +10,8 @@ Only the prompt text differs.
 
 ## Why strip audio descriptors
 
-The official LTX 2.3 i2v/t2v system prompt (`docs/ltx23_prompt_
-system_prompts.md`) directs the prompt engineer to weave audio
+The official LTX 2.3 i2v/t2v system prompt
+(`docs/reference/ltx23_prompt_system_prompts.md`) directs the prompt engineer to weave audio
 descriptions alongside actions. **That guidance assumes the model is
 ALSO generating audio.** In our workflow, the audio is FROZEN via
 `noise_mask=0` on the audio latent — the model is not generating
@@ -165,7 +165,7 @@ still image with no motion, deformed facial features, extra limbs, disfigured ha
 - **The frozen-audio architectural insight is worth documenting
   elsewhere.** LTX's official prompting guide assumes audio is being
   generated; our workflow uses audio as FIXED context. Adding this
-  nuance to `CLAUDE.md` or `docs/debugging_guide.md` would help
+  nuance to `CLAUDE.md` or `docs/guides/debugging_guide.md` would help
   future prompt-writing.
 - **If v6 reads as "flatter" than v5 on chorus peaks**, the audio
   descriptors were providing real reinforcement even with frozen

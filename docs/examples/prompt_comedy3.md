@@ -350,7 +350,7 @@ uv run python scripts/apply_ltx_decoder.py --revert
 This restores `VAEDecodeTiled` with widgets `[512, 64, 512, 64]`
 (tile stride 17.92s, exactly matches `overlap_seconds=2`'s iteration
 stride of 17.92s). If you change `overlap_seconds` after this, you
-must recompute widgets per the table in `docs/debugging_guide.md`
+must recompute widgets per the table in `docs/guides/debugging_guide.md`
 or risk re-introducing mid-video seams.
 
 **Do NOT use**: `VAEDecodeLoopKJ` (wrong tool — designed for

@@ -708,7 +708,7 @@ class TimestampPromptSchedule(io.ComfyNode):
                         f"{blend_seconds:.2f} is below stride_seconds="
                         f"{stride_seconds:.2f}; clamping to stride. "
                         "Sub-stride values can't produce smooth ramps at "
-                        "iteration resolution — see docs/prompt_creation_guide.md."
+                        "iteration resolution — see docs/guides/prompt_creation_guide.md."
                     ),
                 )
                 blend_seconds = stride_seconds

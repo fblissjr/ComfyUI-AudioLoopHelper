@@ -1,17 +1,33 @@
-Last updated: 2026-04-21
+Last updated: 2026-04-23 (framing rewrite: why we diverge)
 
 # LTX 2.3 Prompt Generation System Prompts
 
-> **Historical reference — raw Lightricks i2v/t2v system prompts.**
-> For schedule construction in this project, start with
-> `prompt_creation_guide.md` (prompt rules + variation patterns) or
-> `analysis/llm_prompt_generation_guide.md` (17 hard rules + examples).
-> Those docs incorporate the project-specific constraints (frozen
-> audio, `snap_boundaries`, canonical camera vocabulary) that the raw
-> upstream prompts don't know about.
-
-These are the official system prompts for generating video prompts for LTX 2.3.
-Use them as reference when writing prompts for the TimestampPromptSchedule node.
+> **Why this doc exists.** These are the raw Lightricks i2v and
+> t2v system prompts — what Lightricks uses to expand and rewrite
+> user prompts at inference in the LTX-2 distilled pipeline. They
+> describe the training-distribution patterns the model best
+> matches: long, chronological, 200-word, audio-interleaved
+> paragraphs.
+>
+> **Why our workflow diverges.** We provide both a first-frame
+> image AND frozen audio that jointly condition the video. Because
+> audio and video were trained together in LTX 2.3 with shared
+> cross-attention, the prompt itself works *better* when **concise
+> and less detailed** than these raw prompts suggest. Over-specifying
+> audio descriptors, dialogue transcription, or detailed vocal
+> delivery language double-signals what the frozen audio latent
+> already carries and can over-crank visual intensity at music
+> beats (validated in `docs/examples/action_prompt6.md`).
+>
+> **How to use this doc.** Read these to understand what LTX 2.3
+> "expects" at the training level — useful when debugging why a
+> particular framing lands better than another, or when writing
+> prompts for a *non-frozen-audio variant* (pure T2V, pure I2V
+> with audio-generation, dialogue-heavy scenes).
+>
+> For the rules we actually follow in this repo, start at
+> `docs/guides/prompt_creation_guide.md`. For the LLM-mediated
+> schedule-generation flow, see `docs/guides/prompt_workflow_end_to_end.md`.
 
 Source: LTX 2.3 official documentation.
 

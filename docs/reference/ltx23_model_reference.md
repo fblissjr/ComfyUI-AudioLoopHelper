@@ -53,7 +53,7 @@ comfy_extras/nodes_lt.py (append_keyframe), comfy/ldm/lightricks/model.py
   Landscape and square work best.
 - **Two-stage approach is the recommended workaround**: generate at lower res (720p),
   then spatial latent upscale to 1080p+. This is what LTX-Desktop and native LTX-2
-  both do. See `upscale_guide.md` and `analysis/ltx23_gaps_analysis.md`.
+  both do. See `docs/analysis/ltx23_gaps_analysis.md` (upscale workflow is designed but not yet shipped — see `internal/design/upscale_workflow_design.md`).
 - For our loop workflow: each window is 497 frames at 832x480. Changing resolution
   requires adjusting window_seconds or temporal_tile_size to stay under the limit.
 
@@ -102,8 +102,8 @@ try the per-step workflow. Compare iteration 5+ brightness against initial rende
   does NOT run during the initial render. Node 169 prompt MUST match the
   schedule's 0:00 entry to avoid visual discontinuity at ~20s.
 
-Full system prompts: `ltx23_prompt_system_prompts.md`
-Prompt creation guide: `prompt_creation_guide.md`
+Full system prompts: `docs/reference/ltx23_prompt_system_prompts.md`
+Prompt creation guide: `docs/guides/prompt_creation_guide.md`
 
 ## Conditioning path
 
@@ -172,7 +172,7 @@ extraction and output trimming nodes. Shared internals:
 - CFGGuider (644) -- packages for sampling (cfg=1.0, NAG does guidance)
 - SamplerCustomAdvanced (573) -- generates new frames
 
-Full traces: `pipeline_flow_image.md` and `pipeline_flow_latent.md`.
+Full traces: `docs/reference/pipeline_flow_image.md` and `docs/reference/pipeline_flow_latent.md`.
 
 ## LTX 2.3 audio-video alignment
 
@@ -198,4 +198,4 @@ Getting this wrong silently misconfigures the node.
   3-step refinement sampler -> VAEDecodeTiled.
 - Model: `ltx-2.3-spatial-upscaler-x2-1.1.safetensors`
 - Refinement sigmas: [0.85, 0.725, 0.4219, 0.0] (3 steps).
-- Guide: `upscale_guide.md`
+- Design doc (workflow not yet shipped): `internal/design/upscale_workflow_design.md`

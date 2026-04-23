@@ -16,7 +16,7 @@ identity anchor. Differences:
    carry most of the signal. Shorter prompts also cache better in
    `CachedTextEncode` when the same line recurs.
 2. **Camera keywords are byte-exact to the canonical LTX 2.3 list**
-   (`README.md` lines 657-668, `docs/prompt_creation_guide.md`).
+   (`README.md` lines 657-668, `docs/guides/prompt_creation_guide.md`).
    Every camera clause is one of: `static camera, locked off shot`
    / `dolly in, camera pushing forward` / `dolly left, camera
    tracking left` / `dolly right, camera tracking right` /
@@ -164,7 +164,7 @@ still image with no motion, subtitles, deformed facial features, extra limbs, di
   texture, lens behavior). On a painterly fantasy init image it
   fights the image's native style, and across iterations the drift
   toward photoreal reads as the subject "aging" — skin detail, face
-  geometry subtly realists over time. `docs/prompt_creation_guide.md`
+  geometry subtly realists over time. `docs/guides/prompt_creation_guide.md`
   already says to omit `Style:` when the init image sets style
   strongly; `your-illustrated-init-image.png` clearly does. `Style: illustrated.` keeps
   the structural prefix but pulls the text conditioning toward the

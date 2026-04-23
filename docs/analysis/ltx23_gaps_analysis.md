@@ -1,4 +1,4 @@
-Last updated: 2026-04-12
+Last updated: 2026-04-23 (LTXVLoopingSampler section tightened: 2 root blockers + 3 cascades)
 
 # LTX 2.3 Gaps Analysis: ComfyUI-LTXVideo vs LTX-2 Native vs LTX-Desktop
 
@@ -250,53 +250,74 @@ exists where, what's missing, and what could be brought into ComfyUI workflows.
 
 ## LTXVLoopingSampler AV Latent Incompatibility (Deep Analysis)
 
-Last analyzed: 2026-04-12
+Last analyzed: 2026-04-12; root-cause framing tightened 2026-04-23.
 
 LTXVLoopingSampler (`ComfyUI-LTXVideo/looping_sampler.py` line 722) explicitly
 rejects AV latents with: "LoopingSampler currently does not support Audio Visual
-latents." This is not a TODO -- it's a fundamental architectural incompatibility.
+latents." This is not a TODO — it's architectural.
 
-### Why it's incompatible (5 blocking issues)
+### Two root blockers, three cascading symptoms
 
-1. **Spatial tiling on 5D video fails on 4D audio**: Line 245 does
-   `samples[:,:,:,v_start:v_end,h_start:h_end]`. NestedTensor applies this to
-   BOTH tensors. Audio is `[B,8,T,16]` (4D) -- indexing dims 3,4 causes IndexError.
+Earlier versions of this analysis listed "5 blocking issues" at equal weight.
+On re-examination (2026-04-23), 2 of the 5 are architectural root causes; the
+other 3 are type-system consequences that would vanish once the root causes
+were addressed. Calling that out helps future engineers not waste time fixing
+the easy-looking symptom issues first.
 
-2. **Temporal tiling uses video frame count**: Lines 325-339 iterate based on
-   `shape[2]` (video latent frames: 63). Audio has 497 frames at 25Hz -- completely
-   independent. Tile boundaries would slice audio at wrong positions.
+**Root blocker 1 — Temporal-schedule mismatch** (`looping_sampler.py` lines
+325-339). The temporal chunking loop iterates on the video frame count
+(`tile_config.tile_latents["samples"].shape[2]`, ~63 video latent frames).
+Audio latents have ~497 frames at 25Hz — a completely independent temporal
+density by construction. The loop fundamentally assumes a single temporal
+dimension. Fixing this requires dual temporal iteration or an audio↔video
+frame-mapping scheme, and audio overlap blending in tile-boundary regions
+has no established best practice in the literature. This is architectural.
 
-3. **Weighted spatial accumulation**: Line 914 does
-   `final_output[:,:,:,v,h] += tile * weights`. Can't index-assign a NestedTensor
-   result into a regular 5D tensor.
+**Root blocker 2 — Model cross-attention trained jointly, not tiled**
+(`av_model.py` lines 667 `separate_audio_and_video_latents()` + 1026
+forward). The model's attention operates on joint AV token-space; its
+training never saw tiled AV. Feeding spatially- or temporally-tiled AV would
+require retraining validation or empirical cross-attention pruning (lossy,
+untested). This is architectural.
 
-4. **Sub-sampler expectations**: LTXVBaseSampler/ExtendSampler do
-   `latents["samples"][:,:,:t.shape[2]] = t` -- assumes 5D video-only.
+**Cascades — type-system consequences of Issue 1 below, not independent
+blockers:**
 
-5. **Model forward requires BOTH**: `av_model.py` forward() separates input `x`
-   into `[vx, ax]` and processes both through cross-attention (audio_to_video,
-   video_to_audio). Can't tile them separately with different schedules because
-   cross-attention operates at token level across both modalities simultaneously.
+- **Cascade A — Spatial tiling on 5D video fails on 4D audio** (`looping_sampler.py`
+  line 245). `samples[:,:,:,v_start:v_end,h_start:h_end]` is a 5D slice;
+  NestedTensor broadcasts it to the 4D audio `[B,8,T,16]` and raises
+  `IndexError`. Vanishes if NestedTensor is unbound before spatial tiling.
+- **Cascade B — Weighted spatial accumulation type mismatch** (line 914).
+  `final_output[:,:,:,v,h] += tile * weights` can't index-assign a
+  NestedTensor result into a regular 5D tensor. Vanishes once Cascade A is
+  fixed (tile_samples becomes a regular tensor).
+- **Cascade C — Sub-sampler expectations** (`easy_samplers.py` line 193).
+  `LTXVBaseSampler` / `LTXVExtendSampler` do `latents["samples"][:,:,:t.shape[2]] = t`,
+  assuming 5D video-only. Sub-samplers never need AV-aware changes if
+  NestedTensor is separated upstream.
 
 ### Why TensorLoop works for AV
 
-- Passes whole NestedTensor to sampler (no slicing, no indexing)
-- Model's `separate/recombine_audio_and_video_latents` handles unpacking internally
-- Audio re-added fresh each iteration via LTXVConcatAVLatent
-- No spatial or temporal tiling -- each iteration generates one full window
+- Passes the whole NestedTensor to the sampler — no slicing, no indexing.
+- Model's `separate/recombine_audio_and_video_latents` handles unpacking
+  internally, within the joint-trained code path.
+- Audio is re-added fresh each iteration via `LTXVConcatAVLatent`.
+- No spatial or temporal tiling — each iteration generates one full window.
 
-### Could we build an AV-compatible version?
+### Could we build an AV-compatible LTXVLoopingSampler?
 
-Theoretically yes (separate video/audio before tiling, compute corresponding
-audio ranges per video tile, recombine for sampling, separate for accumulation).
-But: ~1500 lines of new code, audio temporal alignment is non-trivial (25Hz vs
-8x compressed video), audio overlap blending is undefined (no established
-approach), and the model hasn't been tested with tiled AV inference at boundaries.
+Only if both root blockers are resolved. The cascades (A/B/C) are ~150 lines
+of refactoring across `_extract_spatial_tile` and final-assembly paths —
+tractable. But the root blockers are research-grade work: designing audio
+frame mapping with overlap blending that preserves lip-sync at tile
+boundaries (Blocker 1), and validating that tiled cross-attention doesn't
+degrade quality (Blocker 2 — would need either retraining or an empirical
+study). Not feasible in <1 week of focused effort.
 
-**Recommendation**: Stay on TensorLoop for AV. Use LTXVLoopingSampler only for
-video-only workflows. The two-stage upscale approach (generate at 832x480, upscale
-separately) addresses the resolution limitation without requiring spatial tiling
-during AV generation.
+**Recommendation:** Stay on TensorLoop for AV. Use LTXVLoopingSampler only
+for video-only workflows. The two-stage upscale approach (generate at
+832x480, upscale separately) addresses the resolution limitation without
+requiring spatial tiling during AV generation.
 
 ### Source files
 

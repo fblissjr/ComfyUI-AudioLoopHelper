@@ -1,4 +1,4 @@
-Last updated: 2026-04-23
+Last updated: 2026-04-23 (doc reorg: guides/ + reference/ split)
 
 # Architecture overview — ComfyUI-AudioLoopHelper
 
@@ -156,7 +156,7 @@ prepended, then all loop-body slices appended. Final
 `LTXVTiledVAEDecode(1604, [2,2,1,True,'auto','auto'])` + audio →
 `VHS_VideoCombine(617)`.
 
-**Deeper:** `docs/pipeline_flow_latent.md` for the long-form
+**Deeper:** `docs/reference/pipeline_flow_latent.md` for the long-form
 node-by-node trace. Live inspection via
 `scripts/analyze_workflow_dag.py <workflow> --save-run`.
 
@@ -426,8 +426,9 @@ What they ship that we DON'T use:
 
 - [`gemma_encoder.py`](https://github.com/Lightricks/ComfyUI-LTXVideo/blob/main/gemma_encoder.py)
   — bypasses ComfyUI's CLIP wrapper. See §3.
-- `LTXVLoopingSampler` — incompatible with AV latents (5 blocking
-  issues per `docs/analysis/ltx23_gaps_analysis.md`).
+- `LTXVLoopingSampler` — incompatible with AV latents (2 root
+  blockers + 3 type-system cascades per
+  `docs/analysis/ltx23_gaps_analysis.md`).
 - `STG` / `APG` — Lightricks's in-house guidance mechanisms. Not
   wired in baseline. APG is what Lightricks uses instead of NAG.
 
@@ -507,7 +508,7 @@ model_clone.add_object_patch(
 Uses `add_object_patch` — hence the closure-capture + offload
 asymmetry issue in §5.
 
-**Deeper:** `docs/nag_technical_reference.md` for the full NAG
+**Deeper:** `docs/reference/nag_technical_reference.md` for the full NAG
 treatment.
 
 ## 8. Native LTX-2 → ComfyUI portability
@@ -624,14 +625,14 @@ For "I want to...":
 
 ## See also
 
-- `docs/pipeline_flow_latent.md` — full node-by-node trace of the
-  LATENT workflow
-- `docs/pipeline_flow_image.md` — IMAGE workflow trace
-- `docs/sampler_reference.md` — sampler walkthrough with ComfyUI +
-  MultimodalGuider source references
-- `docs/nag_technical_reference.md` — NAG deep dive
+- `docs/reference/pipeline_flow_latent.md` — full node-by-node trace
+  of the LATENT workflow
+- `docs/reference/pipeline_flow_image.md` — IMAGE workflow trace
+- `docs/reference/sampler_reference.md` — sampler walkthrough with
+  ComfyUI + MultimodalGuider source references
+- `docs/reference/nag_technical_reference.md` — NAG deep dive
 - `docs/analysis/nag_object_patches_offload_asymmetry.md` —
   ModelPatcher offload asymmetry explainer
 - `docs/analysis/ltx23_gaps_analysis.md` — capability gaps
-- `docs/debugging_guide.md` — symptom → first-check lookup
+- `docs/guides/debugging_guide.md` — symptom → first-check lookup
 - `CLAUDE.md` — authoritative project memory / coding conventions

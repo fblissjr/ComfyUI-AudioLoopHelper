@@ -649,7 +649,7 @@ uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
   --trim 10
 
 # Pick an ambition tier (default 2a performance-dynamic).
-# See docs/audio_analysis_guide.md#scene-diversity-taxonomy for all tiers.
+# See docs/guides/audio_analysis_guide.md#scene-diversity-taxonomy for all tiers.
 uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
   --subject "a woman singing in a workshop" --scene-diversity 3b
 
@@ -694,7 +694,7 @@ uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
 The JSON export includes `workflow_context` (timing, subject, image description)
 and a complete `llm_system_prompt` with all 17 prompt engineering rules baked in.
 Paste the JSON into Claude or Gemini -- the LLM outputs both `node_169_prompt`
-and `schedule` ready to paste. See `docs/analysis/llm_prompt_generation_guide.md`
+and `schedule` ready to paste. See `docs/guides/prompt_workflow_end_to_end.md`
 for the full workflow.
 
 ## Prompt writing guide (LTX 2.3)
@@ -736,7 +736,7 @@ carefully.
    elements the audio doesn't.
 
 5. **Omit `Style:` prefix when the init image strongly commits style.**
-   Per Lightricks's own rule in `docs/ltx23_prompt_system_prompts.md:25`:
+   Per Lightricks's own rule in `docs/reference/ltx23_prompt_system_prompts.md:25`:
    "If unclear, omit to avoid conflicts." For clearly-committed init
    images (cinematic-realism render, pure illustration, etc.) the
    prefix fights what the image sets. Use `Style: cinematic.` / `Style:
@@ -849,4 +849,4 @@ critical impact moments.
 
 For action content with more cut density, halve `window_seconds` (and
 `length`) to get ~20 iterations on a 2:30 track. See
-`docs/debugging_guide.md` for the window/length math.
+`docs/guides/debugging_guide.md` for the window/length math.

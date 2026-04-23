@@ -1,15 +1,15 @@
-Last updated: 2026-04-22
+Last updated: 2026-04-23 (moved to docs/guides/)
 
 # Debugging Guide: Quality Problems in the Audio-Loop Pipeline
 
 Problem-first troubleshooting. You see X in your output — here's how
 to diagnose and fix it.
 
-Related docs:
-- `prompt_creation_guide.md` — prompt rules + widget-value guidance
-- `audio_analysis_guide.md` — offline analysis + runtime audio nodes
-- `system_prompt.md` — LLM system prompt for schedule generation
-- `profiling_guide.md` — performance profiling (opt-in)
+Related docs (all paths relative to repo root):
+- `docs/guides/prompt_creation_guide.md` — prompt rules + widget-value guidance
+- `docs/guides/audio_analysis_guide.md` — offline analysis + runtime audio nodes
+- `docs/reference/standup_system_prompt.md` — LLM system prompt for schedule generation (standup variant)
+- `docs/guides/profiling_guide.md` — performance profiling (opt-in)
 
 ## How quality problems layer in this pipeline
 
@@ -290,7 +290,7 @@ the mouth makes vowel-like shapes for consonant sounds.
    action-verb attention drives lip shape. Use:
    - Music: "is singing..." (single) / "are singing together..." (multi)
    - Standup: "is telling a joke," "is delivering the punchline",
-     "is pausing for the laugh," etc. (see `docs/system_prompt.md`).
+     "is pausing for the laugh," etc. (see `docs/reference/standup_system_prompt.md`).
    - Dialogue: emotion-loaded verbs like "is pressing the point," "is
      softening." Avoid the too-generic "is speaking."
 
@@ -570,7 +570,7 @@ smoother, overlap was the dominant factor at those timestamps.
 | `shift` | 1513 ModelSamplingSD3 | `13` |
 | scheduler | 1421 BasicScheduler | `linear_quadratic, 8, 1` |
 | CFG | 153 CFGGuider | `1.0` (distilled model) |
-| NAG scale/tau/alpha/enable | 508 LTX2_NAG | `11, 0.25, 2.5, true` |
+| NAG scale/alpha/tau/inplace | 508 LTX2_NAG | `11, 0.25, 2.5, true` (dial `nag_scale` to 3-7 for distilled-1.1 — see `docs/reference/nag_technical_reference.md`) |
 | Sage attention mode | 268 PathchSageAttentionKJ | `sageattn_qk_int8_pv_fp8_cuda` or `sageattn_qk_int8_pv_fp16_triton` |
 | `window_seconds` | 688 FloatConstant | `19.88` |
 | `overlap_seconds` | AudioLoopController | `2.0` or `3.0` |
@@ -585,7 +585,7 @@ smoother, overlap was the dominant factor at those timestamps.
 Same as above except:
 - Verb pool: "is singing..." / "are singing together..."
 - Negative prompt: music-tuned defaults (see `example_workflows/*.json`)
-- NAG settings: same (11, 0.25, 2.5, true)
+- NAG settings: same defaults; dial `nag_scale` to 3-7 for distilled-1.1
 
 ### Node 1604 VAEDecodeTiled — widget meaning
 
@@ -793,12 +793,13 @@ graph.
 
 ## Cross-references
 
-- Prompt rules + widget guidance: `docs/prompt_creation_guide.md`
-- LLM system prompt (music + standup variants):
-  `docs/system_prompt.md` + `scripts/analyze_audio_features.py`
-- Audio analysis pipeline: `docs/audio_analysis_guide.md`
-- LTX 2.3 model reference: `docs/ltx23_model_reference.md`
-- Profiling opt-in: `docs/profiling_guide.md`
+- Prompt rules + widget guidance: `docs/guides/prompt_creation_guide.md`
+- LLM system prompt (standup variant; music variant is embedded in
+  the analyzer's JSON export as `llm_system_prompt`):
+  `docs/reference/standup_system_prompt.md` + `scripts/analyze_audio_features.py`
+- Audio analysis pipeline: `docs/guides/audio_analysis_guide.md`
+- LTX 2.3 model reference: `docs/reference/ltx23_model_reference.md`
+- Profiling opt-in: `docs/guides/profiling_guide.md`
 - Current plan + post-phase findings: `internal/PLAN.md` (not in repo)
 - Standup example schedules: `docs/examples/prompt_comedy1.md` ...
   `docs/examples/prompt_comedy5.md` (public); unscrubbed originals

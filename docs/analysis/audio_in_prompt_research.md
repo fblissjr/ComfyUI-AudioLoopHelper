@@ -1,83 +1,258 @@
-When passing an audio file into LTX-2 to drive lip sync, your text prompt remains a critical tool for guiding the character's acting, expressions, and timing. Even with audio provided, the model relies on the text to understand the context of the facial movements. 
+Last updated: 2026-04-23 (merged audio_in_prompt_analysis.md + audio_in_prompt_guide_notebooklm.md; added project-workflow framing)
 
-Here are the best practices for writing lip sync prompts based on community testing and developer advice:
+# Audio-in-prompt research: community practices for LTX-2 lip-sync
 
-**1. Transcribe the Exact Dialogue**
-While some users have reported occasional success by simply writing "a person is talking", the consensus—including direct advice from LTX developers—is that you should explicitly transcribe the spoken words inside quotation marks. 
-*   **Format:** `The man says: "Your exact audio transcript goes here."` 
-*   If you are extending an existing video or inpainting, you must include the transcript for the *entire* video's audio, including the parts you are leaving unedited, so the model understands the full context.
+Research notes on lip-sync prompting for LTX-2 drawn from community
+testing, NotebookLM synthesis, and Lightricks developer advice.
 
-**2. Describe the Vocal Delivery and Emotion**
-The prompt must match the tone, pitch, and accent of your audio file. If you provide a high-pitched audio file but your prompt says "deep voice," the lip sync will likely fail to synchronize. 
-*   Describe the character's emotional cadence, such as "in a sultry begging voice," "speaks with great passion," or "speaking in a thick Australian accent".
-*   **The "Shouting" Trick:** If the generated lip movement is too subtle or stiff, changing your prompt from "speaking" to "shouting" will force the model to exaggerate the mouth movements.
+## When this applies vs when it doesn't
 
-**3. Use Tight Framing**
-Lip sync generations work significantly better in tight close-up or chest-up medium shots. If the character's face is too small or distant in the frame, the model struggles to maintain their identity and lacks the resolution to animate the lips accurately. 
+**This doc applies to:** LTX-2 workflows where the model is *generating*
+audio, or T2V / I2V variants without a fixed audio track.
 
-**4. Highlight the Action**
-It helps to explicitly tell the model to focus on the mouth. Using phrases like "expressive mouth movement, clear lip sync" or "we clearly see her lips moving in time with the speaking" reinforces the audio-to-video alignment.
+**This doc does NOT apply to our current music-video workflow.** Our
+pipeline uses i2v + **frozen-audio conditioning** (`noise_mask=0` on
+the audio latent via `SolidMask` + `SetLatentNoiseMask`). Because
+audio and video share cross-attention in LTX 2.3 and the audio is
+already carried by the frozen latent, the prompt is better when
+**concise and less detailed** than what this research recommends:
 
-**Example of an optimized lip sync prompt:**
-> *"A tight cinematic close-up of a blonde woman. The camera is locked off and static. She looks directly at the camera with a serious, determined expression. She speaks with great passion in a harsh, low voice, her lips moving with every spoken word. She says: 'I'm going to make you talk if it's the last thing I do.' Room tone ambience, no music."*
+- Strip music / instrumentation references from schedule prompts
+  (the audio latent already carries them).
+- Skip dialogue transcription for singing (audio already carries the
+  vocal performance; the model's joint cross-attention reads the
+  "is singing" verb and binds lip shape to the audio).
+- Over-specifying audio descriptors double-signals and can over-crank
+  visual intensity at beats.
 
-**Troubleshooting Tip:** If your character still looks like they are in a documentary with a voiceover rather than actually speaking the lines, try increasing the volume of your input audio file, as louder audio data often forces the model to drive the lip sync harder.
+See `CLAUDE.md` (Critical constraints → "Audio is FROZEN in our
+workflow") and the empirical case study in
+`docs/examples/action_prompt6.md` for the A/B validation.
 
----
-
-Interestingly, there is actually some debate in the ComfyUI community about whether transcribing the lyrics is strictly required when you provide an audio file! 
-
-Some users have found that writing out full lyrics is "totally unnecessary" and that the "audio alone will do". Because LTX-2 processes the actual mel spectrogram of the audio, the intensity, rhythm, and modulation of the vocal track are often enough to drive the lip sync on their own. Users have reported success by simply prompting that "a man is talking to a woman" or "a woman is singing" and letting the audio file do the rest.
-
-However, experienced workflow builders still recommend transcribing the exact speech or lyrics as a **best practice**. Here is why you might still want to do it:
-
-*   **Precision and Padding:** LTX-2 uses a joint architecture where the text, video, and audio all influence each other. Including the exact text helps the model know exactly "where to pad with precision". It reinforces the audio data with semantic meaning, giving the model a much clearer map of what mouth shapes to form and when.
-*   **Preventing Gibberish:** When dealing with heavy background music, complex pronunciations, or fast singing, the audio track alone might confuse the model. Some users have reported that if they leave the dialogue out of the prompt, the generated lip movements devolve into "gibberish". 
-
-**The takeaway:** You don't *have* to transcribe the lyrics every time. You can absolutely try a simple prompt first (e.g., "she sings into the microphone") to save time. But if the character's lip sync looks sloppy or fails to match the beat, adding the exact lyrics back into the prompt is the best way to lock the performance in.
+**This doc is preserved** because future workflows (audio-generating
+variants, pure-T2V without a frozen track, dialogue-heavy scenes
+where audio is part of the generation target) will want the
+transcribe-dialogue + detailed-delivery pattern.
 
 ---
 
-It can seem redundant since the model already has the full audio data, but there is actually an active debate in the community about this exact point. 
+## Is dialogue transcription required?
 
-Here is what users and developers have discovered about whether you truly need to transcribe the audio:
+**Short answer: for audio-generating workflows, usually no — but
+recommended as best practice.**
 
-**Why you often DON'T need it:**
-Because LTX-2 processes the audio directly, it naturally recognizes the sounds of speech. Many users have found that writing out the exact dialogue or lyrics is completely unnecessary. They report getting perfect lip sync by simply describing the scene—such as "a man is talking to a woman"—and letting the provided audio track do all the heavy lifting to drive the mouth movements. The model inherently "knows what talking is" just by listening to the file.
+LTX-2 processes the mel spectrogram of the audio directly, so the
+model often "knows what talking is" just from the audio file. Many
+users get acceptable lip sync from a simple prompt ("a man is talking
+to a woman") plus the audio track.
 
-**Why it is still recommended as a "best practice":**
-Despite the successes above, other users have reported that if they leave the spoken text out of the prompt, the character's mouth movements devolve into visual "gibberish". 
+**When to transcribe anyway:**
+- Precision / padding: exact text provides extra semantic context
+  that tells the model "where to pad with precision" on mouth shapes.
+- Heavy background music / complex pronunciations / fast singing:
+  audio alone can confuse the model into visual "gibberish."
+- Multi-speaker scenes: use `Person A says: "…" / Person B says: "…"`
+  to bind lip sync to the correct character.
 
-Because of this inconsistency, LTX developers and experienced community members still recommend including the exact dialogue as a best practice. Here is why:
-*   **Precision:** Giving the model the exact text provides extra semantic context, which helps it know exactly "where to pad with precision" to match the mouth shapes to the audio. 
-*   **Complex Scenes:** If your audio has background noise, or if you are generating a scene where there is a "crowd of people talking over each other," the audio alone might confuse the model. In these cases, LTX developers advise using elaborate prompts (e.g., "Person A says: XXXXX, Person B says: YYYYYYY") to force the model to assign the right lip sync to the right character.
-
-**The practical takeaway:** You can absolutely save time by leaving the exact dialogue out of your prompt and just describing the character "talking" or "singing." However, if the resulting lip sync looks sloppy, unconvincing, or turns into gibberish, adding the exact transcript back into the prompt is the best way to lock in the accuracy.
+**Format:** `The man says: "Your exact audio transcript goes here."`
+If extending a video or inpainting, include the transcript for the
+entire video's audio — including unedited sections — so the model
+sees the full context.
 
 ---
 
-Here are several excellent examples of prompts used specifically for generating music videos and lip-syncing to songs, drawn from official guides and community testing. Notice how they carefully describe the vocal delivery, camera movements, rhythmic actions, and specific mouth articulations:
+## Prompt rules for lip-sync quality
 
-**1. The Intimate Acoustic Performance**
-This prompt is great for slower, moodier songs where you want the camera to focus on a grounded, emotional performance:
-> "A warm, intimate cinematic performance inside a cozy, wood-paneled bar, lit with soft amber practical lights and shallow depth of field that creates glowing bokeh in the background. The shot opens in a medium close-up on a young female singer in her 20s with short brown hair and bangs, singing into a microphone while strumming an acoustic guitar, her eyes closed and posture relaxed. The camera slowly arcs left around her, keeping her face and mic in sharp focus as two male band members playing guitars remain softly blurred behind her. Warm light wraps around her face and hair as framed photos and wooden walls drift past in the background. Ambient live music fills the space, led by her clear vocals over gentle acoustic strumming." 
+### Match vocal delivery and emotion
+Prompt tone must match the audio's tone, pitch, and accent. If the
+audio is high-pitched but the prompt says "deep voice," lip sync
+fails. Use phrases like "in a sultry begging voice," "speaks with
+great passion," or "speaking in a thick Australian accent."
 
-**2. Multi-Character Rap / Dynamic Exchanges**
-When you have multiple voices in a song (like a duet or rap battle), you need to clearly direct who is speaking and how they react to each other:
-> "Superman and Lois Lane perform together in a gritty rap music video. Their recognizable appearance and facial identity must remain consistent throughout the scene. At the beginning Lois Lane reacts to the beat with playful rhythmic hype sounds while looking at Superman, then briefly glancing at the camera with a teasing confident smile. The video alternates naturally between different music video shot types: wide shots showing both performers interacting with confident body language, medium performance shots capturing their rap delivery and movement, and occasional close-up reaction shots highlighting facial expressions and lip sync. Superman begins rapping with intense rhythmic delivery, strong mouth articulation and expressive lip movements while alternating his gaze between Lois Lane and the camera. He performs with sharp rap gestures and confident stage presence. When his line ends, Lois Lane steps forward and answers with her verse, rapping with energetic delivery and expressive lip movements while Superman reacts with amused approval."
+**The "shouting" trick.** If generated lip movement is too subtle or
+stiff, swap "speaking" for "shouting" in the prompt — it forces the
+model to exaggerate mouth movements.
 
-**3. The Solo "Stage" Performance (Stylized)**
-This is highly effective for keeping the model focused purely on the singer's rhythmic body mechanics and lip-sync without background distractions:
-> "A single, completely solitary humanoid Shiba Inu performer sings passionately into a handheld microphone. No other people, animals, silhouettes, reflections, shadows, or background figures exist anywhere in the scene. The performer is the only living subject present at all times. He has orange-brown Shiba Inu fur, expressive canine features, a single black eyepatch over his right eye... His mouth opens and closes rhythmically in sync with the performance, with subtle head movement, gentle upper-body sway, and controlled side-to-side motion, creating a dynamic yet grounded stage presence. The microphone remains perfectly aligned with his mouth at all times, with no rotation. Lighting is moody and cinematic... The camera slowly pulls back and pans subtly to follow his movement while maintaining a full-body view, keeping both hands fully visible in-frame at all times."
+### Tight framing wins
+Lip sync generations work significantly better in tight close-ups
+or chest-up medium shots. If the face is too small or distant, the
+model can't maintain identity or resolve lip movement.
 
-**4. Musical Theater / Animated Characters**
-For quirky, animated, or musical-theater-style songs, including the exact lyrics (even if you are providing an audio file) and describing the mouth mechanics helps precision:
-> "A close-up of a cheerful girl puppet with curly auburn yarn hair and wide button eyes, holding a small red umbrella above her head. Rain falls gently around her. She looks upward and begins to sing with joy in English: "It's raining, it's raining, I love it when its raining." Her fabric mouth opening and closing to a melodic tune. Her hands grip the umbrella handle as she sways slightly from side to side in rhythm. The camera holds steady as the rain sparkles against the soft lighting. Her eyes blink occasionally as she sings."
+### Highlight the mouth action
+Phrases like "expressive mouth movement, clear lip sync" or "we
+clearly see her lips moving in time with the speaking" reinforce
+audio-to-video alignment.
 
-**5. High-Emotion Singing with Gestures**
-If the song builds to a crescendo, it helps to prompt for specific emotive body language alongside the singing:
-> "A young woman sings with deep passion towards the camera, then slowly raises one hand to brush her hair back. She possesses long, voluminous dark brown wavy hair, deep blue eyes, and a sun-kissed complexion, wearing a rustic, textured dark burgundy off-shoulder top. She stands amidst a vast golden field, wildflowers swaying gently... The camera maintains a steady medium close-up, slightly low angle, focusing intently on her face. It subtly pushes in during her singing, then smoothly tracks her right hand as it rises, fingers lightly touching her temple, then fluidly sweeping the loose dark strands from her face, revealing her full expression. Intense golden backlighting creates a radiant halo around her hair..."
+### Action before dialogue
+`The person speaks in a harsh low voice and says "…"` yields better
+results than putting dialogue first.
 
-**6. Audio-Reactive Dancing (No Lip-Sync)**
-If you are putting a song over the video but want the character to dance rather than sing, focus heavily on rhythmic tags:
-> "A young woman with glowing eyes, crowned in black horns and adorned with intricate tattoos including wolves across her chest, slowly dances with passionate elegance under dim ambient light. Her dark hair flows as she sways, arms rising then falling rhythmically to unseen music; lips part slightly mid-motion. The camera glides smoothly around her from left to right, capturing her fluid grace against a misty, shadowed backdrop where faint snowflakes drift silently downward."
+### Avoid internal emotions
+Don't say "sad" or "confused." Describe the physical cues: "furrowed
+brow," "tremor of the chin," "tears welling."
+
+### Structure
+Long, descriptive, chronological single paragraphs up to ~200 words.
+Present-tense verbs. Temporal connectors ("as," "then," "while").
+Shot scale established first, then action, then audio layer.
+
+---
+
+## Fixing common lip-sync failure modes
+
+| Symptom | Fix |
+|---|---|
+| Character looks like a documentary voiceover (mouth doesn't move) | Increase audio file volume — louder, peaking audio forces the model to drive lip sync harder |
+| Frozen first frame (I2V) | Add subtle h.264 compression to the init image via `LTXVPreprocess` at strength 33-40. LTX-2 was trained on compressed video; a pristine image reads as a static photo |
+| Over-emoting destroys character likeness | Add negatives: `exaggerated expressions, warped facial features, identity drift`. Optionally lower the audio-to-video attention scale |
+| Multi-speaker confusion | Elaborate prompt with explicit Person A / Person B structure |
+
+---
+
+## Describing the input image (I2V)
+
+If your prompt describes a character, outfit, or environment not in
+the starting image, LTX-2 will often ignore the reference image and
+switch to T2V mode, or freeze the frame.
+
+**The VLM trick:** Pass the input image through a Vision-Language
+Model (Qwen-VL, GPT-4o, Gemini) to generate a literal, accurate
+description, then use that as the base of your prompt.
+
+**Avoid overloading.** Prompting for actions that require a different
+camera angle or setting than the init image fights the model. Start
+with what is visible, then describe the transition.
+
+---
+
+## Concrete examples
+
+These come from community testing and official guides. They illustrate
+LTX 2.3 at training-distribution lengths and specificity levels — useful
+for calibrating what "the model expects" even when our workflow writes
+more concisely.
+
+### 1. Intimate acoustic performance (slow, moody)
+
+> *"A warm, intimate cinematic performance inside a cozy, wood-paneled
+> bar, lit with soft amber practical lights and shallow depth of field
+> that creates glowing bokeh in the background. The shot opens in a
+> medium close-up on a young female singer in her 20s with short brown
+> hair and bangs, singing into a microphone while strumming an acoustic
+> guitar, her eyes closed and posture relaxed. The camera slowly arcs
+> left around her, keeping her face and mic in sharp focus as two male
+> band members playing guitars remain softly blurred behind her. Warm
+> light wraps around her face and hair as framed photos and wooden
+> walls drift past in the background. Ambient live music fills the
+> space, led by her clear vocals over gentle acoustic strumming."*
+
+### 2. Multi-character rap / dynamic exchanges
+
+> *"Superman and Lois Lane perform together in a gritty rap music
+> video. Their recognizable appearance and facial identity must remain
+> consistent throughout the scene. At the beginning Lois Lane reacts to
+> the beat with playful rhythmic hype sounds while looking at Superman,
+> then briefly glancing at the camera with a teasing confident smile.
+> The video alternates naturally between different music video shot
+> types: wide shots showing both performers interacting with confident
+> body language, medium performance shots capturing their rap delivery
+> and movement, and occasional close-up reaction shots highlighting
+> facial expressions and lip sync. Superman begins rapping with intense
+> rhythmic delivery, strong mouth articulation and expressive lip
+> movements while alternating his gaze between Lois Lane and the
+> camera. He performs with sharp rap gestures and confident stage
+> presence. When his line ends, Lois Lane steps forward and answers
+> with her verse, rapping with energetic delivery and expressive lip
+> movements while Superman reacts with amused approval."*
+
+### 3. Stylized solo stage performance
+
+> *"A single, completely solitary humanoid Shiba Inu performer sings
+> passionately into a handheld microphone. No other people, animals,
+> silhouettes, reflections, shadows, or background figures exist
+> anywhere in the scene. The performer is the only living subject
+> present at all times. He has orange-brown Shiba Inu fur, expressive
+> canine features, a single black eyepatch over his right eye... His
+> mouth opens and closes rhythmically in sync with the performance,
+> with subtle head movement, gentle upper-body sway, and controlled
+> side-to-side motion, creating a dynamic yet grounded stage presence.
+> The microphone remains perfectly aligned with his mouth at all times,
+> with no rotation. Lighting is moody and cinematic... The camera
+> slowly pulls back and pans subtly to follow his movement while
+> maintaining a full-body view, keeping both hands fully visible
+> in-frame at all times."*
+
+### 4. Musical theater / animated characters (dialogue included)
+
+> *"A close-up of a cheerful girl puppet with curly auburn yarn hair
+> and wide button eyes, holding a small red umbrella above her head.
+> Rain falls gently around her. She looks upward and begins to sing
+> with joy in English: 'It's raining, it's raining, I love it when
+> its raining.' Her fabric mouth opening and closing to a melodic
+> tune. Her hands grip the umbrella handle as she sways slightly from
+> side to side in rhythm. The camera holds steady as the rain sparkles
+> against the soft lighting. Her eyes blink occasionally as she sings."*
+
+### 5. High-emotion singing with gestures
+
+> *"A young woman sings with deep passion towards the camera, then
+> slowly raises one hand to brush her hair back. She possesses long,
+> voluminous dark brown wavy hair, deep blue eyes, and a sun-kissed
+> complexion, wearing a rustic, textured dark burgundy off-shoulder
+> top. She stands amidst a vast golden field, wildflowers swaying
+> gently... The camera maintains a steady medium close-up, slightly
+> low angle, focusing intently on her face. It subtly pushes in during
+> her singing, then smoothly tracks her right hand as it rises,
+> fingers lightly touching her temple, then fluidly sweeping the loose
+> dark strands from her face, revealing her full expression. Intense
+> golden backlighting creates a radiant halo around her hair..."*
+
+### 6. Audio-reactive dancing (no lip-sync)
+
+> *"A young woman with glowing eyes, crowned in black horns and
+> adorned with intricate tattoos including wolves across her chest,
+> slowly dances with passionate elegance under dim ambient light. Her
+> dark hair flows as she sways, arms rising then falling rhythmically
+> to unseen music; lips part slightly mid-motion. The camera glides
+> smoothly around her from left to right, capturing her fluid grace
+> against a misty, shadowed backdrop where faint snowflakes drift
+> silently downward."*
+
+### 7. Dialogue from a static image (I2V, static camera)
+
+> *"A tight cinematic close-up of a male doctor speaking directly to
+> the camera inside a modern health consultory. He wears a crisp white
+> lab coat over a light blue shirt, subtle stubble, calm confident
+> expression. Soft diffused daylight enters from a side window,
+> creating gentle highlights on his face and clean shadows. The
+> background is softly blurred with medical shelves and diagnostic
+> equipment. The camera is locked in a shallow-depth close-up using a
+> 50mm lens, with a very subtle push-in as he speaks, maintaining eye
+> contact. Natural skin texture, realistic pores, professional medical
+> atmosphere. Quiet room tone ambience, no music. He says: 'We need
+> to run the tests again immediately, the results are inconclusive.'"*
+
+### 8. Stylized non-verbal audio reactivity
+
+> *"Live Action Mode futuristic fashion-dance tableau, neon sci-fi
+> editorial: a dark-skinned dancer with a large textured afro is
+> frozen in a dramatic off-balance tilt, wearing a reflective chrome
+> set. Background is a luminous rectangular LED frame with
+> blue/magenta rim lighting. At the start she holds the extreme lean
+> pose, then slowly wakes into motion — micro tremor in shoulders,
+> fingertips flex. Halfway through she transitions into a smooth hinge
+> and recovery, moving rhythmically to the beat. Toward the end she
+> rotates her head toward camera, eyes lock, and she breathes out one
+> line: 'Watch me bend the light.' The camera makes a controlled slow
+> push-in. Audio: low neon room hum, soft breath, faint fabric creak,
+> subtle whoosh synced to arm sweep, minimal futuristic pulse very
+> low in the mix."*
+
+---
+
+## Sources
+
+- Community testing on r/LTXvideo, LTX Discord
+- Lightricks developer advice (thread-level community posts)
+- NotebookLM synthesis of the above (audio_in_prompt_guide_notebooklm.md
+  merged into this file 2026-04-23)

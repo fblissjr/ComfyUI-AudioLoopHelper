@@ -1,4 +1,4 @@
-Last updated: 2026-04-17 (v2 — added strict timestamp-format rule)
+Last updated: 2026-04-23 (moved + renamed from docs/system_prompt.md; v2 — added strict timestamp-format rule)
 
 # Standup Comedy — Custom LLM System Prompt
 
@@ -14,7 +14,7 @@ LLM (Claude / Gemini / ChatGPT) **in place of** the `llm_system_prompt`
 field from the JSON export, along with the rest of the JSON as context
 and the init image.
 
-See `docs/analysis/llm_prompt_generation_guide.md` for the full
+See `docs/guides/prompt_workflow_end_to_end.md` for the full
 music-video version and the shared rule structure.
 
 ## How to use

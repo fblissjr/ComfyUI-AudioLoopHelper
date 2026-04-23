@@ -1,6 +1,12 @@
-Last updated: 2026-04-09
+Last updated: 2026-04-23 (moved from docs/guides/ — design doc, workflow not yet shipped)
 
-# Upscale Workflow Guide
+# Upscale Workflow Design (not shipped)
+
+> **Status.** This is a design doc. The workflow it describes
+> (`upscale-loop-output.json`) does not exist yet. Per project
+> convention, active planning lives in `internal/`; this will
+> promote to `docs/guides/upscale_guide.md` when the workflow
+> is built and validated.
 
 Separate workflow to upscale the loop output from 832x480 to 1664x960.
 Based on RuneXX's 3-pass approach: upscale in latent space, refine with

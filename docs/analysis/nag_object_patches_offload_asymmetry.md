@@ -1,4 +1,11 @@
-Last updated: 2026-04-22 (+ post-ship patch: internal memoization required)
+Last updated: 2026-04-23 (added reference-doc pointer)
+
+> **Reader pointer.** This doc is the forensic root-cause postmortem.
+> For the conceptual explanation of NAG and the operational rule
+> "CLIP must not enter the loop body" in its final form, start at
+> `docs/reference/nag_technical_reference.md`. Return here when you
+> need exact line references in ComfyUI's `model_patcher.py` and
+> `ltxv_nodes.py`, or when diagnosing a new object_patches-class bug.
 
 # Why CLIP must not enter the loop body
 

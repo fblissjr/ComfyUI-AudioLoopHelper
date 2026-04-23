@@ -133,7 +133,7 @@ uv run --group analysis python scripts/analyze_audio_features.py path/to/song.wa
 
 Then paste the JSON into Claude/Gemini with your creative direction. The LLM
 generates both node_169_prompt and the schedule. See
-`docs/analysis/llm_prompt_generation_guide.md` for the full workflow with examples.
+`docs/guides/prompt_workflow_end_to_end.md` for the full workflow with examples.
 
 ### 7. Run and iterate
 

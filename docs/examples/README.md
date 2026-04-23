@@ -1,4 +1,4 @@
-Last updated: 2026-04-21
+Last updated: 2026-04-23 (sibling doc paths updated for reorg)
 
 # Prompt schedule examples
 
@@ -62,5 +62,5 @@ evolution is:
 7. **Audio descriptors removed when audio is frozen** (action_prompt6
    — the final architectural insight)
 
-See `../prompt_creation_guide.md` and `../debugging_guide.md` for the
-distilled rules extracted from these case studies.
+See `../guides/prompt_creation_guide.md` and `../guides/debugging_guide.md`
+for the distilled rules extracted from these case studies.

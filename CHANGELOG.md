@@ -6,6 +6,102 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **Docs cleanup round 2 (2026-04-23 PM).** After the structural
+  reorg, user critique surfaced ~10 content-level opportunities.
+  Eight shipped in one batch:
+  - **NAG reference doc de-black-boxed.**
+    `docs/reference/nag_technical_reference.md` rewritten 144 → 237
+    lines. Five new sections: cross-attention mechanism (why attn2
+    not attn1), closure-capture pattern with tensor lifecycle,
+    audio_attn2 subsection, NAG×CFG layer interaction,
+    troubleshooting. Stale `nag_scale=11` default replaced with
+    "start at 5, A/B 3-7 for distilled-1.1." Prominent operational
+    constraint callout: "CLIP must not enter the loop body."
+    Source citations verified against `ltxv_nodes.py` and
+    `model_patcher.py` at current HEAD (agent-assisted). Top-note
+    cross-link added to the `nag_object_patches_offload_asymmetry.md`
+    postmortem pointing readers to the reference doc first.
+  - **LTXVLoopingSampler gap analysis tightened.** Prior "5 blocking
+    issues" framing at equal weight replaced with "2 architectural
+    root blockers (temporal-schedule mismatch, cross-attention
+    trained on joint-not-tiled AV) + 3 type-system cascades." The
+    three cascades vanish once NestedTensor is unbound before
+    tiling; the root blockers require research-grade work. Citation
+    sites updated: `CLAUDE.md:57`, `docs/architecture_overview.md:429`.
+  - **LTXVLoopingSampler build guide trimmed and moved.**
+    `docs/guides/latent_loop_build_guide.md` (261 lines, detailed
+    widget tables for a workflow we don't recommend building for
+    music video) → `docs/reference/ltxv_looping_sampler_reference.md`
+    (~100 lines, structural reference + pointer to upstream
+    ComfyUI-LTXVideo README for widget detail).
+  - **Audio-in-prompt docs consolidated + re-contextualized.**
+    `docs/analysis/audio_in_prompt_analysis.md` (83 lines) +
+    `docs/analysis/audio_in_prompt_guide_notebooklm.md` (36 lines)
+    → single `docs/analysis/audio_in_prompt_research.md` (258
+    lines). Top framing section explains *when this applies* (audio-
+    generating workflows) vs *when it doesn't* (our frozen-audio
+    i2v workflow — be concise not detailed). Eight concrete example
+    prompts preserved.
+  - **Prompt-workflow + LLM-generation-guide merged.**
+    `docs/analysis/llm_prompt_generation_guide.md` (~50% duplicative,
+    miscategorized in `analysis/`) merged into
+    `docs/guides/prompt_workflow_end_to_end.md`. Unique content
+    (INFERENCE block, R1-R8 hard rules, ambition tier semantics)
+    preserved as a "System prompt reference" section.
+    Variation-pattern and troubleshooting sections (duplicative
+    with `prompt_creation_guide.md`) dropped with a cross-link.
+  - **Lightricks system-prompts framing rewrite.** Banner on
+    `docs/reference/ltx23_prompt_system_prompts.md` replaced from
+    "Historical reference" → "Why this doc exists / Why our
+    workflow diverges / How to use." Explains that the raw
+    Lightricks prompts are training-distribution references;
+    because LTX 2.3 was trained jointly on audio+video with shared
+    cross-attention, our frozen-audio + i2v workflow works better
+    with *concise and less detailed* prompts than those raw
+    upstream prompts recommend.
+  - **Upscale design doc moved to internal/.**
+    `docs/guides/upscale_guide.md` →
+    `internal/design/upscale_workflow_design.md`. The workflow it
+    describes doesn't exist yet; per CLAUDE.md's convention, active
+    planning lives in `internal/`. Promotes back to `docs/guides/`
+    when the workflow ships.
+  - **pipeline_flow_image.md trimmed.** 1923-line node-by-node trace
+    of the reference-only IMAGE workflow → 112-line summary (data
+    flow + diffs vs the LATENT primary path). Full original archived
+    to `internal/archive/pipeline_flow_image_full.md` (gitignored)
+    for legacy `_image.json` runs.
+  - **Indices refreshed.** `docs/README.md` task-first index +
+    per-folder tables and `CLAUDE.md` "Documentation index" section
+    both updated to match the new state.
+  - Plan + detailed session log in `internal/log/log_2026-04-23.md`.
+- **Reorganized `docs/`** into a task-first structure so the right
+  doc is obvious from the task. New layout:
+  - `docs/README.md` — task-first nav index (new).
+  - `docs/architecture_overview.md` — stays at root (advertised
+    "START HERE" in `CLAUDE.md`).
+  - `docs/guides/` — task-oriented how-to (`prompt_workflow_end_to_end`,
+    `prompt_creation_guide`, `audio_analysis_guide`, `debugging_guide`,
+    `profiling_guide`, `upscale_guide`, `latent_loop_build_guide`).
+  - `docs/reference/` — technical deep-dive (`ltx23_model_reference`,
+    `ltx23_prompt_system_prompts`, `nag_technical_reference`,
+    `pipeline_flow_image`, `pipeline_flow_latent`, `sampler_reference`,
+    `standup_system_prompt`).
+  - `docs/analysis/` and `docs/examples/` — unchanged.
+  Moved via `git mv` so blame history is preserved. All cross-refs in
+  `docs/`, `CLAUDE.md`, root `README.md`, and `nodes.py` updated to the
+  new paths. `CHANGELOG.md` historical entries left at their original
+  paths (they reflect truth at the time).
+- **Renamed `docs/system_prompt.md` → `docs/reference/standup_system_prompt.md`.**
+  The bare name collided with `ltx23_prompt_system_prompts.md`; the
+  new name states the scope (standup / dialogue) and the role (LLM
+  system prompt, not an LTX i2v system prompt).
+- **Removed two dead references to `docs/subgraph_latent_rework_guide.md`**
+  (file never existed in the current repo). The ref in
+  `docs/guides/latent_loop_build_guide.md` now points to
+  `docs/architecture_overview.md` + `docs/reference/pipeline_flow_latent.md`.
+  The CLAUDE.md entry was dropped.
+
 ### Fixed
 - **Batch encoder was re-executing per loop iteration (post-ship patch
   of the offload fix below).** `TimestampPromptScheduleBatchEncode`'s
