@@ -454,7 +454,9 @@ def _keyframe_check_block(
         check_lines.append(
             f"  {_WARN}keyframe batch has {keyframe_batch_size} image(s) but "
             f"schedule is empty. Every iteration uses index 0; other "
-            f"keyframes go unused."
+            f"keyframes go unused. "
+            f"Fix: author a schedule (e.g. '0:00-0:42: 0\\n0:42+: 1') "
+            f"or reduce the batch to 1 image."
         )
         return warn_delta, err_delta
 
@@ -463,12 +465,14 @@ def _keyframe_check_block(
         warn_delta += 1
         check_lines.append(
             f"  {_WARN}keyframe schedule did not parse any entries. "
-            f"Every iteration uses index 0."
+            f"Every iteration uses index 0. "
+            f"Fix: use timestamp→index format, e.g. '0:00-0:42: 0\\n0:42+: 1'."
         )
         return warn_delta, err_delta
 
-    # _parse_image_schedule returns list[tuple[start, end_or_None, index]].
-    indices = {e[2] for e in entries}
+    # _parse_image_schedule returns list[tuple[start, end_or_None, index]];
+    # unpack the index directly to avoid a magic positional index.
+    indices = {idx for _, _, idx in entries}
     out_of_bounds = sorted(i for i in indices if i >= keyframe_batch_size or i < 0)
     if out_of_bounds:
         err_delta += 1

@@ -266,13 +266,12 @@ class TestKeyframeChecks:
     """
 
     def test_keyframe_checks_skipped_when_batch_size_zero(self):
-        report, ok, warns, errs, _ = _run(
+        # With batch=0 the block is fully gated off; no "keyframe" text
+        # should appear in the report.
+        report, _, _, _, _ = _run(
             keyframe_schedule="", keyframe_batch_size=0,
         )
-        # No keyframe section emitted
-        assert "Keyframe" not in report
-        # Keyframe checks don't add to counts
-        assert ok is True or errs >= 0  # unchanged semantics
+        assert "keyframe" not in report.lower()
 
     def test_warn_on_batch_with_no_schedule(self):
         # User wired a 3-image batch but never authored a schedule.
@@ -280,8 +279,23 @@ class TestKeyframeChecks:
         report, _, warns, errs, _ = _run(
             keyframe_schedule="", keyframe_batch_size=3,
         )
-        assert "keyframe batch has 3 image(s) but schedule is empty" in report.lower() or \
-               "batch has 3" in report
+        assert "keyframe batch has 3 image(s) but schedule is empty" in report
+        assert "Fix:" in report
+        assert warns >= 1
+        assert errs == 0
+
+    def test_warn_on_schedule_that_parses_to_empty_entries(self):
+        # Whitespace-only schedule passes the `.strip()` early-return
+        # but parses to no entries. Separate WARN branch.
+        # NOTE: a line of just whitespace is considered "non-empty" by
+        # strip() because the whole string has content, so use a string
+        # with visible content that doesn't match the timestamp format.
+        report, _, warns, errs, _ = _run(
+            keyframe_schedule="garbage line with no timestamp\n",
+            keyframe_batch_size=3,
+        )
+        assert "did not parse any entries" in report
+        assert "Fix:" in report
         assert warns >= 1
         assert errs == 0
 
@@ -305,7 +319,20 @@ class TestKeyframeChecks:
             keyframe_schedule="0:00+: 0\n", keyframe_batch_size=3,
         )
         assert warns >= 1
-        assert "unused" in report.lower() or "always selects" in report.lower() or "collapse" in report.lower()
+        # Production message says "always selects index 0" + "unused".
+        assert "always selects index 0" in report
+        assert "unused" in report.lower()
+
+    def test_error_on_negative_index(self):
+        # _safe_int tolerates negative integers — schedule "0:00+: -1"
+        # parses successfully to index=-1 which is out-of-bounds in
+        # either direction. ERROR branch covers this.
+        report, ok, _, errs, _ = _run(
+            keyframe_schedule="0:00+: -1\n", keyframe_batch_size=3,
+        )
+        assert errs >= 1
+        assert ok is False
+        assert "index -1" in report
 
     def test_no_collapse_warn_when_schedule_uses_all_indices(self):
         # 3 distinct indices across schedule + 3-image batch = nothing unused.
@@ -330,17 +357,23 @@ class TestKeyframeChecks:
         assert errs == 0
 
     def test_warn_count_is_additive_with_existing_checks(self):
-        # Keyframe warn should add on top of existing (e.g. seam-alignment) warns,
-        # not replace them.
-        schedule_prompts = "0:00-0:38: alpha\n0:38-1:15: beta\n1:15+: gamma\n"
-        # At window=9.96 + overlap=2.0, stride=8s → seams at 8, 16, 24, ...
-        # 0:38 = 38s → closest seam 40 → 2s off → outside default 0.2s tolerance
-        # so no seam warn expected. Use a stride that creates seam-on-boundary:
-        report, _, warns, _, _ = _run(
+        # Keyframe warn must ADD to existing warn counts, not replace them.
+        # Measure baseline without keyframes, then add keyframes and
+        # assert the delta.
+        baseline_kwargs = dict(
             window_seconds=9.96, overlap_seconds=2.0, fps=25,
-            schedule=schedule_prompts,
+            schedule="0:00-0:38: alpha\n0:38-1:15: beta\n1:15+: gamma\n",
+        )
+        _, _, baseline_warns, _, _ = _run(**baseline_kwargs)
+        report, _, warns, _, _ = _run(
+            **baseline_kwargs,
             keyframe_schedule="0:00+: 0\n",
             keyframe_batch_size=5,  # 5-image batch, schedule uses only 0 → WARN
         )
-        # At least the single-index-with-batch>1 warn
-        assert warns >= 1
+        # Delta must be exactly the keyframe warn — proves additivity, not replacement.
+        assert warns == baseline_warns + 1, (
+            f"Expected exactly 1 new keyframe warn on top of {baseline_warns} "
+            f"baseline warns, got {warns} total"
+        )
+        # And the new warn line is actually present.
+        assert "always selects index 0" in report
