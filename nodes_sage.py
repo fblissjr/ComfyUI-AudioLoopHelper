@@ -81,19 +81,36 @@ except ImportError:
 
 
 _TRACE_ENV = "AUDIOLOOPHELPER_SAGE_TRACE"
-_AUTO_TOKENS = {"auto", "1", "true", "yes"}
+
+try:
+    from exec_logger import _AUTO_TOKENS  # type: ignore
+except ImportError:
+    _AUTO_TOKENS = {"auto", "1", "true", "yes"}
 
 
 # ---------------------------------------------------------------------------
 # Arch detection + mode-list construction
 # ---------------------------------------------------------------------------
 
+_MODES_DEFAULT = ["disabled", "auto", "sageattn_qk_int8_pv_fp16_triton"]
+
+_MODES_BY_ARCH: dict[str, list[str]] = {
+    "sm80": ["disabled", "auto", "sageattn_qk_int8_pv_fp16_cuda", "sageattn_qk_int8_pv_fp16_triton"],
+    "sm86": ["disabled", "auto", "sageattn_qk_int8_pv_fp16_cuda", "sageattn_qk_int8_pv_fp16_triton"],
+    "sm87": ["disabled", "auto", "sageattn_qk_int8_pv_fp16_cuda", "sageattn_qk_int8_pv_fp16_triton"],
+    "sm89": ["disabled", "auto", "sageattn_qk_int8_pv_fp16_cuda", "sageattn_qk_int8_pv_fp8_cuda++", "sageattn_qk_int8_pv_fp16_triton"],
+    "sm90": ["disabled", "auto", "sageattn_qk_int8_pv_fp8_cuda_sm90", "sageattn_qk_int8_pv_fp16_triton"],
+    "sm100": ["disabled", "auto", "sageattn3", "sageattn3_per_block_mean", "sageattn_qk_int8_pv_fp16_triton"],
+    "sm120": ["disabled", "auto", "sageattn3", "sageattn3_per_block_mean", "sageattn_qk_int8_pv_fp16_triton"],
+    "sm121": ["disabled", "auto", "sageattn3", "sageattn3_per_block_mean", "sageattn_qk_int8_pv_fp16_triton"],
+}
+
+
 def _detect_arch() -> str | None:
     """Return `"sm89"`/`"sm90"`/... for the first CUDA device, or None.
 
     Uses `sageattention.core.get_cuda_arch_versions()` so the reported arch
-    matches exactly what sage's dispatch will see. Returns None when
-    sageattention is unavailable (outside ComfyUI runtime, or not installed).
+    matches exactly what sage's dispatch will see.
     """
     try:
         from sageattention.core import get_cuda_arch_versions
@@ -109,29 +126,10 @@ def _detect_arch() -> str | None:
 
 
 def build_mode_list(arch: str | None) -> list[str]:
-    """Return the sage modes that can actually run on `arch`.
-
-    Always includes `"disabled"` and `"auto"`. The Triton path is always
-    listed because it has no arch requirement. CUDA paths are gated on
-    the arch we detect.
-    """
-    modes: list[str] = ["disabled", "auto", "sageattn_qk_int8_pv_fp16_triton"]
-
-    if arch in {"sm80", "sm86", "sm87"}:
-        modes.insert(2, "sageattn_qk_int8_pv_fp16_cuda")
-    elif arch == "sm89":
-        # Ada: both fp16_cuda (safer) and fp8_cuda++ (fastest) are useful.
-        modes.insert(2, "sageattn_qk_int8_pv_fp16_cuda")
-        modes.insert(3, "sageattn_qk_int8_pv_fp8_cuda++")
-    elif arch == "sm90":
-        modes.insert(2, "sageattn_qk_int8_pv_fp8_cuda_sm90")
-    elif arch in {"sm100", "sm120", "sm121"}:
-        # Blackwell: sage3 is the native path.
-        modes.insert(2, "sageattn3")
-        modes.insert(3, "sageattn3_per_block_mean")
-    # Unknown arch -> only disabled/auto/triton. That's fine; "auto"
-    # delegates to sageattn() which handles the dispatch itself.
-    return modes
+    """Return the sage modes that can actually run on `arch`. Unknown arch
+    still gets disabled/auto/triton because `auto` delegates to sage's own
+    dispatch and triton has no arch requirement."""
+    return _MODES_BY_ARCH.get(arch or "", _MODES_DEFAULT)
 
 
 _CACHED_ARCH = _detect_arch()
@@ -191,9 +189,11 @@ def resolve_trace_path() -> Path | None:
 
 
 class SageTracer:
-    """Lazy-opened JSONL writer. No-op when log_path is None.
+    """Eagerly-opened JSONL writer. No-op when log_path is None.
 
     Emits one line per attention call plus a summary line on flush.
+    Counters and file writes are both short-circuited when disabled so the
+    hot-path cost is one attribute check per call.
     """
 
     def __init__(self, log_path: Path | None):
@@ -203,15 +203,16 @@ class SageTracer:
         self._fallbacks = 0
         self._shapes: set[tuple] = set()
         self._summary_flushed = False
+        if log_path is not None:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            # buffering=1 is line-buffered. Flush per line so a crash
+            # mid-run still leaves a useful trace -- cost is ~1 syscall
+            # per attention call, acceptable for the forensic-only path.
+            self._fh = open(log_path, "a", buffering=1)
 
     @property
     def enabled(self) -> bool:
-        return self._log_path is not None
-
-    def _ensure_open(self) -> None:
-        if self._fh is None and self._log_path is not None:
-            self._log_path.parent.mkdir(parents=True, exist_ok=True)
-            self._fh = open(self._log_path, "a", buffering=1)
+        return self._fh is not None
 
     def emit(
         self,
@@ -223,15 +224,13 @@ class SageTracer:
         elapsed_us: float,
         iter_idx: int | None = None,
     ) -> None:
+        if self._fh is None:
+            return
         self._total += 1
         if fell_back:
             self._fallbacks += 1
         self._shapes.add(tuple(shape))
-        if not self.enabled:
-            return
-        self._ensure_open()
-        assert self._fh is not None
-        record = {
+        self._fh.write(orjson.dumps({
             "ts": time.time(),
             "iter": iter_idx,
             "shape": list(shape),
@@ -239,25 +238,19 @@ class SageTracer:
             "mode": mode,
             "fell_back": fell_back,
             "elapsed_us": round(elapsed_us, 2),
-        }
-        self._fh.write(orjson.dumps(record).decode() + "\n")
+        }).decode() + "\n")
 
     def flush_summary(self) -> None:
-        if self._summary_flushed:
+        if self._summary_flushed or self._fh is None:
             return
         self._summary_flushed = True
-        if not self.enabled:
-            return
-        self._ensure_open()
-        assert self._fh is not None
-        summary = {
+        self._fh.write(orjson.dumps({
             "ts": time.time(),
             "event": "summary",
             "total_calls": self._total,
             "fallback_count": self._fallbacks,
             "distinct_shapes": len(self._shapes),
-        }
-        self._fh.write(orjson.dumps(summary).decode() + "\n")
+        }).decode() + "\n")
         self._fh.flush()
 
 
@@ -265,54 +258,82 @@ class SageTracer:
 # The sage function factory (mode -> callable)
 # ---------------------------------------------------------------------------
 
+def _kernel_auto(q, k, v, *, is_causal, attn_mask, tensor_layout):
+    import sageattention as _sa
+    return _sa.sageattn(q, k, v, is_causal=is_causal, attn_mask=attn_mask, tensor_layout=tensor_layout)
+
+
+def _kernel_fp16_cuda(q, k, v, *, is_causal, attn_mask, tensor_layout):
+    import sageattention as _sa
+    return _sa.sageattn_qk_int8_pv_fp16_cuda(
+        q, k, v, is_causal=is_causal, attn_mask=attn_mask,
+        pv_accum_dtype="fp32", tensor_layout=tensor_layout,
+    )
+
+
+def _kernel_fp16_triton(q, k, v, *, is_causal, attn_mask, tensor_layout):
+    import sageattention as _sa
+    return _sa.sageattn_qk_int8_pv_fp16_triton(
+        q, k, v, is_causal=is_causal, attn_mask=attn_mask, tensor_layout=tensor_layout,
+    )
+
+
+def _kernel_fp8_cuda(q, k, v, *, is_causal, attn_mask, tensor_layout):
+    import sageattention as _sa
+    return _sa.sageattn_qk_int8_pv_fp8_cuda(
+        q, k, v, is_causal=is_causal, attn_mask=attn_mask,
+        pv_accum_dtype="fp32+fp32", tensor_layout=tensor_layout,
+    )
+
+
+def _kernel_fp8_cuda_pp(q, k, v, *, is_causal, attn_mask, tensor_layout):
+    import sageattention as _sa
+    return _sa.sageattn_qk_int8_pv_fp8_cuda(
+        q, k, v, is_causal=is_causal, attn_mask=attn_mask,
+        pv_accum_dtype="fp32+fp16", tensor_layout=tensor_layout,
+    )
+
+
+def _kernel_sage3(q, k, v, *, is_causal, attn_mask, tensor_layout, per_block_mean: bool):
+    from sageattn3 import sageattn3_blackwell  # type: ignore
+    q_, k_, v_ = [x.transpose(1, 2) if tensor_layout == "NHD" else x for x in (q, k, v)]
+    out = sageattn3_blackwell(
+        q_, k_, v_, is_causal=is_causal, attn_mask=attn_mask,
+        per_block_mean=per_block_mean,
+    )
+    return out.transpose(1, 2) if tensor_layout == "NHD" else out
+
+
+_SAGE_KERNELS: dict[str, Callable] = {
+    "auto": _kernel_auto,
+    "sageattn_qk_int8_pv_fp16_cuda": _kernel_fp16_cuda,
+    "sageattn_qk_int8_pv_fp16_triton": _kernel_fp16_triton,
+    "sageattn_qk_int8_pv_fp8_cuda": _kernel_fp8_cuda,
+    "sageattn_qk_int8_pv_fp8_cuda++": _kernel_fp8_cuda_pp,
+    "sageattn3": lambda q, k, v, **kw: _kernel_sage3(q, k, v, per_block_mean=False, **kw),
+    "sageattn3_per_block_mean": lambda q, k, v, **kw: _kernel_sage3(q, k, v, per_block_mean=True, **kw),
+}
+
+
 def _build_sage_fn(mode: str) -> Callable:
     """Return a callable matching the signature:
 
         sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape) -> Tensor
 
-    Internally reshapes q/k/v exactly like `comfy.ldm.modules.attention
-    .attention_sage` does before dispatching to the chosen sage kernel.
-
-    sageattention is imported lazily on first call -- safe to build this
-    at node-patch time even in environments where sage isn't installed.
-    ImportError surfaces only when an attention call is actually made.
+    Reshapes q/k/v the same way `comfy.ldm.modules.attention.attention_sage`
+    does, then dispatches to the chosen kernel. sageattention is imported
+    lazily inside the kernel functions, so this factory is safe to call in
+    environments where sage isn't installed -- ImportError surfaces only
+    when an actual attention call is made.
     """
-
-    def _dispatch(q, k, v, *, is_causal, attn_mask, tensor_layout):
-        import sageattention as _sa  # lazy: only errors when sage is actually called
-        if mode == "auto":
-            return _sa.sageattn(q, k, v, is_causal=is_causal, attn_mask=attn_mask, tensor_layout=tensor_layout)
-        if mode == "sageattn_qk_int8_pv_fp16_cuda":
-            return _sa.sageattn_qk_int8_pv_fp16_cuda(
-                q, k, v, is_causal=is_causal, attn_mask=attn_mask,
-                pv_accum_dtype="fp32", tensor_layout=tensor_layout,
-            )
-        if mode == "sageattn_qk_int8_pv_fp16_triton":
-            return _sa.sageattn_qk_int8_pv_fp16_triton(
-                q, k, v, is_causal=is_causal, attn_mask=attn_mask, tensor_layout=tensor_layout,
-            )
-        if mode == "sageattn_qk_int8_pv_fp8_cuda":
-            return _sa.sageattn_qk_int8_pv_fp8_cuda(
-                q, k, v, is_causal=is_causal, attn_mask=attn_mask,
-                pv_accum_dtype="fp32+fp32", tensor_layout=tensor_layout,
-            )
-        if mode == "sageattn_qk_int8_pv_fp8_cuda++":
-            return _sa.sageattn_qk_int8_pv_fp8_cuda(
-                q, k, v, is_causal=is_causal, attn_mask=attn_mask,
-                pv_accum_dtype="fp32+fp16", tensor_layout=tensor_layout,
-            )
-        if "sageattn3" in mode:
-            from sageattn3 import sageattn3_blackwell  # type: ignore
-            q_, k_, v_ = [x.transpose(1, 2) if tensor_layout == "NHD" else x for x in (q, k, v)]
-            out = sageattn3_blackwell(
-                q_, k_, v_, is_causal=is_causal, attn_mask=attn_mask,
-                per_block_mean=(mode == "sageattn3_per_block_mean"),
-            )
-            return out.transpose(1, 2) if tensor_layout == "NHD" else out
+    kernel = _SAGE_KERNELS.get(mode)
+    if kernel is None:
         raise ValueError(f"unknown sage mode: {mode!r}")
 
     def sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape):
-        # Mirror attention_sage's reshape logic.
+        # Reshape mirrors comfy.ldm.modules.attention.attention_sage:532-575.
+        # We can't delegate to that function because it hardcodes sageattn();
+        # we need the same prep but with a mode-dispatched kernel.
         in_dtype = v.dtype
         if q.dtype == torch.float32 or k.dtype == torch.float32 or v.dtype == torch.float32:
             q, k, v = q.to(torch.float16), k.to(torch.float16), v.to(torch.float16)
@@ -329,7 +350,7 @@ def _build_sage_fn(mode: str) -> Callable:
                 mask = mask.unsqueeze(0)
             if mask.ndim == 3:
                 mask = mask.unsqueeze(1)
-        out = _dispatch(q, k, v, is_causal=False, attn_mask=mask, tensor_layout=tensor_layout).to(in_dtype)
+        out = kernel(q, k, v, is_causal=False, attn_mask=mask, tensor_layout=tensor_layout).to(in_dtype)
         if tensor_layout == "HND":
             if not skip_output_reshape:
                 out = out.transpose(1, 2).reshape(b, -1, heads * dim_head)
@@ -394,36 +415,25 @@ def make_sage_override(
         skip_output_reshape=False,
         **kwargs,
     ):
-        shape = tuple(q.shape)
-        has_mask = mask is not None
         t0 = time.perf_counter() if tracer.enabled else 0.0
+        fell_back = False
         try:
             out = sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape)
         except Exception as err:
-            if not fallback_on_error:
+            if not fallback_on_error or pytorch_fn is None:
                 raise
-            logger.log_once(shape, mode, err)
-            if pytorch_fn is None:
-                # Defensive: reraise if nothing to fall back to.
-                raise
+            logger.log_once(tuple(q.shape), mode, err)
+            fell_back = True
             out = pytorch_fn(
                 q, k, v, heads,
                 mask=mask, attn_precision=attn_precision,
                 skip_reshape=skip_reshape, skip_output_reshape=skip_output_reshape,
                 **kwargs,
             )
-            if tracer.enabled:
-                tracer.emit(
-                    shape=shape, has_mask=has_mask, mode=mode,
-                    fell_back=True,
-                    elapsed_us=(time.perf_counter() - t0) * 1e6,
-                    iter_idx=_iter_from_kwargs(kwargs),
-                )
-            return out
         if tracer.enabled:
             tracer.emit(
-                shape=shape, has_mask=has_mask, mode=mode,
-                fell_back=False,
+                shape=tuple(q.shape), has_mask=mask is not None, mode=mode,
+                fell_back=fell_back,
                 elapsed_us=(time.perf_counter() - t0) * 1e6,
                 iter_idx=_iter_from_kwargs(kwargs),
             )

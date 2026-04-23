@@ -44,19 +44,17 @@ class FakeModel:
 
     def __init__(self):
         self.model_options: dict = {"transformer_options": {}}
-        self.callbacks: list[tuple[str, Callable]] = []
+        self.callbacks: dict[str, Callable] = {}
 
     def clone(self) -> "FakeModel":
         clone = FakeModel()
-        # Deep-enough copy: a fresh transformer_options dict so override
-        # writes don't leak between clone and original.
         clone.model_options = {
             "transformer_options": dict(self.model_options.get("transformer_options", {}))
         }
         return clone
 
     def add_callback(self, call_type: str, fn):
-        self.callbacks.append((call_type, fn))
+        self.callbacks[call_type] = fn
 
 
 def _fake_q(batch=1, seq=64, heads=4, dim_head=16, dtype=torch.float16):
@@ -275,10 +273,7 @@ def test_execute_sets_override_and_registers_cleanup():
     override = clone.model_options["transformer_options"].get("optimized_attention_override")
     assert callable(override)
 
-    cleanup_events = [ct for ct, _ in clone.callbacks]
-    # Use the CallbacksMP.ON_CLEANUP constant value from comfy.patcher_extension.
-    # Its literal is "on_cleanup".
-    assert "on_cleanup" in cleanup_events
+    assert "on_cleanup" in clone.callbacks
 
 
 def test_cleanup_callback_removes_override():
@@ -287,13 +282,9 @@ def test_cleanup_callback_removes_override():
     (clone,) = m.AudioLoopHelperSageAttention._patch_impl(
         model, mode="auto", fallback_on_error=True
     )
-    override = clone.model_options["transformer_options"]["optimized_attention_override"]
-    # Find and invoke the cleanup callback.
-    cleanup_fn = next(fn for ct, fn in clone.callbacks if ct == "on_cleanup")
-    cleanup_fn()
+    clone.callbacks["on_cleanup"]()
     assert "optimized_attention_override" not in clone.model_options["transformer_options"]
-    # Idempotent: running again on a clean state doesn't raise.
-    cleanup_fn()
+    clone.callbacks["on_cleanup"]()
 
 
 # ---------------------------------------------------------------------------
