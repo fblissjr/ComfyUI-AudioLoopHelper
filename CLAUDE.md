@@ -190,6 +190,7 @@ LTX-2_00032.json and LTX-2_00040.json are confirmed working (April 9, 2026). For
 ## Documentation index
 
 ### User-facing guides
+- `docs/architecture_overview.md` -- **START HERE.** Single-entry-point reference covering our workflow, ComfyUI core execution, ComfyUI-LTXVideo + KJNodes layers, native LTX-2 portability, CLIP path, sampler + mask routing, known bugs, extension playbook. Navigable in one pass with cross-references to every deeper doc.
 - `docs/prompt_workflow_end_to_end.md` -- complete pipeline: init image -> VLM -> audio analysis -> LLM -> workflow
 - `docs/prompt_creation_guide.md` -- prompt rules, variation patterns (A/B/C), sampler tuning, examples
 - `docs/audio_analysis_guide.md` -- offline/runtime analysis, AudioPitchDetect wiring patterns
