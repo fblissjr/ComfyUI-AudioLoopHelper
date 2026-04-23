@@ -32,6 +32,7 @@ Flags:
 from __future__ import annotations
 
 import argparse
+import heapq
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -47,38 +48,40 @@ from workflow_utils import WorkflowEditor  # noqa: E402
 MODE_ACTIVE = 0
 MODE_BYPASS = 4
 
-# Node categories that get colored differently in mermaid rendering.
+# Node categories → fill color. Order matters: first-match wins, so put
+# specific categories (conditioning, latent) before generic ones (helper).
+_CATEGORY_PREFIXES: dict[str, tuple[str, ...]] = {
+    "loader": ("loader", "unetloader", "vaeload", "cliploader"),
+    "sampler": ("sampler", "scheduler", "noise"),
+    "conditioning": ("condition", "cliptextencode", "batchencode", "textencode"),
+    "latent": ("latent",),
+    "audio": ("audio", "trimaudio", "melband"),
+    "loop": ("tensorloop",),
+    "subgraph": ("subgraph",),
+}
+_HELPER_EXACT_TYPES = frozenset({
+    "SetNode", "GetNode", "PrimitiveNode", "Reroute", "Note", "FloatConstant",
+})
 _CATEGORY_COLORS = {
-    "loader": "#A8D5BA",       # green
-    "sampler": "#F5B86B",      # orange
-    "conditioning": "#8EB9D4", # blue
-    "latent": "#C8A7D4",       # purple
-    "audio": "#D4A5A5",        # pink
-    "loop": "#E5D27C",         # yellow
-    "subgraph": "#B0B0B0",     # grey
-    "helper": "#DCDCDC",       # light grey
-    "dead": "#F0A0A0",         # red-ish
+    "loader": "#A8D5BA",
+    "sampler": "#F5B86B",
+    "conditioning": "#8EB9D4",
+    "latent": "#C8A7D4",
+    "audio": "#D4A5A5",
+    "loop": "#E5D27C",
+    "subgraph": "#B0B0B0",
+    "helper": "#DCDCDC",
+    "dead": "#F0A0A0",
 }
 
 
 def _categorize(node: dict) -> str:
-    t = node["type"].lower()
-    if "loader" in t or "unetloader" in t or "vaeload" in t or "cliploader" in t:
-        return "loader"
-    if "sampler" in t or "scheduler" in t or "noise" in t:
-        return "sampler"
-    if "condition" in t or "cliptextencode" in t or "batchencode" in t or "textencode" in t:
-        return "conditioning"
-    if "latent" in t:
-        return "latent"
-    if "audio" in t or "trimaudio" in t or "melband" in t:
-        return "audio"
-    if "tensorloop" in t:
-        return "loop"
-    if node["type"] == "SubgraphNode" or "subgraph" in t:
-        return "subgraph"
-    if t in {"setnode", "getnode", "primitivenode", "reroute", "note", "floatconstant"}:
+    if node["type"] in _HELPER_EXACT_TYPES:
         return "helper"
+    t = node["type"].lower()
+    for category, prefixes in _CATEGORY_PREFIXES.items():
+        if any(p in t for p in prefixes):
+            return category
     return "helper"
 
 
@@ -88,10 +91,7 @@ def _build_edges(ed: WorkflowEditor, *, collapse_setget: bool) -> list[tuple[int
     When `collapse_setget` is True, Set_X / Get_X pairs by key name get
     a synthetic edge so the graph reflects actual data flow.
     """
-    edges: list[tuple[int, int, str]] = []
-    for link in ed.wf["links"]:
-        if isinstance(link, list) and len(link) >= 6:
-            edges.append((link[1], link[3], link[5]))
+    edges: list[tuple[int, int, str]] = list(ed.iter_edges())
 
     if collapse_setget:
         set_by_key: dict[str, int] = {}
@@ -114,7 +114,9 @@ def _build_edges(ed: WorkflowEditor, *, collapse_setget: bool) -> list[tuple[int
 def _topo_sort(
     nodes: list[dict], edges: list[tuple[int, int, str]],
 ) -> tuple[list[int], list[int]]:
-    """Return (execution_order, cycle_node_ids). Kahn's algorithm."""
+    """Return (execution_order, cycle_node_ids). Kahn's algorithm with a
+    min-heap ready-queue so tie-breaking is by lowest node id (stable
+    output across runs) in O(N log N) total rather than O(N² log N)."""
     in_deg: dict[int, int] = {n["id"]: 0 for n in nodes}
     out_adj: dict[int, list[int]] = defaultdict(list)
     node_ids = set(in_deg)
@@ -123,16 +125,16 @@ def _topo_sort(
             in_deg[tgt] = in_deg.get(tgt, 0) + 1
             out_adj[src].append(tgt)
 
-    queue = [nid for nid, d in in_deg.items() if d == 0]
+    ready: list[int] = [nid for nid, d in in_deg.items() if d == 0]
+    heapq.heapify(ready)
     order: list[int] = []
-    while queue:
-        queue.sort()  # stable order: lowest id first among ready nodes
-        nid = queue.pop(0)
+    while ready:
+        nid = heapq.heappop(ready)
         order.append(nid)
         for nxt in out_adj[nid]:
             in_deg[nxt] -= 1
             if in_deg[nxt] == 0:
-                queue.append(nxt)
+                heapq.heappush(ready, nxt)
 
     cycle = [nid for nid, d in in_deg.items() if d > 0]
     return order, cycle

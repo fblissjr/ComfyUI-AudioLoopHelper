@@ -46,6 +46,7 @@ import orjson
 
 _LOG_PATH_ENV = "COMFYUI_EXEC_LOG"
 _SHAPE_LIMIT_ENV = "COMFYUI_EXEC_LOG_SHAPE_LIMIT"  # max items shown for lists/dicts
+_SHAPE_RECURSION_DEPTH_LIMIT = 2
 _INSTALLED = False
 
 
@@ -53,10 +54,10 @@ def _shape_of(value: Any, depth: int = 0) -> Any:
     """Extract a JSON-safe shape/summary from an arbitrary Python value.
 
     Keeps output compact: tensor.shape, dict of names → shapes, list of
-    lengths. Refuses to descend past depth 2 to avoid dumping huge
-    nested structures.
+    lengths. Refuses to descend past `_SHAPE_RECURSION_DEPTH_LIMIT` to
+    avoid dumping huge nested structures.
     """
-    if depth > 2:
+    if depth > _SHAPE_RECURSION_DEPTH_LIMIT:
         return "<...>"
     try:
         # torch.Tensor
@@ -132,6 +133,10 @@ def install() -> bool:
         return False
 
     sink = sys.stderr if log_path == "stderr" else open(log_path, "a", buffering=1)
+    # Signature match against ComfyUI's execute() is NOT verified at
+    # install time. If ComfyUI changes the signature, the wrapper will
+    # raise TypeError on the first workflow run (late, but safe-fail;
+    # the workflow won't execute silently-wrong).
     original = _exec_mod.execute
 
     async def wrapped_execute(

@@ -174,6 +174,16 @@ class WorkflowEditor:
         """Find all links originating from a node."""
         return [l for l in self.wf["links"] if isinstance(l, list) and l[1] == src_node]
 
+    def iter_edges(self):
+        """Yield (src_node, tgt_node, type_label) edges from top-level links.
+
+        Shared helper so tools don't hand-parse the `[id, src, src_slot, tgt,
+        tgt_slot, type]` list format.
+        """
+        for link in self.wf["links"]:
+            if isinstance(link, list) and len(link) >= 6:
+                yield link[1], link[3], link[5]
+
     # --- Subgraph operations ---
 
     def get_subgraph(self, index: int = 0) -> dict | None:
