@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1607,
-  "last_link_id": 3006,
+  "last_node_id": 1608,
+  "last_link_id": 3009,
   "nodes": [
     {
       "id": 252,
@@ -1864,7 +1864,7 @@
     },
     {
       "id": 268,
-      "type": "PathchSageAttentionKJ",
+      "type": "AudioLoopHelperSageAttention",
       "pos": [
         -1363.844464482797,
         4439.804943637588
@@ -1893,13 +1893,11 @@
         }
       ],
       "properties": {
-        "cnr_id": "comfyui-kjnodes",
-        "ver": "204f6d5aae73b10c0fe2fb26e61405fd6337bb77",
-        "Node name for S&R": "PathchSageAttentionKJ"
+        "Node name for S&R": "AudioLoopHelperSageAttention"
       },
       "widgets_values": [
-        "sageattn_qk_int8_pv_fp8_cuda++",
-        false
+        "auto_mask_aware",
+        true
       ]
     },
     {
@@ -2298,7 +2296,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            2036
+            3007
           ]
         }
       ],
@@ -3305,7 +3303,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 2036
+          "link": 3009
         },
         {
           "name": "vae",
@@ -3528,7 +3526,8 @@
           "type": "INT",
           "links": [
             2936,
-            3004
+            3004,
+            3008
           ]
         }
       ],
@@ -4276,6 +4275,52 @@
         0
       ],
       "title": "Conditioning Select (by Iteration)"
+    },
+    {
+      "id": 1608,
+      "type": "LoopIterationStamp",
+      "pos": [
+        2667.4696783995114,
+        4167.000748148983
+      ],
+      "size": [
+        260,
+        78
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 3007
+        },
+        {
+          "name": "current_iteration",
+          "type": "INT",
+          "link": 3008,
+          "widget": {
+            "name": "current_iteration"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            3009
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoopIterationStamp"
+      },
+      "widgets_values": [
+        0
+      ],
+      "title": "Loop Iteration Stamp"
     }
   ],
   "links": [
@@ -4630,14 +4675,6 @@
       843,
       1,
       "SIGMAS"
-    ],
-    [
-      2036,
-      654,
-      0,
-      843,
-      2,
-      "MODEL"
     ],
     [
       2037,
@@ -5182,6 +5219,30 @@
       640,
       0,
       "AUDIO"
+    ],
+    [
+      3007,
+      654,
+      0,
+      1608,
+      0,
+      "MODEL"
+    ],
+    [
+      3008,
+      1539,
+      3,
+      1608,
+      1,
+      "INT"
+    ],
+    [
+      3009,
+      1608,
+      0,
+      843,
+      2,
+      "MODEL"
     ]
   ],
   "groups": [
@@ -6971,7 +7032,7 @@
         },
         "class_type": "LTXVGemmaCLIPModelLoader",
         "_meta": {
-          "title": "🅛🅣🅧 Gemma 3 Model Loader"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Gemma 3 Model Loader"
         }
       },
       "3": {
@@ -7057,7 +7118,7 @@
         },
         "class_type": "LTXVAudioVAELoader",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Audio VAE Loader"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Audio VAE Loader"
         }
       },
       "14": {
@@ -7073,7 +7134,7 @@
         },
         "class_type": "LTXVAudioVAEDecode",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Audio VAE Decode"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Audio VAE Decode"
         }
       },
       "15": {
@@ -7102,7 +7163,7 @@
         },
         "class_type": "VHS_VideoCombine",
         "_meta": {
-          "title": "Video Combine 🎥🅥🅗🅢"
+          "title": "Video Combine \ud83c\udfa5\ud83c\udd65\ud83c\udd57\ud83c\udd62"
         }
       },
       "17": {
@@ -7127,7 +7188,7 @@
         },
         "class_type": "MultimodalGuider",
         "_meta": {
-          "title": "🅛🅣🅧 Multimodal Guider"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Multimodal Guider"
         }
       },
       "18": {
@@ -7144,7 +7205,7 @@
         },
         "class_type": "GuiderParameters",
         "_meta": {
-          "title": "🅛🅣🅧 Guider Parameters"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Guider Parameters"
         }
       },
       "19": {
@@ -7157,7 +7218,7 @@
         },
         "class_type": "GuiderParameters",
         "_meta": {
-          "title": "🅛🅣🅧 Guider Parameters"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Guider Parameters"
         }
       },
       "21": {
@@ -7216,7 +7277,7 @@
         },
         "class_type": "LTXVEmptyLatentAudio",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Empty Latent Audio"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Empty Latent Audio"
         }
       },
       "27": {
@@ -7245,7 +7306,7 @@
         },
         "class_type": "LTXVConcatAVLatent",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Concat AV Latent"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Concat AV Latent"
         }
       },
       "29": {
@@ -7261,7 +7322,7 @@
         },
         "class_type": "LTXVSeparateAVLatent",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Separate AV Latent"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Separate AV Latent"
         }
       },
       "41": {

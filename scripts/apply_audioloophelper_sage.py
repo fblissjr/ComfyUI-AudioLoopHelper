@@ -101,7 +101,7 @@ def main() -> int:
     parser.add_argument(
         "--all",
         action="store_true",
-        help="Apply to every example_workflows/audio-loop-music-video_latent*.json.",
+        help="Apply to every example_workflows/audio-loop-music-video_*.json that has node 268.",
     )
     parser.add_argument(
         "--revert",
@@ -111,7 +111,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.all:
-        targets = sorted((REPO_ROOT / "example_workflows").glob("audio-loop-music-video_latent*.json"))
+        targets = sorted((REPO_ROOT / "example_workflows").glob("audio-loop-music-video_*.json"))
     else:
         targets = [Path(args.workflow)]
 
