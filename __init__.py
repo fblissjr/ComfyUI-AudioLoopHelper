@@ -26,16 +26,22 @@ else:
             return
         setattr(torch, flag, True)
 
-        profile_dir = Path(__file__).resolve().parent / "profile_output"
-        if not profile_dir.exists():
-            return
-        for child in profile_dir.iterdir():
-            try:
-                if child.is_dir():
-                    shutil.rmtree(child)
-                else:
-                    child.unlink()
-            except OSError as e:  # permission / concurrent access
-                print(f"[AudioLoopHelper] skipped {child.name}: {e}")
+        # Clean both the legacy location and the new canonical one so
+        # stale runs don't accumulate after the move.
+        plugin_root = Path(__file__).resolve().parent
+        for profile_dir in (
+            plugin_root / "profile_output",
+            plugin_root / "internal" / "analysis" / "runs" / "profiler",
+        ):
+            if not profile_dir.exists():
+                continue
+            for child in profile_dir.iterdir():
+                try:
+                    if child.is_dir():
+                        shutil.rmtree(child)
+                    else:
+                        child.unlink()
+                except OSError as e:  # permission / concurrent access
+                    print(f"[AudioLoopHelper] skipped {child.name}: {e}")
 
     _clear_stale_profile_output()

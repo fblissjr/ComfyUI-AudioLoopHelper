@@ -3,16 +3,21 @@
 Activates when `COMFYUI_EXEC_LOG` env var is set to a non-empty value.
 Monkey-patches ComfyUI's per-node execution function to emit one line
 per node: timestamp, node id, class, wall-clock duration, and tensor
-shapes of each input/output (where identifiable). Output goes to the
-path named by the env var, or stderr if the value is literally `stderr`.
+shapes of each input/output (where identifiable). Output goes to:
+  - `stderr`      -- if env var is literally the string "stderr"
+  - `auto`/`1`    -- auto-generate a timestamped file under the shared
+                     runs dir (gitignored): `internal/analysis/runs/
+                     exec_log/exec_YYYY-MM-DD_HHMMSS.jsonl`
+  - any other value -- treated as an explicit file path
 
-Example:
+Examples:
 
-    COMFYUI_EXEC_LOG=/tmp/exec.jsonl python main.py --listen 0.0.0.0
-    # run your workflow via the UI; then:
+    COMFYUI_EXEC_LOG=auto python <comfyui>/main.py --listen 0.0.0.0
+    # run the workflow; the JSONL lands in
+    # <plugin>/internal/analysis/runs/exec_log/exec_*.jsonl
+
+    COMFYUI_EXEC_LOG=/tmp/exec.jsonl python <comfyui>/main.py
     jq -c 'select(.event=="end")' /tmp/exec.jsonl | head -30
-    # or:
-    cat /tmp/exec.jsonl | python -c '...'
 
 Output format: JSON lines, one per node event. Fields:
   ts          -- epoch float seconds
@@ -39,6 +44,8 @@ from __future__ import annotations
 import os
 import sys
 import time
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import orjson
@@ -48,6 +55,22 @@ _LOG_PATH_ENV = "COMFYUI_EXEC_LOG"
 _SHAPE_LIMIT_ENV = "COMFYUI_EXEC_LOG_SHAPE_LIMIT"  # max items shown for lists/dicts
 _SHAPE_RECURSION_DEPTH_LIMIT = 2
 _INSTALLED = False
+
+# Auto-save destination shares the DAG-analyzer runs dir so all
+# per-generation debug output lives in one gitignored tree.
+_AUTO_RUNS_DIR = Path(__file__).resolve().parent / "internal" / "analysis" / "runs" / "exec_log"
+_AUTO_TOKENS = {"auto", "1", "true", "yes"}
+
+
+def _resolve_log_target(value: str) -> str:
+    """Map the env var value to a concrete sink: `"stderr"` or a path."""
+    if value == "stderr":
+        return value
+    if value.lower() in _AUTO_TOKENS:
+        _AUTO_RUNS_DIR.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        return str(_AUTO_RUNS_DIR / f"exec_{ts}.jsonl")
+    return value
 
 
 def _shape_of(value: Any, depth: int = 0) -> Any:
@@ -121,9 +144,10 @@ def install() -> bool:
     if _INSTALLED:
         return True
 
-    log_path = os.environ.get(_LOG_PATH_ENV, "").strip()
-    if not log_path:
+    raw = os.environ.get(_LOG_PATH_ENV, "").strip()
+    if not raw:
         return False
+    log_path = _resolve_log_target(raw)
 
     try:
         import execution as _exec_mod  # ComfyUI's execution.py

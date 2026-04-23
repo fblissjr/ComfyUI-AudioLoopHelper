@@ -35,9 +35,20 @@ import argparse
 import heapq
 import sys
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 
 import orjson
+
+
+_DEFAULT_RUNS_DIR = Path(__file__).resolve().parent.parent / "internal" / "analysis" / "runs"
+
+
+def _timestamped_path(runs_dir: Path, workflow_path: Path, ext: str) -> Path:
+    """Build `<runs_dir>/dag_<workflow_slug>_YYYY-MM-DD_HHMMSS.<ext>`."""
+    slug = workflow_path.stem.replace(".", "_")
+    ts = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    return runs_dir / f"dag_{slug}_{ts}.{ext}"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -357,7 +368,11 @@ def main() -> None:
     ap.add_argument("workflow", help="Path to workflow JSON")
     ap.add_argument("--format", choices=("mermaid", "dot", "ascii", "json"),
                     default="mermaid")
-    ap.add_argument("--output", help="Write to file instead of stdout")
+    ap.add_argument("--output", help="Write to explicit file path instead of stdout")
+    ap.add_argument("--save-run", action="store_true",
+                    help=f"Save to timestamped file under {_DEFAULT_RUNS_DIR} (gitignored)")
+    ap.add_argument("--runs-dir", type=Path, default=_DEFAULT_RUNS_DIR,
+                    help="Override directory for --save-run output")
     ap.add_argument("--include-bypassed", action="store_true",
                     help="Include mode=4 (bypassed) nodes in rendering")
     ap.add_argument("--no-collapse-setget", action="store_true",
@@ -369,17 +384,29 @@ def main() -> None:
     args = ap.parse_args()
 
     filter_types = args.filter_types.split(",") if args.filter_types else None
+    workflow_path = Path(args.workflow)
     out = analyze(
-        Path(args.workflow),
+        workflow_path,
         fmt=args.format,
         include_bypassed=args.include_bypassed,
         collapse_setget=not args.no_collapse_setget,
         filter_types=filter_types,
         include_subgraph=args.subgraph,
     )
+
+    ext_by_format = {"mermaid": "md", "dot": "dot", "ascii": "txt", "json": "json"}
+    output_path: Path | None = None
     if args.output:
-        Path(args.output).write_text(out)
-        print(f"Wrote {args.output}")
+        output_path = Path(args.output)
+    elif args.save_run:
+        args.runs_dir.mkdir(parents=True, exist_ok=True)
+        output_path = _timestamped_path(
+            args.runs_dir, workflow_path, ext_by_format[args.format],
+        )
+
+    if output_path is not None:
+        output_path.write_text(out)
+        print(f"Wrote {output_path}")
     else:
         print(out)
 

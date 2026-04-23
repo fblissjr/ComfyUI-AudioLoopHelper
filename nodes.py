@@ -1824,12 +1824,12 @@ class ProfileBegin(io.ComfyNode):
                 ),
                 io.String.Input(
                     "output_dir",
-                    default="profile_output",
+                    default="internal/analysis/runs/profiler",
                     tooltip=(
                         "Root dir for profile outputs. Relative paths resolve "
                         "against the ComfyUI-AudioLoopHelper plugin folder "
-                        "(gitignored). Use an absolute path to write elsewhere. "
-                        "A timestamped subdir is created per run."
+                        "(gitignored under internal/). Use an absolute path to "
+                        "write elsewhere. A timestamped subdir is created per run."
                     ),
                 ),
                 io.Int.Input(
