@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1613,
-  "last_link_id": 3032,
+  "last_node_id": 1619,
+  "last_link_id": 3043,
   "nodes": [
     {
       "id": 252,
@@ -1832,7 +1832,7 @@
       ],
       "flags": {},
       "order": 36,
-      "mode": 0,
+      "mode": 4,
       "inputs": [
         {
           "name": "model",
@@ -2107,9 +2107,7 @@
         {
           "name": "IMAGE",
           "type": "IMAGE",
-          "links": [
-            3016
-          ]
+          "links": []
         }
       ],
       "title": "Get_input_image",
@@ -3190,7 +3188,7 @@
           "name": "output",
           "type": "LATENT",
           "links": [
-            2994
+            3040
           ]
         }
       ],
@@ -3408,7 +3406,7 @@
           "name": "initial_value",
           "shape": 7,
           "type": "LATENT",
-          "link": 3001
+          "link": 3039
         }
       ],
       "outputs": [
@@ -3473,7 +3471,8 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            1223
+            1223,
+            3033
           ]
         },
         {
@@ -3977,7 +3976,7 @@
         {
           "name": "samples2",
           "type": "LATENT",
-          "link": 2994
+          "link": 3041
         },
         {
           "name": "dim",
@@ -4029,7 +4028,7 @@
           "name": "",
           "type": "LATENT",
           "links": [
-            3001
+            3038
           ]
         }
       ],
@@ -4057,7 +4056,7 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 3016
+          "link": 3037
         },
         {
           "name": "current_iteration",
@@ -4130,7 +4129,7 @@
         "Node name for S&R": "KeyframeImageSchedule"
       },
       "widgets_values": [
-        "0:00+: 0",
+        "0:00-0:42: 0\n0:42-1:28: 1\n1:28+: 2\n",
         0.0
       ],
       "title": "Keyframe Image Schedule"
@@ -4363,6 +4362,251 @@
       },
       "title": "VAE Encode (init image \u2192 guide latent)",
       "widgets_values": []
+    },
+    {
+      "id": 1614,
+      "type": "LoadImage",
+      "pos": [
+        -2400,
+        4600
+      ],
+      "size": [
+        315,
+        314
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            3034
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": []
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "keyframe_02.png",
+        "image"
+      ],
+      "title": "Keyframe 2 (swap filename)"
+    },
+    {
+      "id": 1615,
+      "type": "LoadImage",
+      "pos": [
+        -2400,
+        4950
+      ],
+      "size": [
+        315,
+        314
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            3036
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": []
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "keyframe_03.png",
+        "image"
+      ],
+      "title": "Keyframe 3 (swap filename)"
+    },
+    {
+      "id": 1616,
+      "type": "ImageBatch",
+      "pos": [
+        -2030,
+        4600
+      ],
+      "size": [
+        140,
+        46
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image1",
+          "type": "IMAGE",
+          "link": 3033
+        },
+        {
+          "name": "image2",
+          "type": "IMAGE",
+          "link": 3034
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            3035
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "Node name for S&R": "ImageBatch"
+      },
+      "widgets_values": [],
+      "title": "ImageBatch (kf01 + kf02)"
+    },
+    {
+      "id": 1617,
+      "type": "ImageBatch",
+      "pos": [
+        -1840,
+        4600
+      ],
+      "size": [
+        140,
+        46
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image1",
+          "type": "IMAGE",
+          "link": 3035
+        },
+        {
+          "name": "image2",
+          "type": "IMAGE",
+          "link": 3036
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            3037
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "Node name for S&R": "ImageBatch"
+      },
+      "widgets_values": [],
+      "title": "ImageBatch (+ kf03) -> 3-frame batch"
+    },
+    {
+      "id": 1618,
+      "type": "ProfileBegin_AudioLoop",
+      "pos": [
+        2600,
+        4400
+      ],
+      "size": [
+        320,
+        220
+      ],
+      "flags": {},
+      "order": 90,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "trigger",
+          "type": "*",
+          "link": 3038
+        }
+      ],
+      "outputs": [
+        {
+          "name": "trigger",
+          "type": "*",
+          "links": [
+            3039
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-audioloophelper",
+        "Node name for S&R": "ProfileBegin_AudioLoop"
+      },
+      "widgets_values": [
+        true,
+        "internal/analysis/runs/profiler",
+        1,
+        3,
+        true,
+        true,
+        true,
+        false
+      ],
+      "title": "Profile Begin"
+    },
+    {
+      "id": 1619,
+      "type": "ProfileEnd_AudioLoop",
+      "pos": [
+        3900,
+        5000
+      ],
+      "size": [
+        320,
+        80
+      ],
+      "flags": {},
+      "order": 90,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "trigger",
+          "type": "*",
+          "link": 3040
+        }
+      ],
+      "outputs": [
+        {
+          "name": "trigger",
+          "type": "*",
+          "links": [
+            3041
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-audioloophelper",
+        "Node name for S&R": "ProfileEnd_AudioLoop"
+      },
+      "widgets_values": [],
+      "title": "Profile End"
     }
   ],
   "links": [
@@ -5111,14 +5355,6 @@
       "LATENT"
     ],
     [
-      2994,
-      1540,
-      0,
-      1605,
-      1,
-      "LATENT"
-    ],
-    [
       2995,
       1605,
       0,
@@ -5143,14 +5379,6 @@
       "LATENT"
     ],
     [
-      3001,
-      1606,
-      0,
-      1539,
-      0,
-      "LATENT"
-    ],
-    [
       3005,
       245,
       0,
@@ -5165,14 +5393,6 @@
       843,
       16,
       "FLOAT"
-    ],
-    [
-      3016,
-      651,
-      0,
-      1609,
-      0,
-      "IMAGE"
     ],
     [
       3017,
@@ -5292,6 +5512,78 @@
       0,
       843,
       8,
+      "LATENT"
+    ],
+    [
+      3033,
+      444,
+      0,
+      1616,
+      0,
+      "IMAGE"
+    ],
+    [
+      3034,
+      1614,
+      0,
+      1616,
+      1,
+      "IMAGE"
+    ],
+    [
+      3035,
+      1616,
+      0,
+      1617,
+      0,
+      "IMAGE"
+    ],
+    [
+      3036,
+      1615,
+      0,
+      1617,
+      1,
+      "IMAGE"
+    ],
+    [
+      3037,
+      1617,
+      0,
+      1609,
+      0,
+      "IMAGE"
+    ],
+    [
+      3038,
+      1606,
+      0,
+      1618,
+      0,
+      "LATENT"
+    ],
+    [
+      3039,
+      1618,
+      0,
+      1539,
+      0,
+      "LATENT"
+    ],
+    [
+      3040,
+      1540,
+      0,
+      1619,
+      0,
+      "LATENT"
+    ],
+    [
+      3041,
+      1619,
+      0,
+      1605,
+      1,
       "LATENT"
     ]
   ],
@@ -5583,7 +5875,7 @@
             "name": "extended_latent",
             "type": "LATENT",
             "linkIds": [
-              3015
+              3043
             ],
             "pos": [
               4811.1378697247,
@@ -6408,7 +6700,7 @@
                 "name": "latent",
                 "type": "LATENT",
                 "links": [
-                  3015
+                  3042
                 ]
               }
             ],
@@ -6419,6 +6711,43 @@
             "widgets_values": [
               "always"
             ]
+          },
+          {
+            "id": 2008,
+            "type": "ProfileIterStep_AudioLoop",
+            "pos": [
+              4860,
+              4900
+            ],
+            "size": [
+              220,
+              58
+            ],
+            "flags": {},
+            "order": 90,
+            "mode": 4,
+            "inputs": [
+              {
+                "name": "latent",
+                "type": "LATENT",
+                "link": 3042
+              }
+            ],
+            "outputs": [
+              {
+                "name": "latent",
+                "type": "LATENT",
+                "links": [
+                  3043
+                ]
+              }
+            ],
+            "properties": {
+              "cnr_id": "comfyui-audioloophelper",
+              "Node name for S&R": "ProfileIterStep_AudioLoop"
+            },
+            "widgets_values": [],
+            "title": "Profile Iter Step"
           }
         ],
         "groups": [],
@@ -6728,19 +7057,27 @@
             "type": "LATENT"
           },
           {
-            "id": 3015,
-            "origin_id": 2007,
-            "origin_slot": 0,
-            "target_id": -20,
-            "target_slot": 0,
-            "type": "LATENT"
-          },
-          {
             "id": 3016,
             "origin_id": -10,
             "origin_slot": 8,
             "target_id": 1519,
             "target_slot": 4,
+            "type": "LATENT"
+          },
+          {
+            "id": 3042,
+            "origin_id": 2007,
+            "origin_slot": 0,
+            "target_id": 2008,
+            "target_slot": 0,
+            "type": "LATENT"
+          },
+          {
+            "id": 3043,
+            "origin_id": 2008,
+            "origin_slot": 0,
+            "target_id": -20,
+            "target_slot": 0,
             "type": "LATENT"
           }
         ],
