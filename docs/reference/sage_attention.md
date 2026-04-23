@@ -219,8 +219,11 @@ flipping back if anything regresses.
 - `<sage_fork_repo>/README.md` — the sage build used by this node.
   Fork of `woct0rdho/SageAttention` (which forks `thu-ml/SageAttention`).
   Includes a local `build.sh` hardened to install into an explicit
-  `VIRTUAL_ENV`. **We own this fork**, so mask-aware routing here and
-  future kernel-side fixes (e.g. the fp16_cuda mask bug) can be
-  co-optimized rather than blocked on upstream review. Measurement
-  artifact: `<sage_fork_repo>/tests/test_sageattn_ltx_shapes.py` (the
-  seq_kv sweep proving all CUDA mask kernels fail vs triton).
+  `VIRTUAL_ENV`. **We own this fork**, so routing policy here and
+  future kernel-side work (e.g. adding masked-attention support to the
+  CUDA kernels) can be co-optimized rather than blocked on upstream
+  review. Measurement artifact:
+  `<sage_fork_repo>/tests/test_sageattn_ltx_shapes.py` (the seq_kv sweep
+  + synthetic-wide-V shape characterizing the CUDA kernels' dropped-mask
+  behavior vs triton's honored-mask path). Sage-fork CHANGELOG's "Open
+  work" section carries the mask-support feature-add triage.

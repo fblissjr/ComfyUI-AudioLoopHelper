@@ -294,8 +294,9 @@ def _reset_trace_env(monkeypatch: pytest.MonkeyPatch):
 
 
 # ---------------------------------------------------------------------------
-# 7. Mask-aware mode. Sage's CUDA mask kernels (fp16_cuda, fp8++) fail at
-# rtol=0.44 on LTX cross-attn; fp16_triton is clean. auto_mask_aware routes
+# 7. Mask-aware mode. Sage's CUDA kernels don't implement mask support
+# (MaskMode enum is {kNone, kCausal}; attn_mask is silently dropped via
+# kwargs); only fp16_triton has a masked path. auto_mask_aware routes
 # masked calls to triton and unmasked calls to the primary kernel.
 # ---------------------------------------------------------------------------
 

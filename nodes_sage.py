@@ -97,11 +97,12 @@ _MASK_AWARE_MODE = "auto_mask_aware"
 _DEFAULT_MODE = _MASK_AWARE_MODE
 
 # Mask-aware is listed first after disabled/auto because it is the safe
-# default per `internal/design/sage_backlog.md` item 2: sage's CUDA mask
-# kernels (fp16_cuda, fp8++) fail at rtol=0.44 on LTX cross-attn, while
-# fp16_triton is clean. auto_mask_aware routes around the bug without
-# giving up self-attn speed. Always available: fp16_triton is JIT so it
-# runs on any arch.
+# default per `internal/design/sage_backlog.md` item 2: sage's CUDA
+# kernels don't implement masked attention (MaskMode enum is
+# {kNone, kCausal}; attn_mask is silently dropped via kwargs). Only
+# fp16_triton has a masked path. auto_mask_aware routes masked calls
+# there without giving up self-attn speed on the unmasked path. Always
+# available: fp16_triton is JIT so it runs on any arch.
 _MODES_DEFAULT = ["disabled", _MASK_AWARE_MODE, "auto", _TRITON_MODE]
 
 _MODES_BY_ARCH: dict[str, list[str]] = {
