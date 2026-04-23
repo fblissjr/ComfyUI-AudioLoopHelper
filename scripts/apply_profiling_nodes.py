@@ -7,22 +7,24 @@ Idempotent. Does three insertions:
   2. ProfileIterStep: inside subgraph #843, intercepts the link from
      IterationCleanup (2007) -> subgraph output. Marks iteration boundary.
   3. ProfileEnd: intercepts TensorLoopClose (1540) -> LatentConcat (1605).
-     Runs at workflow end, writes trace/summary/memory_timeline to disk.
+     Runs at workflow end, writes trace/summary/memory_timeline to
+     `internal/analysis/runs/profiler/<timestamp>/` by default (gitignored).
 
 Default: enabled=True so the workflow demonstrates profiling when run. Toggle
 off via the `enabled` widget on ProfileBegin, or right-click bypass any of
 the three profile nodes.
 
 Usage:
-    uv run python scripts/apply_profiling_nodes.py
+    uv run python scripts/apply_profiling_nodes.py [workflow.json]
 """
 
+import sys
 from pathlib import Path
 
 from workflow_utils import WorkflowEditor
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-WORKFLOW = REPO_ROOT / "example_workflows" / "audio-loop-music-video_latent.json"
+DEFAULT_WORKFLOW = REPO_ROOT / "example_workflows" / "audio-loop-music-video_latent.json"
 
 TENSOR_LOOP_OPEN = 1539
 TENSOR_LOOP_CLOSE = 1540
@@ -198,14 +200,14 @@ def patch_workflow(path: Path) -> None:
                 node_id_source_link=tlo_initial_link,
                 pos=[2600, 4400],
                 widgets=[
-                    True,                # enabled
-                    "profile_output",    # output_dir (plugin-relative, gitignored)
-                    1,                   # warmup_iterations
-                    3,                   # active_iterations
-                    True,                # include_cpu
-                    True,                # include_memory
-                    True,                # include_shapes
-                    False,               # include_flops
+                    True,                                   # enabled
+                    "internal/analysis/runs/profiler",      # output_dir (plugin-relative, gitignored)
+                    1,                                      # warmup_iterations
+                    3,                                      # active_iterations
+                    True,                                   # include_cpu
+                    True,                                   # include_memory
+                    True,                                   # include_shapes
+                    False,                                  # include_flops
                 ],
                 title="Profile Begin",
             )
@@ -238,10 +240,11 @@ def patch_workflow(path: Path) -> None:
 
 
 def main() -> None:
-    if not WORKFLOW.exists():
-        print(f"Workflow not found: {WORKFLOW}")
+    path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_WORKFLOW
+    if not path.exists():
+        print(f"Workflow not found: {path}")
         return
-    patch_workflow(WORKFLOW)
+    patch_workflow(path)
 
 
 if __name__ == "__main__":
