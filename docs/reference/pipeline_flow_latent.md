@@ -1,4 +1,4 @@
-Last updated: 2026-04-23
+Last updated: 2026-04-23 (post-cleanup: #1318 upgraded to LTXVTiledVAEDecode, #1520 VAE moved to top level, slot 8 IMAGE → LATENT, dead #1590/#1597/Reroute/Note removed, batch encoder stamps frame_rate)
 
 # Pipeline Flow: LATENT-Based Music Video Workflow
 
@@ -581,13 +581,13 @@ Output Assembly:
 - **Outputs**:
   | Output | Type | Connected To |
   |--------|------|-------------|
-  | video_latent | LATENT | #381 LTXVCropGuides (slot 2), #1318 VAEDecode (slot 0), #1539 TensorLoopOpen initial_value (slot 0) |
+  | video_latent | LATENT | #381 LTXVCropGuides (slot 2), #1318 LTXVTiledVAEDecode (slot 1), #1539 TensorLoopOpen initial_value (slot 0) |
   | audio_latent | LATENT | unwired -- discarded; loop re-encodes audio each iteration |
 
 **Critical path split**: The video_latent from #245 goes to THREE places:
 1. **#1539 TensorLoopOpen** -- full latent (WITH guides) as loop initial value
 2. **#381 LTXVCropGuides** -- strips guides for prepending to final output
-3. **#1318 VAEDecode** -- preview of initial render
+3. **#1318 LTXVTiledVAEDecode** -- preview of initial render (upgraded from generic `VAEDecode` on 2026-04-23 for OOM safety at higher resolutions)
 
 ### Node 381 -- LTXVCropGuides (Initial)
 - **Type**: `LTXVCropGuides` (ComfyUI core: `comfy_extras/nodes_lt.py`)
@@ -732,7 +732,7 @@ The subgraph receives 15 inputs from the outer workflow via internal node -10:
 | 5 | video_end_time (window_size_seconds) | FLOAT | #691 Get_window_size_seconds -- 19.88 |
 | 6 | positive | CONDITIONING | #1588 Get_base_cond_pos directly |
 | 7 | negative | CONDITIONING | #648 Get_base_cond_neg directly |
-| 8 | num_guides.image_1 (init_image) | IMAGE | #651 Get_input_image |
+| 8 | guide_latent (init_image pre-encoded) | LATENT | top-level `VAEEncode` (new node, 2026-04-23) ← `#651 Get_input_image` + `#619 Get_video_vae` — slot was `num_guides.image_1` (IMAGE) pre-2026-04-23 |
 | 9 | audio_vae (Audio VAE) | VAE | #599 Get_audio_vae |
 | 10 | audio | AUDIO | #641 Get_actual_audio |
 | 11 | start_index | FLOAT | #1582 AudioLoopController start_index (slot 0) |
@@ -832,7 +832,7 @@ The subgraph receives 15 inputs from the outer workflow via internal node -10:
   | positive | CONDITIONING | Subgraph input slot 6 via link 2823 |
   | negative | CONDITIONING | Subgraph input slot 7 via link 2824 |
   | latent | LATENT | #606 LTXVAudioVideoMask video_latent (slot 0) via link 2828 |
-  | guiding_latent | LATENT | #1520 VAEEncode (slot 0) via link 2827 |
+  | guiding_latent | LATENT | subgraph input slot 8 `guide_latent` directly — was via internal `#1520 VAEEncode` pre-2026-04-23; VAE encode is now top-level (init image encoded once per workflow run, not per iteration) |
   | strength | FLOAT | Subgraph input slot 12 (first_frame_guide_strength) via link 2839 |
 - **Widgets**: `latent_idx`: `-1` (guide positioned before first frame), `strength`: widget overridden by input
 - **Outputs**:
@@ -1019,7 +1019,7 @@ The noise_mask is the mechanism by which the sampler knows which latent frames t
 
 ### Node 1598 -- Get_video_vae (Final Decode)
 - **Type**: `GetNode` (KJNodes) -- retrieves `video_vae`
-- **Outputs**: VAE -> #1604, #1590, #1591, #1597
+- **Outputs**: VAE -> #1604 (final decode), #1318 (initial-render preview decode), new top-level `VAEEncode` (guide latent). `#1590`/`#1591`/`#1597` (upscale skeleton) removed 2026-04-23.
 
 ### Node 1604 -- VAEDecodeTiled ("Final VAE Decode (once)")
 - **Type**: `VAEDecodeTiled` (ComfyUI core)
