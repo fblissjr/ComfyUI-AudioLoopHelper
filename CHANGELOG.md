@@ -6,6 +6,22 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **`AudioLoopHelperSageAttention` node** (`nodes_sage.py`). An
+  AudioLoopHelper-native alternative to KJNodes'
+  `PathchSageAttentionKJ` with three properties the KJ node lacks:
+  (1) try/except pytorch fallback on sage exceptions with deduplicated
+  logging per `(shape, mode, error)`, (2) `CallbacksMP.ON_CLEANUP`
+  handler so the override is removed on model unload, (3) opt-in
+  per-call JSONL telemetry to `internal/analysis/runs/sage/` gated by
+  the `AUDIOLOOPHELPER_SAGE_TRACE` env var (zero overhead when unset).
+  Mode combo is filtered to modes the detected GPU can actually run
+  (no Blackwell-only footguns on Ada). See
+  `internal/analysis/sage_attention_analysis.md` for the patch-chain
+  analysis that motivates this node and
+  `internal/design/sage_backlog.md` for deferred mask-aware routing /
+  baselining work. 15 tests in `tests/test_sage_node.py`.
+
 ### Changed (workflow layout)
 - **Loop subgraph input slot 8 type changed: IMAGE → LATENT.** Formerly
   `num_guides.image_1`, now `guide_latent`. The per-iteration
