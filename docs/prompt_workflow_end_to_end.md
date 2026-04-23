@@ -284,11 +284,15 @@ Two locations in the ComfyUI workflow:
 Covers trimmed 0:00 to ~0:20 (the first window). Copy the
 `node_169_prompt` text and paste it into node 169's text field.
 
-### Node 1558 (TimestampPromptSchedule) -- loop iterations
+### `TimestampPromptScheduleBatchEncode` -- loop iterations
 
 Covers everything after the first window. Copy the `schedule:` block
 (just the timestamp lines, not the "schedule:" header) and paste into
-node 1558's text field.
+the `schedule` widget on `TimestampPromptScheduleBatchEncode`. In
+workflow copies from before 2026-04-22 this text went on node 1558
+(`TimestampPromptSchedule`); the 2026-04-22 batch-encode fix replaced
+that node — migrate via `scripts/apply_batch_encode_fix.py`. See
+`docs/analysis/nag_object_patches_offload_asymmetry.md` for why.
 
 ### Verify timing alignment
 

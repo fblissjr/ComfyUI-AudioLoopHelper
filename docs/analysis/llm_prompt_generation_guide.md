@@ -84,7 +84,10 @@ schedule:
 2:30+: Style: cinematic. In a wide shot, dolly out, camera pulling back, a woman in her 30s with dark hair pulled back, wearing a vintage dress, is singing the final notes, growing still. Room tone fades.
 ```
 
-**Copy node_169_prompt into node 169. Copy the schedule block into TimestampPromptSchedule (node 1558).**
+**Copy node_169_prompt into node 169. Copy the schedule block into the
+`schedule` widget on `TimestampPromptScheduleBatchEncode` (workflow
+copies from before 2026-04-22 had this on node 1558
+`TimestampPromptSchedule`; migrate with `scripts/apply_batch_encode_fix.py`).**
 
 ## Step 3: Use a VLM for init_image description
 

@@ -1,6 +1,6 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-04-20
+Last updated: 2026-04-22
 
 **TLDR**: Custom ComfyUI nodes for generating full-length music videos with LTX 2.3.
 Handles loop timing, auto-stopping at the audio boundary, per-iteration seed
@@ -55,11 +55,18 @@ To use prompt scheduling:
      --subject "your scene description" --trim 5
    ```
 2. Paste the **Node 169** output into node 169 (CLIPTextEncode)
-3. Paste the **TimestampPromptSchedule** output into node 1558's schedule text box
-4. Leave `blend_seconds` at **0** (default) — with `snap_boundaries=True` (also default)
-   and an identical subject across entries, hard switches at snapped boundaries
-   are clean. Enable cross-fade by setting `blend_seconds >= stride_seconds`
-   (typically ~18s) only if you see a visible seam at a prompt transition.
+3. Paste the schedule text into the **TimestampPromptScheduleBatchEncode** node's
+   `schedule` widget. (In older workflow copies from before 2026-04-22 this
+   was node 1558 `TimestampPromptSchedule`; the 2026-04-22 offload fix
+   replaced that chain with a single batch encoder that runs CLIP once
+   outside the loop. See [CLAUDE.md](CLAUDE.md) "CLIP must not enter the
+   loop body" for why. Run
+   `uv run --group dev python scripts/apply_batch_encode_fix.py` to
+   migrate an older copy.)
+4. Leave `snap_boundaries=True` (default). The batch encoder hard-cuts
+   between schedule entries at the iteration grid; as long as subject
+   strings are consistent across entries (see "Prompt writing guide"
+   below), hard cuts are visually clean.
 5. Run. The loop auto-stops when it reaches the end of the audio.
 
 ## Nodes
@@ -97,11 +104,67 @@ Changing `overlap_seconds` automatically adjusts stride, stop timing,
 start indices, iteration count, overlap_frames, overlap_latent_frames,
 and the subgraph's video_start_time mask. One value, one place.
 
-### Timestamp Prompt Schedule
+### Timestamp Prompt Schedule (Batch Encode)
+
+**Primary schedule-handling node after 2026-04-22.** Pre-encodes every
+per-iteration prompt ONCE, outside the loop. Pair with
+`ConditioningSelectByIteration` inside the loop. Keeps CLIP out of the
+per-iteration path entirely — see [CLAUDE.md](CLAUDE.md) "CLIP must not
+enter the loop body" for why this matters (previously, per-iteration
+CLIP loading evicted the DiT, which in turn corrupted LTX2_NAG's
+captured negative-conditioning tensor, which caused items from the
+negative prompt to reappear starting at iteration 2).
+
+**Inputs:**
+
+| Input | Type | Description |
+|-------|------|-------------|
+| clip | CLIP | CLIP model (Gemma 3 for LTX 2.3) |
+| schedule | STRING | Timestamp-based schedule (same format as `TimestampPromptSchedule`) |
+| stride_seconds | FLOAT | From `AudioLoopController.stride_seconds` |
+| audio_duration | FLOAT | From `AudioLoopController.audio_duration` |
+| snap_boundaries | BOOLEAN | Default True. Rounds schedule boundaries to the iteration grid so every iteration runs on one pure prompt. |
+
+**Outputs:**
+
+| Output | Type | Wire to |
+|--------|------|---------|
+| conditioning_list | * (opaque) | `ConditioningSelectByIteration.conditioning_list` |
+| iteration_count | INT | Informational; has +1 headroom beyond the expected loop length |
+
+Dedup: identical prompt strings across iterations are encoded once.
+CLIP load count per run = number of unique prompts in the schedule.
+
+### Conditioning Select (by Iteration)
+
+In-loop companion to `TimestampPromptScheduleBatchEncode`. Indexes the
+pre-encoded conditioning list by current iteration. No CLIP input —
+safe to place anywhere in the loop body.
+
+**Inputs:**
+
+| Input | Type | Description |
+|-------|------|-------------|
+| conditioning_list | * | From `TimestampPromptScheduleBatchEncode.conditioning_list` |
+| current_iteration | INT | From `TensorLoopOpen.current_iteration` |
+
+**Outputs:** `conditioning` (CONDITIONING) — wire to the extension subgraph's `positive` input.
+
+Clamp semantics: `current_iteration >= len(list)` returns the last
+entry (absorbs the encoder's +1 headroom). `current_iteration < 0`
+returns the first entry. Empty list raises `ValueError` (wiring bug).
+
+### Timestamp Prompt Schedule (legacy)
 
 Per-iteration prompt variation based on song timestamps. Write prompts
 for verse, chorus, bridge -- the node picks the right one each iteration.
 Supports gradual blending between prompts at transitions via `blend_seconds`.
+
+**As of 2026-04-22 this node is no longer wired in the shipped
+`_latent.json` workflow.** Superseded by the Batch Encode path above.
+Kept available for workflows that genuinely need per-iteration
+re-encode (the batch approach requires schedule + audio duration +
+stride to be known at graph build time).
 
 **Inputs:**
 
@@ -180,10 +243,15 @@ Estimated 7 iterations:
   ...
 ```
 
-### Conditioning Blend
+### Conditioning Blend (legacy)
 
 Blends two conditionings with a factor. Works with LTX 2.3 Gemma 3
 text encoder (no pooled_output required).
+
+**Not wired in the shipped `_latent.json` after 2026-04-22.** The new
+batch-encode path hard-cuts between schedule entries at the iteration
+grid rather than cross-fading. Kept available for workflows that still
+use `TimestampPromptSchedule` inside the loop.
 
 **Inputs:**
 
@@ -358,12 +426,20 @@ smooth visual transitions between keyframes.
 When `blend_factor = 0.0`, passes image_a through unchanged (no computation).
 When `blend_factor = 1.0`, passes image_b through unchanged.
 
-### Cached Text Encode
+### Cached Text Encode (legacy)
 
 Drop-in replacement for `CLIPTextEncode` with an LRU cache keyed on
 `(id(clip), text)`. Skips Gemma 3 encoding when the same prompt is reused
 across iterations. Same input/output signature as `CLIPTextEncode` — no
 other wiring changes needed when swapping.
+
+**Not wired in `_latent.json` after 2026-04-22.** The batch-encode path
+encodes the whole schedule once and never re-enters CLIP, which is
+strictly better than per-iter caching (cache hits are still a "CLIP is
+loaded somewhere in the loop graph" signal to ComfyUI's memory manager,
+and cache misses trigger the DiT-eviction cycle documented in
+[CLAUDE.md](CLAUDE.md)). Kept for workflows that genuinely need
+per-iter CLIP access.
 
 **Inputs:**
 

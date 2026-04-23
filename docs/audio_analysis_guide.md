@@ -75,7 +75,7 @@ cross-attention signal for lip sync.
 Style: cinematic. In a wide establishing shot, static camera, locked off shot, a woman singing in a workshop is singing softly, easing into the song, static camera, mouth opening softly, handheld energy, rock-video motion. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
 ```
 
-**TimestampPromptSchedule (node 1558):**
+**Schedule (paste into `TimestampPromptScheduleBatchEncode` after 2026-04-22; older workflow copies had this on node 1558 `TimestampPromptSchedule`):**
 ```
 0:00-0:22: Style: cinematic. In a wide establishing shot, static camera, locked off shot, a woman singing in a workshop is singing softly, easing into the song, static camera, mouth opening softly, handheld energy, rock-video motion. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
 0:22-0:45: Style: cinematic. In a wide establishing shot, static camera, locked off shot, a woman singing in a workshop is singing softly, easing into the song, slow dolly in, head tilted slightly, handheld energy, rock-video motion. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
@@ -85,8 +85,10 @@ Style: cinematic. In a wide establishing shot, static camera, locked off shot, a
 ```
 
 Paste the node 169 prompt into node 169 (CLIPTextEncode). Paste the schedule
-into node 1558. The node 169 prompt matches the first schedule entry
-byte-for-byte by construction (enforced in test suite).
+into `TimestampPromptScheduleBatchEncode`'s `schedule` widget (older
+workflows: node 1558; migrate via `scripts/apply_batch_encode_fix.py`).
+The node 169 prompt matches the first schedule entry byte-for-byte by
+construction (enforced in test suite).
 
 Long sections are automatically subdivided into ~20s chunks (~12s with
 `--montage`) so every iteration window gets its own prompt. A 3-minute

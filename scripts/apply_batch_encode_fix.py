@@ -13,7 +13,8 @@ Usage:
     uv run --group dev python scripts/apply_batch_encode_fix.py <workflow.json>
 
 The edit is idempotent: re-running on an already-migrated workflow
-is a no-op.
+is a no-op. Required source nodes are validated UP FRONT so a partial
+migration cannot leave the workflow in an inconsistent state.
 """
 
 from __future__ import annotations
@@ -28,8 +29,6 @@ from workflow_utils import WorkflowEditor
 
 
 NODES_TO_REMOVE = {
-    # (id, reason) -- order doesn't matter because remove_node_and_links
-    # detaches links as it goes.
     1608: "ConditioningBlend 'Prompt Blend' -- replaced by selector",
     1607: "CachedTextEncode_AudioLoop 'Next Prompt Encode' -- removed",
     1559: "CachedTextEncode_AudioLoop 'Loop Prompt Encode' -- removed",
@@ -40,12 +39,20 @@ NODES_TO_REMOVE = {
     1588: "Get_base_cond_pos (Static Mode) -- dead",
 }
 
-# Source slots we will wire into the new batch encoder.
+# Source nodes the new encoder + selector will wire into. All must
+# exist before we mutate anything, else partial migration is possible.
 CLIP_LOADER_ID = 416           # DualCLIPLoader; slot 0 = CLIP
 AUDIO_CONTROLLER_ID = 1582     # AudioLoopController; slot 2=audio_duration, 4=stride_seconds
 TENSOR_LOOP_OPEN_ID = 1539     # TensorLoopOpen; slot 3 = current_iteration
 SUBGRAPH_INSTANCE_ID = 843     # subgraph node in the main graph
 SUBGRAPH_POSITIVE_SLOT = 6     # "positive" CONDITIONING input on the subgraph
+
+REQUIRED_SOURCE_NODES = (
+    CLIP_LOADER_ID,
+    AUDIO_CONTROLLER_ID,
+    TENSOR_LOOP_OPEN_ID,
+    SUBGRAPH_INSTANCE_ID,
+)
 
 
 def _schedule_widget_value(ed: WorkflowEditor) -> tuple[str, bool]:
@@ -53,7 +60,7 @@ def _schedule_widget_value(ed: WorkflowEditor) -> tuple[str, bool]:
 
     Widget order on TimestampPromptSchedule is:
       [current_iteration, stride_seconds, schedule, blend_seconds, snap_boundaries]
-    Returns a safe default if the node was already migrated.
+    Returns a safe default if the node is absent.
     """
     try:
         node = ed.find_node(1558)
@@ -69,6 +76,24 @@ def _already_migrated(ed: WorkflowEditor) -> bool:
     return bool(ed.find_nodes_by_type("TimestampPromptScheduleBatchEncode"))
 
 
+def _assert_required_nodes_present(ed: WorkflowEditor) -> None:
+    missing = []
+    for nid in REQUIRED_SOURCE_NODES:
+        try:
+            ed.find_node(nid)
+        except ValueError:
+            missing.append(nid)
+    if missing:
+        raise SystemExit(
+            f"Refusing to migrate: required source node(s) missing: {missing}. "
+            "This script assumes the canonical latent workflow layout "
+            "(DualCLIPLoader=416, AudioLoopController=1582, "
+            "TensorLoopOpen=1539, subgraph instance=843). "
+            "If your workflow was edited, update the constants at the top "
+            "of this script."
+        )
+
+
 def _remove_legacy_nodes(ed: WorkflowEditor) -> list[int]:
     removed: list[int] = []
     for nid, reason in NODES_TO_REMOVE.items():
@@ -82,64 +107,40 @@ def _remove_legacy_nodes(ed: WorkflowEditor) -> list[int]:
     return removed
 
 
+def _widget_input(name: str, dtype: str) -> dict:
+    return {"name": name, "type": dtype, "widget": {"name": name}, "link": None}
+
+
 def _add_batch_encoder(
     ed: WorkflowEditor,
     *,
     schedule_text: str,
     snap_boundaries: bool,
 ) -> int:
-    """Add TimestampPromptScheduleBatchEncode at top level.
-
-    Inputs all wired:
-      clip           <- DualCLIPLoader(416)  slot 0
-      schedule       -> widget (from legacy 1558)
-      stride_seconds <- AudioLoopController(1582)  slot 4
-      audio_duration <- AudioLoopController(1582)  slot 2
-      snap_boundaries -> widget (from legacy 1558)
-    """
-    nid = ed.next_node_id()
-    node = {
-        "id": nid,
-        "type": "TimestampPromptScheduleBatchEncode",
-        "pos": [-960, 4780],
-        "size": [400, 190],
-        "flags": {},
-        "order": 30,
-        "mode": 0,
-        "inputs": [
+    """Add TimestampPromptScheduleBatchEncode at top level and wire its
+    three non-widget inputs."""
+    nid = ed.add_top_level_node(
+        node_type="TimestampPromptScheduleBatchEncode",
+        pos=[-960, 4780],
+        size=[400, 190],
+        inputs=[
             {"name": "clip", "type": "CLIP", "link": None},
-            {
-                "name": "schedule", "type": "STRING",
-                "widget": {"name": "schedule"}, "link": None,
-            },
-            {
-                "name": "stride_seconds", "type": "FLOAT",
-                "widget": {"name": "stride_seconds"}, "link": None,
-            },
-            {
-                "name": "audio_duration", "type": "FLOAT",
-                "widget": {"name": "audio_duration"}, "link": None,
-            },
-            {
-                "name": "snap_boundaries", "type": "BOOLEAN",
-                "widget": {"name": "snap_boundaries"}, "link": None,
-            },
+            _widget_input("schedule", "STRING"),
+            _widget_input("stride_seconds", "FLOAT"),
+            _widget_input("audio_duration", "FLOAT"),
+            _widget_input("snap_boundaries", "BOOLEAN"),
         ],
-        "outputs": [
+        outputs=[
             {"name": "conditioning_list", "type": "*", "links": []},
             {"name": "iteration_count", "type": "INT", "links": []},
         ],
-        "title": "Prompt Schedule (Batch Encode)",
-        "properties": {
+        widgets_values=[schedule_text, 17.92, 180.0, snap_boundaries],
+        properties={
             "cnr_id": "comfyui-audioloophelper",
             "Node name for S&R": "TimestampPromptScheduleBatchEncode",
         },
-        "widgets_values": [schedule_text, 17.92, 180.0, snap_boundaries],
-        "color": "#232",
-        "bgcolor": "#353",
-    }
-    ed.add_node(node)
-
+        title="Prompt Schedule (Batch Encode)",
+    )
     ed.add_link(CLIP_LOADER_ID, 0, nid, 0, "CLIP")
     ed.add_link(AUDIO_CONTROLLER_ID, 4, nid, 2, "FLOAT")
     ed.add_link(AUDIO_CONTROLLER_ID, 2, nid, 3, "FLOAT")
@@ -147,37 +148,26 @@ def _add_batch_encoder(
 
 
 def _add_selector(ed: WorkflowEditor, batch_encoder_id: int) -> int:
-    """Add ConditioningSelectByIteration + its outgoing wire into the
-    subgraph's 'positive' input slot (replacing the legacy blend output).
-    """
-    nid = ed.next_node_id()
-    node = {
-        "id": nid,
-        "type": "ConditioningSelectByIteration",
-        "pos": [-520, 4780],
-        "size": [290, 78],
-        "flags": {},
-        "order": 80,
-        "mode": 0,
-        "inputs": [
+    """Add ConditioningSelectByIteration and wire it into the subgraph's
+    'positive' input slot (replacing the legacy blend output)."""
+    nid = ed.add_top_level_node(
+        node_type="ConditioningSelectByIteration",
+        pos=[-520, 4780],
+        size=[290, 78],
+        inputs=[
             {"name": "conditioning_list", "type": "*", "link": None},
-            {
-                "name": "current_iteration", "type": "INT",
-                "widget": {"name": "current_iteration"}, "link": None,
-            },
+            _widget_input("current_iteration", "INT"),
         ],
-        "outputs": [
+        outputs=[
             {"name": "conditioning", "type": "CONDITIONING", "links": []},
         ],
-        "title": "Conditioning Select (by Iteration)",
-        "properties": {
+        widgets_values=[0],
+        properties={
             "cnr_id": "comfyui-audioloophelper",
             "Node name for S&R": "ConditioningSelectByIteration",
         },
-        "widgets_values": [0],
-    }
-    ed.add_node(node)
-
+        title="Conditioning Select (by Iteration)",
+    )
     ed.add_link(batch_encoder_id, 0, nid, 0, "*")
     ed.add_link(TENSOR_LOOP_OPEN_ID, 3, nid, 1, "INT")
     ed.add_link(nid, 0, SUBGRAPH_INSTANCE_ID, SUBGRAPH_POSITIVE_SLOT, "CONDITIONING")
@@ -190,6 +180,8 @@ def rewire(path: Path) -> None:
     if _already_migrated(ed):
         print(f"{path.name}: already migrated (batch encoder present), skipping.")
         return
+
+    _assert_required_nodes_present(ed)
 
     schedule_text, snap_boundaries = _schedule_widget_value(ed)
     print(f"{path.name}: migrating...")

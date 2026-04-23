@@ -1,4 +1,4 @@
-Last updated: 2026-04-21
+Last updated: 2026-04-22
 
 # Debugging Guide: Quality Problems in the Audio-Loop Pipeline
 
@@ -55,6 +55,7 @@ often reveals the next one. That's not a regression — it's progress.
 | Illustrated init progressively becomes photoreal / "broadway musical" over iterations | LTX 2.3's audio-video cross-attention has photoreal-trained prior; `Style: illustrated.` at CFG=1 can't overcome it | [Style drift toward photoreal](#style-drift-toward-photoreal) |
 | Lip-sync desyncs progressively over 10 iterations | Integer-latent stride drift (fixed 2026-04-20 in `AudioLoopController`) | [Lip-sync drift over iterations](#lip-sync-drift-over-iterations) |
 | Resolution-related sampling oddness | `ImageResizeKJv2` width/height not divisible by 32 (single-stage) or 64 (distilled) | [Resolution alignment](#resolution-alignment) |
+| Items from the negative prompt (microphones, duplicate characters, etc.) reappear starting iter 2+ even though iter 1 is clean; or `Style: illustrated.` inits slide toward photoreal; or anatomy glitches (deformed hands, extra limbs) return after the first iteration — and the schedule-bypassed run is clean | CLIP loaded inside the loop body is evicting the DiT; LTX2_NAG's captured negative-conditioning tensor goes stale across the offload/reload round-trip (`object_patches` are not device-migrated by ComfyUI). Fixed 2026-04-22 by moving CLIP out of the loop via `TimestampPromptScheduleBatchEncode`. | Migrate the workflow: `uv run --group dev python scripts/apply_batch_encode_fix.py`. Full technical reference: `docs/analysis/nag_object_patches_offload_asymmetry.md`. |
 
 ---
 

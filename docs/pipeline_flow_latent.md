@@ -1,8 +1,25 @@
-Last updated: 2026-04-11
+Last updated: 2026-04-11 (pre-fix snapshot)
 
 # Pipeline Flow: LATENT-Based Music Video Workflow
 
 Source: `example_workflows/audio-loop-music-video_latent.json`
+
+> **Partially stale — 2026-04-22 batch-encode fix.** The conditioning
+> path in this trace describes the pre-fix structure: nodes 1558
+> (`TimestampPromptSchedule`), 1559 + 1607 (`CachedTextEncode_AudioLoop`),
+> 1608 (`ConditioningBlend`), 575 (`Set_guider`), 645 / 647 / 1588
+> (`Set_base_cond_pos` / `Get_base_cond_pos` x2) have been removed.
+> Replaced with `TimestampPromptScheduleBatchEncode` + `ConditioningSelectByIteration`
+> (new node IDs assigned at migration time). Everything else in this
+> trace — model path, subgraph internals, audio path, sampler, output
+> assembly — is still accurate. For a live inspection of current
+> wiring use `scripts/workflow_utils.py`:
+>
+>     uv run --group dev python scripts/workflow_utils.py \
+>       example_workflows/audio-loop-music-video_latent.json <node_id>
+>
+> For why the fix was needed, see
+> `docs/analysis/nag_object_patches_offload_asymmetry.md`.
 
 This document traces every node in the latent-space audio loop music video workflow, from model loading through final output. The workflow generates full-length music videos by iteratively extending an initial render in latent space (no per-iteration VAE round-trip).
 

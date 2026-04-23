@@ -15,12 +15,8 @@ import pytest
 
 
 class FakeCLIP:
-    """Minimal CLIP stand-in recording tokenize+encode calls.
-
-    Returns a distinct object per text so the selector's output identity
-    can be asserted per iteration. Records every encode call so dedup
-    behavior can be verified.
-    """
+    """Records tokenize+encode calls and returns a distinct object per
+    text, so tests can assert dedup and per-iteration output identity."""
 
     def __init__(self) -> None:
         self.tokenize_calls: list[str] = []

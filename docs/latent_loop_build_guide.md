@@ -168,7 +168,7 @@ Compare to the TensorLoop workflow: ~50+ nodes including the subgraph internals.
 | VAE decodes per iteration | 1 (lossy) | 0 (all latent) |
 | VAE encodes per iteration | 1 (context frames) | 0 (all latent) |
 | Total VAE decodes | N+1 | 1 |
-| Prompt scheduling | TimestampPromptSchedule per iteration | ScheduleToMultiPrompt upfront |
+| Prompt scheduling | TimestampPromptScheduleBatchEncode upfront + ConditioningSelectByIteration per iter (2026-04-22) | ScheduleToMultiPrompt upfront |
 | Stop signal | AudioLoopController should_stop | Not needed (latent sized for full audio) |
 | Overlap handling | Manual subgraph nodes (615, 1509) | Built-in temporal_overlap |
 | Extension subgraph | Required (complex) | Not needed |

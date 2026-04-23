@@ -17,8 +17,10 @@ imports analysis nodes from nodes_analysis.py.
 
 Core nodes (nodes.py):
 - `AudioLoopController` -- core: 8 outputs. overlap_seconds (slot 7) auto-wires to LTXVAudioVideoMask video_start_time.
-- `TimestampPromptSchedule` -- per-iteration prompt from timestamp ranges. `snap_boundaries=True` default snaps boundaries to the stride grid so every iteration runs on one pure prompt. `blend_seconds` raised-cosine-ramps across multiple iterations; values 0 < x < stride are auto-clamped to stride with a one-time warning (see docs/prompt_creation_guide.md and the Phase 1 findings in the plan).
-- `ConditioningBlend` -- lerps two conditioning tensors (works with LTX Gemma 3 and CLIP)
+- `TimestampPromptScheduleBatchEncode` -- PRIMARY path. Pre-encodes every per-iteration prompt OUTSIDE the loop; emits `conditioning_list` + `iteration_count`. Dedup means each unique prompt encodes once. Pairs with `ConditioningSelectByIteration`. Eliminates the CLIP offload cycle that silenced NAG iter 2+ (see "CLIP must not enter the loop body" in Critical constraints, and `docs/analysis/nag_object_patches_offload_asymmetry.md`).
+- `ConditioningSelectByIteration` -- indexes the pre-encoded `conditioning_list` by `current_iteration`. Runs inside the loop; no CLIP reference. Clamps on overshoot/negative; empty list raises.
+- `TimestampPromptSchedule` -- LEGACY emit-strings path. Still exported, not wired in the shipped `_latent.json` (superseded by batch encode). Useful for workflows that explicitly want per-iter re-encode.
+- `ConditioningBlend` -- lerps two conditioning tensors (works with LTX Gemma 3 and CLIP). Not wired by default after 2026-04-22; kept for workflows that need per-iteration cross-fade via the legacy TimestampPromptSchedule path.
 - `AudioLoopPlanner` -- displays iteration timeline for planning
 - `AudioDuration` -- extracts duration/sample_rate from audio tensor
 - `LatentContextExtract` -- extracts tail latent frames + strips noise_mask
@@ -27,7 +29,7 @@ Core nodes (nodes.py):
 - `KeyframeImageSchedule` -- per-iteration keyframe image selection from timestamp schedule (like TimestampPromptSchedule but for images). Outputs image/next_image/blend_factor. **Still uses the legacy spike-blend path** (no `snap_boundaries` widget yet); sub-stride `blend_seconds` produces jitter. Phase 1.5 follow-up in the plan.
 - `VideoFrameExtract` -- extracts frame from reference video at current iteration's timestamp for video-to-video conditioning
 - `ImageBlend` -- pixel-space lerp of two images by a factor. Pairs with KeyframeImageSchedule for smooth keyframe transitions.
-- `CachedTextEncode` -- drop-in replacement for CLIPTextEncode. LRU-caches Gemma output by `(id(clip), text)`. Big win on schedules where a prompt spans multiple iterations.
+- `CachedTextEncode` -- LEGACY. Drop-in replacement for CLIPTextEncode with LRU cache keyed by `(id(clip), text)`. Not wired in `_latent.json` after 2026-04-22 — the batch encoder runs CLIP once for the whole schedule, which is strictly better than per-iter caching. Kept for workflows that still use `TimestampPromptSchedule` inside the loop.
 - `IterationCleanup` -- LATENT passthrough that runs `gc.collect()` + `torch.cuda.empty_cache()`. Place near subgraph output to reduce allocator fragmentation between iterations. Modes: always / gpu_only / never.
 - `ProfileBegin` / `ProfileIterStep` / `ProfileEnd` -- three-node `torch.profiler` integration. **Opt-in via `scripts/apply_profiling_nodes.py`**; example workflows do NOT ship with profile nodes. `record_function` spans on hot nodes are runtime-gated via `_profile_span()` so they're zero-overhead (`nullcontext`) when no profiler is active. See `docs/profiling_guide.md`.
 
@@ -70,6 +72,7 @@ value converter and default. Thin wrappers: `_parse_schedule` / `_match_schedule
 - **Audio is FROZEN in our workflow** (`noise_mask=0` on audio latent via `SolidMask` + `SetLatentNoiseMask`). LTX's official i2v/t2v prompting guide tells writers to weave audio descriptions alongside actions (`her voice echoes`, `brass swells`, `snare firing`) — that guidance assumes the model is GENERATING audio. We're not; we're providing fixed audio and asking the model to produce video that syncs to it. Text descriptions of audio double-signal what the audio latent already carries and can over-crank visual intensity at music beats. **Strip music/instrumentation references from schedule prompts; keep diegetic ambient sounds** (`wind`, `thunder`, `rain` when present in the visual scene). Action verbs and canonical camera phrases do all the lifting; audio cross-attention binds to the frozen audio latent alone. Validated across `music_prompt*` and `action_prompt*` case studies in `docs/examples/`.
 - **Length widget constraint**: `EmptyLTXVLatentVideo.length` must satisfy `(length - 1) % 8 == 0` so pixel frames map cleanly to LTX latent frames. Valid: `1, 9, 17, ..., 241, 249, 257, ..., 497, 505, ...`. Invalid values get auto-rounded UP by ComfyUI silently. If changing `length`, also update `window_size_seconds` (node 688 FloatConstant) to `length / fps` exactly — a mismatch reintroduces the same integer-latent drift the `AudioLoopController` fix eliminated. For 20-iter rapid-cut runs use `length=249 → window=9.96s → stride=8.0s`; for default use `length=497 → window=19.88s → stride=17.92s`.
 - **`snap_boundaries=True` (default) means changing `overlap_seconds` does NOT require re-authoring the prompt schedule.** The node rounds schedule timestamps to the actual iteration stride at runtime. One-widget change; no mental math on the grid.
+- **CLIP must not enter the loop body.** Per-iteration `CachedTextEncode` forces CLIP into VRAM on every iteration, which triggers `load_models_gpu → free_memory → model.detach(unpatch_weights=True)` (`comfy/model_management.py:664, 690, 764-766`) and evicts the DiT. On reload, `patch_model()` re-injects `object_patches` closures but ComfyUI's `model_patches_to(device)` (`comfy/model_patcher.py:561-580`) migrates `transformer_options["patches"]` only — NOT `object_patches`. LTX2_NAG's captured `nag_cond_video` tensor lives in an `object_patches` closure (KJNodes `ltxv_nodes.py:500-501`) and goes stale across the offload/reload round-trip. Net effect: NAG silently disengages after iter 1 and every suppressed class leaks back (microphones, `still image with no motion`, `deformed hands`, `duplicate character`, style drift). Fix: pre-encode the whole schedule ONCE outside the loop via `TimestampPromptScheduleBatchEncode`, select per-iteration via `ConditioningSelectByIteration`. Full technical reference: `docs/analysis/nag_object_patches_offload_asymmetry.md`.
 - **Batch widget edits across example workflows:** `python3 -c` one-liner that loads each JSON, mutates `widgets_values` on the target node type, and writes back with `json.dumps(wf, indent=2) + "\n"`. Preserves structure cleanly.
 
 ## ComfyUI gotchas
@@ -115,9 +118,10 @@ uv run --group dev --group analysis python -m pytest tests/ -v --rootdir=.
 - `tests/test_cache_nodes.py` -- CachedTextEncode LRU, IterationCleanup modes (13 tests)
 - `tests/test_profile_nodes.py` -- ProfileBegin/ProfileIterStep/ProfileEnd disabled paths (7 tests)
 - `tests/test_schedule_snapping.py` -- TimestampPromptSchedule snap + raised-cosine blend (20 tests)
+- `tests/test_batch_encode.py` -- `TimestampPromptScheduleBatchEncode` + `ConditioningSelectByIteration` parity, dedup, clamp, end-to-end integration asserting CLIP encode called exactly once per unique prompt (12 tests)
 - `tests/test_decoder_validator.py` -- DR1 decoder widget alignment (6 tests)
 - `tests/test_workflows.py` -- workflow JSON structural validation (parametrized over all example_workflows/*.json)
-- Total: 170 tests (2026-04-20).
+- Total: 218 tests (2026-04-22).
 
 ## Dependencies
 
@@ -199,6 +203,7 @@ LTX-2_00032.json and LTX-2_00040.json are confirmed working (April 9, 2026). For
 - `docs/analysis/ltx_desktop_conditioning_analysis.md` -- ModalitySpec, TemporalRegionMask (retake), frozen modality
 - `docs/analysis/comfyui_ltxvideo_multiframe_guide_analysis.md` -- guide chaining, LTXVAddGuide* hierarchy
 - `docs/analysis/kjnodes_multiframe_guide_analysis.md` -- LTXVAddGuideMulti (up to 20 guides), LTXVAddGuidesFromBatch
+- `docs/analysis/nag_object_patches_offload_asymmetry.md` -- why CLIP cannot enter the loop body (the 2026-04-22 root cause behind per-iter microphones/anatomy/motion regressions)
 
 ### Prompt schedule examples (public)
 - `docs/examples/README.md` -- index of all case studies with patterns-that-transfer summary
@@ -209,7 +214,7 @@ LTX-2_00032.json and LTX-2_00040.json are confirmed working (April 9, 2026). For
 
 ### Example workflows
 - `example_workflows/audio-loop-music-video_image.json` -- IMAGE loop (per-iteration AdaIN)
-- `example_workflows/audio-loop-music-video_latent.json` -- LATENT loop (per-iteration AdaIN). Primary working baseline.
+- `example_workflows/audio-loop-music-video_latent.json` -- LATENT loop (per-iteration AdaIN). Primary working baseline. As of 2026-04-22 uses `TimestampPromptScheduleBatchEncode` + `ConditioningSelectByIteration` for schedule handling (the per-iter `CachedTextEncode`+`ConditioningBlend` chain was removed because CLIP-in-loop was silencing NAG; see Critical constraints). Migrate other variants via `scripts/apply_batch_encode_fix.py`.
 - `example_workflows/audio-loop-music-video_latent_keyframe.json` -- LATENT loop + per-iteration keyframe image schedule via `KeyframeImageSchedule` + `ImageBlend` (instead of constant `Get_input_image`).
 - `example_workflows/audio-loop-music-video_latent_stg.json` -- LATENT loop with STG-hybrid sampling: preserves authoritative distilled-1.1 sigma schedule (`linear_quadratic, 8, 1` + shift=13) but swaps `CFGGuider` for `MultimodalGuider` + `GuiderParameters` (cfg=2, stg=1 on both modalities) for STG quality lift. `cfg=2` rather than the originally-designed `cfg=1` because `MultimodalGuider` has an unbound-variable bug at `multimodal_guider.py:269` when `cfg=1.0` on both modalities (uncond branch not run, `noise_pred_neg` referenced anyway). NAG bypassed. Use `KSamplerSelect: euler` (not `euler_ancestral_cfg_pp`) — ancestral re-noise compounds iteration drift in the loop architecture regardless of CFG++; see `docs/sampler_reference.md`. Built via `scripts/apply_stg_hybrid_package.py`. A/B target against the baseline `_latent.json`.
 - `example_workflows/audio-loop-music-video_image_adain_perstep.json` -- IMAGE + per-step AdaIN (experimental)

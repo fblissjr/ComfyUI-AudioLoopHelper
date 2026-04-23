@@ -115,15 +115,22 @@ Prompt creation guide: `prompt_creation_guide.md`
 - Extension #843 positive/negative should come from Get_base_cond_pos/neg
   DIRECTLY, NOT through an extra LTXVConditioning node. Node 1587 is bypassed
   because it corrupted the initial render's audio-video cross-attention.
-- **Blending wiring (fully connected in all 3 workflows)**:
+- **Conditioning wiring (canonical after 2026-04-22)**:
   ```
-  TimestampPromptSchedule (1558)
-    |-> prompt -> CLIPTextEncode A (1559) -> ConditioningBlend.conditioning_a
-    |-> next_prompt -> CLIPTextEncode B (1604*) -> ConditioningBlend.conditioning_b
-    |-> blend_factor -> ConditioningBlend.blend_factor
-                              -> Extension #843 input 6 (positive)
+  TimestampPromptScheduleBatchEncode (runs ONCE, outside the loop)
+    clip, schedule, stride_seconds, audio_duration, snap_boundaries
+      |-> conditioning_list -> ConditioningSelectByIteration (inside loop)
+                                     |-> conditioning -> Extension #843 input 6 (positive)
+  TensorLoopOpen.current_iteration ----^
   ```
-  blend_seconds=0 means hard switch. blend_seconds=5.0 smoothly transitions.
+  CLIP loads once per generation; DiT + NAG stay resident; hard-cut
+  between schedule entries at the iteration grid. In copies of the
+  workflow saved before 2026-04-22 the per-iteration chain was
+  `TimestampPromptSchedule (1558) -> CachedTextEncode (1559 + 1607) ->
+  ConditioningBlend (1608) -> Extension`, which silenced NAG iter 2+
+  via `object_patches` device-migration asymmetry (see
+  `docs/analysis/nag_object_patches_offload_asymmetry.md`). Migrate
+  pre-fix copies via `scripts/apply_batch_encode_fix.py`.
 
 ## Initial render path (critical for sync)
 

@@ -36,7 +36,10 @@ music-video version and the shared rule structure.
 4. In the user message, paste the remaining JSON + attach the init image
    + add your creative direction.
 5. Copy the LLM's `node_169_prompt` into Node 169 (CLIPTextEncode).
-6. Copy the LLM's `schedule` block into Node 1558 (TimestampPromptSchedule).
+6. Copy the LLM's `schedule` block into the `schedule` widget on
+   `TimestampPromptScheduleBatchEncode` (in workflow copies from before
+   2026-04-22, this was node 1558 `TimestampPromptSchedule`; migrate via
+   `scripts/apply_batch_encode_fix.py`).
 
 Note: section labels in the JSON (INTRO / VERSE / CHORUS / BRIDGE / OUTRO)
 are librosa's music-structure guesses. For standup they still mark real
