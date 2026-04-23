@@ -121,6 +121,7 @@ value converter and default. Thin wrappers: `_parse_schedule` / `_match_schedule
 ## Subgraph editing
 
 - ALWAYS use WorkflowEditor from `scripts/workflow_utils.py`.
+- Structural graph-walking helpers on `WorkflowEditor`: `find_subgraph_invoker(sg_index=0)` (returns the top-level node whose `type` matches the subgraph UUID), `find_input_slot(node, name)` (named-slot lookup), `find_link_to_slot(tgt_node, tgt_slot)` (slot-filtered variant of `find_links_to`). Use these instead of hand-rolling iteration over `wf["nodes"]` / `wf["links"]` in apply scripts.
 - **`remove_link` and `remove_subgraph_link` REBIND the target list** (via filter comprehension), they don't mutate in place. Any local variable holding `ed.wf["links"]` or `sg["links"]` goes stale after the first call — re-fetch before appending, or use the editor's methods which re-resolve internally.
 - Top-level links: array format `[id, src_node, src_slot, tgt_node, tgt_slot, type]`
 - Subgraph internal links: dict format `{id, origin_id, origin_slot, target_id, target_slot, type}`
@@ -137,7 +138,7 @@ uv run --group dev --group analysis python -m pytest tests/ -v --rootdir=.
 ```
 - `__init__.py` guards ComfyUI-only import with try/except for pytest.
 - `nodes.py` has try/except for `comfy_api` with `_IOStub`/`_Passthrough` fallback for test imports.
-- `tests/conftest.py` adds `scripts/` to sys.path.
+- `tests/conftest.py` adds `scripts/` + `tests/` to sys.path. Shared MODEL-patcher fakes live in `tests/_fakes.py` (`from _fakes import FakeModelPatcher` / `FakeModelWithCallbacks`; `clone()` deepcopies to mirror production `deepcopy_list_dict`). Don't use `conftest` as the import target -- the root `./conftest.py` (which holds `collect_ignore` for ComfyUI-only imports) shadows `tests/conftest.py` for `from conftest import X`.
 - `tests/test_audio_features.py` -- offline analysis (style flag, companion-animal detection, diversity tiers, montage, subdivision, LLM system prompt rules, JSON export shape)
 - `tests/test_audio_analysis_nodes.py` -- runtime AudioPitchDetect (9 tests)
 - `tests/test_audio_loop_controller.py` -- AudioLoopController integer-latent stride invariants (20 tests — zero-drift across overlap values 0-5s, effective-vs-target overlap reporting, edge cases)
@@ -155,6 +156,7 @@ uv run --group dev --group analysis python -m pytest tests/ -v --rootdir=.
 ## Dependencies
 
 Companion custom nodes (not imported, used alongside in workflows):
+- **Sage attention fork at `<sage_fork_repo>/`** -- our fork of `woct0rdho/SageAttention` (which forks `thu-ml/SageAttention`). Kernel-side changes land there; consumer-side routing is in `nodes_sage.py`. Rebuild with `<sage_fork_repo>/build.sh` (hardened to install into explicit `VIRTUAL_ENV`). Cross-repo state in `internal/design/sage_backlog.md`; fork has its own CHANGELOG + "Open work" backlog.
 - ComfyUI-NativeLooping_testing -- TensorLoopOpen/Close
 - ComfyUI-LTXVideo -- LTXVAddLatentGuide, LTXVCropGuides, LTXVPreprocess, LTXVTiledVAEDecode (default decoder in our example workflows — spatial-only tiling, no temporal-tile seams; swap via `scripts/apply_ltx_decoder.py --revert` if you need the generic VAEDecodeTiled fallback)
 - ComfyUI-KJNodes -- Set/Get nodes, FloatConstant, LTX2_NAG, LTXVImgToVideoInplaceKJ, LTXVAddGuideMulti (multi-guide, up to 20), LTXVAddGuidesFromBatch
@@ -188,6 +190,7 @@ LTX-2_00032.json and LTX-2_00040.json are confirmed working (April 9, 2026). For
 - `COMFYUI_EXEC_LOG=/tmp/exec.jsonl python <comfyui>/main.py` — runtime per-node JSONL log (start/end/error events, timings, input/output tensor shapes). Installed from `exec_logger.py` via `__init__.py`. Zero overhead when env var is unset. Use when "which node is frozen/slow/crashing" is the question.
 - **All debug outputs land in `internal/analysis/runs/`** (gitignored) when you use `--save-run` (DAG analyzer), `COMFYUI_EXEC_LOG=auto` (exec logger), or the default `ProfileBegin.output_dir` (torch.profiler traces land under `runs/profiler/<timestamp>/`). Timestamped filenames so successive runs can be diffed. Shared helper `timestamped_run_path()` in `scripts/workflow_utils.py` — use it when adding a new debug tool.
 - **Apply scripts take an optional workflow path.** `apply_batch_encode_fix.py`, `apply_melband_default_off.py`, `apply_profiling_nodes.py` all default to `example_workflows/audio-loop-music-video_latent.json` but accept a CLI arg — useful for staging changes on `internal/scratch/` test workflows first.
+- `scripts/verify_sage_iteration_trace.sh [path]` — reads the latest sage JSONL under `internal/analysis/runs/sage/` (lexicographic sort on filename; `timestamped_run_path()` format bakes the timestamp into the name). Emits one JSON doc with `summary`, `stamp_missing`, and `per_iteration` (grouped by iter with per-kernel + fallback counts). Answers backlog item 7: "does the sage override survive model offload across loop iterations?" `AUDIOLOOPHELPER_SAGE_TRACE=auto` is the default in `<comfyui>/start.sh` so every render emits a trace; unset once the verification closes.
 - **When iter-over-iter drift appears and NAG-scale toggling + prompt-content changes don't fix it, trace CONDITIONING paths in parallel.** Walk both the initial-render sampler's conditioning chain and the loop-body sampler's chain back to their CLIP encoders. Asymmetries (one path passing through `LTXVConditioning` + the other not; different `frame_rate` values; CLIP-producing node inside the loop subgraph) are load-bearing bugs. The 2026-04-23 `frame_rate` metadata regression was found this way.
 
 ## Documentation conventions
