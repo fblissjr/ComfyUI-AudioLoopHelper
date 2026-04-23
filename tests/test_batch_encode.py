@@ -14,6 +14,19 @@ from __future__ import annotations
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _clear_batch_encode_cache():
+    """FakeCLIP instances are tiny and get GC'd between tests, so Python
+    id() recycles rapidly — a stale cache entry from a previous test
+    would produce a ghost hit on a new FakeCLIP. Clear before every
+    test so each case sees a fresh cache. Real ComfyUI CLIP models are
+    15 GB and never recycle mid-run; this is a test-only concern."""
+    import nodes
+    nodes._BATCH_ENCODE_CACHE.clear()
+    yield
+    nodes._BATCH_ENCODE_CACHE.clear()
+
+
 class FakeCLIP:
     """Records tokenize+encode calls and returns a distinct object per
     text, so tests can assert dedup and per-iteration output identity."""
@@ -219,6 +232,65 @@ class TestConditioningSelectByIteration:
             ConditioningSelectByIteration.execute(
                 conditioning_list=[], current_iteration=0,
             )
+
+
+class TestBatchEncoderCaching:
+    """The batch encoder MUST cache its CONDITIONING_LIST output across
+    repeated execute() calls with equivalent inputs.
+
+    Context: in the live workflow, `AudioLoopController` is upstream of
+    the batch encoder (supplies `stride_seconds` + `audio_duration`) and
+    itself takes `current_iteration` from `TensorLoopOpen`. ComfyUI sees
+    AudioLoopController's outputs as "new" each iteration even though
+    the FLOAT values are identical, which invalidates the batch
+    encoder's framework-level cache. Without an internal cache, the
+    batch encoder re-encodes all N unique prompts per iteration --
+    defeating the whole point of the fix. Symptom in the console log
+    is N "Model LTXAVTEModel_ prepared" lines per iteration, where N =
+    number of unique schedule prompts.
+    """
+
+    def test_repeated_execute_calls_with_same_inputs_skip_clip(self):
+        from nodes import TimestampPromptScheduleBatchEncode
+        clip = FakeCLIP()
+        kwargs = dict(
+            clip=clip, schedule=_schedule_text(),
+            stride_seconds=20.0, audio_duration=80.0, snap_boundaries=True,
+        )
+        # First call: encodes every unique prompt once.
+        list_a, count_a = TimestampPromptScheduleBatchEncode.execute(**kwargs)
+        first_call_encode_count = len(clip.encode_calls)
+        assert first_call_encode_count >= 1
+
+        # Second + third calls with identical inputs must NOT re-encode.
+        list_b, count_b = TimestampPromptScheduleBatchEncode.execute(**kwargs)
+        list_c, count_c = TimestampPromptScheduleBatchEncode.execute(**kwargs)
+        assert len(clip.encode_calls) == first_call_encode_count, (
+            "Batch encoder re-encoded on cache-hit path. "
+            f"Expected {first_call_encode_count} CLIP calls, got {len(clip.encode_calls)}."
+        )
+        # Cached output identity is stable so the selector returns the
+        # SAME CONDITIONING objects across calls.
+        assert list_b is list_a
+        assert list_c is list_a
+        assert count_b == count_a == count_c
+
+    def test_input_change_invalidates_cache(self):
+        from nodes import TimestampPromptScheduleBatchEncode
+        clip = FakeCLIP()
+        base = dict(
+            clip=clip, schedule=_schedule_text(),
+            stride_seconds=20.0, audio_duration=80.0, snap_boundaries=True,
+        )
+        TimestampPromptScheduleBatchEncode.execute(**base)
+        encodes_after_first = len(clip.encode_calls)
+
+        # Different schedule -> must re-encode (cache miss by design).
+        other_schedule = "0:00+: something totally different\n"
+        TimestampPromptScheduleBatchEncode.execute(
+            **{**base, "schedule": other_schedule},
+        )
+        assert len(clip.encode_calls) > encodes_after_first
 
 
 class TestBatchAndSelectIntegration:
