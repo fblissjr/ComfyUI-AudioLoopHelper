@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1617,
-  "last_link_id": 3052,
+  "last_node_id": 1618,
+  "last_link_id": 3055,
   "nodes": [
     {
       "id": 252,
@@ -2219,7 +2219,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            2036
+            3053
           ]
         }
       ],
@@ -3236,7 +3236,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 2036
+          "link": 3055
         },
         {
           "name": "vae",
@@ -3436,7 +3436,8 @@
           "type": "INT",
           "links": [
             2936,
-            3047
+            3047,
+            3054
           ]
         }
       ],
@@ -4213,8 +4214,54 @@
         "cnr_id": "comfy-core",
         "Node name for S&R": "VAEEncode"
       },
-      "title": "VAE Encode (init image → guide latent)",
+      "title": "VAE Encode (init image \u2192 guide latent)",
       "widgets_values": []
+    },
+    {
+      "id": 1618,
+      "type": "LoopIterationStamp",
+      "pos": [
+        2667.4696783995114,
+        4167.000748148983
+      ],
+      "size": [
+        260,
+        78
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 3053
+        },
+        {
+          "name": "current_iteration",
+          "type": "INT",
+          "link": 3054,
+          "widget": {
+            "name": "current_iteration"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            3055
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoopIterationStamp"
+      },
+      "widgets_values": [
+        0
+      ],
+      "title": "Loop Iteration Stamp"
     }
   ],
   "links": [
@@ -4569,14 +4616,6 @@
       843,
       1,
       "SIGMAS"
-    ],
-    [
-      2036,
-      654,
-      0,
-      843,
-      2,
-      "MODEL"
     ],
     [
       2037,
@@ -5097,6 +5136,30 @@
       843,
       8,
       "LATENT"
+    ],
+    [
+      3053,
+      654,
+      0,
+      1618,
+      0,
+      "MODEL"
+    ],
+    [
+      3054,
+      1539,
+      3,
+      1618,
+      1,
+      "INT"
+    ],
+    [
+      3055,
+      1618,
+      0,
+      843,
+      2,
+      "MODEL"
     ]
   ],
   "groups": [
@@ -6576,7 +6639,7 @@
         },
         "class_type": "LTXVGemmaCLIPModelLoader",
         "_meta": {
-          "title": "🅛🅣🅧 Gemma 3 Model Loader"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Gemma 3 Model Loader"
         }
       },
       "3": {
@@ -6662,7 +6725,7 @@
         },
         "class_type": "LTXVAudioVAELoader",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Audio VAE Loader"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Audio VAE Loader"
         }
       },
       "14": {
@@ -6678,7 +6741,7 @@
         },
         "class_type": "LTXVAudioVAEDecode",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Audio VAE Decode"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Audio VAE Decode"
         }
       },
       "15": {
@@ -6707,7 +6770,7 @@
         },
         "class_type": "VHS_VideoCombine",
         "_meta": {
-          "title": "Video Combine 🎥🅥🅗🅢"
+          "title": "Video Combine \ud83c\udfa5\ud83c\udd65\ud83c\udd57\ud83c\udd62"
         }
       },
       "17": {
@@ -6732,7 +6795,7 @@
         },
         "class_type": "MultimodalGuider",
         "_meta": {
-          "title": "🅛🅣🅧 Multimodal Guider"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Multimodal Guider"
         }
       },
       "18": {
@@ -6749,7 +6812,7 @@
         },
         "class_type": "GuiderParameters",
         "_meta": {
-          "title": "🅛🅣🅧 Guider Parameters"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Guider Parameters"
         }
       },
       "19": {
@@ -6762,7 +6825,7 @@
         },
         "class_type": "GuiderParameters",
         "_meta": {
-          "title": "🅛🅣🅧 Guider Parameters"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Guider Parameters"
         }
       },
       "21": {
@@ -6821,7 +6884,7 @@
         },
         "class_type": "LTXVEmptyLatentAudio",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Empty Latent Audio"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Empty Latent Audio"
         }
       },
       "27": {
@@ -6850,7 +6913,7 @@
         },
         "class_type": "LTXVConcatAVLatent",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Concat AV Latent"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Concat AV Latent"
         }
       },
       "29": {
@@ -6866,7 +6929,7 @@
         },
         "class_type": "LTXVSeparateAVLatent",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Separate AV Latent"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Separate AV Latent"
         }
       },
       "41": {

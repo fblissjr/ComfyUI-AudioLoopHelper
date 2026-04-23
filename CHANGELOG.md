@@ -7,6 +7,15 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **`LoopIterationStamp` node** (`nodes.py`). MODEL passthrough that
+  writes `transformer_options["iteration"] = int(current_iteration)`.
+  Wired between the patch chain (sage / NAG / tuner) and the subgraph
+  invoker; auto-inserted by `scripts/apply_iteration_stamp.py [--all]`.
+  Unblocks offload-asymmetry verification: `AudioLoopHelperSageAttention`'s
+  JSONL tracer groups rows by `iter` so silent sage disengagement on
+  iter 2+ (the NAG-asymmetry sibling risk) becomes detectable. Additive
+  -- preserves `optimized_attention_override` and other transformer_options
+  keys. 6 tests in `tests/test_iteration_stamp.py`.
 - **`AudioLoopHelperSageAttention` node** (`nodes_sage.py`). An
   AudioLoopHelper-native alternative to KJNodes'
   `PathchSageAttentionKJ` with three properties the KJ node lacks:

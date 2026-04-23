@@ -187,6 +187,22 @@ class WorkflowEditor:
         """Find all links targeting a node."""
         return [l for l in self.wf["links"] if isinstance(l, list) and l[3] == tgt_node]
 
+    def find_link_to_slot(self, tgt_node: int, tgt_slot: int) -> list | None:
+        """Find the top-level link feeding a specific input slot. ComfyUI
+        allows only one inbound link per input, so there is at most one."""
+        for l in self.wf["links"]:
+            if isinstance(l, list) and len(l) >= 6 and l[3] == tgt_node and l[4] == tgt_slot:
+                return l
+        return None
+
+    @staticmethod
+    def find_input_slot(node: dict, name: str) -> int:
+        """Return the index of a named input slot on a node. Raises if missing."""
+        for i, inp in enumerate(node.get("inputs", [])):
+            if inp.get("name") == name:
+                return i
+        raise ValueError(f"Node {node.get('id')} has no input named {name!r}.")
+
     def find_links_from(self, src_node: int) -> list:
         """Find all links originating from a node."""
         return [l for l in self.wf["links"] if isinstance(l, list) and l[1] == src_node]
@@ -210,6 +226,21 @@ class WorkflowEditor:
             sgs = defs.get("subgraphs", [])
             if index < len(sgs):
                 return sgs[index]
+        return None
+
+    def find_subgraph_invoker(self, sg_index: int = 0) -> dict | None:
+        """Return the top-level node whose `type` is the subgraph UUID at
+        `sg_index`, i.e. the node that invokes the subgraph as a loop body.
+        Returns None if no invoker is wired."""
+        sg = self.get_subgraph(sg_index)
+        if not sg:
+            return None
+        sg_id = sg.get("id")
+        if not sg_id:
+            return None
+        for n in self.wf["nodes"]:
+            if n.get("type") == sg_id:
+                return n
         return None
 
     def find_subgraph_node(self, node_id: int, sg_index: int = 0) -> dict | None:

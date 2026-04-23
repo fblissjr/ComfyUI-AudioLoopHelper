@@ -1,4 +1,4 @@
-Last updated: 2026-04-23
+Last updated: 2026-04-23 (iteration stamp wired)
 
 # AudioLoopHelperSageAttention -- Reference
 
@@ -137,10 +137,11 @@ On model cleanup, a summary row:
 ```
 
 `iter` is pulled from `transformer_options.get("iteration")` with a
-fallback to `.get("step")`. Nothing currently sets `iteration` — a
-first trace will show `iter=null` on every row. Per-iteration
-grouping requires a one-line stamp from `TensorLoopOpen` (not yet
-wired; see `internal/design/sage_backlog.md` item 7).
+fallback to `.get("step")`. The stamp comes from `LoopIterationStamp`
+(see `nodes.py`), which is auto-inserted into the shipping workflows
+by `scripts/apply_iteration_stamp.py`. For workflows that don't yet
+have the stamp (e.g. a custom build), `iter` falls back to sampler
+step, so traces are still groupable — just by step, not loop pass.
 
 ### When to use it
 
@@ -149,8 +150,9 @@ wired; see `internal/design/sage_backlog.md` item 7).
   override wasn't hit.
 - **Checking for silent disengagement across iterations.** If per-iter
   call counts drop to 0 after iteration 0, the override is being
-  dropped by model offload (NAG-asymmetry sibling risk). Backlog
-  item 7.
+  dropped by model offload (NAG-asymmetry sibling risk). With
+  `LoopIterationStamp` wired, group trace rows by `iter` and confirm
+  counts are stable across iterations.
 - **Measuring fallback rate.** `fallback_count / total_calls` tells
   you how much of your run is quietly running on pytorch SDPA. Non-zero
   indicates shapes sage can't handle — worth investigating.

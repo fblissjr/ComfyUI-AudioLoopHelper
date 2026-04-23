@@ -1772,6 +1772,58 @@ class IterationCleanup(io.ComfyNode):
         return io.NodeOutput(latent)
 
 
+class LoopIterationStamp(io.ComfyNode):
+    """MODEL passthrough that stamps `transformer_options["iteration"]`.
+
+    Wire inside the loop body between the sampler's MODEL source (top-level
+    patch chain -- sage, NAG, tuner, etc.) and the sampler itself, with
+    `current_iteration` taken from `TensorLoopOpen`. Downstream consumers
+    that read `transformer_options["iteration"]` can then attribute work
+    to a specific loop pass. Canonical consumer: the sage tracer at
+    `nodes_sage.py::_iter_from_kwargs`, which groups JSONL trace rows
+    by iteration for offload-asymmetry forensics.
+
+    Additive: does not overwrite other `transformer_options` keys (the
+    sage `optimized_attention_override` in particular survives).
+    """
+
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="LoopIterationStamp",
+            display_name="Loop Iteration Stamp",
+            category="AudioLoopHelper",
+            description=(
+                "Stamp the current loop iteration onto the model's "
+                "transformer_options so per-iteration tracers (sage, "
+                "profiler) can attribute calls to a loop pass."
+            ),
+            inputs=[
+                io.Model.Input("model"),
+                io.Int.Input(
+                    "current_iteration",
+                    default=0, min=0,
+                    tooltip="Wire from TensorLoopOpen.current_iteration.",
+                ),
+            ],
+            outputs=[io.Model.Output(display_name="model")],
+        )
+
+    @classmethod
+    def execute(cls, model, current_iteration) -> io.NodeOutput:
+        (stamped,) = cls._stamp_impl(model, current_iteration=current_iteration)
+        return io.NodeOutput(stamped)
+
+    @classmethod
+    def _stamp_impl(cls, model, *, current_iteration):
+        """Testable seam. Returns (stamped_model,) without io.NodeOutput
+        wrapping so tests can run without the v3 runtime in scope."""
+        clone = model.clone()
+        transformer_options = clone.model_options.setdefault("transformer_options", {})
+        transformer_options["iteration"] = int(current_iteration)
+        return (clone,)
+
+
 # --- Profiling nodes ---
 #
 # Three coordinated nodes capture end-to-end profile data for the audio loop:
@@ -2140,6 +2192,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             ImageBlend,
             CachedTextEncode,
             IterationCleanup,
+            LoopIterationStamp,
             AudioLoopHelperSageAttention,
             ProfileBegin,
             ProfileIterStep,

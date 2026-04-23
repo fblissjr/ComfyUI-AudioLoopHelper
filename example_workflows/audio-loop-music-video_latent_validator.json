@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1620,
-  "last_link_id": 3060,
+  "last_node_id": 1621,
+  "last_link_id": 3063,
   "nodes": [
     {
       "id": 252,
@@ -2222,7 +2222,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            2036
+            3061
           ]
         }
       ],
@@ -3241,7 +3241,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 2036
+          "link": 3063
         },
         {
           "name": "vae",
@@ -3441,7 +3441,8 @@
           "type": "INT",
           "links": [
             2936,
-            3055
+            3055,
+            3062
           ]
         }
       ],
@@ -4419,6 +4420,52 @@
       },
       "title": "VAE Encode (init image \u2192 guide latent)",
       "widgets_values": []
+    },
+    {
+      "id": 1621,
+      "type": "LoopIterationStamp",
+      "pos": [
+        2667.4696783995114,
+        4167.000748148983
+      ],
+      "size": [
+        260,
+        78
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 3061
+        },
+        {
+          "name": "current_iteration",
+          "type": "INT",
+          "link": 3062,
+          "widget": {
+            "name": "current_iteration"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            3063
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoopIterationStamp"
+      },
+      "widgets_values": [
+        0
+      ],
+      "title": "Loop Iteration Stamp"
     }
   ],
   "links": [
@@ -4773,14 +4820,6 @@
       843,
       1,
       "SIGMAS"
-    ],
-    [
-      2036,
-      654,
-      0,
-      843,
-      2,
-      "MODEL"
     ],
     [
       2037,
@@ -5365,6 +5404,30 @@
       843,
       8,
       "LATENT"
+    ],
+    [
+      3061,
+      654,
+      0,
+      1621,
+      0,
+      "MODEL"
+    ],
+    [
+      3062,
+      1539,
+      3,
+      1621,
+      1,
+      "INT"
+    ],
+    [
+      3063,
+      1621,
+      0,
+      843,
+      2,
+      "MODEL"
     ]
   ],
   "groups": [

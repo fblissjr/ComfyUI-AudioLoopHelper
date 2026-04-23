@@ -33,28 +33,7 @@ def _mod():
 # Test fakes
 # ---------------------------------------------------------------------------
 
-class FakeModel:
-    """Minimal stand-in for comfy.model_patcher.ModelPatcher.
-
-    Only the surface that AudioLoopHelperSageAttention touches:
-      - clone() returns a deep-ish copy (new dict for model_options)
-      - model_options["transformer_options"] dict
-      - add_callback(call_type, fn) stores callbacks for later invocation
-    """
-
-    def __init__(self):
-        self.model_options: dict = {"transformer_options": {}}
-        self.callbacks: dict[str, Callable] = {}
-
-    def clone(self) -> "FakeModel":
-        clone = FakeModel()
-        clone.model_options = {
-            "transformer_options": dict(self.model_options.get("transformer_options", {}))
-        }
-        return clone
-
-    def add_callback(self, call_type: str, fn):
-        self.callbacks[call_type] = fn
+from _fakes import FakeModelWithCallbacks as FakeModel
 
 
 def _fake_q(batch=1, seq=64, heads=4, dim_head=16, dtype=torch.float16):
