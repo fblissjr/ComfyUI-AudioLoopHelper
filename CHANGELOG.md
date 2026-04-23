@@ -6,6 +6,32 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **Frame-rate metadata asymmetry between initial render and loop iterations.**
+  `TimestampPromptScheduleBatchEncode` emitted raw CLIP conditioning with
+  no `frame_rate` metadata, while the initial render's positive
+  conditioning passed through `LTXVConditioning` (stamps
+  `frame_rate=25`) and the loop body's negative conditioning did too
+  (sourced from `Set_base_cond_neg` downstream of the same
+  `LTXVConditioning`). Net: loop-iter positive was the only path
+  without `frame_rate`, which made the model's temporal scaling
+  inconsistent between the initial window and subsequent iterations.
+  Symptom: identity drift + hallucinated objects (microphones, altered
+  faces) escalating iter-over-iter regardless of `nag_scale` or prompt
+  content. Introduced by the 2026-04-22 batch-encode migration
+  (moving CLIP out of the loop accidentally dropped the
+  `LTXVConditioning` wrapping that used to live in the per-iter chain).
+  Fix: `TimestampPromptScheduleBatchEncode` now stamps
+  `{'frame_rate': frame_rate}` on each encoded CONDITIONING internally,
+  matching `LTXVConditioning`'s behavior. New `frame_rate` widget
+  (default 25.0) on the node; cache key includes it; shipped example
+  workflows updated to expose the widget. Four tests in
+  `tests/test_batch_encode.py::TestFrameRateMetadata` lock the invariant
+  in place (default stamp, override, metadata preservation, cache-key
+  invalidation). Behavior confirmed against ComfyUI core
+  `comfy_extras/nodes_lt.py:416-436` (`LTXVConditioning` is just a
+  thin `node_helpers.conditioning_set_values` call stamping frame_rate).
+
 ### Changed
 - **Docs cleanup round 2 (2026-04-23 PM).** After the structural
   reorg, user critique surfaced ~10 content-level opportunities.
