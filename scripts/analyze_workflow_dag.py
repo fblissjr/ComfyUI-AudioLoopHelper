@@ -35,24 +35,13 @@ import argparse
 import heapq
 import sys
 from collections import defaultdict
-from datetime import datetime
 from pathlib import Path
 
 import orjson
 
-
-_DEFAULT_RUNS_DIR = Path(__file__).resolve().parent.parent / "internal" / "analysis" / "runs"
-
-
-def _timestamped_path(runs_dir: Path, workflow_path: Path, ext: str) -> Path:
-    """Build `<runs_dir>/dag_<workflow_slug>_YYYY-MM-DD_HHMMSS.<ext>`."""
-    slug = workflow_path.stem.replace(".", "_")
-    ts = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    return runs_dir / f"dag_{slug}_{ts}.{ext}"
-
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from workflow_utils import WorkflowEditor  # noqa: E402
+from workflow_utils import RUNS_DIR, WorkflowEditor, timestamped_run_path  # noqa: E402
 
 
 # ComfyUI "mode" field: 0=active, 2=mute, 4=bypass.
@@ -370,9 +359,7 @@ def main() -> None:
                     default="mermaid")
     ap.add_argument("--output", help="Write to explicit file path instead of stdout")
     ap.add_argument("--save-run", action="store_true",
-                    help=f"Save to timestamped file under {_DEFAULT_RUNS_DIR} (gitignored)")
-    ap.add_argument("--runs-dir", type=Path, default=_DEFAULT_RUNS_DIR,
-                    help="Override directory for --save-run output")
+                    help=f"Save to timestamped file under {RUNS_DIR} (gitignored)")
     ap.add_argument("--include-bypassed", action="store_true",
                     help="Include mode=4 (bypassed) nodes in rendering")
     ap.add_argument("--no-collapse-setget", action="store_true",
@@ -399,9 +386,9 @@ def main() -> None:
     if args.output:
         output_path = Path(args.output)
     elif args.save_run:
-        args.runs_dir.mkdir(parents=True, exist_ok=True)
-        output_path = _timestamped_path(
-            args.runs_dir, workflow_path, ext_by_format[args.format],
+        slug = workflow_path.stem.replace(".", "_")
+        output_path = timestamped_run_path(
+            "", f"dag_{slug}", ext_by_format[args.format],
         )
 
     if output_path is not None:

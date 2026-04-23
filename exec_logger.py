@@ -44,11 +44,16 @@ from __future__ import annotations
 import os
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import orjson
+
+# scripts/ lives at <plugin>/scripts/workflow_utils.py
+_SCRIPTS_DIR = Path(__file__).resolve().parent / "scripts"
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+from workflow_utils import timestamped_run_path  # noqa: E402
 
 
 _LOG_PATH_ENV = "COMFYUI_EXEC_LOG"
@@ -56,9 +61,10 @@ _SHAPE_LIMIT_ENV = "COMFYUI_EXEC_LOG_SHAPE_LIMIT"  # max items shown for lists/d
 _SHAPE_RECURSION_DEPTH_LIMIT = 2
 _INSTALLED = False
 
-# Auto-save destination shares the DAG-analyzer runs dir so all
-# per-generation debug output lives in one gitignored tree.
-_AUTO_RUNS_DIR = Path(__file__).resolve().parent / "internal" / "analysis" / "runs" / "exec_log"
+# Shell-style truthy tokens that mean "auto-generate a timestamped path
+# under the shared runs dir." Matches common conventions (Docker,
+# systemd, Python configs) so users don't have to remember a bespoke
+# spelling.
 _AUTO_TOKENS = {"auto", "1", "true", "yes"}
 
 
@@ -67,9 +73,7 @@ def _resolve_log_target(value: str) -> str:
     if value == "stderr":
         return value
     if value.lower() in _AUTO_TOKENS:
-        _AUTO_RUNS_DIR.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-        return str(_AUTO_RUNS_DIR / f"exec_{ts}.jsonl")
+        return str(timestamped_run_path("exec_log", "exec", "jsonl"))
     return value
 
 

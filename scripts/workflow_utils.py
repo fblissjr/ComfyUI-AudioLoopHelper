@@ -16,7 +16,24 @@ Handles the three link representations that must stay in sync:
 """
 
 import json
+from datetime import datetime
 from pathlib import Path
+
+
+RUNS_DIR = Path(__file__).resolve().parent.parent / "internal" / "analysis" / "runs"
+
+
+def timestamped_run_path(subdir: str, prefix: str, ext: str) -> Path:
+    """Build `<project>/internal/analysis/runs/<subdir>/<prefix>_YYYY-MM-DD_HHMMSS.<ext>`.
+
+    Shared helper for debug tools that dump timestamped artifacts
+    (DAG dumps, exec logs, profiler traces). Creates the parent dir if
+    missing. Gitignored by the project's internal/ rule.
+    """
+    out_dir = RUNS_DIR / subdir if subdir else RUNS_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    return out_dir / f"{prefix}_{ts}.{ext}"
 
 
 class WorkflowEditor:
