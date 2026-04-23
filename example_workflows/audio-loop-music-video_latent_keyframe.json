@@ -4384,6 +4384,14 @@
             "name": "snap_boundaries"
           },
           "link": null
+        },
+        {
+          "name": "frame_rate",
+          "type": "FLOAT",
+          "widget": {
+            "name": "frame_rate"
+          },
+          "link": null
         }
       ],
       "outputs": [
@@ -4408,7 +4416,8 @@
         "0:00+: video of a woman passionately singing alone",
         17.92,
         180.0,
-        true
+        true,
+        25.0
       ],
       "title": "Prompt Schedule (Batch Encode)"
     },

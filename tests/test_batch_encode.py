@@ -188,6 +188,106 @@ class TestTimestampPromptScheduleBatchEncode:
         assert len(clip.encode_calls) == 1
 
 
+class TestFrameRateMetadata:
+    """Every emitted conditioning must carry a `frame_rate` key in its
+    per-entry metadata dict — same shape `LTXVConditioning` stamps on
+    `CLIPTextEncode` output for the initial render path.
+
+    Why: pre-2026-04-23 the batch encoder emitted RAW CLIP conditioning
+    and the workflow fed it directly to the loop body's sampler. Inside
+    the subgraph the chain was `LTXVAddLatentGuide → LTXVCropGuides →
+    CFGGuider → Sampler`, which never re-applies `frame_rate`. Meanwhile
+    the initial render's positive conditioning DOES pass through
+    `LTXVConditioning` (frame_rate=25 stamped) and the negative
+    conditioning DOES too (sourced from `Set_base_cond_neg` downstream
+    of the same `LTXVConditioning`). Net result: loop-iter positive was
+    the only path without `frame_rate` metadata. The model's temporal
+    scaling diverged between the initial render and loop iterations,
+    compounding identity drift (different faces, hallucinated microphones)
+    that escalated iter-over-iter regardless of NAG scale or prompt content.
+    """
+
+    def test_default_frame_rate_is_25_on_every_conditioning(self):
+        from nodes import TimestampPromptScheduleBatchEncode
+        clip = FakeCLIP()
+        conditioning_list, _ = TimestampPromptScheduleBatchEncode.execute(
+            clip=clip,
+            schedule=_schedule_text(),
+            stride_seconds=20.0,
+            audio_duration=60.0,
+            snap_boundaries=True,
+        )
+        assert conditioning_list, "expected at least one conditioning"
+        for i, cond in enumerate(conditioning_list):
+            for j, entry in enumerate(cond):
+                meta = entry[1]
+                assert "frame_rate" in meta, (
+                    f"conditioning[{i}][{j}] missing 'frame_rate' metadata: {meta}"
+                )
+                assert meta["frame_rate"] == 25.0, (
+                    f"conditioning[{i}][{j}] frame_rate={meta['frame_rate']}, expected 25.0"
+                )
+
+    def test_custom_frame_rate_is_stamped_on_every_conditioning(self):
+        from nodes import TimestampPromptScheduleBatchEncode
+        clip = FakeCLIP()
+        conditioning_list, _ = TimestampPromptScheduleBatchEncode.execute(
+            clip=clip,
+            schedule=_schedule_text(),
+            stride_seconds=20.0,
+            audio_duration=60.0,
+            snap_boundaries=True,
+            frame_rate=30.0,
+        )
+        for cond in conditioning_list:
+            for entry in cond:
+                assert entry[1]["frame_rate"] == 30.0
+
+    def test_frame_rate_preserves_existing_metadata(self):
+        """Stamping must not clobber other keys in the conditioning dict.
+        FakeCLIP emits `{'pooled_output': None}`; that must survive."""
+        from nodes import TimestampPromptScheduleBatchEncode
+        clip = FakeCLIP()
+        conditioning_list, _ = TimestampPromptScheduleBatchEncode.execute(
+            clip=clip,
+            schedule="0:00+: solo\n",
+            stride_seconds=20.0,
+            audio_duration=20.0,
+            snap_boundaries=True,
+        )
+        for entry in conditioning_list[0]:
+            assert "pooled_output" in entry[1]
+            assert "frame_rate" in entry[1]
+
+    def test_frame_rate_change_invalidates_cache(self):
+        """Cache key must include frame_rate so a widget change re-encodes
+        rather than returning stale stamped conditionings."""
+        from nodes import TimestampPromptScheduleBatchEncode
+        clip = FakeCLIP()
+        kwargs = dict(
+            clip=clip,
+            schedule=_schedule_text(),
+            stride_seconds=20.0,
+            audio_duration=60.0,
+            snap_boundaries=True,
+        )
+        TimestampPromptScheduleBatchEncode.execute(**kwargs, frame_rate=25.0)
+        encodes_after_first = len(clip.encode_calls)
+
+        # Same inputs except frame_rate → must re-encode (new cache key).
+        TimestampPromptScheduleBatchEncode.execute(**kwargs, frame_rate=48.0)
+        assert len(clip.encode_calls) > encodes_after_first, (
+            "frame_rate change didn't invalidate cache"
+        )
+
+        # Back to 25.0 should hit cache from first call.
+        encodes_before_third = len(clip.encode_calls)
+        TimestampPromptScheduleBatchEncode.execute(**kwargs, frame_rate=25.0)
+        assert len(clip.encode_calls) == encodes_before_third, (
+            "returning to previously-seen frame_rate should be a cache hit"
+        )
+
+
 class TestConditioningSelectByIteration:
     """Per-iteration selector -- runs inside the loop, no CLIP ref."""
 

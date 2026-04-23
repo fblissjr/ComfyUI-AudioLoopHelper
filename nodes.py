@@ -741,6 +741,7 @@ _AUDIO_DURATION_PRECISION = 2
 def _batch_encode_cache_key(
     clip, schedule: str, stride_seconds: float,
     audio_duration: float, snap_boundaries: bool,
+    frame_rate: float,
 ) -> tuple:
     # id(clip) as identity token: CLIP models are large (15+ GB) and
     # stay resident for the full run, so address recycling isn't a
@@ -751,6 +752,7 @@ def _batch_encode_cache_key(
         round(stride_seconds, _STRIDE_SECONDS_PRECISION),
         round(audio_duration, _AUDIO_DURATION_PRECISION),
         bool(snap_boundaries),
+        round(float(frame_rate), 3),
     )
 
 
@@ -834,6 +836,25 @@ class TimestampPromptScheduleBatchEncode(io.ComfyNode):
                         "Default on -- matches TimestampPromptSchedule."
                     ),
                 ),
+                io.Float.Input(
+                    "frame_rate",
+                    default=25.0,
+                    min=0.0,
+                    max=1000.0,
+                    step=0.01,
+                    tooltip=(
+                        "Stamped onto every emitted CONDITIONING as "
+                        "`{'frame_rate': ...}` metadata — same thing "
+                        "`LTXVConditioning` does on the initial-render path. "
+                        "Default 25.0 matches LTX 2.3 training config. Keep "
+                        "identical to the `frame_rate` set on the initial "
+                        "render's `LTXVConditioning` node, otherwise the "
+                        "model's temporal scaling differs between the "
+                        "initial window and subsequent loop iterations, "
+                        "producing identity drift + hallucinated objects "
+                        "(e.g. microphones) escalating iter-over-iter."
+                    ),
+                ),
             ],
             outputs=[
                 io.AnyType.Output(
@@ -862,12 +883,14 @@ class TimestampPromptScheduleBatchEncode(io.ComfyNode):
         stride_seconds: float,
         audio_duration: float,
         snap_boundaries: bool = True,
+        frame_rate: float = 25.0,
     ) -> str:
         # Returned string tells ComfyUI's scheduler "inputs are
         # value-stable, reuse my cached output." Uses the same key as
         # the internal cache so the two can't drift.
         return repr(_batch_encode_cache_key(
-            clip, schedule, stride_seconds, audio_duration, snap_boundaries,
+            clip, schedule, stride_seconds, audio_duration,
+            snap_boundaries, frame_rate,
         ))
 
     @classmethod
@@ -878,9 +901,11 @@ class TimestampPromptScheduleBatchEncode(io.ComfyNode):
         stride_seconds: float,
         audio_duration: float,
         snap_boundaries: bool = True,
+        frame_rate: float = 25.0,
     ) -> io.NodeOutput:
         cache_key = _batch_encode_cache_key(
-            clip, schedule, stride_seconds, audio_duration, snap_boundaries,
+            clip, schedule, stride_seconds, audio_duration,
+            snap_boundaries, frame_rate,
         )
         cached = _BATCH_ENCODE_CACHE.get(cache_key)
         if cached is not None:
@@ -912,10 +937,20 @@ class TimestampPromptScheduleBatchEncode(io.ComfyNode):
                 seen.add(prompt)
                 unique.append(prompt)
 
+        # Stamp frame_rate onto every encoded conditioning's metadata dict,
+        # matching what LTXVConditioning does on the initial-render path.
+        # Without this, positive conditioning in the loop body has no
+        # frame_rate while negative (sourced from the initial-render's
+        # LTXVConditioning) does — the asymmetry drives the model's
+        # temporal scaling inconsistent across iterations.
         encoded: dict[str, list] = {}
         for prompt in unique:
             tokens = clip.tokenize(prompt)
-            encoded[prompt] = clip.encode_from_tokens_scheduled(tokens)
+            cond = clip.encode_from_tokens_scheduled(tokens)
+            encoded[prompt] = [
+                [t[0], {**t[1], "frame_rate": float(frame_rate)}]
+                for t in cond
+            ]
 
         conditioning_list = [encoded[p] for p in prompts_per_iter]
 

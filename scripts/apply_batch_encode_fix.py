@@ -151,12 +151,13 @@ def _add_batch_encoder(
             _widget_input("stride_seconds", "FLOAT"),
             _widget_input("audio_duration", "FLOAT"),
             _widget_input("snap_boundaries", "BOOLEAN"),
+            _widget_input("frame_rate", "FLOAT"),
         ],
         outputs=[
             {"name": "conditioning_list", "type": "*", "links": []},
             {"name": "iteration_count", "type": "INT", "links": []},
         ],
-        widgets_values=[schedule_text, 17.92, 180.0, snap_boundaries],
+        widgets_values=[schedule_text, 17.92, 180.0, snap_boundaries, 25.0],
         properties={
             "cnr_id": "comfyui-audioloophelper",
             "Node name for S&R": "TimestampPromptScheduleBatchEncode",
