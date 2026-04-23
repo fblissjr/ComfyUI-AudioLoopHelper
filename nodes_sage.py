@@ -369,11 +369,20 @@ def _run_sage_kernel(kernel, q, k, v, heads, mask, skip_reshape, skip_output_res
 
 def _route_mask_aware(mask) -> str:
     """Single source of truth for `auto_mask_aware`'s routing policy.
-    Masked paths -> fp16_triton (sage's CUDA masked kernels are broken at
-    LTX cross-attn shapes per `internal/design/sage_backlog.md` item 2);
-    unmasked -> sage auto. Used by `_build_sage_fn` to pick the kernel
-    and by `_effective_mode` to report it in the tracer -- keeping both
-    in one function prevents drift if a third rule is added later.
+    Masked paths -> fp16_triton; unmasked -> sage auto.
+
+    Sage's INT8-QK-FP8/FP16-PV CUDA kernels don't implement mask support
+    (MaskMode enum is `{kNone, kCausal}`; `attn_mask` passed to `sageattn()`
+    is accepted via **kwargs and silently dropped). Feeding a masked call
+    into those kernels yields attention contaminated by padded positions
+    -- rtol scales ~1/seq_kv, which is what our LTX-shape sweep measured
+    (rtol 0.26-0.94 across seq_kv 32-1024). Only the Triton kernel
+    implements masked attention. Full characterization:
+    `internal/design/sage_backlog.md` item 2.
+
+    Keeping this function as the one place the policy lives means
+    `_build_sage_fn` and `_effective_mode` won't drift if a third routing
+    rule is added later.
     """
     return _TRITON_MODE if mask is not None else "auto"
 

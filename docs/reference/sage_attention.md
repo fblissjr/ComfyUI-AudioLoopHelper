@@ -50,15 +50,19 @@ Arch mappings in `nodes_sage.py::_MODES_BY_ARCH`:
 Semantics:
 
 - **`auto_mask_aware`** (default) — per-call routing: masked paths
-  (LTX cross-attn carries text-padding mask) dispatch to
+  (LTX cross-attn carries a text-padding mask) dispatch to
   `sageattn_qk_int8_pv_fp16_triton`; unmasked paths (self-attn) delegate
-  to sage's `auto`. Correct default because sage's CUDA mask kernels
-  (fp16_cuda, fp8_cuda, fp8++) all produce rtol up to 0.94 vs SDPA on
-  LTX's cross-attn across seq_kv = 32–1024 — the CUDA mask path has a
-  seq-dependent bug; only the Triton path is clean (rtol ≈ 0.039).
-  Stateless per-call decision: no closure caches, no offload-survival
-  risk beyond the base override. Full measurement in
-  `internal/design/sage_backlog.md` (item 2, retired).
+  to sage's `auto`. Correct default because sage's INT8-QK-FP8/FP16-PV
+  CUDA kernels do not implement mask support — `MaskMode` is
+  `{kNone, kCausal}` only, and `attn_mask` passed via kwargs is silently
+  dropped. Padded positions then contribute as if unmasked, contaminating
+  the attention. The LTX-shape sweep measures rtol 0.26–0.94 vs SDPA
+  across seq_kv = 32–1024 (more padding → worse rtol, as expected from
+  "mask ignored"). Triton is the only sage kernel that implements
+  masked attention (rtol ≈ 0.039 across the same range). Stateless
+  per-call decision: no closure caches, no offload-survival risk beyond
+  the base override. Full characterization:
+  `internal/design/sage_backlog.md` item 2.
 - **`disabled`** — no-op, returns the input model unchanged.
 - **`auto`** — calls `sageattention.sageattn()` and lets sage's own
   dispatch pick the best kernel. On sm89 + CUDA >= 12.8 this lands on
@@ -67,11 +71,11 @@ Semantics:
   masked cross-attn** — use `auto_mask_aware` instead. Kept for
   non-LTX workflows and for A/B comparison.
 - **`sageattn_qk_int8_pv_fp16_cuda`** — INT8 QK + FP16 PV, fp32
-  accumulator. Broken on LTX cross-attn+mask (rtol 0.26–0.94 across
-  seq_kv). Safe for self-attn only.
+  accumulator. No mask support (silently dropped). Safe for self-attn
+  only; do not feed masked cross-attn calls to this mode.
 - **`sageattn_qk_int8_pv_fp8_cuda++`** — INT8 QK + FP8 PV, fp32+fp16
-  accumulator (SageAttention2++). Fastest on Ada for self-attn.
-  Broken on LTX cross-attn+mask (same range as fp16_cuda).
+  accumulator (SageAttention2++). Fastest on Ada for self-attn. Also
+  no mask support.
 - **`sageattn_qk_int8_pv_fp16_triton`** — JIT Triton; always
   available. Only mask-clean kernel on any arch. Small (~100ms–1s)
   JIT-compile cost on first use of a new shape visible as

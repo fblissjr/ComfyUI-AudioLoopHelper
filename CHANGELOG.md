@@ -10,14 +10,17 @@ This project uses [Semantic Versioning](https://semver.org/).
 - **`AudioLoopHelperSageAttention` default mode is now `auto_mask_aware`**
   (was `auto`). Routes masked cross-attn calls to
   `sageattn_qk_int8_pv_fp16_triton` and unmasked self-attn calls to
-  sage `auto`. Driven by measurement in
-  `<sage_fork_repo>/tests/test_sageattn_ltx_shapes.py` showing that all
-  three CUDA mask kernels (fp16_cuda, fp8_cuda, fp8++) produce
-  rtol 0.26–0.94 vs SDPA across seq_kv = 32–1024 on LTX shapes,
-  while fp16_triton stays clean at rtol ≈ 0.039. Stateless per-call
-  routing — no offload-state risk beyond the base override. Tracer
-  JSONL rows now include an `effective_mode` field so a trace can
-  confirm the routing is firing. 6 new tests.
+  sage `auto`. Necessary because sage's INT8-QK-FP8/FP16-PV CUDA kernels
+  don't implement mask support — `MaskMode` is `{kNone, kCausal}` only;
+  `attn_mask` passed via kwargs is silently dropped, contaminating
+  attention with padded positions. Measurement in
+  `<sage_fork_repo>/tests/test_sageattn_ltx_shapes.py` shows rtol 0.26–0.94
+  vs SDPA across seq_kv 32–1024 on LTX cross-attn shapes (scaling ∝
+  1/seq_kv, consistent with "mask ignored"); triton stays clean at
+  rtol ≈ 0.039. Stateless per-call routing — no offload-state risk
+  beyond the base override. Tracer JSONL rows now include an
+  `effective_mode` field so a trace can confirm the routing is firing.
+  6 new tests.
 - **Shipping `_latent*.json` workflows swapped from KJNodes'
   `PathchSageAttentionKJ` to `AudioLoopHelperSageAttention`** via
   `scripts/apply_audioloophelper_sage.py [--all]`. Reversible with
