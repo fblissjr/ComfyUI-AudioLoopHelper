@@ -725,11 +725,33 @@ class TimestampPromptSchedule(io.ComfyNode):
 # cache churn when upstream AudioLoopController re-executes per iteration
 # (its `current_iteration` input changes every loop pass even though its
 # stride_seconds / audio_duration OUTPUT values are constant). Without
-# this cache, the batch encoder re-ran 9 Gemma forwards per iteration on
-# a 9-entry schedule — visible in the ComfyUI console as 9 "Model
-# LTXAVTEModel_ prepared" lines per loop pass.
+# this cache, the batch encoder re-ran N Gemma forwards per iteration on
+# an N-entry schedule, defeating the whole point of moving CLIP out of
+# the loop.
 _BATCH_ENCODE_CACHE: OrderedDict = OrderedDict()
 _BATCH_ENCODE_CACHE_MAX = 4  # typically 1 live schedule; 4 covers A/B runs
+
+# Rounding tolerances absorb float noise from upstream AudioLoopController
+# quantization. Shared between cache-key construction and IS_CHANGED so
+# both representations stay in lockstep if either ever changes.
+_STRIDE_SECONDS_PRECISION = 4
+_AUDIO_DURATION_PRECISION = 2
+
+
+def _batch_encode_cache_key(
+    clip, schedule: str, stride_seconds: float,
+    audio_duration: float, snap_boundaries: bool,
+) -> tuple:
+    # id(clip) as identity token: CLIP models are large (15+ GB) and
+    # stay resident for the full run, so address recycling isn't a
+    # realistic hazard. Same latent caveat as _COND_CACHE.
+    return (
+        id(clip),
+        schedule,
+        round(stride_seconds, _STRIDE_SECONDS_PRECISION),
+        round(audio_duration, _AUDIO_DURATION_PRECISION),
+        bool(snap_boundaries),
+    )
 
 
 class TimestampPromptScheduleBatchEncode(io.ComfyNode):
@@ -841,15 +863,12 @@ class TimestampPromptScheduleBatchEncode(io.ComfyNode):
         audio_duration: float,
         snap_boundaries: bool = True,
     ) -> str:
-        # Tell ComfyUI's scheduler "inputs are value-stable, reuse my
-        # cached output." Rounded to absorb float noise from upstream
-        # AudioLoopController quantization. id(clip) is fine as an
-        # identity token — CLIP models are large and stay resident, so
-        # address recycling isn't a realistic hazard mid-run.
-        return (
-            f"{id(clip)}|{schedule}|{round(stride_seconds, 4)}"
-            f"|{round(audio_duration, 2)}|{bool(snap_boundaries)}"
-        )
+        # Returned string tells ComfyUI's scheduler "inputs are
+        # value-stable, reuse my cached output." Uses the same key as
+        # the internal cache so the two can't drift.
+        return repr(_batch_encode_cache_key(
+            clip, schedule, stride_seconds, audio_duration, snap_boundaries,
+        ))
 
     @classmethod
     def execute(
@@ -860,12 +879,8 @@ class TimestampPromptScheduleBatchEncode(io.ComfyNode):
         audio_duration: float,
         snap_boundaries: bool = True,
     ) -> io.NodeOutput:
-        cache_key = (
-            id(clip),
-            schedule,
-            round(stride_seconds, 4),
-            round(audio_duration, 2),
-            bool(snap_boundaries),
+        cache_key = _batch_encode_cache_key(
+            clip, schedule, stride_seconds, audio_duration, snap_boundaries,
         )
         cached = _BATCH_ENCODE_CACHE.get(cache_key)
         if cached is not None:

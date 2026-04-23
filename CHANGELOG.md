@@ -7,6 +7,18 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- **Batch encoder was re-executing per loop iteration (post-ship patch
+  of the offload fix below).** `TimestampPromptScheduleBatchEncode`'s
+  `stride_seconds` / `audio_duration` inputs come from
+  `AudioLoopController`, which itself depends on `current_iteration` —
+  so ComfyUI's framework cache invalidated the batch encoder every
+  iteration, forcing it to re-encode every unique prompt. User
+  observed N `Model LTXAVTEModel_ prepared` lines per loop pass on an
+  N-entry schedule. Added module-level LRU
+  (`_BATCH_ENCODE_CACHE`) and `IS_CHANGED` classmethod so the batch
+  encoder short-circuits on value-stable inputs regardless of
+  framework-cache churn. 2 new tests exercising cache-hit and
+  invalidation paths.
 - **Prompt schedule regression iter 2+ (microphones/style-drift/anatomy
   glitches).** With `TimestampPromptSchedule` active, suppressed
   classes returned after iteration 1. Root cause: per-iteration

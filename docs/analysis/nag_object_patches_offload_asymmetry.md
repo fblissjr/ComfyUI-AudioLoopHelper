@@ -1,4 +1,4 @@
-Last updated: 2026-04-22
+Last updated: 2026-04-22 (+ post-ship patch: internal memoization required)
 
 # Why CLIP must not enter the loop body
 
@@ -114,6 +114,48 @@ never gets exposed to an offload/reload round-trip.
 
 Migration: `scripts/apply_batch_encode_fix.py` (idempotent; validates
 required source nodes up front so partial migration is impossible).
+
+## Why the batch encoder needs its own memoization (follow-up patch)
+
+Initial ship of the batch-encode node did NOT include an internal
+cache. Empirically, that was incomplete: running a 9-entry schedule
+showed nine `Model LTXAVTEModel_ prepared` lines per loop pass in the
+ComfyUI console, i.e. every unique prompt was being re-encoded every
+iteration.
+
+Root cause is two layers stacked:
+
+1. **Workflow wiring.** The batch encoder's `stride_seconds` and
+   `audio_duration` inputs come from `AudioLoopController`.
+   `AudioLoopController` takes `current_iteration` from
+   `TensorLoopOpen` as an input. Its framework-cache entry therefore
+   invalidates every iteration, even though its FLOAT OUTPUT values
+   don't change. Downstream consumers see "new" outputs and
+   re-execute.
+2. **Node-level code.** With no `IS_CHANGED` and no internal cache,
+   the batch encoder had no way to short-circuit. It dutifully
+   re-encoded all N unique prompts on every loop pass.
+
+The code-level fix is the universal one (works regardless of future
+workflow-wiring changes): a module-level LRU on the batch encoder
+(`nodes.py:_BATCH_ENCODE_CACHE`) keyed on `(id(clip), schedule,
+stride_seconds, audio_duration, snap_boundaries)`, plus an
+`IS_CHANGED` classmethod that returns the same key as a string so
+ComfyUI's scheduler can also short-circuit before calling `execute`.
+Belt and braces. Same LRU pattern `CachedTextEncode` already uses.
+
+Rounding `stride_seconds` to 4 decimals and `audio_duration` to 2
+absorbs float noise from AudioLoopController's integer-latent stride
+quantization — without rounding, floating-point jitter could
+invalidate the cache on what should be identical iterations.
+
+Latent caveat: the cache key uses `id(clip)`. If CLIP is freed and a
+fresh one reloaded at the same Python address, we'd return stale
+encoding. Not a realistic hazard in ComfyUI (CLIP is 15+ GB and stays
+resident), but it is exactly why the pytest suite carries an autouse
+fixture that clears the cache between tests — FakeCLIP is tiny,
+gets GC'd rapidly, and `id()` recycles fast. Documented in
+`nodes.py` at the cache declaration.
 
 ## Why we didn't "just fix `object_patches` migration"
 
