@@ -162,6 +162,8 @@ LTX-2_00032.json and LTX-2_00040.json are confirmed working (April 9, 2026). For
 - `uv run --group dev python scripts/trace_node_source.py <workflow> <node_id> --include-inputs` — resolve any node to its Python source (AST-extracted class body + bounded call graph) + workflow-level wiring. Flags `add_object_patch` closures, captured tensors, mode=4 bypasses, widget overrides on wired inputs. **Run this before trusting any widget annotation in CLAUDE.md** — saved this session from a stale `LTX2_NAG` widget-order error.
 - `uv run --group dev python scripts/analyze_workflow_dag.py <workflow> --format <ascii|mermaid|dot|json>` — topo-sorted execution order + DAG rendering. `--subgraph 0` pulls loop-body internals into the same graph. Answers "what runs in what order" without executing anything.
 - `COMFYUI_EXEC_LOG=/tmp/exec.jsonl python <comfyui>/main.py` — runtime per-node JSONL log (start/end/error events, timings, input/output tensor shapes). Installed from `exec_logger.py` via `__init__.py`. Zero overhead when env var is unset. Use when "which node is frozen/slow/crashing" is the question.
+- **All debug outputs land in `internal/analysis/runs/`** (gitignored) when you use `--save-run` (DAG analyzer), `COMFYUI_EXEC_LOG=auto` (exec logger), or the default `ProfileBegin.output_dir` (torch.profiler traces land under `runs/profiler/<timestamp>/`). Timestamped filenames so successive runs can be diffed. Shared helper `timestamped_run_path()` in `scripts/workflow_utils.py` — use it when adding a new debug tool.
+- **Apply scripts take an optional workflow path.** `apply_batch_encode_fix.py`, `apply_melband_default_off.py`, `apply_profiling_nodes.py` all default to `example_workflows/audio-loop-music-video_latent.json` but accept a CLI arg — useful for staging changes on `internal/scratch/` test workflows first.
 
 ## Documentation conventions
 
@@ -242,3 +244,4 @@ LTX-2_00032.json and LTX-2_00040.json are confirmed working (April 9, 2026). For
 - `internal/postmortem_v0409_latent_rework.md` -- latent rework (5 issues, noise_mask root cause)
 - `internal/audio_analysis_evolution.md` -- original critique of the audio→prompt pipeline (heuristic vs learned gap)
 - `internal/prompts/` -- unscrubbed working versions of the `docs/examples/` case studies plus legacy prompt drafts
+- `internal/analysis/` -- deep-dive investigations (frozen initial render, NAG object_patches asymmetry, reference-workflow comparison). `internal/analysis/runs/` holds timestamped debug-tool outputs from `analyze_workflow_dag.py --save-run`, `COMFYUI_EXEC_LOG=auto`, and `ProfileBegin`.
