@@ -721,6 +721,201 @@ class TimestampPromptSchedule(io.ComfyNode):
         return io.NodeOutput(prompt, next_prompt, blend_factor, current_time)
 
 
+class TimestampPromptScheduleBatchEncode(io.ComfyNode):
+    """Pre-encodes every per-iteration prompt up front, OUTSIDE the loop.
+
+    Pair with ConditioningSelectByIteration inside the loop. CLIP loads
+    exactly once per generation; DiT + model-level patches (NAG,
+    AttentionTuner, ChunkFeedForward) stay resident for the full run.
+
+    Replaces the CachedTextEncode-inside-the-loop pattern that forced
+    CLIP/DiT offload thrash and silenced NAG on iteration 2+
+    (microphones/anatomy-regressions/style-drift returning after iter 1).
+    The root cause is a ComfyUI ModelPatcher asymmetry: object_patches
+    closures are never device-migrated on offload, so NAG's captured
+    nag_cond_video tensor goes stale across a CLIP-load-triggered
+    eviction. Keeping CLIP out of the loop eliminates the failure mode.
+
+    Behavior matches TimestampPromptSchedule for every iteration index
+    (snap_boundaries parity). Dedup ensures identical prompt strings are
+    encoded once regardless of how many iterations they span.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="TimestampPromptScheduleBatchEncode",
+            display_name="Timestamp Prompt Schedule (Batch Encode)",
+            category="looping/audio",
+            description=(
+                "Pre-encodes every per-iteration prompt outside the loop. "
+                "Pair with ConditioningSelectByIteration inside the loop. "
+                "Eliminates CLIP offload thrash that silences NAG iter 2+."
+            ),
+            inputs=[
+                io.Clip.Input("clip", tooltip="CLIP model (Gemma 3 for LTX 2.3)."),
+                io.String.Input(
+                    "schedule",
+                    default="0:00+: default prompt",
+                    multiline=True,
+                    tooltip=(
+                        "Timestamp-based prompt schedule (same format as "
+                        "TimestampPromptSchedule).\n"
+                        "  0:00-0:38: prompt for this range\n"
+                        "  0:38-1:15: chorus prompt\n"
+                        "  1:15+: prompt from here onward"
+                    ),
+                ),
+                io.Float.Input(
+                    "stride_seconds",
+                    default=17.92,
+                    min=0.01,
+                    step=0.01,
+                    tooltip=(
+                        "Audio stride per iteration. Wire from "
+                        "AudioLoopController.stride_seconds (effective, "
+                        "latent-quantized value)."
+                    ),
+                ),
+                io.Float.Input(
+                    "audio_duration",
+                    default=180.0,
+                    min=0.01,
+                    step=0.1,
+                    tooltip=(
+                        "Total audio duration in seconds. Wire from "
+                        "AudioLoopController.audio_duration."
+                    ),
+                ),
+                io.Boolean.Input(
+                    "snap_boundaries",
+                    default=True,
+                    tooltip=(
+                        "Snap schedule boundaries to the iteration grid. "
+                        "Default on -- matches TimestampPromptSchedule."
+                    ),
+                ),
+            ],
+            outputs=[
+                io.AnyType.Output(
+                    "conditioning_list",
+                    tooltip=(
+                        "List of pre-encoded CONDITIONING, one per iteration. "
+                        "Wire to ConditioningSelectByIteration inside the loop."
+                    ),
+                ),
+                io.Int.Output(
+                    "iteration_count",
+                    tooltip=(
+                        "Number of entries in conditioning_list. Includes "
+                        "+1 headroom beyond the expected loop length so the "
+                        "selector's clamp absorbs overshoot."
+                    ),
+                ),
+            ],
+        )
+
+    @classmethod
+    def execute(
+        cls,
+        clip,
+        schedule: str,
+        stride_seconds: float,
+        audio_duration: float,
+        snap_boundaries: bool = True,
+    ) -> io.NodeOutput:
+        entries = _parse_schedule(schedule)
+        if snap_boundaries and entries:
+            entries = _snap_schedule_to_iterations(entries, stride_seconds)
+
+        # +1 headroom: if the loop runs one more iteration than the audio
+        # length strictly allows, the selector's clamp returns the last
+        # encoded prompt rather than crashing.
+        safe_stride = max(stride_seconds, 1e-6)
+        iteration_count = max(1, math.ceil(audio_duration / safe_stride) + 1)
+
+        prompts_per_iter = [
+            _match_schedule_generic(entries, i * stride_seconds, "")
+            for i in range(iteration_count)
+        ]
+
+        # Dedup preserves insertion order -- same unique prompt always
+        # produces the same CONDITIONING object, so the selector's output
+        # is identity-stable per unique prompt.
+        unique: list[str] = []
+        seen: set[str] = set()
+        for prompt in prompts_per_iter:
+            if prompt not in seen:
+                seen.add(prompt)
+                unique.append(prompt)
+
+        encoded: dict[str, list] = {}
+        for prompt in unique:
+            tokens = clip.tokenize(prompt)
+            encoded[prompt] = clip.encode_from_tokens_scheduled(tokens)
+
+        conditioning_list = [encoded[p] for p in prompts_per_iter]
+        return io.NodeOutput(conditioning_list, iteration_count)
+
+
+class ConditioningSelectByIteration(io.ComfyNode):
+    """Selects a pre-encoded CONDITIONING by iteration index.
+
+    Runs INSIDE the loop. No CLIP dependency -> no CLIP load -> no DiT
+    eviction. Pair with TimestampPromptScheduleBatchEncode outside the
+    loop.
+
+    Clamp behavior:
+      - current_iteration >= len(conditioning_list) -> returns last entry
+        (absorbs the batch encoder's +1 headroom).
+      - current_iteration < 0                       -> returns first entry
+        (defensive; real workflows wire current_iteration from
+        TensorLoopOpen which starts at 1).
+      - empty conditioning_list                     -> raises ValueError
+        (wiring bug; fail loudly).
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="ConditioningSelectByIteration",
+            display_name="Conditioning Select (by Iteration)",
+            category="looping/audio",
+            description=(
+                "Inside-loop selector for pre-encoded conditioning. "
+                "Pair with TimestampPromptScheduleBatchEncode."
+            ),
+            inputs=[
+                io.AnyType.Input(
+                    "conditioning_list",
+                    tooltip=(
+                        "List of CONDITIONING from "
+                        "TimestampPromptScheduleBatchEncode."
+                    ),
+                ),
+                io.Int.Input(
+                    "current_iteration",
+                    default=0,
+                    min=0,
+                    tooltip="Iteration index from TensorLoopOpen.",
+                ),
+            ],
+            outputs=[
+                io.Conditioning.Output("conditioning"),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, conditioning_list, current_iteration: int) -> io.NodeOutput:
+        if not conditioning_list:
+            raise ValueError(
+                "ConditioningSelectByIteration: conditioning_list is empty. "
+                "Wire the output of TimestampPromptScheduleBatchEncode."
+            )
+        idx = max(0, min(current_iteration, len(conditioning_list) - 1))
+        return io.NodeOutput(conditioning_list[idx])
+
+
 class AudioLoopPlanner(io.ComfyNode):
     """Shows the iteration timeline for planning prompt schedules.
 
@@ -1826,6 +2021,8 @@ class AudioLoopHelperExtension(ComfyExtension):
         return [
             AudioLoopController,
             TimestampPromptSchedule,
+            TimestampPromptScheduleBatchEncode,
+            ConditioningSelectByIteration,
             ConditioningBlend,
             AudioLoopPlanner,
             LoopConfigValidator,

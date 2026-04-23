@@ -6,7 +6,47 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **Prompt schedule regression iter 2+ (microphones/style-drift/anatomy
+  glitches).** With `TimestampPromptSchedule` active, suppressed
+  classes returned after iteration 1. Root cause: per-iteration
+  `CachedTextEncode` forced CLIP into VRAM each iteration, which
+  triggered `load_models_gpu` → `free_memory` → DiT eviction. On
+  reload, LTX2_NAG's `object_patches` closure still pointed at the GPU
+  `nag_cond_video` tensor from before the offload, but ComfyUI's
+  `model_patches_to()` does not migrate `object_patches` the way it
+  migrates `transformer_options["patches"]` (asymmetry at
+  `comfy/model_patcher.py:561-580` vs `object_patches` not touched).
+  Net effect: NAG silently disengaged after iteration 1 and every
+  class it was suppressing leaked back simultaneously — microphones,
+  "still image with no motion", "deformed hands", "duplicate
+  character/twin/clone", style drift toward photoreal from
+  illustrated inits. Fixed by moving all prompt encoding OUTSIDE the
+  loop; CLIP now loads exactly once per run. Migrate existing
+  workflows via `scripts/apply_batch_encode_fix.py`.
+
+### Changed
+- **`example_workflows/audio-loop-music-video_latent.json` rewired.**
+  Primary working baseline now uses the batch-encode path. The inner
+  subgraph is unchanged; the only rewire is on the positive
+  conditioning feed into `positive` (subgraph input slot 6).
+
 ### Added
+- **`TimestampPromptScheduleBatchEncode` + `ConditioningSelectByIteration`
+  in `nodes.py`.** The batch encoder runs ONCE outside the loop and
+  pre-encodes every per-iteration prompt (deduplicated) into a
+  `conditioning_list`. The selector runs inside the loop, indexes the
+  list by `current_iteration`, has no CLIP dependency, and cannot
+  trigger the offload cycle. Parity with `TimestampPromptSchedule`
+  for `snap_boundaries=True/False`. 12 new tests
+  (`tests/test_batch_encode.py`).
+- **`scripts/apply_batch_encode_fix.py`.** Idempotent workflow
+  migration: swaps the legacy `TimestampPromptSchedule` +
+  `CachedTextEncode_AudioLoop` x2 + `ConditioningBlend` chain for the
+  new batch encoder + selector. Also removes dead wiring discovered
+  during the offload-bug investigation: `Set_guider` (stored, never
+  Get'd) and `Set_base_cond_pos` + its two `Get_base_cond_pos` nodes
+  (stored/retrieved but downstream-unconsumed).
 - **`LoopConfigValidator` node (`nodes_validation.py`) + new example
   workflow `audio-loop-music-video_latent_validator.json`.** Shows the
   exact integer-latent math `AudioLoopController` performs and flags
