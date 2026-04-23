@@ -462,7 +462,7 @@ What we depend on:
 | `LTX2SamplingPreviewOverride` | Preview callback rate | only affects preview |
 | `LTXVImgToVideoInplaceKJ` | Inject image at latent frame 0 | `[num_images, strength, frame_idx]` |
 | `LTXVAddGuideMulti` | Multi-image guide (up to 20) | not in baseline |
-| `PathchSageAttentionKJ` | Sage attention kernel patch | bypassed in baseline |
+| `PathchSageAttentionKJ` | Sage attention kernel patch (KJNodes) | superseded in baseline by `AudioLoopHelperSageAttention` (mode `auto_mask_aware`); see `docs/reference/sage_attention.md` |
 | `VAELoaderKJ` | VAE loader with dtype + device control | |
 | `Set*` / `Get*` | Variable-like wiring | used liberally |
 

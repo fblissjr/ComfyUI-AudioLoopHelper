@@ -571,7 +571,7 @@ smoother, overlap was the dominant factor at those timestamps.
 | scheduler | 1421 BasicScheduler | `linear_quadratic, 8, 1` |
 | CFG | 153 CFGGuider | `1.0` (distilled model) |
 | NAG scale/alpha/tau/inplace | 508 LTX2_NAG | `11, 0.25, 2.5, true` (dial `nag_scale` to 3-7 for distilled-1.1 — see `docs/reference/nag_technical_reference.md`) |
-| Sage attention mode | 268 PathchSageAttentionKJ | `sageattn_qk_int8_pv_fp8_cuda` or `sageattn_qk_int8_pv_fp16_triton` |
+| Sage attention mode | 268 AudioLoopHelperSageAttention | `auto_mask_aware` (default; routes masked cross-attn to triton) |
 | `window_seconds` | 688 FloatConstant | `19.88` |
 | `overlap_seconds` | AudioLoopController | `2.0` or `3.0` |
 | `temporal_size, temporal_overlap` | 1604 VAEDecodeTiled (widgets 3-4) | `512, 64` (not `64, 8`) |

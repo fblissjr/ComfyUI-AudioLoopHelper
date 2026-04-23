@@ -34,7 +34,10 @@ class FakeModelPatcher:
 
 
 def _walk_callables(obj):
-    """Yield callables reachable from obj so deepcopy's memo preserves their identity."""
+    """Yield callables reachable from obj so deepcopy's memo preserves
+    their identity. Assumes acyclic input -- ComfyUI's `model_options` is
+    plain dicts + lists + callables with no back-references.
+    """
     if callable(obj) and not isinstance(obj, (type, dict, list)):
         yield obj
     elif isinstance(obj, dict):

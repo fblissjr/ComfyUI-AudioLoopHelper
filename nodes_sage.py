@@ -367,6 +367,17 @@ def _run_sage_kernel(kernel, q, k, v, heads, mask, skip_reshape, skip_output_res
     return out
 
 
+def _route_mask_aware(mask) -> str:
+    """Single source of truth for `auto_mask_aware`'s routing policy.
+    Masked paths -> fp16_triton (sage's CUDA masked kernels are broken at
+    LTX cross-attn shapes per `internal/design/sage_backlog.md` item 2);
+    unmasked -> sage auto. Used by `_build_sage_fn` to pick the kernel
+    and by `_effective_mode` to report it in the tracer -- keeping both
+    in one function prevents drift if a third rule is added later.
+    """
+    return _TRITON_MODE if mask is not None else "auto"
+
+
 def _build_sage_fn(mode: str) -> Callable:
     """Return a callable matching the signature:
 
@@ -375,19 +386,14 @@ def _build_sage_fn(mode: str) -> Callable:
     sageattention is imported lazily inside the kernel functions, so this
     factory is safe to call in environments where sage isn't installed --
     ImportError surfaces only when an actual attention call is made.
-
-    `auto_mask_aware` dispatches per call: masked paths -> fp16_triton
-    (sage's CUDA masked kernels are broken at LTX cross-attn shapes per
-    `internal/design/sage_backlog.md` item 2), unmasked -> sage auto.
     """
     if mode == _MASK_AWARE_MODE:
         def sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape):
             # Per-call, stateless decision: no closure state to go stale
             # across model offload/reload. The iteration-stamp tracer
             # catches silent disengagement empirically.
-            kernel_name = _TRITON_MODE if mask is not None else "auto"
             return _run_sage_kernel(
-                _SAGE_KERNELS[kernel_name], q, k, v, heads, mask,
+                _SAGE_KERNELS[_route_mask_aware(mask)], q, k, v, heads, mask,
                 skip_reshape, skip_output_reshape,
             )
         return torch.compiler.disable()(sage_fn)
@@ -412,14 +418,12 @@ def _build_sage_fn(mode: str) -> Callable:
 
 def _effective_mode(mode: str, mask) -> str:
     """Return the kernel name that actually dispatched for this call.
-
-    For non-routing modes this equals `mode`. For `auto_mask_aware`, it
-    depends on mask presence: masked -> fp16_triton, unmasked -> auto.
-    Mirror `_build_sage_fn`'s routing policy so the tracer's
-    `effective_mode` field matches what the kernel function did.
+    Non-routing modes return `mode` unchanged; `auto_mask_aware` delegates
+    to `_route_mask_aware` so the tracer's `effective_mode` field matches
+    what `_build_sage_fn` actually ran.
     """
     if mode == _MASK_AWARE_MODE:
-        return _TRITON_MODE if mask is not None else "auto"
+        return _route_mask_aware(mask)
     return mode
 
 

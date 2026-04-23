@@ -22,8 +22,6 @@ import argparse
 import sys
 from pathlib import Path
 
-import orjson
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
@@ -133,8 +131,6 @@ def main() -> int:
         if not target.exists():
             print(f"  missing: {target}")
             continue
-        # Quick JSON parse sanity.
-        orjson.loads(target.read_bytes())
         apply(target)
 
     return 0

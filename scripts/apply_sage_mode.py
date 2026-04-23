@@ -53,9 +53,11 @@ def apply_mode(mode_value: str) -> None:
     for wf_path in sorted(WORKFLOWS_DIR.glob("*.json")):
         wf = orjson.loads(wf_path.read_bytes())
         changed = False
+        found = False
         for n in wf["nodes"]:
             if n.get("id") != SAGE_NODE_ID:
                 continue
+            found = True
             ntype = n.get("type")
 
             if ntype == "PathchSageAttentionKJ":
@@ -85,7 +87,9 @@ def apply_mode(mode_value: str) -> None:
             if n.get("widgets_values") != target_widgets:
                 n["widgets_values"] = target_widgets
                 changed = True
-        if changed:
+        if not found:
+            print(f"  skip (no node {SAGE_NODE_ID}): {wf_path.name}")
+        elif changed:
             wf_path.write_bytes(orjson.dumps(wf, option=orjson.OPT_INDENT_2))
             print(f"  updated {wf_path.name}")
         else:

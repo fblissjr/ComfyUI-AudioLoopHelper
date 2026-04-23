@@ -1,4 +1,4 @@
-Last updated: 2026-04-17
+Last updated: 2026-04-23
 
 # Profiling Guide: End-to-End Audio Loop Profiling
 
@@ -112,13 +112,14 @@ Anywhere before `TensorLoopOpen`. Tap any existing connection point — the
 `trigger` input is untyped passthrough. Easiest targets:
 
 - Output of the `UNETLoader` (MODEL) — intercept before the first model
-  patch node (`PathchSageAttentionKJ` or equivalent).
+  patch node (`AudioLoopHelperSageAttention` in the shipping workflows,
+  `PathchSageAttentionKJ` in user variants that haven't swapped).
 - Output of `AudioLoopController` (any scalar output).
 - Output of an early `FloatConstant` that feeds the window_size.
 
 The output of `ProfileBegin` goes to the consumer that was originally
-connected. E.g., if you tap `UNETLoader → PathchSageAttentionKJ`, rewire
-it as `UNETLoader → ProfileBegin → PathchSageAttentionKJ`.
+connected. E.g., if you tap `UNETLoader → AudioLoopHelperSageAttention`,
+rewire it as `UNETLoader → ProfileBegin → AudioLoopHelperSageAttention`.
 
 ### `ProfileIterStep` placement
 

@@ -1,4 +1,4 @@
-Last updated: 2026-04-23 (post-cleanup: #1318 upgraded to LTXVTiledVAEDecode, #1520 VAE moved to top level, slot 8 IMAGE → LATENT, dead #1590/#1597/Reroute/Note removed, batch encoder stamps frame_rate)
+Last updated: 2026-04-23 (node 268 swapped KJ PathchSageAttentionKJ → AudioLoopHelperSageAttention with auto_mask_aware default; LoopIterationStamp inserted between patch chain and subgraph invoker)
 
 # Pipeline Flow: LATENT-Based Music Video Workflow
 
@@ -65,16 +65,16 @@ Output Assembly:
 - **Outputs**:
   | Output | Type | Connected To |
   |--------|------|-------------|
-  | MODEL | MODEL | #268 PathchSageAttentionKJ (slot 0) |
+  | MODEL | MODEL | #268 AudioLoopHelperSageAttention (slot 0) |
 
-### Node 268 -- PathchSageAttentionKJ (BYPASSED, mode=4)
-- **Type**: `PathchSageAttentionKJ` (KJNodes: `nodes/model_optimization_nodes.py`)
-- **What**: Patches model to use SageAttention for faster inference. Currently bypassed -- model passes through unchanged.
+### Node 268 -- AudioLoopHelperSageAttention
+- **Type**: `AudioLoopHelperSageAttention` (`nodes_sage.py`)
+- **What**: Patches ComfyUI's `optimized_attention` hook with sage kernels. Default mode `auto_mask_aware` routes masked cross-attn calls to `sageattn_qk_int8_pv_fp16_triton` (the one kernel clean on LTX cross-attn+mask) and unmasked self-attn calls to sage `auto`. See `docs/reference/sage_attention.md`.
 - **Inputs**:
   | Input | Type | Source |
   |-------|------|--------|
   | model | MODEL | #414 UNETLoader (slot 0) |
-- **Widgets**: `attention_backend`: `auto`, `force_fp32_output`: `false`
+- **Widgets**: `mode`: `auto_mask_aware`, `fallback_on_error`: `true`
 - **Outputs**:
   | Output | Type | Connected To |
   |--------|------|-------------|
@@ -86,7 +86,7 @@ Output Assembly:
 - **Inputs**:
   | Input | Type | Source |
   |-------|------|--------|
-  | model | MODEL | #268 PathchSageAttentionKJ (slot 0) |
+  | model | MODEL | #268 AudioLoopHelperSageAttention (slot 0) |
 - **Widgets**: `chunk_size`: `2`, `dim`: `4096`
 - **Outputs**:
   | Output | Type | Connected To |
@@ -1123,7 +1123,8 @@ The upscale chain is bypassed because per-loop VAE round-trip quality loss and V
 | `chunk_size` | #504 LTXVChunkFeedForward | `2` | Feed-forward chunking (lower = less VRAM, slower) | 1+ |
 | `dim` | #504 LTXVChunkFeedForward | `4096` | Feed-forward dimension | Model-dependent |
 | `preview_interval` | #503 LTX2SamplingPreviewOverride | `8` | Preview decode every N steps | 1+ |
-| `attention_backend` | #268 PathchSageAttentionKJ | `auto` | Attention implementation (bypassed) | auto, sage, etc. |
+| `mode` | #268 AudioLoopHelperSageAttention | `auto_mask_aware` | Sage kernel routing (masked → triton, unmasked → auto) | disabled, auto_mask_aware, auto, per-arch kernel names |
+| `fallback_on_error` | #268 AudioLoopHelperSageAttention | `true` | Fall back to pytorch SDPA on sage exception | true, false |
 
 ### Attention Tuning
 
@@ -1223,7 +1224,7 @@ Paths are given relative to your ComfyUI install root (`<comfyui>`).
 | 33 | 576 | SetNode | Set_sampler | Sampling Config |
 | 34 | 1271 | SetNode | Set_first_frame_guide_strength | Loop Setup |
 | 35 | 689 | SetNode | Set_window_size_seconds | Audio Prep |
-| 36 | 268 | PathchSageAttentionKJ | PathchSageAttentionKJ (bypassed) | Model Loading |
+| 36 | 268 | AudioLoopHelperSageAttention | AudioLoopHelperSageAttention (auto_mask_aware) | Model Loading |
 | 37 | 228 | SetNode | Set_video_vae | Model Loading |
 | 38 | 252 | SetNode | Set_audio_vae | Model Loading |
 | 39 | 169 | CLIPTextEncode | CLIPTextEncode (positive) | Text Encoding |

@@ -22,8 +22,6 @@ import argparse
 import sys
 from pathlib import Path
 
-import orjson
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
@@ -54,9 +52,12 @@ def _swap_to_kj(node: dict) -> bool:
         return False
     node["type"] = KJ_TYPE
     node["widgets_values"] = list(KJ_DEFAULT_WIDGETS)
+    # Leave ver empty: ComfyUI treats missing/empty ver as "unknown" (no
+    # version warning). Hardcoding a stale hash from the original swap
+    # forward direction would trigger version-mismatch on user's actually-
+    # installed KJNodes.
     node["properties"] = {
         "cnr_id": "comfyui-kjnodes",
-        "ver": "204f6d5aae73b10c0fe2fb26e61405fd6337bb77",
         "Node name for S&R": KJ_TYPE,
     }
     node["mode"] = 0
@@ -118,7 +119,6 @@ def main() -> int:
         if not target.exists():
             print(f"  missing: {target}")
             continue
-        orjson.loads(target.read_bytes())  # sanity
         apply(target, revert=args.revert)
 
     return 0

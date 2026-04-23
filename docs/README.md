@@ -108,7 +108,7 @@ docs/
 | `nag_technical_reference.md` | LTX2_NAG — attention math, widgets, closure-capture mechanism, NAG×CFG composition, troubleshooting. De-black-boxed 2026-04-23. |
 | `pipeline_flow_image.md` | IMAGE workflow summary + diffs vs LATENT. Full node-by-node trace archived to `internal/archive/`. |
 | `pipeline_flow_latent.md` | LATENT workflow node-by-node trace — the primary working baseline. |
-| `sage_attention.md` | `AudioLoopHelperSageAttention` node — parameters, arch-filtered mode combo, fallback behavior, JSONL telemetry schema. Drop-in alternative to KJNodes' `PathchSageAttentionKJ` with fallback, cleanup, and observability. |
+| `sage_attention.md` | `AudioLoopHelperSageAttention` node — parameters, arch-filtered mode combo, mask-aware routing (default `auto_mask_aware`), fallback behavior, JSONL telemetry schema with `effective_mode` field. Now wired into all shipping `_latent*.json` workflows as node 268 (swapped from KJNodes' `PathchSageAttentionKJ`). |
 | `sampler_reference.md` | `euler` vs `euler_ancestral` vs `euler_ancestral_cfg_pp` with ComfyUI + MultimodalGuider source walkthrough. |
 | `standup_system_prompt.md` | LLM system prompt for standup / dialogue schedule generation (music variant ships embedded in analyzer JSON). |
 
