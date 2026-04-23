@@ -291,3 +291,130 @@ def _reset_trace_env(monkeypatch: pytest.MonkeyPatch):
     # Tests should not leak an env var that enables telemetry.
     monkeypatch.delenv("AUDIOLOOPHELPER_SAGE_TRACE", raising=False)
     yield
+
+
+# ---------------------------------------------------------------------------
+# 7. Mask-aware mode. Sage's CUDA mask kernels (fp16_cuda, fp8++) fail at
+# rtol=0.44 on LTX cross-attn; fp16_triton is clean. auto_mask_aware routes
+# masked calls to triton and unmasked calls to the primary kernel.
+# ---------------------------------------------------------------------------
+
+
+def test_all_arches_include_auto_mask_aware():
+    m = _mod()
+    for arch in ("sm80", "sm86", "sm87", "sm89", "sm90", "sm100", "sm120", "sm121", None):
+        assert "auto_mask_aware" in m.build_mode_list(arch), arch
+
+
+def test_auto_mask_aware_routes_masked_call_to_triton_kernel(monkeypatch: pytest.MonkeyPatch):
+    m = _mod()
+    dispatches: list[str] = []
+
+    def fake_triton(q, k, v, **kw):
+        dispatches.append("triton")
+        return v  # any shape-compatible tensor
+
+    def fake_auto(q, k, v, **kw):
+        dispatches.append("auto")
+        return v
+
+    monkeypatch.setitem(m._SAGE_KERNELS, "sageattn_qk_int8_pv_fp16_triton", fake_triton)
+    monkeypatch.setitem(m._SAGE_KERNELS, "auto", fake_auto)
+
+    sage_fn = m._build_sage_fn("auto_mask_aware")
+    q = _fake_q(); k, v = _fake_kv(q)
+    mask = torch.zeros(1, q.shape[1], q.shape[1])
+
+    sage_fn(q, k, v, heads=4, mask=mask, skip_reshape=False, skip_output_reshape=False)
+    assert dispatches == ["triton"]
+
+
+def test_auto_mask_aware_routes_unmasked_call_to_primary_kernel(monkeypatch: pytest.MonkeyPatch):
+    m = _mod()
+    dispatches: list[str] = []
+
+    def fake_triton(q, k, v, **kw):
+        dispatches.append("triton")
+        return v
+
+    def fake_auto(q, k, v, **kw):
+        dispatches.append("auto")
+        return v
+
+    monkeypatch.setitem(m._SAGE_KERNELS, "sageattn_qk_int8_pv_fp16_triton", fake_triton)
+    monkeypatch.setitem(m._SAGE_KERNELS, "auto", fake_auto)
+
+    sage_fn = m._build_sage_fn("auto_mask_aware")
+    q = _fake_q(); k, v = _fake_kv(q)
+
+    sage_fn(q, k, v, heads=4, mask=None, skip_reshape=False, skip_output_reshape=False)
+    assert dispatches == ["auto"]
+
+
+def test_override_tracer_records_effective_mode_for_mask_aware(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    m = _mod()
+
+    def fake_sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape):
+        return v
+
+    log = tmp_path / "sage_test.jsonl"
+    tracer = m.SageTracer(log_path=log)
+    override = m.make_sage_override(
+        sage_fn=fake_sage_fn,
+        pytorch_fn=lambda *a, **kw: None,
+        mode="auto_mask_aware",
+        fallback_on_error=True,
+        tracer=tracer,
+        logger=m.SageFallbackLogger(emit=lambda _: None),
+    )
+
+    q = _fake_q(); k, v = _fake_kv(q)
+    mask = torch.zeros(1, 1, q.shape[1])
+    override(None, q, k, v, heads=4, mask=mask)       # masked call
+    override(None, q, k, v, heads=4, mask=None)       # unmasked call
+    tracer.flush_summary()
+
+    rows = [orjson.loads(l) for l in log.read_text().splitlines() if l]
+    per_call = [r for r in rows if "event" not in r]
+    assert len(per_call) == 2
+    # Masked call effective_mode == triton; unmasked == configured primary.
+    assert per_call[0]["mode"] == "auto_mask_aware"
+    assert per_call[0]["effective_mode"] == "sageattn_qk_int8_pv_fp16_triton"
+    assert per_call[1]["mode"] == "auto_mask_aware"
+    assert per_call[1]["effective_mode"] != "sageattn_qk_int8_pv_fp16_triton"
+
+
+def test_explicit_mode_tracer_effective_mode_matches_configured_mode(tmp_path: Path):
+    # Regression: non-mask-aware modes must report effective_mode == mode
+    # for both masked and unmasked calls.
+    m = _mod()
+
+    def fake_sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape):
+        return v
+
+    log = tmp_path / "sage_explicit.jsonl"
+    tracer = m.SageTracer(log_path=log)
+    override = m.make_sage_override(
+        sage_fn=fake_sage_fn,
+        pytorch_fn=lambda *a, **kw: None,
+        mode="sageattn_qk_int8_pv_fp8_cuda++",
+        fallback_on_error=True,
+        tracer=tracer,
+        logger=m.SageFallbackLogger(emit=lambda _: None),
+    )
+    q = _fake_q(); k, v = _fake_kv(q)
+    override(None, q, k, v, heads=4, mask=torch.zeros(1, 1, q.shape[1]))
+    override(None, q, k, v, heads=4, mask=None)
+    tracer.flush_summary()
+
+    rows = [orjson.loads(l) for l in log.read_text().splitlines() if l]
+    per_call = [r for r in rows if "event" not in r]
+    assert all(r["effective_mode"] == "sageattn_qk_int8_pv_fp8_cuda++" for r in per_call)
+
+
+def test_default_mode_is_mask_aware():
+    """auto_mask_aware is the right default: fp8++ on the masked cross-attn
+    path produces rtol=0.44 vs SDPA on LTX shapes. auto_mask_aware routes
+    around this while keeping fp8++ speed on self-attn."""
+    m = _mod()
+    assert m._DEFAULT_MODE == "auto_mask_aware"

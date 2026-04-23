@@ -92,17 +92,27 @@ except ImportError:
 # Arch detection + mode-list construction
 # ---------------------------------------------------------------------------
 
-_MODES_DEFAULT = ["disabled", "auto", "sageattn_qk_int8_pv_fp16_triton"]
+_TRITON_MODE = "sageattn_qk_int8_pv_fp16_triton"
+_MASK_AWARE_MODE = "auto_mask_aware"
+_DEFAULT_MODE = _MASK_AWARE_MODE
+
+# Mask-aware is listed first after disabled/auto because it is the safe
+# default per `internal/design/sage_backlog.md` item 2: sage's CUDA mask
+# kernels (fp16_cuda, fp8++) fail at rtol=0.44 on LTX cross-attn, while
+# fp16_triton is clean. auto_mask_aware routes around the bug without
+# giving up self-attn speed. Always available: fp16_triton is JIT so it
+# runs on any arch.
+_MODES_DEFAULT = ["disabled", _MASK_AWARE_MODE, "auto", _TRITON_MODE]
 
 _MODES_BY_ARCH: dict[str, list[str]] = {
-    "sm80": ["disabled", "auto", "sageattn_qk_int8_pv_fp16_cuda", "sageattn_qk_int8_pv_fp16_triton"],
-    "sm86": ["disabled", "auto", "sageattn_qk_int8_pv_fp16_cuda", "sageattn_qk_int8_pv_fp16_triton"],
-    "sm87": ["disabled", "auto", "sageattn_qk_int8_pv_fp16_cuda", "sageattn_qk_int8_pv_fp16_triton"],
-    "sm89": ["disabled", "auto", "sageattn_qk_int8_pv_fp16_cuda", "sageattn_qk_int8_pv_fp8_cuda++", "sageattn_qk_int8_pv_fp16_triton"],
-    "sm90": ["disabled", "auto", "sageattn_qk_int8_pv_fp8_cuda_sm90", "sageattn_qk_int8_pv_fp16_triton"],
-    "sm100": ["disabled", "auto", "sageattn3", "sageattn3_per_block_mean", "sageattn_qk_int8_pv_fp16_triton"],
-    "sm120": ["disabled", "auto", "sageattn3", "sageattn3_per_block_mean", "sageattn_qk_int8_pv_fp16_triton"],
-    "sm121": ["disabled", "auto", "sageattn3", "sageattn3_per_block_mean", "sageattn_qk_int8_pv_fp16_triton"],
+    "sm80": ["disabled", _MASK_AWARE_MODE, "auto", "sageattn_qk_int8_pv_fp16_cuda", _TRITON_MODE],
+    "sm86": ["disabled", _MASK_AWARE_MODE, "auto", "sageattn_qk_int8_pv_fp16_cuda", _TRITON_MODE],
+    "sm87": ["disabled", _MASK_AWARE_MODE, "auto", "sageattn_qk_int8_pv_fp16_cuda", _TRITON_MODE],
+    "sm89": ["disabled", _MASK_AWARE_MODE, "auto", "sageattn_qk_int8_pv_fp16_cuda", "sageattn_qk_int8_pv_fp8_cuda++", _TRITON_MODE],
+    "sm90": ["disabled", _MASK_AWARE_MODE, "auto", "sageattn_qk_int8_pv_fp8_cuda_sm90", _TRITON_MODE],
+    "sm100": ["disabled", _MASK_AWARE_MODE, "auto", "sageattn3", "sageattn3_per_block_mean", _TRITON_MODE],
+    "sm120": ["disabled", _MASK_AWARE_MODE, "auto", "sageattn3", "sageattn3_per_block_mean", _TRITON_MODE],
+    "sm121": ["disabled", _MASK_AWARE_MODE, "auto", "sageattn3", "sageattn3_per_block_mean", _TRITON_MODE],
 }
 
 
@@ -223,6 +233,7 @@ class SageTracer:
         fell_back: bool,
         elapsed_us: float,
         iter_idx: int | None = None,
+        effective_mode: str | None = None,
     ) -> None:
         if self._fh is None:
             return
@@ -236,6 +247,11 @@ class SageTracer:
             "shape": list(shape),
             "has_mask": has_mask,
             "mode": mode,
+            # effective_mode reflects the kernel that actually dispatched.
+            # Equal to mode for non-routing modes; differs on mask-aware
+            # calls. Reading the trace without this field hides the
+            # "mask-aware stopped being mask-aware" failure mode.
+            "effective_mode": effective_mode if effective_mode is not None else mode,
             "fell_back": fell_back,
             "elapsed_us": round(elapsed_us, 2),
         }).decode() + "\n")
@@ -315,51 +331,73 @@ _SAGE_KERNELS: dict[str, Callable] = {
 }
 
 
+def _run_sage_kernel(kernel, q, k, v, heads, mask, skip_reshape, skip_output_reshape):
+    """Apply the reshape/mask prep that mirrors
+    `comfy.ldm.modules.attention.attention_sage:532-575`, then dispatch to
+    `kernel(q, k, v, is_causal=False, attn_mask=mask, tensor_layout=...)`.
+
+    Split out of `_build_sage_fn` so the mask-aware path can pick the
+    kernel per-call without duplicating the reshape logic.
+    """
+    in_dtype = v.dtype
+    if q.dtype == torch.float32 or k.dtype == torch.float32 or v.dtype == torch.float32:
+        q, k, v = q.to(torch.float16), k.to(torch.float16), v.to(torch.float16)
+    if skip_reshape:
+        b, _, _, dim_head = q.shape
+        tensor_layout = "HND"
+    else:
+        b, _, dim_head = q.shape
+        dim_head //= heads
+        q, k, v = (t.view(b, -1, heads, dim_head) for t in (q, k, v))
+        tensor_layout = "NHD"
+    if mask is not None:
+        if mask.ndim == 2:
+            mask = mask.unsqueeze(0)
+        if mask.ndim == 3:
+            mask = mask.unsqueeze(1)
+    out = kernel(q, k, v, is_causal=False, attn_mask=mask, tensor_layout=tensor_layout).to(in_dtype)
+    if tensor_layout == "HND":
+        if not skip_output_reshape:
+            out = out.transpose(1, 2).reshape(b, -1, heads * dim_head)
+    else:
+        if skip_output_reshape:
+            out = out.transpose(1, 2)
+        else:
+            out = out.reshape(b, -1, heads * dim_head)
+    return out
+
+
 def _build_sage_fn(mode: str) -> Callable:
     """Return a callable matching the signature:
 
         sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape) -> Tensor
 
-    Reshapes q/k/v the same way `comfy.ldm.modules.attention.attention_sage`
-    does, then dispatches to the chosen kernel. sageattention is imported
-    lazily inside the kernel functions, so this factory is safe to call in
-    environments where sage isn't installed -- ImportError surfaces only
-    when an actual attention call is made.
+    sageattention is imported lazily inside the kernel functions, so this
+    factory is safe to call in environments where sage isn't installed --
+    ImportError surfaces only when an actual attention call is made.
+
+    `auto_mask_aware` dispatches per call: masked paths -> fp16_triton
+    (sage's CUDA masked kernels are broken at LTX cross-attn shapes per
+    `internal/design/sage_backlog.md` item 2), unmasked -> sage auto.
     """
+    if mode == _MASK_AWARE_MODE:
+        def sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape):
+            # Per-call, stateless decision: no closure state to go stale
+            # across model offload/reload. The iteration-stamp tracer
+            # catches silent disengagement empirically.
+            kernel_name = _TRITON_MODE if mask is not None else "auto"
+            return _run_sage_kernel(
+                _SAGE_KERNELS[kernel_name], q, k, v, heads, mask,
+                skip_reshape, skip_output_reshape,
+            )
+        return torch.compiler.disable()(sage_fn)
+
     kernel = _SAGE_KERNELS.get(mode)
     if kernel is None:
         raise ValueError(f"unknown sage mode: {mode!r}")
 
     def sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape):
-        # Reshape mirrors comfy.ldm.modules.attention.attention_sage:532-575.
-        # We can't delegate to that function because it hardcodes sageattn();
-        # we need the same prep but with a mode-dispatched kernel.
-        in_dtype = v.dtype
-        if q.dtype == torch.float32 or k.dtype == torch.float32 or v.dtype == torch.float32:
-            q, k, v = q.to(torch.float16), k.to(torch.float16), v.to(torch.float16)
-        if skip_reshape:
-            b, _, _, dim_head = q.shape
-            tensor_layout = "HND"
-        else:
-            b, _, dim_head = q.shape
-            dim_head //= heads
-            q, k, v = (t.view(b, -1, heads, dim_head) for t in (q, k, v))
-            tensor_layout = "NHD"
-        if mask is not None:
-            if mask.ndim == 2:
-                mask = mask.unsqueeze(0)
-            if mask.ndim == 3:
-                mask = mask.unsqueeze(1)
-        out = kernel(q, k, v, is_causal=False, attn_mask=mask, tensor_layout=tensor_layout).to(in_dtype)
-        if tensor_layout == "HND":
-            if not skip_output_reshape:
-                out = out.transpose(1, 2).reshape(b, -1, heads * dim_head)
-        else:
-            if skip_output_reshape:
-                out = out.transpose(1, 2)
-            else:
-                out = out.reshape(b, -1, heads * dim_head)
-        return out
+        return _run_sage_kernel(kernel, q, k, v, heads, mask, skip_reshape, skip_output_reshape)
 
     # Default to disabling torch.compile around the sage call. The sage
     # fork's torch.compile support is recent and thin; wrap to avoid
@@ -371,6 +409,19 @@ def _build_sage_fn(mode: str) -> Callable:
 # ---------------------------------------------------------------------------
 # The override factory
 # ---------------------------------------------------------------------------
+
+def _effective_mode(mode: str, mask) -> str:
+    """Return the kernel name that actually dispatched for this call.
+
+    For non-routing modes this equals `mode`. For `auto_mask_aware`, it
+    depends on mask presence: masked -> fp16_triton, unmasked -> auto.
+    Mirror `_build_sage_fn`'s routing policy so the tracer's
+    `effective_mode` field matches what the kernel function did.
+    """
+    if mode == _MASK_AWARE_MODE:
+        return _TRITON_MODE if mask is not None else "auto"
+    return mode
+
 
 def make_sage_override(
     *,
@@ -436,6 +487,7 @@ def make_sage_override(
                 fell_back=fell_back,
                 elapsed_us=(time.perf_counter() - t0) * 1e6,
                 iter_idx=_iter_from_kwargs(kwargs),
+                effective_mode=_effective_mode(mode, mask),
             )
         return out
 
@@ -473,12 +525,15 @@ class AudioLoopHelperSageAttention(io.ComfyNode):
                 io.Combo.Input(
                     "mode",
                     options=_MODE_LIST,
-                    default="auto",
+                    default=_DEFAULT_MODE,
                     tooltip=(
-                        "Sage kernel to use. 'auto' delegates to sage's "
-                        "own dispatch (recommended). 'disabled' is a "
-                        "no-op. Other options are explicit kernel choices "
-                        "filtered to those your GPU supports."
+                        "Sage kernel to use. 'auto_mask_aware' (default) "
+                        "routes masked cross-attn to fp16_triton (the one "
+                        "kernel that handles LTX cross-attn cleanly) and "
+                        "unmasked self-attn to sage auto. 'auto' delegates "
+                        "fully to sage's dispatch. 'disabled' is a no-op. "
+                        "Other options are explicit kernel choices filtered "
+                        "to those your GPU supports."
                     ),
                 ),
                 io.Boolean.Input(

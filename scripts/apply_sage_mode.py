@@ -34,6 +34,8 @@ WORKFLOWS_DIR = REPO_ROOT / "example_workflows"
 SAGE_NODE_ID = 268
 
 MODE_ALIASES = {
+    "mask_aware":   "auto_mask_aware",
+    "ma":           "auto_mask_aware",
     "fp16_cuda":    "sageattn_qk_int8_pv_fp16_cuda",
     "fp16c":        "sageattn_qk_int8_pv_fp16_cuda",
     "fp16_triton":  "sageattn_qk_int8_pv_fp16_triton",
@@ -52,16 +54,37 @@ def apply_mode(mode_value: str) -> None:
         wf = orjson.loads(wf_path.read_bytes())
         changed = False
         for n in wf["nodes"]:
-            if n.get("id") == SAGE_NODE_ID and n.get("type") == "PathchSageAttentionKJ":
-                # mode=4 only when explicitly disabling the sage patch itself.
+            if n.get("id") != SAGE_NODE_ID:
+                continue
+            ntype = n.get("type")
+
+            if ntype == "PathchSageAttentionKJ":
+                # KJ uses node-mode=4 to disable and has no "disabled" widget.
+                # auto_mask_aware is our mode; KJ has no equivalent, reject.
+                if mode_value == "auto_mask_aware":
+                    print(f"  skip (KJ node has no auto_mask_aware): {wf_path.name}")
+                    continue
                 target_node_mode = 4 if mode_value == "disabled" else 0
                 target_widgets = [mode_value, False]  # [sage_mode, allow_compile]
-                if n.get("mode") != target_node_mode:
-                    n["mode"] = target_node_mode
-                    changed = True
-                if n.get("widgets_values") != target_widgets:
-                    n["widgets_values"] = target_widgets
-                    changed = True
+
+            elif ntype == "AudioLoopHelperSageAttention":
+                # Our node disables via widget value, not node mode.
+                # widgets: [mode, fallback_on_error]. Preserve fallback flag.
+                existing = n.get("widgets_values") or ["auto_mask_aware", True]
+                fallback_flag = existing[1] if len(existing) >= 2 else True
+                target_node_mode = 0
+                target_widgets = [mode_value, fallback_flag]
+
+            else:
+                print(f"  skip (unexpected type {ntype!r}): {wf_path.name}")
+                continue
+
+            if n.get("mode") != target_node_mode:
+                n["mode"] = target_node_mode
+                changed = True
+            if n.get("widgets_values") != target_widgets:
+                n["widgets_values"] = target_widgets
+                changed = True
         if changed:
             wf_path.write_bytes(orjson.dumps(wf, option=orjson.OPT_INDENT_2))
             print(f"  updated {wf_path.name}")

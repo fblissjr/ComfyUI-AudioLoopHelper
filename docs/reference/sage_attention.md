@@ -1,4 +1,4 @@
-Last updated: 2026-04-23 (iteration stamp wired)
+Last updated: 2026-04-23 (mask-aware routing shipped as default)
 
 # AudioLoopHelperSageAttention -- Reference
 
@@ -32,38 +32,51 @@ input model is never mutated.
 
 ### mode (Combo)
 
-Default: `"auto"`. The combo is **arch-filtered at node-import time**
-via `sageattention.core.get_cuda_arch_versions()` — you only see modes
-that can actually run on the detected GPU. No Blackwell-only options
-on Ada, no sm90 options on Ampere.
+Default: `"auto_mask_aware"`. The combo is **arch-filtered at
+node-import time** via `sageattention.core.get_cuda_arch_versions()` —
+you only see modes that can actually run on the detected GPU. No
+Blackwell-only options on Ada, no sm90 options on Ampere.
 
 Arch mappings in `nodes_sage.py::_MODES_BY_ARCH`:
 
 | Detected arch | Options shown (in combo order) |
 |---|---|
-| sm80 / sm86 / sm87 (Ampere) | disabled, auto, `sageattn_qk_int8_pv_fp16_cuda`, `sageattn_qk_int8_pv_fp16_triton` |
-| **sm89 (Ada / RTX 40xx)** | disabled, auto, `sageattn_qk_int8_pv_fp16_cuda`, `sageattn_qk_int8_pv_fp8_cuda++`, `sageattn_qk_int8_pv_fp16_triton` |
-| sm90 (Hopper) | disabled, auto, `sageattn_qk_int8_pv_fp8_cuda_sm90`, `sageattn_qk_int8_pv_fp16_triton` |
-| sm100 / sm120 / sm121 (Blackwell) | disabled, auto, `sageattn3`, `sageattn3_per_block_mean`, `sageattn_qk_int8_pv_fp16_triton` |
-| unknown / sage not importable | disabled, auto, `sageattn_qk_int8_pv_fp16_triton` |
+| sm80 / sm86 / sm87 (Ampere) | disabled, **auto_mask_aware**, auto, `sageattn_qk_int8_pv_fp16_cuda`, `sageattn_qk_int8_pv_fp16_triton` |
+| **sm89 (Ada / RTX 40xx)** | disabled, **auto_mask_aware**, auto, `sageattn_qk_int8_pv_fp16_cuda`, `sageattn_qk_int8_pv_fp8_cuda++`, `sageattn_qk_int8_pv_fp16_triton` |
+| sm90 (Hopper) | disabled, **auto_mask_aware**, auto, `sageattn_qk_int8_pv_fp8_cuda_sm90`, `sageattn_qk_int8_pv_fp16_triton` |
+| sm100 / sm120 / sm121 (Blackwell) | disabled, **auto_mask_aware**, auto, `sageattn3`, `sageattn3_per_block_mean`, `sageattn_qk_int8_pv_fp16_triton` |
+| unknown / sage not importable | disabled, **auto_mask_aware**, auto, `sageattn_qk_int8_pv_fp16_triton` |
 
 Semantics:
 
+- **`auto_mask_aware`** (default) — per-call routing: masked paths
+  (LTX cross-attn carries text-padding mask) dispatch to
+  `sageattn_qk_int8_pv_fp16_triton`; unmasked paths (self-attn) delegate
+  to sage's `auto`. Correct default because sage's CUDA mask kernels
+  (fp16_cuda, fp8_cuda, fp8++) all produce rtol up to 0.94 vs SDPA on
+  LTX's cross-attn across seq_kv = 32–1024 — the CUDA mask path has a
+  seq-dependent bug; only the Triton path is clean (rtol ≈ 0.039).
+  Stateless per-call decision: no closure caches, no offload-survival
+  risk beyond the base override. Full measurement in
+  `internal/design/sage_backlog.md` (item 2, retired).
 - **`disabled`** — no-op, returns the input model unchanged.
 - **`auto`** — calls `sageattention.sageattn()` and lets sage's own
   dispatch pick the best kernel. On sm89 + CUDA >= 12.8 this lands on
   `sageattn_qk_int8_pv_fp8_cuda` with `pv_accum_dtype="fp32+fp16"`
-  (SageAttention2++). Recommended for the default path.
+  (SageAttention2++). **Not recommended for LTX workflows that hit
+  masked cross-attn** — use `auto_mask_aware` instead. Kept for
+  non-LTX workflows and for A/B comparison.
 - **`sageattn_qk_int8_pv_fp16_cuda`** — INT8 QK + FP16 PV, fp32
-  accumulator. Safer than the fp8 paths (no fp8 overflow risk). Use
-  if the auto/fp8++ path shows accuracy loss on your workflow.
+  accumulator. Broken on LTX cross-attn+mask (rtol 0.26–0.94 across
+  seq_kv). Safe for self-attn only.
 - **`sageattn_qk_int8_pv_fp8_cuda++`** — INT8 QK + FP8 PV, fp32+fp16
-  accumulator (SageAttention2++). Fastest on Ada. Equivalent to `auto`
-  on Ada + CUDA >= 12.8 but explicit — won't drift if you move to a
-  different arch.
+  accumulator (SageAttention2++). Fastest on Ada for self-attn.
+  Broken on LTX cross-attn+mask (same range as fp16_cuda).
 - **`sageattn_qk_int8_pv_fp16_triton`** — JIT Triton; always
-  available; slowest. Useful as a sanity check if you suspect a CUDA
-  extension issue.
+  available. Only mask-clean kernel on any arch. Small (~100ms–1s)
+  JIT-compile cost on first use of a new shape visible as
+  `elapsed_us` spikes in the trace; warm-shape performance is 2.4–3.9×
+  SDPA depending on shape.
 - **`sageattn3*`** — Blackwell-only. Not shown on Ada.
 
 ### fallback_on_error (BOOLEAN, default True)
@@ -118,11 +131,19 @@ Each attention call:
   "iter": null,
   "shape": [1, 31776, 2048],
   "has_mask": false,
-  "mode": "sageattn_qk_int8_pv_fp8_cuda++",
+  "mode": "auto_mask_aware",
+  "effective_mode": "auto",
   "fell_back": false,
   "elapsed_us": 842.5
 }
 ```
+
+`mode` is the configured widget value; `effective_mode` is the kernel
+that actually dispatched. For non-routing modes they're identical. For
+`auto_mask_aware` they diverge: `effective_mode=sageattn_qk_int8_pv_fp16_triton`
+on masked calls, `effective_mode=auto` on unmasked. A trace where
+`mode=auto_mask_aware` but `effective_mode` never changes means the
+routing isn't firing — file a bug.
 
 On model cleanup, a summary row:
 
@@ -194,4 +215,8 @@ flipping back if anything regresses.
 - `<sage_fork_repo>/README.md` — the sage build used by this node.
   Fork of `woct0rdho/SageAttention` (which forks `thu-ml/SageAttention`).
   Includes a local `build.sh` hardened to install into an explicit
-  `VIRTUAL_ENV`.
+  `VIRTUAL_ENV`. **We own this fork**, so mask-aware routing here and
+  future kernel-side fixes (e.g. the fp16_cuda mask bug) can be
+  co-optimized rather than blocked on upstream review. Measurement
+  artifact: `<sage_fork_repo>/tests/test_sageattn_ltx_shapes.py` (the
+  seq_kv sweep proving all CUDA mask kernels fail vs triton).

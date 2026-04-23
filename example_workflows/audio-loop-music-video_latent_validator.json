@@ -1821,7 +1821,7 @@
     },
     {
       "id": 268,
-      "type": "PathchSageAttentionKJ",
+      "type": "AudioLoopHelperSageAttention",
       "pos": [
         -1363.844464482797,
         4439.804943637588
@@ -1850,13 +1850,11 @@
         }
       ],
       "properties": {
-        "cnr_id": "comfyui-kjnodes",
-        "ver": "204f6d5aae73b10c0fe2fb26e61405fd6337bb77",
-        "Node name for S&R": "PathchSageAttentionKJ"
+        "Node name for S&R": "AudioLoopHelperSageAttention"
       },
       "widgets_values": [
-        "sageattn_qk_int8_pv_fp8_cuda++",
-        false
+        "auto_mask_aware",
+        true
       ]
     },
     {

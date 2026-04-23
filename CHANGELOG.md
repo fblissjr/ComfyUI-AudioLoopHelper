@@ -6,6 +6,24 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **`AudioLoopHelperSageAttention` default mode is now `auto_mask_aware`**
+  (was `auto`). Routes masked cross-attn calls to
+  `sageattn_qk_int8_pv_fp16_triton` and unmasked self-attn calls to
+  sage `auto`. Driven by measurement in
+  `<sage_fork_repo>/tests/test_sageattn_ltx_shapes.py` showing that all
+  three CUDA mask kernels (fp16_cuda, fp8_cuda, fp8++) produce
+  rtol 0.26–0.94 vs SDPA across seq_kv = 32–1024 on LTX shapes,
+  while fp16_triton stays clean at rtol ≈ 0.039. Stateless per-call
+  routing — no offload-state risk beyond the base override. Tracer
+  JSONL rows now include an `effective_mode` field so a trace can
+  confirm the routing is firing. 6 new tests.
+- **Shipping `_latent*.json` workflows swapped from KJNodes'
+  `PathchSageAttentionKJ` to `AudioLoopHelperSageAttention`** via
+  `scripts/apply_audioloophelper_sage.py [--all]`. Reversible with
+  `--revert`. `scripts/apply_sage_mode.py` extended to handle both
+  node types; `mask_aware` added as shorthand for `auto_mask_aware`.
+
 ### Added
 - **`LoopIterationStamp` node** (`nodes.py`). MODEL passthrough that
   writes `transformer_options["iteration"] = int(current_iteration)`.
