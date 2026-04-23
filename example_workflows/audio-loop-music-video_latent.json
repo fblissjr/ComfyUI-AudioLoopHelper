@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1616,
-  "last_link_id": 3049,
+  "last_node_id": 1617,
+  "last_link_id": 3052,
   "nodes": [
     {
       "id": 252,
@@ -2108,7 +2108,7 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            2043
+            3050
           ]
         }
       ],
@@ -2122,39 +2122,6 @@
       ],
       "color": "#2a363b",
       "bgcolor": "#3f5159"
-    },
-    {
-      "id": 618,
-      "type": "Reroute",
-      "pos": [
-        2183.421530702164,
-        4372.700464729356
-      ],
-      "size": [
-        75,
-        26
-      ],
-      "flags": {},
-      "order": 77,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "",
-          "type": "*",
-          "link": 2515
-        }
-      ],
-      "outputs": [
-        {
-          "name": "",
-          "type": "IMAGE",
-          "links": []
-        }
-      ],
-      "properties": {
-        "showOutputText": false,
-        "horizontal": false
-      }
     },
     {
       "id": 578,
@@ -2557,7 +2524,7 @@
     },
     {
       "id": 1318,
-      "type": "VAEDecode",
+      "type": "LTXVTiledVAEDecode",
       "pos": [
         1678.3910857117328,
         4130.358701678818
@@ -2571,14 +2538,14 @@
       "mode": 0,
       "inputs": [
         {
-          "name": "samples",
-          "type": "LATENT",
-          "link": 2505
-        },
-        {
           "name": "vae",
           "type": "VAE",
           "link": 2507
+        },
+        {
+          "name": "latents",
+          "type": "LATENT",
+          "link": 2505
         }
       ],
       "outputs": [
@@ -2586,17 +2553,23 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            2506,
-            2515
+            2506
           ]
         }
       ],
       "properties": {
-        "cnr_id": "comfy-core",
+        "cnr_id": "comfyui-ltxvideo",
         "ver": "0.16.4",
-        "Node name for S&R": "VAEDecode"
+        "Node name for S&R": "LTXVTiledVAEDecode"
       },
-      "widgets_values": []
+      "widgets_values": [
+        2,
+        2,
+        1,
+        true,
+        "auto",
+        "auto"
+      ]
     },
     {
       "id": 245,
@@ -3081,7 +3054,8 @@
           "name": "VAE",
           "type": "VAE",
           "links": [
-            2037
+            2037,
+            3051
           ]
         }
       ],
@@ -3296,9 +3270,9 @@
         },
         {
           "label": "init_image",
-          "name": "num_guides.image_1",
-          "type": "IMAGE",
-          "link": 2043
+          "name": "guide_latent",
+          "type": "LATENT",
+          "link": 3052
         },
         {
           "label": "Audio VAE",
@@ -3414,29 +3388,6 @@
         "ver": "0.16.2"
       },
       "widgets_values": []
-    },
-    {
-      "id": 1585,
-      "type": "Note",
-      "pos": [
-        1257.7226774687679,
-        4726.852013998611
-      ],
-      "size": [
-        527.2480606674178,
-        120.97932452218993
-      ],
-      "flags": {},
-      "order": 31,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [],
-      "properties": {},
-      "widgets_values": [
-        "0:38-1:15: video of a woman passionately singing in a dimly basement workshop with strings of colorful mismatched Christmas lights, wide shot showing the full workshop space, energetic performance\n1:15-1:45: video of a woman passionately singing in a dimly basement workshop, extreme close-up of face and hands, emotional performance, soft warm Christmas light bokeh\n1:45+: video of a woman passionately singing in a dimly basement workshop with strings of colorful mismatched Christmas lights, medium shot, gentle swaying, final verse"
-      ],
-      "color": "#432",
-      "bgcolor": "#653"
     },
     {
       "id": 1539,
@@ -3858,9 +3809,7 @@
           "name": "VAE",
           "type": "VAE",
           "links": [
-            2962,
             2971,
-            2980,
             2988
           ]
         }
@@ -3909,49 +3858,6 @@
       "title": "Load Spatial Upscaler 2x"
     },
     {
-      "id": 1590,
-      "type": "VAEEncode",
-      "pos": [
-        4500,
-        5800
-      ],
-      "size": [
-        270,
-        100
-      ],
-      "flags": {},
-      "order": 90,
-      "mode": 4,
-      "inputs": [
-        {
-          "name": "pixels",
-          "type": "IMAGE",
-          "link": null
-        },
-        {
-          "name": "vae",
-          "type": "VAE",
-          "link": 2962
-        }
-      ],
-      "outputs": [
-        {
-          "name": "LATENT",
-          "type": "LATENT",
-          "links": [
-            2969
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.18.5",
-        "Node name for S&R": "VAEEncode"
-      },
-      "widgets_values": [],
-      "title": "Encode for Upscale"
-    },
-    {
       "id": 1591,
       "type": "LTXVLatentUpsampler",
       "pos": [
@@ -3969,7 +3875,7 @@
         {
           "name": "samples",
           "type": "LATENT",
-          "link": 2969
+          "link": null
         },
         {
           "name": "upscale_model",
@@ -3986,9 +3892,7 @@
         {
           "name": "LATENT",
           "type": "LATENT",
-          "links": [
-            2982
-          ]
+          "links": []
         }
       ],
       "properties": {
@@ -3998,56 +3902,6 @@
       },
       "widgets_values": [],
       "title": "Spatial Upscale 2x"
-    },
-    {
-      "id": 1597,
-      "type": "LTXVTiledVAEDecode",
-      "pos": [
-        5460,
-        6000
-      ],
-      "size": [
-        270,
-        100
-      ],
-      "flags": {},
-      "order": 90,
-      "mode": 4,
-      "inputs": [
-        {
-          "name": "vae",
-          "type": "VAE",
-          "link": 2980
-        },
-        {
-          "name": "latents",
-          "type": "LATENT",
-          "link": 2982
-        }
-      ],
-      "outputs": [
-        {
-          "name": "image",
-          "type": "IMAGE",
-          "links": [
-            2979
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "ComfyUI-LTXVideo",
-        "ver": "0.18.5",
-        "Node name for S&R": "LTXVTiledVAEDecode"
-      },
-      "widgets_values": [
-        2,
-        2,
-        1,
-        true,
-        "auto",
-        "auto"
-      ],
-      "title": "Decode Upscaled"
     },
     {
       "id": 1604,
@@ -4319,6 +4173,48 @@
       "widgets_values": [
         0
       ]
+    },
+    {
+      "id": 1617,
+      "type": "VAEEncode",
+      "pos": [
+        2785.635219733824,
+        4649.355894068363
+      ],
+      "size": [
+        210,
+        46
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pixels",
+          "type": "IMAGE",
+          "link": 3050
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 3051
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            3052
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "Node name for S&R": "VAEEncode"
+      },
+      "title": "VAE Encode (init image \u2192 guide latent)",
+      "widgets_values": []
     }
   ],
   "links": [
@@ -4699,14 +4595,6 @@
       "FLOAT"
     ],
     [
-      2043,
-      651,
-      0,
-      843,
-      8,
-      "IMAGE"
-    ],
-    [
       2044,
       599,
       0,
@@ -4777,14 +4665,6 @@
       245,
       0,
       "LATENT"
-    ],
-    [
-      2515,
-      1318,
-      0,
-      618,
-      0,
-      "IMAGE"
     ],
     [
       2518,
@@ -5043,14 +4923,6 @@
       "INT"
     ],
     [
-      2962,
-      1598,
-      0,
-      1590,
-      1,
-      "VAE"
-    ],
-    [
       2971,
       1598,
       0,
@@ -5059,44 +4931,12 @@
       "VAE"
     ],
     [
-      2980,
-      1598,
-      0,
-      1597,
-      0,
-      "VAE"
-    ],
-    [
-      2969,
-      1590,
-      0,
-      1591,
-      0,
-      "LATENT"
-    ],
-    [
       2967,
       1589,
       0,
       1591,
       1,
       "LATENT_UPSCALE_MODEL"
-    ],
-    [
-      2979,
-      1597,
-      0,
-      617,
-      0,
-      "IMAGE"
-    ],
-    [
-      2982,
-      1591,
-      0,
-      1597,
-      1,
-      "LATENT"
     ],
     [
       2988,
@@ -5233,6 +5073,30 @@
       640,
       0,
       "AUDIO"
+    ],
+    [
+      3050,
+      651,
+      0,
+      1617,
+      0,
+      "IMAGE"
+    ],
+    [
+      3051,
+      619,
+      0,
+      1617,
+      1,
+      "VAE"
+    ],
+    [
+      3052,
+      1617,
+      0,
+      843,
+      8,
+      "LATENT"
     ]
   ],
   "groups": [
@@ -5340,8 +5204,7 @@
             "name": "vae",
             "type": "VAE",
             "linkIds": [
-              2822,
-              2826
+              2822
             ],
             "localized_name": "vae",
             "pos": [
@@ -5409,11 +5272,9 @@
           },
           {
             "id": "1dc802b5-7040-4e5c-a258-b2c94e6a28a2",
-            "name": "num_guides.image_1",
-            "type": "IMAGE",
-            "linkIds": [
-              2825
-            ],
+            "name": "guide_latent",
+            "type": "LATENT",
+            "linkIds": [],
             "localized_name": "num_guides.image_1",
             "label": "init_image",
             "pos": [
@@ -5918,7 +5779,7 @@
                 "localized_name": "guiding_latent",
                 "name": "guiding_latent",
                 "type": "LATENT",
-                "link": 2827
+                "link": 3043
               },
               {
                 "localized_name": "strength",
@@ -5968,51 +5829,6 @@
               -1,
               1
             ]
-          },
-          {
-            "id": 1520,
-            "type": "VAEEncode",
-            "pos": [
-              2803.8588980542972,
-              4635.260323276806
-            ],
-            "size": [
-              140,
-              46
-            ],
-            "flags": {},
-            "order": 14,
-            "mode": 0,
-            "inputs": [
-              {
-                "localized_name": "pixels",
-                "name": "pixels",
-                "type": "IMAGE",
-                "link": 2825
-              },
-              {
-                "localized_name": "vae",
-                "name": "vae",
-                "type": "VAE",
-                "link": 2826
-              }
-            ],
-            "outputs": [
-              {
-                "localized_name": "LATENT",
-                "name": "LATENT",
-                "type": "LATENT",
-                "links": [
-                  2827
-                ]
-              }
-            ],
-            "properties": {
-              "cnr_id": "comfy-core",
-              "ver": "0.16.4",
-              "Node name for S&R": "VAEEncode"
-            },
-            "widgets_values": []
           },
           {
             "id": 574,
@@ -6556,30 +6372,6 @@
             "type": "CONDITIONING"
           },
           {
-            "id": 2825,
-            "origin_id": -10,
-            "origin_slot": 8,
-            "target_id": 1520,
-            "target_slot": 0,
-            "type": "IMAGE"
-          },
-          {
-            "id": 2826,
-            "origin_id": -10,
-            "origin_slot": 3,
-            "target_id": 1520,
-            "target_slot": 1,
-            "type": "VAE"
-          },
-          {
-            "id": 2827,
-            "origin_id": 1520,
-            "origin_slot": 0,
-            "target_id": 1519,
-            "target_slot": 4,
-            "type": "LATENT"
-          },
-          {
             "id": 2828,
             "origin_id": 606,
             "origin_slot": 0,
@@ -6745,6 +6537,14 @@
             "origin_slot": 0,
             "target_id": -20,
             "target_slot": 0,
+            "type": "LATENT"
+          },
+          {
+            "id": 3043,
+            "origin_id": -10,
+            "origin_slot": 8,
+            "target_id": 1519,
+            "target_slot": 4,
             "type": "LATENT"
           }
         ],

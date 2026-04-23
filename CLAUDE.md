@@ -95,6 +95,26 @@ value converter and default. Thin wrappers: `_parse_schedule` / `_match_schedule
 - **`LTXVConcatAVLatent` looks buggy at a glance but isn't.** The `execute()` does `output.update(video_latent); output.update(audio_latent)` (which appears to overwrite the video noise_mask with the audio mask), then IMMEDIATELY overwrites `output["noise_mask"]` and `output["samples"]` with proper `NestedTensor((video, audio))` wrappers. Net result is correct. Source: `<comfyui_extras>/nodes_lt.py:619-651`. Do not chase this — one exploration agent this session misread the control flow and filed a false-positive bug.
 - Validate workflow JSON after edits: `python3 -c "import json; json.load(open('file.json'))"`
 
+## Init image conditioning path
+
+- **Initial render** embeds the init image at frame 0 via
+  `#531 LTXVImgToVideoInplaceKJ` (KJNodes; encodes image + writes into
+  frame 0 of the blank latent in-place, noise_mask locks it).
+- **Loop iterations** anchor to the init image via a top-level
+  `VAEEncode` → subgraph input slot 8 (LATENT, `guide_latent`) →
+  `#1519 LTXVAddLatentGuide.guiding_latent`. `latent_idx=-1` per
+  `ComfyUI-LTXVideo/latents.py:411-420` means "conditioning is on the
+  frame BEFORE this window" — the model sees the init image as the
+  frame immediately preceding the current iteration's window.
+- **The init image is VAE-encoded ONCE** at top level (one encode per
+  workflow run), not per iteration. The old shape re-encoded every
+  loop iteration inside the subgraph — vestigial from the IMAGE-loop
+  era — and was removed 2026-04-23 via `scripts/apply_vae_and_cleanup.py`.
+- **Subgraph input slot 8 semantics changed 2026-04-23.** Old: IMAGE
+  `num_guides.image_1`. New: LATENT `guide_latent`. Workflows saved
+  before this date will need re-migration (the apply script is
+  idempotent, safe to re-run).
+
 ## Subgraph editing
 
 - ALWAYS use WorkflowEditor from `scripts/workflow_utils.py`.

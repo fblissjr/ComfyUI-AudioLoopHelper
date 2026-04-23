@@ -6,6 +6,30 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed (workflow layout)
+- **Loop subgraph input slot 8 type changed: IMAGE → LATENT.** Formerly
+  `num_guides.image_1`, now `guide_latent`. The per-iteration
+  `VAEEncode` inside the subgraph (previously re-encoding the same
+  init image every iteration) is replaced by one top-level `VAEEncode`
+  that encodes the init image exactly once at workflow setup. The
+  subgraph's `LTXVAddLatentGuide` now pulls its `guiding_latent`
+  directly from the slot-8 input. Saves one video VAE encode per
+  loop iteration. **Breaking for saved workflows** with the old
+  subgraph shape — re-migrate via
+  `scripts/apply_vae_and_cleanup.py` (idempotent).
+- **Dead-code cleanup across LATENT example workflows.** Removed:
+  `#1590 VAEEncode` + `#1597 LTXVTiledVAEDecode` (mode=4 skeleton from
+  the deferred in-workflow upscale path; input unwired),
+  `Reroute #618` (dead), `Note #1585` (stale copy of a prompt schedule
+  from pre-batch-encode days; schedule now lives on
+  `TimestampPromptScheduleBatchEncode.schedule`).
+- **Initial-render preview decode upgraded.** `#1318 VAEDecode` →
+  `LTXVTiledVAEDecode` (widgets `[2, 2, 1, True, "auto", "auto"]`).
+  Defensive: avoids OOM on the preview path when resolution is bumped.
+- Applied to: `_latent.json`, `_latent_keyframe.json`, `_latent_stg.json`,
+  `_latent_validator.json`, `_image_adain_perstep.json`. The reference
+  `_image.json` legacy workflow is untouched.
+
 ### Fixed
 - **Frame-rate metadata asymmetry between initial render and loop iterations.**
   `TimestampPromptScheduleBatchEncode` emitted raw CLIP conditioning with
