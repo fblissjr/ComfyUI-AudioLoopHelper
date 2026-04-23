@@ -38,6 +38,7 @@ try:
         _compute_loop_geometry,
         _compute_tile_count,
         _format_timestamp,
+        _parse_image_schedule,
         _parse_schedule,
     )
 except ImportError:
@@ -47,6 +48,7 @@ except ImportError:
         _compute_loop_geometry,
         _compute_tile_count,
         _format_timestamp,
+        _parse_image_schedule,
         _parse_schedule,
     )
 
@@ -189,6 +191,31 @@ class LoopConfigValidator(io.ComfyNode):
                     step=0.01,
                     tooltip="Seams within this many seconds of a schedule boundary trigger a WARN.",
                 ),
+                io.String.Input(
+                    "keyframe_schedule",
+                    default="",
+                    multiline=True,
+                    tooltip=(
+                        "KeyframeImageSchedule schedule string (same format as the "
+                        "`schedule` widget). Empty = skip keyframe checks.\n"
+                        "Example:\n"
+                        "  0:00-0:42: 0\n"
+                        "  0:42-1:28: 1\n"
+                        "  1:28+: 2"
+                    ),
+                ),
+                io.Int.Input(
+                    "keyframe_batch_size",
+                    default=0,
+                    min=0,
+                    tooltip=(
+                        "Number of images in the batch wired to "
+                        "KeyframeImageSchedule.images. 0 = skip keyframe checks. "
+                        "Enables: index-out-of-bounds detection, "
+                        "schedule-collapses-to-single-index detection, "
+                        "empty-schedule-with-batch detection."
+                    ),
+                ),
             ],
             outputs=[
                 io.String.Output("report", tooltip="Full diagnostic text. Wire to PreviewAny."),
@@ -215,6 +242,8 @@ class LoopConfigValidator(io.ComfyNode):
         schedule: str,
         resolution_rule: str,
         seam_tolerance_seconds: float,
+        keyframe_schedule: str = "",
+        keyframe_batch_size: int = 0,
     ) -> io.NodeOutput:
         report, ok, warnings, errors, stride = _build_report(
             audio_duration=_audio_duration(audio),
@@ -227,6 +256,8 @@ class LoopConfigValidator(io.ComfyNode):
             schedule=schedule,
             resolution_rule=resolution_rule,
             seam_tolerance_seconds=seam_tolerance_seconds,
+            keyframe_schedule=keyframe_schedule,
+            keyframe_batch_size=keyframe_batch_size,
         )
         return io.NodeOutput(report, ok, warnings, errors, stride)
 
@@ -243,6 +274,8 @@ def _build_report(
     schedule: str,
     resolution_rule: str,
     seam_tolerance_seconds: float,
+    keyframe_schedule: str = "",
+    keyframe_batch_size: int = 0,
 ) -> tuple[str, bool, int, int, float]:
     """Pure function: separated from execute() for testability."""
     g = _compute_loop_geometry(window_seconds, overlap_seconds, fps)
@@ -374,6 +407,21 @@ def _build_report(
             f"{g.overlap_latent_frames} latents. Stride collapses, convergence extremely slow."
         )
 
+    # Keyframe checks — gated on batch_size > 0. Catches the three
+    # footguns that make KeyframeImageSchedule a no-op or an error:
+    #   1. Batch wired but schedule empty (silent index-0 lock).
+    #   2. Schedule references an index beyond batch_size (runtime clamp
+    #      swallows the user's intent).
+    #   3. Schedule collapses to a single index when batch_size > 1
+    #      (unused keyframes — the pre-fix shipped shape of
+    #      _latent_keyframe.json).
+    if keyframe_batch_size > 0:
+        kf_warn, kf_err = _keyframe_check_block(
+            keyframe_schedule, keyframe_batch_size, check_lines,
+        )
+        warn_count += kf_warn
+        err_count += kf_err
+
     lines.extend(check_lines)
     lines.append("")
     if err_count == 0 and warn_count == 0:
@@ -383,6 +431,74 @@ def _build_report(
     lines.append("=" * 68)
 
     return "\n".join(lines), (err_count == 0), warn_count, err_count, g.stride_seconds
+
+
+def _keyframe_check_block(
+    keyframe_schedule: str,
+    keyframe_batch_size: int,
+    check_lines: list[str],
+) -> tuple[int, int]:
+    """Emit OK/WARN/ERROR lines for keyframe wiring. Returns (warn_delta, err_delta).
+
+    Caller is responsible for the `keyframe_batch_size > 0` gate.
+    Three failure modes caught (pre-run):
+      - Empty schedule with batched keyframes → silent index-0 lock.
+      - Index out of bounds → runtime clamp swallows intent.
+      - Single-index schedule with batch > 1 → unused keyframes.
+    """
+    warn_delta = 0
+    err_delta = 0
+
+    if not keyframe_schedule.strip():
+        warn_delta += 1
+        check_lines.append(
+            f"  {_WARN}keyframe batch has {keyframe_batch_size} image(s) but "
+            f"schedule is empty. Every iteration uses index 0; other "
+            f"keyframes go unused."
+        )
+        return warn_delta, err_delta
+
+    entries = _parse_image_schedule(keyframe_schedule)
+    if not entries:
+        warn_delta += 1
+        check_lines.append(
+            f"  {_WARN}keyframe schedule did not parse any entries. "
+            f"Every iteration uses index 0."
+        )
+        return warn_delta, err_delta
+
+    # _parse_image_schedule returns list[tuple[start, end_or_None, index]].
+    indices = {e[2] for e in entries}
+    out_of_bounds = sorted(i for i in indices if i >= keyframe_batch_size or i < 0)
+    if out_of_bounds:
+        err_delta += 1
+        shown = ", ".join(str(i) for i in out_of_bounds[:5])
+        more = f" (+{len(out_of_bounds) - 5} more)" if len(out_of_bounds) > 5 else ""
+        check_lines.append(
+            f"  {_ERR} keyframe schedule references index {shown}{more} "
+            f"but batch has {keyframe_batch_size} image(s) (valid: "
+            f"0..{keyframe_batch_size - 1}). Runtime clamps silently so the "
+            f"intended keyframe never shows. Fix: add more images to the "
+            f"batch OR correct the indices."
+        )
+        return warn_delta, err_delta
+
+    if len(indices) == 1 and keyframe_batch_size > 1:
+        (only,) = indices
+        warn_delta += 1
+        check_lines.append(
+            f"  {_WARN}keyframe schedule always selects index {only}; "
+            f"{keyframe_batch_size - 1} keyframe(s) in the batch are unused. "
+            f"Add timestamp ranges pointing at other indices, e.g. "
+            f"'0:42-1:28: 1' to activate them."
+        )
+        return warn_delta, err_delta
+
+    check_lines.append(
+        f"  {_OK}keyframe schedule: {len(indices)} distinct index(es) "
+        f"in a {keyframe_batch_size}-image batch"
+    )
+    return warn_delta, err_delta
 
 
 def _math_block(

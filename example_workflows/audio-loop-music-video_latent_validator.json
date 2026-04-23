@@ -1855,7 +1855,7 @@
         "Node name for S&R": "PathchSageAttentionKJ"
       },
       "widgets_values": [
-        "sageattn_qk_int8_pv_fp8_cuda",
+        "sageattn_qk_int8_pv_fp8_cuda++",
         false
       ]
     },
@@ -4109,6 +4109,22 @@
           "widget": {
             "name": "overlap_seconds"
           }
+        },
+        {
+          "name": "keyframe_schedule",
+          "type": "STRING",
+          "widget": {
+            "name": "keyframe_schedule"
+          },
+          "link": null
+        },
+        {
+          "name": "keyframe_batch_size",
+          "type": "INT",
+          "widget": {
+            "name": "keyframe_batch_size"
+          },
+          "link": null
         }
       ],
       "outputs": [
@@ -4153,7 +4169,9 @@
         0,
         "",
         "div_by_32",
-        0.2
+        0.2,
+        "",
+        0
       ],
       "title": "Loop Config Validator"
     },

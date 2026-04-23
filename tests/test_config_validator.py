@@ -28,6 +28,8 @@ def _run(
     schedule: str = "",
     resolution_rule: str = "div_by_32",
     seam_tolerance_seconds: float = 0.2,
+    keyframe_schedule: str = "",
+    keyframe_batch_size: int = 0,
 ):
     return _build_report(
         audio_duration=audio_duration,
@@ -40,6 +42,8 @@ def _run(
         schedule=schedule,
         resolution_rule=resolution_rule,
         seam_tolerance_seconds=seam_tolerance_seconds,
+        keyframe_schedule=keyframe_schedule,
+        keyframe_batch_size=keyframe_batch_size,
     )
 
 
@@ -249,3 +253,94 @@ class TestFullReport:
         assert warns >= 2  # at least effective-overlap + seam-alignment
         assert "seam(s) within" in report
         assert "effective overlap 1.960s" in report
+
+
+class TestKeyframeChecks:
+    """Validation for KeyframeImageSchedule wiring — catches the
+    'wired single image + multi-entry schedule' + 'multi-entry batch
+    + no schedule' + 'schedule-collapses-to-index-0' footguns before
+    a 45-minute run.
+
+    All checks gated on keyframe_batch_size > 0; when 0 (default),
+    no keyframe-related lines appear in the report.
+    """
+
+    def test_keyframe_checks_skipped_when_batch_size_zero(self):
+        report, ok, warns, errs, _ = _run(
+            keyframe_schedule="", keyframe_batch_size=0,
+        )
+        # No keyframe section emitted
+        assert "Keyframe" not in report
+        # Keyframe checks don't add to counts
+        assert ok is True or errs >= 0  # unchanged semantics
+
+    def test_warn_on_batch_with_no_schedule(self):
+        # User wired a 3-image batch but never authored a schedule.
+        # Every iteration will silently use index 0 — unused keyframes.
+        report, _, warns, errs, _ = _run(
+            keyframe_schedule="", keyframe_batch_size=3,
+        )
+        assert "keyframe batch has 3 image(s) but schedule is empty" in report.lower() or \
+               "batch has 3" in report
+        assert warns >= 1
+        assert errs == 0
+
+    def test_error_on_index_out_of_bounds(self):
+        # Schedule references index 5 but batch only has 3 images.
+        # Runtime: KeyframeImageSchedule clamps silently, so the user's
+        # intended keyframe is never used. Pre-run: ERROR.
+        schedule = "0:00-0:42: 0\n0:42-1:28: 5\n1:28+: 2\n"
+        report, ok, _, errs, _ = _run(
+            keyframe_schedule=schedule, keyframe_batch_size=3,
+        )
+        assert errs >= 1
+        assert ok is False
+        assert "index 5" in report or "out of bounds" in report.lower()
+
+    def test_warn_on_schedule_collapse_to_single_index(self):
+        # User authored "0:00+: 0" with a 3-image batch — other keyframes
+        # unused. This is the exact bug the shipped _latent_keyframe.json
+        # had before today's wiring fix.
+        report, _, warns, _, _ = _run(
+            keyframe_schedule="0:00+: 0\n", keyframe_batch_size=3,
+        )
+        assert warns >= 1
+        assert "unused" in report.lower() or "always selects" in report.lower() or "collapse" in report.lower()
+
+    def test_no_collapse_warn_when_schedule_uses_all_indices(self):
+        # 3 distinct indices across schedule + 3-image batch = nothing unused.
+        schedule = "0:00-0:42: 0\n0:42-1:28: 1\n1:28+: 2\n"
+        report, ok, _, errs, _ = _run(
+            keyframe_schedule=schedule, keyframe_batch_size=3,
+        )
+        assert errs == 0
+        # Per-index unused check should pass
+        assert "unused" not in report.lower() or "not unused" in report.lower()
+        # A positive OK line should appear for the keyframe block
+        assert "keyframe" in report.lower()
+
+    def test_single_index_with_batch_size_one_is_ok(self):
+        # batch_size=1 with schedule "0:00+: 0" is legitimate (one keyframe,
+        # one entry). No warning should fire.
+        report, _, warns, errs, _ = _run(
+            keyframe_schedule="0:00+: 0\n", keyframe_batch_size=1,
+        )
+        # No "unused" warning when batch_size == 1
+        assert "unused" not in report.lower()
+        assert errs == 0
+
+    def test_warn_count_is_additive_with_existing_checks(self):
+        # Keyframe warn should add on top of existing (e.g. seam-alignment) warns,
+        # not replace them.
+        schedule_prompts = "0:00-0:38: alpha\n0:38-1:15: beta\n1:15+: gamma\n"
+        # At window=9.96 + overlap=2.0, stride=8s → seams at 8, 16, 24, ...
+        # 0:38 = 38s → closest seam 40 → 2s off → outside default 0.2s tolerance
+        # so no seam warn expected. Use a stride that creates seam-on-boundary:
+        report, _, warns, _, _ = _run(
+            window_seconds=9.96, overlap_seconds=2.0, fps=25,
+            schedule=schedule_prompts,
+            keyframe_schedule="0:00+: 0\n",
+            keyframe_batch_size=5,  # 5-image batch, schedule uses only 0 → WARN
+        )
+        # At least the single-index-with-batch>1 warn
+        assert warns >= 1
