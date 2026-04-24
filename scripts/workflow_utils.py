@@ -53,12 +53,43 @@ def timestamped_run_dir(base: Path) -> Path:
     return run_dir
 
 
+_EMPTY_WORKFLOW_SKELETON = {
+    "revision": 0,
+    "last_node_id": 0,
+    "last_link_id": 0,
+    "nodes": [],
+    "links": [],
+    "groups": [],
+    "definitions": {"subgraphs": []},
+    "config": {},
+    "extra": {"ds": {"scale": 0.5, "offset": [0, 0]}},
+    "version": 0.4,
+}
+
+
 class WorkflowEditor:
     """Load, inspect, modify, and save ComfyUI workflow JSON."""
 
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self.wf = orjson.loads(self.path.read_bytes())
+
+    @classmethod
+    def from_scratch(cls, output_path: str | Path) -> "WorkflowEditor":
+        """Build an editor around an empty in-memory workflow skeleton.
+
+        For apply scripts that construct a workflow from zero rather than
+        forking an existing one. Call `.save()` (or pass `output_path` to
+        `save()`) to write the result. The skeleton uses a fresh uuid
+        per instance so saved workflows have distinct IDs.
+        """
+        import copy
+        import uuid
+        instance = cls.__new__(cls)
+        instance.path = Path(output_path)
+        instance.wf = copy.deepcopy(_EMPTY_WORKFLOW_SKELETON)
+        instance.wf["id"] = str(uuid.uuid4())
+        return instance
 
     def save(self, path: str | Path | None = None, *, verbose: bool = False):
         """Write workflow to disk. Defaults to original path."""
@@ -122,7 +153,7 @@ class WorkflowEditor:
         size: list,
         inputs: list,
         outputs: list,
-        widgets_values: list,
+        widgets_values: list | dict,
         properties: dict | None = None,
         title: str | None = None,
     ) -> int:

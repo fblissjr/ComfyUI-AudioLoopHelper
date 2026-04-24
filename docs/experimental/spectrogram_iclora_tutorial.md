@@ -27,7 +27,7 @@ Architectural design + iteration ladder lives in `internal/design/spectrogram_re
 
 ### Models + LoRAs
 
-All should already be on disk if you run the main AudioLoopHelper workflow. Paths below use `<comfyui_models>` as a placeholder for your ComfyUI `models/` directory.
+Paths below use `<comfyui_models>` as a placeholder for your ComfyUI `models/` directory. If you already run the main AudioLoopHelper workflow you'll have most of these; otherwise, download them from their respective sources (linked in the AudioLoopHelper main README + Lightricks' LTX 2.3 Hugging Face repos).
 
 | File | Path | Size | Purpose |
 |---|---|---|---|
@@ -36,11 +36,11 @@ All should already be on disk if you run the main AudioLoopHelper workflow. Path
 | `ltx-2.3_text_projection_bf16.safetensors` | `<comfyui_models>/text_encoders/` | small | LTX 2.3 text-projection head |
 | `LTX23_video_vae_bf16.safetensors` | `<comfyui_models>/vae/` | ~600 MB | Video VAE |
 | `LTX23_audio_vae_bf16.safetensors` | `<comfyui_models>/vae/` | ~80 MB | Audio VAE (for dummy silent audio latent) |
-| `MergeGreen_IC-lora_ltx2.3.safetensors` | `<comfyui_models>/loras/` | ~1 GB | IC-LoRA adapter |
+| `MergeGreen_IC-lora_ltx2.3.safetensors` | `<comfyui_models>/loras/` | ~1 GB | IC-LoRA adapter (community Union Control variant; Hugging Face: `MergeGreen/LTX-2.3-IC-LoRA`) |
 
-**IC-LoRA rationale:** `LTXAddVideoICLoRAGuide` is a *generic* node that appends a reference image(s) to the sampler's latent + conditioning metadata — by itself, it doesn't teach the model what the reference means. The IC-LoRA file (`MergeGreen_IC-lora_ltx2.3.safetensors` in our case) is what's trained on structural-reference → real-video pairs. Without the LoRA, the model gets the guide tokens but ignores them. The MergeGreen Union Control IC-LoRA is trained on canny/depth/pose-style references. Our spectrogram test asks whether that training generalizes OOD.
+**IC-LoRA rationale:** `LTXAddVideoICLoRAGuide` is a *generic* node that appends reference images to the sampler's latent + conditioning metadata — by itself, it doesn't teach the model what the reference means. The IC-LoRA file is what's trained on structural-reference → real-video pairs. Without the LoRA, the model gets the guide tokens but ignores them. The MergeGreen Union Control IC-LoRA is trained on canny/depth/pose-style references; this tutorial tests whether that training generalizes out-of-distribution to spectrograms.
 
-**You do NOT need** the upstream Union Control file (`ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors`); we use MergeGreen which is already local.
+**File-name compatibility:** if you have a different Union Control IC-LoRA (e.g. Lightricks' upstream `ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors`), edit the `ICLORA_FILE` constant at the top of `scripts/apply_spectrogram_iclora_minimal.py` and re-run it. Any Union-Control-trained IC-LoRA should work; the workflow wiring is file-agnostic.
 
 ### Tools
 
