@@ -6,6 +6,23 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **`scripts/apply_iclora_initial_render.py`** — Phase 0a IC-LoRA wiring
+  for the latent loop workflow. Forks `example_workflows/audio-loop-music-video_latent.json`
+  into `internal/scratch/audio-loop-music-video_latent_iclora_phase0a.json`
+  with `LTXICLoRALoaderModelOnly` (LoRA-patches MODEL for both initial
+  render and loop body — the open MODEL-fork question Phase 0a is
+  designed to answer empirically) and `LTXAddVideoICLoRAGuide` on the
+  initial-render conditioning + latent path. Loop-body `base_cond_neg`
+  Set source intentionally untouched so loop iterations see the
+  unmodified conditioning baseline. Idempotent + `--revert` supported.
+  Companion assessment in `internal/ic_lora_assessment.md` evaluates the
+  full sibling-Claude IC-LoRA ideas list (`internal/IC-LORA_IDEAS.md`)
+  tier-by-tier against this project's architecture; downgrades the doc's
+  Tier-S "proxy-render-as-reference" flagship as misaligned with our
+  init-image commitment pattern, and promotes the doc's Tier-C
+  spectrogram-as-canny idea to Tier A given our frozen-audio thesis.
+
 ### Changed
 - **`AudioLoopHelperSageAttention` default mode is now `auto_mask_aware`**
   (was `auto`). Routes masked cross-attn calls to
