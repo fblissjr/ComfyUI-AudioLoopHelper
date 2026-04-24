@@ -72,12 +72,14 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 
 - **Initial render**: `#531 LTXVImgToVideoInplaceKJ` writes encoded init into frame 0; `noise_mask=0` locks it.
 - **Loop iterations**: top-level `VAEEncode → subgraph slot 8 (guide_latent) → #1519 LTXVAddLatentGuide` with `latent_idx=-1` (conditioning on the frame BEFORE the window). Init encoded ONCE.
-- **Preprocess symmetry (MANDATORY)**: both paths consume `#446 LTXVPreprocess(img_compression=18)` output. Wiring: `#445 ImageResizeKJv2 → #446 → { #531 (initial), #650 Set_input_image (loop guide) }`. Skipping `#446` on the loop branch is the photoreal-drift footgun — initial locks in preprocessed stats, loop anchors to raw, cross-attention reasserts its "singing woman with microphone" prior iter-over-iter. Fix + idempotent migration across all six example workflows: `scripts/apply_loop_guide_preprocess_symmetry.py`.
+- **F2 — Preprocess symmetry (MANDATORY)**: both paths consume `#446 LTXVPreprocess(img_compression=18)` output. Wiring: `#445 ImageResizeKJv2 → #446 → { #531 (initial), #650 Set_input_image (loop guide) }`. Skipping `#446` on the loop branch is the photoreal-drift footgun — cross-attention reasserts its "singing woman with microphone" prior iter-over-iter. Apply: `scripts/apply_loop_guide_preprocess_symmetry.py`. Audit: `audit_workflows.py::preprocess_symmetry`.
+- **F3 — Cropguides symmetry (MANDATORY)**: loop `#644 CFGGuider` positive/negative CONDITIONING must come from `#655 LTXVCropGuides`, NOT `#1519 LTXVAddLatentGuide` directly — mirrors initial path's `#164 → #381 → #153`. Bypassing `#655` leaves guide-keyframe metadata to accumulate iter-over-iter, producing subtle identity drift even after F2 is fixed. Apply: `scripts/apply_loop_cropguides_symmetry.py`. Audit: `audit_workflows.py::loop_cropguides_symmetry`. Recipes for both in `docs/guides/debugging_guide.md`.
 - Full trace: `docs/reference/pipeline_flow_latent.md`.
 
 ## Subgraph editing
 
-- ALWAYS use `WorkflowEditor`. Top-level helpers: `find_node`, `find_link_to_slot(tgt, slot)`, `add_link`, `remove_link`, `rewire_input(tgt, slot, new_src, new_src_slot, dtype)`, `find_links_to/from`. Subgraph-specific: `find_subgraph_invoker`, `find_subgraph_node`, `remove_subgraph_link`. `find_input_slot` works on both. **Don't hand-roll link lookups or rewires** — `find_link_to_slot` replaces the `next(lk for lk in ed.wf["links"] if lk[0] == link_id)` pattern; `rewire_input` replaces the `remove_link` + `add_link` splice.
+- ALWAYS use `WorkflowEditor`. Top-level helpers: `find_node`, `has_node`, `require_nodes`, `find_link_to_slot(tgt, slot)`, `add_link`, `remove_link`, `rewire_input(tgt, slot, new_src, new_src_slot, dtype)`, `find_links_to/from`. Subgraph: `find_subgraph_invoker`, `find_subgraph_node`, `find_subgraph_link`, `add_subgraph_link`, `remove_subgraph_link`, `rewire_subgraph_input` (mirrors top-level rewire). `find_input_slot` works on both. **Don't hand-roll link lookups or rewires** — `find_link_to_slot` replaces the `next(lk for lk in ed.wf["links"] if lk[0] == link_id)` pattern; `rewire_input` / `rewire_subgraph_input` replace the `remove_link` + `add_link` splice.
+- **Scaffold new apply scripts from `scripts/templates/`**. Two templates (`apply_script_all_workflows.py` for in-place edits, `apply_script_staged_variant.py` for experimental staging). Both include the canonical `--revert`, `--dry-run`, idempotence, and `require_nodes` guards. HyDE pattern: `apply_X.py --dry-run | audit_workflows.py` verifies a hypothetical state before committing to it.
 - **`remove_link` rebinds the target list** via filter — locals holding `ed.wf["links"]` go stale. Use editor methods or re-fetch.
 - Top-level links are array `[id, src, src_slot, tgt, tgt_slot, type]`; subgraph internal links are dict `{id, origin_id, origin_slot, target_id, target_slot, type}`. Subgraph def at `wf['definitions']['subgraphs'][0]`.
 - Distributor `-10` / output collector `-20` are virtual — not in `sg["nodes"]`.
@@ -90,10 +92,11 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 uv run --group dev --group analysis python -m pytest tests/ -v --rootdir=.
 ```
 
+- CI runs on push/PR to main (`.github/workflows/ci.yml`): pytest + `scripts/audit_workflows.py` + docs-consistency tests.
 - `__init__.py` guards ComfyUI imports for pytest; `nodes.py` has `_IOStub`/`_Passthrough` fallback.
 - `tests/conftest.py` adds `scripts/` + `tests/` to `sys.path`. Shared fakes: `tests/_fakes.py` (`FakeModelPatcher`, `FakeModelWithCallbacks`). Root `./conftest.py` has `collect_ignore` — shadows `tests/conftest.py` for `from conftest import X`.
 - **Memoization fixes need REPEATED-call tests.** Single-call tests can't detect framework-cache-invalidation. Canonical shape: `tests/test_batch_encode.py::TestBatchEncoderCaching`.
-- **`id()`-keyed caches need autouse clear-fixtures.** `FakeCLIP` gets GC'd rapidly; Python address recycling produces ghost hits.
+- **`id()`-keyed caches need autouse clear-fixtures.** `FakeCLIP` gets GC'd rapidly; Python address recycling produces ghost hits. Production cache keys now include `type(clip).__name__` as cheap cross-class insurance; test fixtures still required.
 
 ## Dependencies
 
