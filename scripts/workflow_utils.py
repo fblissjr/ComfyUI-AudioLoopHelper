@@ -75,6 +75,18 @@ class WorkflowEditor:
                 return n
         raise ValueError(f"Node {node_id} not found")
 
+    def has_node(self, node_id: int) -> bool:
+        """True iff the workflow contains a top-level node with this id."""
+        return any(n["id"] == node_id for n in self.wf["nodes"])
+
+    def require_nodes(self, node_ids) -> list[int]:
+        """Return the subset of `node_ids` NOT present in the workflow.
+
+        Empty list means every requested node exists. Callers typically
+        early-return (skip-workflow) or raise depending on severity.
+        """
+        return [nid for nid in node_ids if not self.has_node(nid)]
+
     def find_nodes_by_type(self, node_type: str) -> list[dict]:
         return [n for n in self.wf["nodes"] if n["type"] == node_type]
 

@@ -54,23 +54,19 @@ def _bypass_melband_nodes(ed: WorkflowEditor, path: Path) -> bool:
 
 def _rewire_actual_audio_direct(ed: WorkflowEditor, path: Path) -> bool:
     """Ensure Set_actual_audio pulls from TrimAudioDuration, not the sampler."""
-    try:
-        ed.find_node(SET_ACTUAL_AUDIO_ID)
-        ed.find_node(TRIM_AUDIO_ID)
-    except ValueError:
+    if ed.require_nodes((SET_ACTUAL_AUDIO_ID, TRIM_AUDIO_ID)):
         # Layout doesn't match this workflow family — skip silently.
         return False
 
-    # Drop any existing link into Set_actual_audio.
-    for link in list(ed.wf["links"]):
-        if isinstance(link, list) and link[3] == SET_ACTUAL_AUDIO_ID:
-            if link[1] == TRIM_AUDIO_ID and link[2] == 0 and link[4] == 0:
-                return False  # already direct
-            print(f"  {path.name}: drop stale link {link[0]} "
-                  f"(src={link[1]} -> Set_actual_audio)")
-            ed.remove_link(link[0])
+    existing = ed.find_link_to_slot(SET_ACTUAL_AUDIO_ID, 0)
+    if existing and existing[1] == TRIM_AUDIO_ID and existing[2] == 0:
+        return False  # already direct
 
-    ed.add_link(TRIM_AUDIO_ID, 0, SET_ACTUAL_AUDIO_ID, 0, "AUDIO")
+    if existing:
+        print(f"  {path.name}: drop stale link {existing[0]} "
+              f"(src={existing[1]} -> Set_actual_audio)")
+
+    ed.rewire_input(SET_ACTUAL_AUDIO_ID, 0, TRIM_AUDIO_ID, 0, "AUDIO")
     print(f"  {path.name}: wire TrimAudioDuration({TRIM_AUDIO_ID}) "
           f"-> Set_actual_audio({SET_ACTUAL_AUDIO_ID}) directly")
     return True

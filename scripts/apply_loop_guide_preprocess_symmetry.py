@@ -63,11 +63,9 @@ def _apply_one(wf_path: Path, revert: bool) -> str:
     except Exception as e:  # noqa: BLE001
         return f"load error: {e}"
 
-    for nid in (IMAGE_RESIZE_ID, LTXV_PREPROCESS_ID, SET_INPUT_IMAGE_ID):
-        try:
-            ed.find_node(nid)
-        except ValueError:
-            return f"skip (missing node {nid})"
+    missing = ed.require_nodes((IMAGE_RESIZE_ID, LTXV_PREPROCESS_ID, SET_INPUT_IMAGE_ID))
+    if missing:
+        return f"skip (missing nodes {missing})"
 
     row = ed.find_link_to_slot(SET_INPUT_IMAGE_ID, 0)
     if row is None:
