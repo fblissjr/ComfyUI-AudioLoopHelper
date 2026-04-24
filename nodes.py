@@ -1420,25 +1420,11 @@ class StripLatentNoiseMask(io.ComfyNode):
 
 
 class LatentTemporalMask(io.ComfyNode):
-    """Writes a `noise_mask` to a video latent so only a time range regenerates.
+    """Writes a retake noise_mask to a video latent: regenerate only
+    `[start_time, end_time]`, hold the rest fixed as context.
 
-    Canonical retake use: run produces a video with one bad N-second
-    section. User loads the accumulated latent, sets
-    `[start_time, end_time]` to the bad range, feeds into a sampler
-    with a fresh prompt. Only the masked region regenerates; the rest
-    is held fixed by `noise_mask == 0`.
-
-    Mask semantics (per CLAUDE.md "Critical constraints"):
-      * `noise_mask == 1.0` → frame regenerates from noise
-      * `noise_mask == 0.0` → frame stays fixed (context)
-
-    Latent-frame math (per CLAUDE.md "Key patterns"):
-      * `start_latent_frame = int(start_time * fps / 8)` inclusive
-      * `end_latent_frame   = int(end_time   * fps / 8) + 1` exclusive
-      * Out-of-range indices clamp to `[0, total_latent_frames]`.
-      * Reversed (`end < start`) or zero-width ranges yield an all-zero
-        mask (nothing regenerates) rather than raising — safer for UI
-        widget drift; the user sees no change and notices the bug.
+    Reversed or zero-width ranges yield an all-zero mask (no-op) rather
+    than raising — safer for UI widget drift.
 
     Port of `TemporalRegionMask.apply_to` from
     `coderef/LTX-2/packages/ltx-pipelines/src/ltx_pipelines/retake.py`.

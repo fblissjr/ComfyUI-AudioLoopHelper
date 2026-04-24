@@ -1,56 +1,27 @@
 """Phase 0a: Wire IC-LoRA on the initial-render path of the latent loop workflow.
 
-Inserts two ComfyUI-LTXVideo nodes into a copy of the canonical
-audio-loop-music-video_latent.json:
+Forks `example_workflows/audio-loop-music-video_latent.json` into a
+staging copy under `internal/scratch/`, splicing in two
+ComfyUI-LTXVideo nodes:
 
-  - LTXICLoRALoaderModelOnly: between LTX2SamplingPreviewOverride(503)
-    and SetNode(572). The Set/Get pair stores the MODEL under the
-    "model" key, which is read by BOTH the initial-render sampler
-    AND the loop subgraph (via GetNode 654 -> LoopIterationStamp 1618).
-    Consequence: the LoRA-patched MODEL is active for every pass.
-    This is the open MODEL-fork question the assessment doc raises;
-    Phase 0a deliberately accepts it so the test exposes whether
-    LoRA-patched MODEL without an IC-LoRA guide hurts loop iterations.
+  - `LTXICLoRALoaderModelOnly` between `LTX2SamplingPreviewOverride(503)`
+    and `SetNode(572)`. The Set/Get(654) pair also feeds the loop
+    subgraph via `LoopIterationStamp(1618)`, so the LoRA-patched MODEL
+    is active for BOTH initial render AND loop iterations. This is the
+    open MODEL-fork question from `internal/ic_lora_assessment.md`:
+    Phase 0a accepts the coupling so the A/B exposes whether a
+    LoRA-patched MODEL without an attached guide hurts loop iterations.
 
-  - LTXAddVideoICLoRAGuide: between the initial-render conditioning +
-    latent and the SamplerCustomAdvanced(161). Re-routes:
-      LTXVConditioning(164).positive  -> CFGGuider(153).positive,
-                                         LTXVCropGuides(381).positive
-      LTXVConditioning(164).negative  -> CFGGuider(153).negative,
-                                         LTXVCropGuides(381).negative
-      LTXVImgToVideoInplaceKJ(531).latent -> LTXVConcatAVLatent(350).video_latent
-    All re-routes pass through the IC-LoRA guide so the modified
-    conditioning + latent reach the sampler. The link from
-    LTXVConditioning(164).negative -> SetNode(646) "base_cond_neg"
-    (loop-body negative source) is INTENTIONALLY left untouched so
-    loop iterations see the unmodified conditioning baseline.
-
-The reference image is the preprocessed init image (LTXVPreprocess 446
-output), which is already what feeds LTXVImgToVideoInplaceKJ(531) for
-frame 0. Same image both places means IC-LoRA reinforces the init.
-
-Default IC-LoRA model: MergeGreen_IC-lora_ltx2.3.safetensors (single-frame
-variant; matches the reference workflow shipped with the LoRA). The
-loop-specific MergeGreen_Loop_IC-lora_ltx2.3.safetensors becomes
-relevant in Phase 0b/Phase 1 when the IC-LoRA guide is per-iteration.
+  - `LTXAddVideoICLoRAGuide` on the initial-render conditioning + latent
+    path. The loop-body negative source (`SetNode 646 base_cond_neg`)
+    is intentionally untouched so loop iterations see the unmodified
+    conditioning baseline.
 
 Usage:
-    # Default: read example_workflows/_latent.json, write staging copy
     uv run --group dev python scripts/apply_iclora_initial_render.py
-
-    # Custom output location
-    uv run --group dev python scripts/apply_iclora_initial_render.py \\
-        --output internal/scratch/my_iclora_test.json
-
-    # In-place on a workflow you've already copied
-    uv run --group dev python scripts/apply_iclora_initial_render.py \\
-        --input internal/scratch/my_test.json --output internal/scratch/my_test.json
-
-    # Revert (deletes the staging output if it exists)
     uv run --group dev python scripts/apply_iclora_initial_render.py --revert
 
-The edit is idempotent on the OUTPUT path: re-running on an
-already-migrated workflow is a no-op.
+Idempotent on the OUTPUT path; `--revert` deletes the staging file.
 """
 
 from __future__ import annotations
@@ -156,14 +127,20 @@ def _add_iclora_loader(ed: WorkflowEditor) -> int:
     return nid
 
 
-def _reroute_through_iclora_guide(
-    ed: WorkflowEditor, *, loader_id: int,
-) -> int:
-    """Insert LTXAddVideoICLoRAGuide between the initial-render
-    conditioning + latent sources and their consumers. Re-routes positive,
-    negative, and latent through the guide; leaves the loop-body
-    'base_cond_neg' Set link untouched."""
-    nid = ed.add_top_level_node(
+# (target_node, target_slot_name, guide_output_slot, dtype)
+# The sources feeding these slots get re-routed through the IC-LoRA guide
+# so the modified conditioning + latent reach the sampler.
+GUIDE_REROUTES = (
+    (CFGGUIDER_ID, "positive", 0, "CONDITIONING"),
+    (CFGGUIDER_ID, "negative", 1, "CONDITIONING"),
+    (LTXVCROPGUIDES_ID, "positive", 0, "CONDITIONING"),
+    (LTXVCROPGUIDES_ID, "negative", 1, "CONDITIONING"),
+    (LTXV_CONCAT_AV_LATENT_ID, "video_latent", 2, "LATENT"),
+)
+
+
+def _add_guide_node(ed: WorkflowEditor) -> int:
+    return ed.add_top_level_node(
         node_type="LTXAddVideoICLoRAGuide",
         pos=[-1000, 1100],
         size=[360, 280],
@@ -203,33 +180,22 @@ def _reroute_through_iclora_guide(
         title="IC-LoRA Guide (initial-render)",
     )
 
-    # --- Source feeds into the IC-LoRA guide ---
-    # positive: from LTXVConditioning(164).positive (slot 0)
-    ed.add_link(LTXVCONDITIONING_ID, 0, nid, 0, "CONDITIONING")
-    # negative: from LTXVConditioning(164).negative (slot 1)
-    ed.add_link(LTXVCONDITIONING_ID, 1, nid, 1, "CONDITIONING")
-    # vae: from GetNode 'video_vae' (already exists)
-    ed.add_link(GET_VIDEO_VAE_ID, 0, nid, 2, "VAE")
-    # latent: from LTXVImgToVideoInplaceKJ(531).latent (slot 0)
-    ed.add_link(LTXV_IMG_TO_VID_INPLACE_KJ_ID, 0, nid, 3, "LATENT")
-    # image: from LTXVPreprocess(446).output_image (slot 0) — same image
-    # that ImgToVideoInplaceKJ already writes to frame 0
-    ed.add_link(LTXV_PREPROCESS_ID, 0, nid, 4, "IMAGE")
-    # latent_downscale_factor: from IC-LoRA loader output slot 1 (FLOAT
-    # extracted from safetensors metadata; defaults to 1.0 if missing)
-    ed.add_link(loader_id, 1, nid, 5, "FLOAT")
 
-    # --- Re-route consumers from original sources to the guide outputs ---
-    # Existing links to remove (after capturing what they fed):
-    reroutes = [
-        # (existing_target_node, existing_target_slot_name, guide_output_slot, dtype)
-        (CFGGUIDER_ID, "positive", 0, "CONDITIONING"),
-        (CFGGUIDER_ID, "negative", 1, "CONDITIONING"),
-        (LTXVCROPGUIDES_ID, "positive", 0, "CONDITIONING"),
-        (LTXVCROPGUIDES_ID, "negative", 1, "CONDITIONING"),
-        (LTXV_CONCAT_AV_LATENT_ID, "video_latent", 2, "LATENT"),
-    ]
-    for tgt_id, tgt_slot_name, guide_out_slot, dtype in reroutes:
+def _wire_guide_inputs(ed: WorkflowEditor, guide_id: int, loader_id: int) -> None:
+    ed.add_link(LTXVCONDITIONING_ID, 0, guide_id, 0, "CONDITIONING")
+    ed.add_link(LTXVCONDITIONING_ID, 1, guide_id, 1, "CONDITIONING")
+    ed.add_link(GET_VIDEO_VAE_ID, 0, guide_id, 2, "VAE")
+    ed.add_link(LTXV_IMG_TO_VID_INPLACE_KJ_ID, 0, guide_id, 3, "LATENT")
+    # Same preprocessed init image that already writes to frame 0 via
+    # ImgToVideoInplaceKJ -- means IC-LoRA reinforces the init commitment.
+    ed.add_link(LTXV_PREPROCESS_ID, 0, guide_id, 4, "IMAGE")
+    # latent_downscale_factor auto-extracts from safetensors metadata
+    # (defaults to 1.0 if missing); wire as input so the loader drives it.
+    ed.add_link(loader_id, 1, guide_id, 5, "FLOAT")
+
+
+def _reroute_consumers_through_guide(ed: WorkflowEditor, guide_id: int) -> None:
+    for tgt_id, tgt_slot_name, guide_out_slot, dtype in GUIDE_REROUTES:
         tgt_node = ed.find_node(tgt_id)
         tgt_slot = WorkflowEditor.find_input_slot(tgt_node, tgt_slot_name)
         existing = ed.find_link_to_slot(tgt_id, tgt_slot)
@@ -239,20 +205,26 @@ def _reroute_through_iclora_guide(
                 "but none found."
             )
         ed.remove_link(existing[0])
-        ed.add_link(nid, guide_out_slot, tgt_id, tgt_slot, dtype)
+        ed.add_link(guide_id, guide_out_slot, tgt_id, tgt_slot, dtype)
 
-    return nid
+
+def _reroute_through_iclora_guide(ed: WorkflowEditor, *, loader_id: int) -> int:
+    """Insert LTXAddVideoICLoRAGuide between the initial-render conditioning
+    + latent sources and their consumers. Loop-body `base_cond_neg` Set
+    link is intentionally untouched so loop iterations see the unmodified
+    baseline."""
+    guide_id = _add_guide_node(ed)
+    _wire_guide_inputs(ed, guide_id, loader_id)
+    _reroute_consumers_through_guide(ed, guide_id)
+    return guide_id
 
 
 def _migrate(input_path: Path, output_path: Path) -> None:
-    if output_path.exists() and input_path != output_path:
-        existing = WorkflowEditor(output_path)
-        if _already_migrated(existing):
-            print(
-                f"{output_path.name}: already migrated, skipping. "
-                "Run with --revert to delete and start over."
-            )
-            return
+    # Preserve user edits: if the staging file is already migrated, bail
+    # before overwriting. --revert deletes it for a fresh start.
+    if output_path.exists() and input_path != output_path and _already_migrated(WorkflowEditor(output_path)):
+        print(f"{output_path.name}: already migrated, skipping. Run --revert to reset.")
+        return
 
     if input_path != output_path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -262,7 +234,7 @@ def _migrate(input_path: Path, output_path: Path) -> None:
     ed = WorkflowEditor(output_path)
 
     if _already_migrated(ed):
-        print(f"{output_path.name}: already migrated (LTXICLoRALoaderModelOnly present), skipping.")
+        print(f"{output_path.name}: already migrated, skipping.")
         return
 
     _assert_required_nodes_present(ed)

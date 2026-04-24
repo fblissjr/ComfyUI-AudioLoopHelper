@@ -19,8 +19,9 @@ import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from workflow_utils import EXAMPLE_WORKFLOWS_DIR as EXAMPLE_DIR
 
-EXAMPLE_DIR = Path(__file__).parent.parent / "example_workflows"
 DIV_STRICT = 64  # distilled two-stage requirement
 DIV_PERMISSIVE = 32  # single-stage requirement
 

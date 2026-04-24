@@ -20,7 +20,9 @@ from datetime import datetime
 from pathlib import Path
 
 
-RUNS_DIR = Path(__file__).resolve().parent.parent / "internal" / "analysis" / "runs"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+EXAMPLE_WORKFLOWS_DIR = REPO_ROOT / "example_workflows"
+RUNS_DIR = REPO_ROOT / "internal" / "analysis" / "runs"
 
 
 def timestamped_run_path(subdir: str, prefix: str, ext: str) -> Path:

@@ -1,19 +1,8 @@
 """Tests for LatentTemporalMask — retake support.
 
-`LatentTemporalMask` writes a noise_mask to a latent so that only a
-time range regenerates on a re-sample pass. Canonical use: the user
-finishes a run, sees one bad section, loads the accumulated latent,
-sets `[start_time, end_time]` on the bad range, and re-samples —
-only the masked region changes.
-
-Mask semantics (per CLAUDE.md "Critical constraints"):
-  - `noise_mask == 1.0` → frame regenerates from noise
-  - `noise_mask == 0.0` → frame stays fixed (context)
-
 Latent-frame math (per CLAUDE.md "Key patterns"):
-  - `latent_frame = int(time_seconds * fps / 8)` (start, inclusive)
-  - `end_latent_frame = int(end_time * fps / 8) + 1` (exclusive)
-  - `LTX_TEMPORAL_SCALE = 8` is the LTX 2.3 VAE's temporal compression.
+  start_latent = int(start_time * fps / 8)
+  end_latent   = int(end_time   * fps / 8) + 1   # exclusive, generous
 """
 
 import torch

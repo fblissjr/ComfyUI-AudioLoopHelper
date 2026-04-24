@@ -10,13 +10,11 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "internal" / "scripts"))
 from test_workflow_integrity import validate
-
-
-WORKFLOW_DIR = Path(__file__).resolve().parent.parent / "example_workflows"
+from workflow_utils import EXAMPLE_WORKFLOWS_DIR
 
 
 def _get_workflows():
-    return sorted(WORKFLOW_DIR.glob("*.json"))
+    return sorted(EXAMPLE_WORKFLOWS_DIR.glob("*.json"))
 
 
 @pytest.mark.parametrize("wf_path", _get_workflows(), ids=lambda p: p.name)
