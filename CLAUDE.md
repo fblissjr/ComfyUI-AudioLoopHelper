@@ -129,6 +129,7 @@ Companion custom nodes (used alongside, not imported):
 
 - Default: mutate `example_workflows/audio-loop-music-video_latent.json` in place (accept optional path).
 - **Experimental variants stage to `internal/scratch/<base>_<feature>_<phase>.json`** via `--output`. Idempotent; `--revert` deletes the staging file. Canonical: `scripts/apply_iclora_initial_render.py`. Promotion to `example_workflows/` follows "ships AND stabilizes"; criteria in `internal/PLAN.md`.
+- **Scratch-build apply scripts** use `WorkflowEditor.from_scratch(output_path)` + `add_top_level_node` + `add_link` — returns an empty-skeleton editor with fresh uuid + reset `last_node_id` / `last_link_id`. No parallel `Builder` class needed. Canonical: `scripts/apply_spectrogram_iclora_minimal.py`.
 
 ## Working with Claude across sessions
 
@@ -142,6 +143,7 @@ Companion custom nodes (used alongside, not imported):
 
 - **Active planning lives in gitignored `internal/`.** Promote to `docs/` only when feature ships AND stabilizes.
 - **Case studies in pairs**: unscrubbed → `internal/prompts/`; scrubbed → `docs/examples/` or `docs/guides/debugging_guide.md`.
+- **Public docs written for GitHub readers, not our local state.** No "already on disk" / "we use X locally" framing; use `<comfyui_models>` / `/path/to/model` placeholders and list file sources (Hugging Face slugs, upstream repos). `internal/` docs can assume our local state.
 - **Breaking changes trigger docs sweep** — add stale phrase to `scripts/validate_docs_consistency.py::STALE_PATTERNS`; `tests/test_docs_consistency.py` fails until fixed.
 - **Last-updated date at top of every doc** (`Last updated: YYYY-MM-DD`).
 - **Trim public + archive full** for reference docs >1000 lines. Public in `docs/reference/` → summary; full → `internal/archive/` (gitignored).
