@@ -10,3 +10,11 @@ coderef/
 .pytest_cache
 .venv
 profile_output/
+
+# Generated data (PNG sequences, mp4 renders, metadata). Keep the
+# directory structure via .gitkeep sentinels but ignore the contents.
+data/*
+!data/.gitkeep
+!data/*/
+data/*/*
+!data/*/.gitkeep

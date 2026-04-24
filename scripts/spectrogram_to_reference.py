@@ -30,6 +30,7 @@ import argparse
 import shutil
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, Literal
 
@@ -39,8 +40,7 @@ import orjson
 from PIL import Image
 from scipy.ndimage import gaussian_filter, sobel
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from workflow_utils import timestamped_run_dir
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # noqa: E402 (workflow_utils is sibling)
 
 
 RenderMode = Literal["raw", "normalized", "blurred", "edge_detected"]
@@ -209,6 +209,30 @@ def time_bin_for_frame(frame_idx: int, fps: float, sr: int, hop_length: int) -> 
 # ---------------------------------------------------------------------------
 
 
+def _resolve_run_dir(cfg: argparse.Namespace) -> Path:
+    """Per-run output dir with collision-proof naming.
+
+    Explicit `--run-name` wins. Otherwise `<ts>_<mode>` groups mode
+    sweeps visually and avoids same-second collisions across modes.
+    Milliseconds on the timestamp handle same-second same-mode reruns.
+    Refuses to clobber an existing dir -- user gets a clear error
+    rather than silent overwrite of prior frames.
+    """
+    base = Path(cfg.output_dir)
+    if cfg.run_name:
+        run_dir = base / cfg.run_name
+    else:
+        now = datetime.now()
+        ts = now.strftime("%Y-%m-%d_%H%M%S") + f"-{now.microsecond // 1000:03d}"
+        run_dir = base / f"{ts}_{cfg.mode}"
+    if run_dir.exists():
+        raise SystemExit(
+            f"Output dir {run_dir} already exists. Delete it or pass --run-name <distinct>."
+        )
+    run_dir.mkdir(parents=True)
+    return run_dir
+
+
 def _render_run(cfg: argparse.Namespace) -> Path:
     audio_path = Path(cfg.audio).expanduser().resolve()
     print(f"Loading audio: {audio_path}")
@@ -237,7 +261,7 @@ def _render_run(cfg: argparse.Namespace) -> Path:
     print(f"  total frames: {total_frames} (fps={cfg.fps}, align_ltx={cfg.align_ltx_latent})")
     print(f"  sliding window: {cfg.window_seconds}s = {window_bins} mel bins")
 
-    run_dir = timestamped_run_dir(Path(cfg.output_dir))
+    run_dir = _resolve_run_dir(cfg)
     print(f"\nRendering frames -> {run_dir}")
 
     for frame_idx in range(total_frames):
@@ -332,7 +356,7 @@ def main() -> None:
     ap.add_argument("--audio", required=True, help="Path to input audio file.")
     ap.add_argument(
         "--output-dir",
-        default="internal/scratch/spectrogram_runs",
+        default="data/spectrogram_runs",
         help="Parent directory for timestamped run output (default: %(default)s).",
     )
     ap.add_argument("--fps", type=float, default=25.0)
@@ -362,6 +386,8 @@ def main() -> None:
                     help="Length in seconds to render after --start (default: rest of file).")
     ap.add_argument("--emit-video", action="store_true", default=False,
                     help="After PNG emission, stitch frames into spectrogram.mp4 via ffmpeg.")
+    ap.add_argument("--run-name", default=None,
+                    help="Explicit run-dir name (default: <ts_ms>_<mode>). Refuses to overwrite.")
 
     cfg = ap.parse_args()
 

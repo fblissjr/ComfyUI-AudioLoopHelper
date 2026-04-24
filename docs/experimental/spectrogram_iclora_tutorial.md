@@ -79,7 +79,7 @@ uv run --group analysis python scripts/spectrogram_to_reference.py \
     --emit-video
 ```
 
-Output appears at `internal/scratch/spectrogram_runs/<timestamp>/`:
+Output appears at `data/spectrogram_runs/<timestamp>/`:
 - `spectrogram.mp4` — 121 frames at 25 fps, 832×448, near-lossless x264. **This is what you feed into ComfyUI.**
 - `frame_XXXXX.png` — raw PNG sequence (ignore; same data as the mp4).
 - `metadata.json` — all render params.
