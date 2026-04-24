@@ -241,6 +241,14 @@ R8b BPM distribution (3-5 seeds) vs R7/R8a/R14 baseline distribution:
 
 For R8b to count as "closer to source," it should land at mean BPM noticeably > 130 (say, 133+) across multiple seeds, and/or show reduced variance (more consistent tempo = more conditioning, not less).
 
+## Forward direction (regardless of spectrogram-as-IC-LoRA verdict)
+
+A new direction emerged from the experiment's close-out reflection: **test-time compute methods applied to the IC-LoRA reference channel**. Spectrogram-as-reference was about picking the right reference modality; TTC methods operate on the existing reference at inference time (amplify, search, iterate, ensemble, schedule).
+
+POC for the first method (amplification inspired by the CFG formula) landed as `scripts/apply_ttc_iclora_amplification_poc.py` and `example_workflows/experimental/iclora_amplification_poc.json`. Full landscape: `internal/analysis/iclora_landscape_analysis.md`.
+
+This direction is independent of whether spectrogram-as-IC-LoRA works — the TTC methods apply to any IC-LoRA + reference pair, not just spectrograms.
+
 ## Pivot directions if spectrogram-as-IC-LoRA path is dead
 
 Ranked by expected value given current evidence:
