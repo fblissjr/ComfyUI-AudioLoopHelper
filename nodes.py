@@ -743,11 +743,17 @@ def _batch_encode_cache_key(
     audio_duration: float, snap_boundaries: bool,
     frame_rate: float,
 ) -> tuple:
-    # id(clip) as identity token: CLIP models are large (15+ GB) and
-    # stay resident for the full run, so address recycling isn't a
-    # realistic hazard. Same latent caveat as _COND_CACHE.
+    # (id(clip), type(clip).__name__) as identity token. CLIP models are
+    # large (15+ GB) and stay resident today, so address recycling isn't
+    # currently a hazard -- the type discriminator is cheap insurance for
+    # the future: multi-GPU splits, offload under pressure, or a ComfyUI
+    # update that changes eviction policy could all produce id() collisions
+    # between a freed CLIP and a different object reloaded at the same
+    # address. With the type tag, a Gemma->T5 swap can't produce a ghost
+    # hit. Same discriminator used in _COND_CACHE.
     return (
         id(clip),
+        type(clip).__name__,
         schedule,
         round(stride_seconds, _STRIDE_SECONDS_PRECISION),
         round(audio_duration, _AUDIO_DURATION_PRECISION),
@@ -1713,14 +1719,15 @@ class ImageBlend(io.ComfyNode):
 
 # Module-level LRU cache for CachedTextEncode.
 # Persists across loop iterations (our goal) and across workflow runs.
-# Keyed on (id(clip), text). Bounded so long-running sessions don't grow
-# unbounded VRAM from cached CONDITIONING tensors.
+# Keyed on (id(clip), type(clip).__name__, text). Bounded so long-running
+# sessions don't grow unbounded VRAM from cached CONDITIONING tensors.
 #
 # Hazard: id(clip) can be recycled by CPython if the original CLIP is freed
 # and a new object lands at the same memory address. In practice CLIP models
 # are large (>10GB) and stay resident across iterations, so this is a latent
-# risk rather than an observed bug. If ghost hits ever appear, switch to
-# weakref-based keying.
+# risk rather than an observed bug. The type tag is cheap insurance: a
+# swap from Gemma->T5 (or vice versa) can't produce a ghost hit even if the
+# address is recycled. If actual hits degrade anyway, switch to weakref keying.
 _COND_CACHE: OrderedDict = OrderedDict()
 _COND_CACHE_MAX = 20
 
@@ -1767,7 +1774,7 @@ class CachedTextEncode(io.ComfyNode):
 
     @classmethod
     def execute(cls, clip, text: str) -> io.NodeOutput:
-        key = (id(clip), text)
+        key = (id(clip), type(clip).__name__, text)
         cached = _COND_CACHE.get(key)
         if cached is not None:
             _COND_CACHE.move_to_end(key)
