@@ -7,6 +7,23 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **`LatentTemporalMask` node (`nodes.py`)** — retake support. Writes a
+  `noise_mask` to a video latent so only `[start_time, end_time]`
+  regenerates on a re-sample; rest stays fixed as context. Latent-frame
+  math: `start_latent = int(t*fps/8)`, `end_latent = int(end*fps/8)+1`,
+  clamped to the latent length. Reversed or zero-width ranges yield an
+  all-zero mask (no-op) rather than raising — safer for UI widget drift.
+  Mask shape matches samples `[B,C,F,H,W]` (no broadcast shortcut,
+  consistent with upstream `LTXVSetAudioVideoMaskByTime`). Port of
+  `TemporalRegionMask.apply_to` from
+  `coderef/LTX-2/packages/ltx-pipelines/src/ltx_pipelines/retake.py`.
+  11 tests in `tests/test_retake_nodes.py`.
+- **`scripts/audit_workflows.py`** — health audit across every
+  `example_workflows/*.json` (sage node+mode, `LoopIterationStamp`,
+  batch-encode pattern, distilled sigma chain, resolution div-32,
+  `(L-1)%8==0`, `LTXVPreprocess img_compression>=18`,
+  `LTXVTiledVAEDecode` preferred). Exits 1 on any ERR, 0 on WARN-only.
+  All six shipped workflows currently 66 OK / 0 WARN / 0 ERR.
 - **`scripts/apply_iclora_initial_render.py`** — Phase 0a IC-LoRA wiring
   for the latent loop workflow. Forks `example_workflows/audio-loop-music-video_latent.json`
   into `internal/scratch/audio-loop-music-video_latent_iclora_phase0a.json`
@@ -22,6 +39,9 @@ This project uses [Semantic Versioning](https://semver.org/).
   Tier-S "proxy-render-as-reference" flagship as misaligned with our
   init-image commitment pattern, and promotes the doc's Tier-C
   spectrogram-as-canny idea to Tier A given our frozen-audio thesis.
+- **`EXAMPLE_WORKFLOWS_DIR` constant in `scripts/workflow_utils.py`** —
+  retires three duplicate inline definitions across `audit_workflows.py`,
+  `validate_workflow_resolution.py`, `tests/test_workflows.py`.
 
 ### Changed
 - **`AudioLoopHelperSageAttention` default mode is now `auto_mask_aware`**

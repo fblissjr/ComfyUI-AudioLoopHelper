@@ -26,6 +26,7 @@ Core nodes (nodes.py):
 - `LatentContextExtract` -- extracts tail latent frames + strips noise_mask
 - `LatentOverlapTrim` -- trims overlap latent frames + strips noise_mask
 - `StripLatentNoiseMask` -- low-level noise_mask removal utility
+- `LatentTemporalMask` -- retake support. Writes a noise_mask to a video latent so only `[start_time, end_time]` regenerates on a re-sample; rest stays fixed as context. Latent-frame math: `start_latent = int(t*fps/8)`, `end_latent = int(end*fps/8) + 1`. Reversed or zero-width ranges yield an all-zero mask (no-op). Port of `TemporalRegionMask.apply_to` from `coderef/LTX-2/.../retake.py`. Tests in `tests/test_retake_nodes.py`.
 - `KeyframeImageSchedule` -- per-iteration keyframe image selection from timestamp schedule (like TimestampPromptSchedule but for images). Outputs image/next_image/blend_factor. **Still uses the legacy spike-blend path** (no `snap_boundaries` widget yet); sub-stride `blend_seconds` produces jitter. Phase 1.5 follow-up in the plan.
 - `VideoFrameExtract` -- extracts frame from reference video at current iteration's timestamp for video-to-video conditioning
 - `ImageBlend` -- pixel-space lerp of two images by a factor. Pairs with KeyframeImageSchedule for smooth keyframe transitions.
@@ -97,6 +98,7 @@ value converter and default. Thin wrappers: `_parse_schedule` / `_match_schedule
 - **TensorLoop framework-cache invalidation is transitive.** Any node whose inputs transitively depend on `TensorLoopOpen.current_iteration` (e.g. anything wired through `AudioLoopController`) gets framework-cache-invalidated every iteration even if its OUTPUT values don't change. If you want "run once per workflow" behavior, memoize INSIDE the node on an `id(clip)`-keyed LRU + add `IS_CHANGED` (see `TimestampPromptScheduleBatchEncode` pattern), OR break the dependency chain by wiring from non-loop-dependent sources.
 - **`LTXVConcatAVLatent` looks buggy at a glance but isn't.** The `execute()` does `output.update(video_latent); output.update(audio_latent)` (which appears to overwrite the video noise_mask with the audio mask), then IMMEDIATELY overwrites `output["noise_mask"]` and `output["samples"]` with proper `NestedTensor((video, audio))` wrappers. Net result is correct. Source: `<comfyui_extras>/nodes_lt.py:619-651`. Do not chase this — one exploration agent this session misread the control flow and filed a false-positive bug.
 - Validate workflow JSON after edits: `python3 -c "import json; json.load(open('file.json'))"`
+- **Subgraph schema changes force a UI re-add.** Adding/removing/renaming a subgraph input or output changes the JSON slot indices that ComfyUI bakes into saved node positions. Users who already have the workflow open must delete the subgraph node from the canvas and re-add it for the new schema to take effect. Document this loudly in any apply script that mutates `sg["inputs"]` / `sg["outputs"]` — currently relevant to the planned IC-LoRA Phase 0b migration; not yet triggered by any shipped script.
 
 ## Init image conditioning path
 
@@ -185,6 +187,7 @@ LTX-2_00032.json and LTX-2_00040.json are confirmed working (April 9, 2026). For
 
 ### Debug tools (when a workflow regression needs forensics)
 
+- `uv run --group dev python scripts/audit_workflows.py [--verbose]` — health audit across every `example_workflows/*.json`: sage node+mode, `LoopIterationStamp` presence, batch-encode vs legacy prompt path, distilled sigma chain (`linear_quadratic 8 1` + `shift=13` + `euler` + `cfg=1`, STG exception handled), resolution div-32, `(L-1)%8==0`, `LTXVPreprocess img_compression >= 18`, `LTXVTiledVAEDecode` preferred. Exits 1 on any ERR; WARNs don't fail. Run after any bulk workflow edit; cheap (<100 ms).
 - `uv run --group dev python scripts/trace_node_source.py <workflow> <node_id> --include-inputs` — resolve any node to its Python source (AST-extracted class body + bounded call graph) + workflow-level wiring. Flags `add_object_patch` closures, captured tensors, mode=4 bypasses, widget overrides on wired inputs. **Run this before trusting any widget annotation in CLAUDE.md** — saved this session from a stale `LTX2_NAG` widget-order error.
 - `uv run --group dev python scripts/analyze_workflow_dag.py <workflow> --format <ascii|mermaid|dot|json>` — topo-sorted execution order + DAG rendering. `--subgraph 0` pulls loop-body internals into the same graph. Answers "what runs in what order" without executing anything.
 - `COMFYUI_EXEC_LOG=/tmp/exec.jsonl python <comfyui>/main.py` — runtime per-node JSONL log (start/end/error events, timings, input/output tensor shapes). Installed from `exec_logger.py` via `__init__.py`. Zero overhead when env var is unset. Use when "which node is frozen/slow/crashing" is the question.
