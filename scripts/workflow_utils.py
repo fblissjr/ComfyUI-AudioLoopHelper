@@ -25,6 +25,9 @@ EXAMPLE_WORKFLOWS_DIR = REPO_ROOT / "example_workflows"
 RUNS_DIR = REPO_ROOT / "internal" / "analysis" / "runs"
 
 
+_RUN_TIMESTAMP_FMT = "%Y-%m-%d_%H%M%S"  # lexicographic-sortable; verify_sage_iteration_trace.sh depends on this shape
+
+
 def timestamped_run_path(subdir: str, prefix: str, ext: str) -> Path:
     """Build `<project>/internal/analysis/runs/<subdir>/<prefix>_YYYY-MM-DD_HHMMSS.<ext>`.
 
@@ -34,8 +37,19 @@ def timestamped_run_path(subdir: str, prefix: str, ext: str) -> Path:
     """
     out_dir = RUNS_DIR / subdir if subdir else RUNS_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    ts = datetime.now().strftime(_RUN_TIMESTAMP_FMT)
     return out_dir / f"{prefix}_{ts}.{ext}"
+
+
+def timestamped_run_dir(base: Path) -> Path:
+    """Build `<base>/YYYY-MM-DD_HHMMSS/` and create it. Companion to
+    `timestamped_run_path` for tools that produce a directory of
+    artifacts (PNG frame sequences, profiler traces, multi-file runs).
+    """
+    ts = datetime.now().strftime(_RUN_TIMESTAMP_FMT)
+    run_dir = base / ts
+    run_dir.mkdir(parents=True, exist_ok=True)
+    return run_dir
 
 
 class WorkflowEditor:
