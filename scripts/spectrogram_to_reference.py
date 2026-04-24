@@ -212,12 +212,15 @@ def time_bin_for_frame(frame_idx: int, fps: float, sr: int, hop_length: int) -> 
 def _render_run(cfg: argparse.Namespace) -> Path:
     audio_path = Path(cfg.audio).expanduser().resolve()
     print(f"Loading audio: {audio_path}")
-    audio, sr_out = librosa.load(str(audio_path), sr=cfg.sr, mono=True)
+    # librosa.load offset+duration decodes only the requested segment --
+    # skips the intro without loading the full file into memory.
+    audio, sr_out = librosa.load(
+        str(audio_path), sr=cfg.sr, mono=True,
+        offset=cfg.start, duration=cfg.duration,
+    )
     sr = int(sr_out)
-    if cfg.duration is not None:
-        audio = audio[: int(cfg.duration * sr)]
     duration = len(audio) / sr
-    print(f"  duration={duration:.2f}s, sr={sr}")
+    print(f"  start={cfg.start}s, duration={duration:.2f}s, sr={sr}")
 
     print(f"Computing Mel spectrogram: n_mels={cfg.n_mels}, hop={cfg.hop_length}, log={cfg.log_scale}")
     mel = compute_mel_log(
@@ -353,8 +356,10 @@ def main() -> None:
     ap.add_argument("--align-ltx-latent", action="store_true", default=True,
                     help=f"Round frame count to (n-1) %% {LTX_TEMPORAL_SCALE} == 0 for LTX latent alignment.")
     ap.add_argument("--no-align-ltx-latent", dest="align_ltx_latent", action="store_false")
+    ap.add_argument("--start", type=float, default=0.0,
+                    help="Skip this many seconds from the start of the audio (e.g. to skip an intro).")
     ap.add_argument("--duration", type=float, default=None,
-                    help="Truncate audio to this many seconds (for quick tests).")
+                    help="Length in seconds to render after --start (default: rest of file).")
     ap.add_argument("--emit-video", action="store_true", default=False,
                     help="After PNG emission, stitch frames into spectrogram.mp4 via ffmpeg.")
 
