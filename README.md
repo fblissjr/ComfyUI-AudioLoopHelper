@@ -1,6 +1,6 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-04-22
+Last updated: 2026-04-24
 
 **TLDR**: Custom ComfyUI nodes for generating full-length music videos with LTX 2.3.
 Handles loop timing, auto-stopping at the audio boundary, per-iteration seed
@@ -34,6 +34,27 @@ Five workflow variants included:
   the model chain — applies AdaIN at every denoising step.
 
 Workflow adapted from [kijai's LTX 2.3 long loop extension test](https://github.com/kijai/ComfyUI-NativeLooping_testing/blob/main/ltx23_long_loop_extension_test.json).
+
+### Experimental (not on the shipped-workflow promotion path)
+
+`example_workflows/experimental/` holds workflows paired with exploratory
+experiments. Current contents:
+
+- **`spectrogram_iclora_minimal.json`** — V2A round-trip experiment: Mel
+  spectrogram fed as IC-LoRA structural reference (via `LTXAddVideoICLoRAGuide`),
+  audio generated rather than frozen. Tutorial: `docs/experimental/spectrogram_iclora_tutorial.md`.
+  Full run log + findings: `docs/experiments/exp_2026-04-24_spectrogram_iclora_v2a.md`.
+- **`iclora_amplification_poc.json`** — proof of concept for inference-time
+  amplification of any conditional contribution (IC-LoRA, style LoRAs, etc.).
+  Feeds `(conditioning_with_X, conditioning_without_X)` to `CFGGuider`;
+  existing sampler math computes the blend with cfg as the amplification
+  factor. Zero new sampler code. Apply script:
+  `scripts/apply_ttc_iclora_amplification_poc.py`.
+
+Per-experiment logs with hypothesis, setup, observations, inferences, and
+next steps live under `docs/experiments/` (convention in
+`docs/experiments/README.md`). These are working research notes, not
+production docs.
 
 Built for use alongside:
 - [ComfyUI-NativeLooping](https://github.com/kijai/ComfyUI-NativeLooping_testing) -- TensorLoopOpen/Close loop mechanism
