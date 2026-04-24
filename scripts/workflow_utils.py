@@ -6,7 +6,7 @@ Usage:
     ed.find_node(843)
     ed.trace_node_inputs(843)
     ed.add_node(...)
-    ed.rewire(old_src, old_tgt, new_src, new_tgt)
+    ed.rewire_input(tgt_node, tgt_slot, new_src, new_src_slot, dtype)
     ed.save("path/to/output.json")
 
 Handles the three link representations that must stay in sync:
@@ -15,9 +15,10 @@ Handles the three link representations that must stay in sync:
   3. Subgraph internal links (dict format) with linkIds on inputs
 """
 
-import json
 from datetime import datetime
 from pathlib import Path
+
+import orjson
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -57,13 +58,14 @@ class WorkflowEditor:
 
     def __init__(self, path: str | Path):
         self.path = Path(path)
-        self.wf = json.loads(self.path.read_text())
+        self.wf = orjson.loads(self.path.read_bytes())
 
-    def save(self, path: str | Path | None = None):
+    def save(self, path: str | Path | None = None, *, verbose: bool = False):
         """Write workflow to disk. Defaults to original path."""
         out = Path(path) if path else self.path
-        out.write_text(json.dumps(self.wf, indent=2))
-        print(f"Saved to {out}")
+        out.write_bytes(orjson.dumps(self.wf, option=orjson.OPT_INDENT_2))
+        if verbose:
+            print(f"Saved to {out}")
 
     # --- Node operations ---
 
@@ -193,7 +195,12 @@ class WorkflowEditor:
             pass
 
     def find_link(self, src_node: int, tgt_node: int) -> int | None:
-        """Find link ID between two nodes. Returns None if not found."""
+        """Find the FIRST link id between two nodes. Returns None if not found.
+
+        Two nodes can be connected by multiple links (different slot pairs);
+        this returns only the first match in link-array order. For inbound
+        lookups prefer `find_link_to_slot` (slot-precise, single-result).
+        """
         for l in self.wf["links"]:
             if isinstance(l, list) and l[1] == src_node and l[3] == tgt_node:
                 return l[0]
@@ -210,6 +217,23 @@ class WorkflowEditor:
             if isinstance(l, list) and len(l) >= 6 and l[3] == tgt_node and l[4] == tgt_slot:
                 return l
         return None
+
+    def rewire_input(
+        self, tgt_node: int, tgt_slot: int,
+        new_src: int, new_src_slot: int, dtype: str,
+    ) -> int:
+        """Replace whatever feeds `tgt_node[tgt_slot]` with `new_src[new_src_slot]`.
+
+        If an inbound link exists it's removed; a new link is then added.
+        Returns the new link id. No-ops if the same wiring is already in place
+        (still returns the existing link id, so callers can chain).
+        """
+        existing = self.find_link_to_slot(tgt_node, tgt_slot)
+        if existing is not None:
+            if existing[1] == new_src and existing[2] == new_src_slot:
+                return existing[0]
+            self.remove_link(existing[0])
+        return self.add_link(new_src, new_src_slot, tgt_node, tgt_slot, dtype)
 
     @staticmethod
     def find_input_slot(node: dict, name: str) -> int:

@@ -1,4 +1,4 @@
-Last updated: 2026-04-23 (node 268 swapped KJ PathchSageAttentionKJ → AudioLoopHelperSageAttention with auto_mask_aware default; LoopIterationStamp inserted between patch chain and subgraph invoker)
+Last updated: 2026-04-24 (loop guide now feeds from #446 LTXVPreprocess, not raw #445 ImageResizeKJv2, so initial render and loop share the same preprocessed init image)
 
 # Pipeline Flow: LATENT-Based Music Video Workflow
 
@@ -409,18 +409,18 @@ Output Assembly:
 - **Outputs**:
   | Output | Type | Connected To |
   |--------|------|-------------|
-  | IMAGE | IMAGE | #446 LTXVPreprocess (slot 0), #650 Set_input_image (slot 0) |
+  | IMAGE | IMAGE | #446 LTXVPreprocess (slot 0) |
   | width | INT | #344 EmptyLTXVLatentVideo width (slot 0) |
   | height | INT | #344 EmptyLTXVLatentVideo height (slot 1) |
   | mask | MASK | unwired |
 
 ### Node 650 -- Set_input_image
 - **Type**: `SetNode` (KJNodes)
-- **What**: Stores resized image as `input_image` for the extension subgraph
+- **What**: Stores the PREPROCESSED image as `input_image` for the extension subgraph. Source is #446 LTXVPreprocess (NOT #445 directly) — matches what the initial render's `LTXVImgToVideoInplaceKJ` consumes.
 
 ### Node 446 -- LTXVPreprocess
 - **Type**: `LTXVPreprocess` (ComfyUI core: `comfy_extras/nodes_lt.py`)
-- **What**: Preprocesses the image for LTX i2v (pixel normalization). Widget `noise_aug_strength`: `0`.
+- **What**: Preprocesses the image for LTX i2v (pixel normalization). Widget `noise_aug_strength`: `0`. **Feeds both the initial render AND the loop guide** — skipping #446 on either path causes photoreal-drift / subject replacement (see `scripts/apply_loop_guide_preprocess_symmetry.py`).
 - **Inputs**:
   | Input | Type | Source |
   |-------|------|--------|
@@ -428,7 +428,7 @@ Output Assembly:
 - **Outputs**:
   | Output | Type | Connected To |
   |--------|------|-------------|
-  | output_image | IMAGE | #531 LTXVImgToVideoInplaceKJ image_1 (slot 2) |
+  | output_image | IMAGE | #531 LTXVImgToVideoInplaceKJ image_1 (slot 2), #650 Set_input_image (slot 0) |
 
 ### Node 526 -- PrimitiveNode (length)
 - **Type**: `PrimitiveNode` (ComfyUI core)

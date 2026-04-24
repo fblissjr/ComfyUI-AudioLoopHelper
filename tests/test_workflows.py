@@ -3,12 +3,8 @@
 Runs the workflow integrity checker against all example workflows.
 """
 
-import sys
-from pathlib import Path
-
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "internal" / "scripts"))
 from test_workflow_integrity import validate
 from workflow_utils import EXAMPLE_WORKFLOWS_DIR
 

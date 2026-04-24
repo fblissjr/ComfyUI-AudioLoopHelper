@@ -198,14 +198,12 @@ def _reroute_consumers_through_guide(ed: WorkflowEditor, guide_id: int) -> None:
     for tgt_id, tgt_slot_name, guide_out_slot, dtype in GUIDE_REROUTES:
         tgt_node = ed.find_node(tgt_id)
         tgt_slot = WorkflowEditor.find_input_slot(tgt_node, tgt_slot_name)
-        existing = ed.find_link_to_slot(tgt_id, tgt_slot)
-        if existing is None:
+        if ed.find_link_to_slot(tgt_id, tgt_slot) is None:
             raise SystemExit(
                 f"Expected inbound link on {tgt_node['type']}({tgt_id}).{tgt_slot_name} "
                 "but none found."
             )
-        ed.remove_link(existing[0])
-        ed.add_link(guide_id, guide_out_slot, tgt_id, tgt_slot, dtype)
+        ed.rewire_input(tgt_id, tgt_slot, guide_id, guide_out_slot, dtype)
 
 
 def _reroute_through_iclora_guide(ed: WorkflowEditor, *, loader_id: int) -> int:

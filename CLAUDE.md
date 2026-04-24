@@ -1,6 +1,6 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-04-23
+Last updated: 2026-04-24
 
 ComfyUI nodes that automate loop timing + audio analysis for full-length music video generation with LTX 2.3. Core pattern: `AudioLoopController` drives stride from integer latent counts, audio is frozen via `noise_mask=0`, prompts pre-encoded once outside the loop (CLIP must never enter the loop body). **Start here:** `docs/architecture_overview.md`; task-first nav at `docs/README.md`.
 
@@ -65,17 +65,19 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **`LTXVConcatAVLatent` isn't buggy.** `output.update(video); output.update(audio)` gets overwritten by a proper `NestedTensor` assignment on the next line. Don't chase.
 - Validate after edits: `python3 -c "import json; json.load(open('file.json'))"`.
 - Scrub workflows before open-sourcing: filenames, paths, UUIDs, previews, creative prompts.
-- **TensorLoop framework-cache invalidation is transitive.** Any node downstream of `current_iteration` re-executes per iter. Memoize via `id()`-keyed LRU + `IS_CHANGED` (see `TimestampPromptScheduleBatchEncode`).
+- **TensorLoop framework-cache invalidation is transitive.** Any node downstream of `current_iteration` re-executes per iter. Memoize via `id()`-keyed LRU + `IS_CHANGED` (see `TimestampPromptScheduleBatchEncode`). Module-level caches (`_BATCH_ENCODE_CACHE`, `_COND_CACHE`) die on ComfyUI restart — they're plain dicts, no persistence.
+- **LTX has no image VAE encode node.** Decode variants exist (`LTXVTiledVAEDecode`, `LTXVSpatioTemporalTiledVAEDecode`); audio has `LTXVAudioVAEEncode`. For image→latent, use core `VAEEncode` — even Lightricks' reference workflows do.
 
 ## Init image conditioning path
 
 - **Initial render**: `#531 LTXVImgToVideoInplaceKJ` writes encoded init into frame 0; `noise_mask=0` locks it.
 - **Loop iterations**: top-level `VAEEncode → subgraph slot 8 (guide_latent) → #1519 LTXVAddLatentGuide` with `latent_idx=-1` (conditioning on the frame BEFORE the window). Init encoded ONCE.
+- **Preprocess symmetry (MANDATORY)**: both paths consume `#446 LTXVPreprocess(img_compression=18)` output. Wiring: `#445 ImageResizeKJv2 → #446 → { #531 (initial), #650 Set_input_image (loop guide) }`. Skipping `#446` on the loop branch is the photoreal-drift footgun — initial locks in preprocessed stats, loop anchors to raw, cross-attention reasserts its "singing woman with microphone" prior iter-over-iter. Fix + idempotent migration across all six example workflows: `scripts/apply_loop_guide_preprocess_symmetry.py`.
 - Full trace: `docs/reference/pipeline_flow_latent.md`.
 
 ## Subgraph editing
 
-- ALWAYS use `WorkflowEditor`. Helpers: `find_subgraph_invoker`, `find_input_slot`, `find_link_to_slot`, `remove_link`, `remove_subgraph_link`.
+- ALWAYS use `WorkflowEditor`. Top-level helpers: `find_node`, `find_link_to_slot(tgt, slot)`, `add_link`, `remove_link`, `rewire_input(tgt, slot, new_src, new_src_slot, dtype)`, `find_links_to/from`. Subgraph-specific: `find_subgraph_invoker`, `find_subgraph_node`, `remove_subgraph_link`. `find_input_slot` works on both. **Don't hand-roll link lookups or rewires** — `find_link_to_slot` replaces the `next(lk for lk in ed.wf["links"] if lk[0] == link_id)` pattern; `rewire_input` replaces the `remove_link` + `add_link` splice.
 - **`remove_link` rebinds the target list** via filter — locals holding `ed.wf["links"]` go stale. Use editor methods or re-fetch.
 - Top-level links are array `[id, src, src_slot, tgt, tgt_slot, type]`; subgraph internal links are dict `{id, origin_id, origin_slot, target_id, target_slot, type}`. Subgraph def at `wf['definitions']['subgraphs'][0]`.
 - Distributor `-10` / output collector `-20` are virtual — not in `sg["nodes"]`.
