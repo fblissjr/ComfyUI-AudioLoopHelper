@@ -236,15 +236,25 @@ def _resolve_run_dir(cfg: argparse.Namespace) -> Path:
 def _render_run(cfg: argparse.Namespace) -> Path:
     audio_path = Path(cfg.audio).expanduser().resolve()
     print(f"Loading audio: {audio_path}")
-    # librosa.load offset+duration decodes only the requested segment --
-    # skips the intro without loading the full file into memory.
+    # Pre-load `window_seconds` of lead-in audio BEFORE the user's
+    # requested start so frame 0 of the output has a fully-populated
+    # sliding window. Without this, frame 0 shows a near-black image
+    # (empty window, left-padded with zeros) and the IC-LoRA would
+    # prompt the model to render "nothing happening" at video start.
+    lead_in = cfg.window_seconds
+    load_start = max(0.0, cfg.start - lead_in)
+    lead_in_actual = cfg.start - load_start  # < lead_in if start < window_seconds
+    load_duration = None if cfg.duration is None else cfg.duration + lead_in_actual
+
     audio, sr_out = librosa.load(
         str(audio_path), sr=cfg.sr, mono=True,
-        offset=cfg.start, duration=cfg.duration,
+        offset=load_start, duration=load_duration,
     )
     sr = int(sr_out)
-    duration = len(audio) / sr
-    print(f"  start={cfg.start}s, duration={duration:.2f}s, sr={sr}")
+    total_loaded = len(audio) / sr
+    render_duration = total_loaded - lead_in_actual
+    print(f"  start={cfg.start}s, render_duration={render_duration:.2f}s, "
+          f"lead_in={lead_in_actual:.2f}s (for sliding-window context), sr={sr}")
 
     print(f"Computing Mel spectrogram: n_mels={cfg.n_mels}, hop={cfg.hop_length}, log={cfg.log_scale}")
     mel = compute_mel_log(
@@ -255,9 +265,10 @@ def _render_run(cfg: argparse.Namespace) -> Path:
     print(f"  mel shape: {mel.shape}; prepared min/max: {prepared.min()}/{prepared.max()}")
 
     total_frames = frame_count_for(
-        duration_seconds=duration, fps=cfg.fps, align_ltx_latent=cfg.align_ltx_latent,
+        duration_seconds=render_duration, fps=cfg.fps, align_ltx_latent=cfg.align_ltx_latent,
     )
     window_bins = int(round(cfg.window_seconds * sr / cfg.hop_length))
+    lead_in_bins = int(round(lead_in_actual * sr / cfg.hop_length))
     print(f"  total frames: {total_frames} (fps={cfg.fps}, align_ltx={cfg.align_ltx_latent})")
     print(f"  sliding window: {cfg.window_seconds}s = {window_bins} mel bins")
 
@@ -265,7 +276,14 @@ def _render_run(cfg: argparse.Namespace) -> Path:
     print(f"\nRendering frames -> {run_dir}")
 
     for frame_idx in range(total_frames):
-        time_idx = min(time_bin_for_frame(frame_idx, fps=cfg.fps, sr=sr, hop_length=cfg.hop_length), mel.shape[1] - 1)
+        # Offset each frame's time_idx into the mel by lead_in_bins so
+        # frame 0 of output lands at the user's requested --start point.
+        # The lead-in content sits before it in the mel and populates
+        # the sliding window automatically.
+        time_idx = min(
+            lead_in_bins + time_bin_for_frame(frame_idx, fps=cfg.fps, sr=sr, hop_length=cfg.hop_length),
+            mel.shape[1] - 1,
+        )
         frame = render_frame(prepared, time_idx=time_idx, window_bins=window_bins,
                              resolution=(cfg.resolution_h, cfg.resolution_w))
         Image.fromarray(frame).save(run_dir / f"frame_{frame_idx:05d}.png")
@@ -281,7 +299,8 @@ def _render_run(cfg: argparse.Namespace) -> Path:
         **{k: v for k, v in vars(cfg).items() if k != "audio"},
         "audio_path": str(audio_path),
         "output_dir": str(run_dir),
-        "duration_seconds": duration,
+        "duration_seconds": render_duration,
+        "lead_in_seconds": lead_in_actual,
         "total_frames": total_frames,
         "sr_effective": sr,
         "video_path": str(video_path) if video_path else None,
