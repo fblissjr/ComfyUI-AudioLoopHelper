@@ -208,10 +208,9 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         sg = sgs[0]
         sg_node_ids = {n["id"] for n in sg.get("nodes", [])}
         if {644, 655, 1519}.issubset(sg_node_ids):
-            pos = next((l for l in sg.get("links", [])
-                       if l.get("target_id") == 644 and l.get("target_slot") == 1), None)
-            neg = next((l for l in sg.get("links", [])
-                       if l.get("target_id") == 644 and l.get("target_slot") == 2), None)
+            sg_links = sg.get("links", [])
+            pos = next((l for l in sg_links if l.get("target_id") == 644 and l.get("target_slot") == 1), None)
+            neg = next((l for l in sg_links if l.get("target_id") == 644 and l.get("target_slot") == 2), None)
             if pos is None or neg is None:
                 record("WARN", "loop_cropguides_symmetry", "CFGGuider(644) missing pos/neg inbound links")
             elif pos["origin_id"] == 655 and neg["origin_id"] == 655:

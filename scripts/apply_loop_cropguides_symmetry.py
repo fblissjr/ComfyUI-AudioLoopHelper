@@ -63,13 +63,6 @@ LTXV_CROP_GUIDES_ID = 655         # Subgraph node: mirrors initial-path #381
 SUBGRAPH_INDEX = 0
 
 
-def _find_sg_link(sg: dict, tgt_node: int, tgt_slot: int) -> dict | None:
-    return next(
-        (l for l in sg["links"] if l["target_id"] == tgt_node and l["target_slot"] == tgt_slot),
-        None,
-    )
-
-
 def _apply_one(wf_path: Path, revert: bool, dry_run: bool) -> str:
     try:
         ed = WorkflowEditor(wf_path)
@@ -86,8 +79,8 @@ def _apply_one(wf_path: Path, revert: bool, dry_run: bool) -> str:
     if missing:
         return f"skip (missing subgraph nodes {missing})"
 
-    pos = _find_sg_link(sg, CFG_GUIDER_ID, 1)
-    neg = _find_sg_link(sg, CFG_GUIDER_ID, 2)
+    pos = ed.find_subgraph_link_to_slot(CFG_GUIDER_ID, 1, SUBGRAPH_INDEX)
+    neg = ed.find_subgraph_link_to_slot(CFG_GUIDER_ID, 2, SUBGRAPH_INDEX)
     if pos is None or neg is None:
         return f"skip (CFGGuider {CFG_GUIDER_ID} missing inbound pos/neg links)"
 

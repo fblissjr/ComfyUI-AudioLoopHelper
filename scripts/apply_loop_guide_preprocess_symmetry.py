@@ -35,8 +35,10 @@ Compatibility with other apply scripts:
 Usage:
     uv run --group dev python scripts/apply_loop_guide_preprocess_symmetry.py
     uv run --group dev python scripts/apply_loop_guide_preprocess_symmetry.py --revert
+    uv run --group dev python scripts/apply_loop_guide_preprocess_symmetry.py --dry-run
 
 Idempotent. Run repeatedly; already-fixed workflows report "no change".
+`--dry-run` reports the planned change without writing.
 """
 
 from __future__ import annotations
@@ -57,7 +59,7 @@ LTXV_PREPROCESS_ID = 446    # LTXVPreprocess (post-preprocess, img_compression=1
 SET_INPUT_IMAGE_ID = 650    # SetNode "input_image" -- feeds loop subgraph guide
 
 
-def _apply_one(wf_path: Path, revert: bool) -> str:
+def _apply_one(wf_path: Path, revert: bool, dry_run: bool) -> str:
     try:
         ed = WorkflowEditor(wf_path)
     except Exception as e:  # noqa: BLE001
@@ -80,21 +82,29 @@ def _apply_one(wf_path: Path, revert: bool) -> str:
     if src_node != expected_src or src_slot != 0:
         return f"skip (unexpected inbound source {src_node}/{src_slot})"
 
-    ed.rewire_input(SET_INPUT_IMAGE_ID, 0, target_src, 0, "IMAGE")
-    ed.save(wf_path)
-    return (
-        "reverted (446 -> 445 as input_image source)"
-        if revert
-        else "updated (loop guide now shares LTXVPreprocess output)"
+    verb = (
+        "would revert" if dry_run and revert else
+        "would update" if dry_run else
+        "reverted" if revert else "updated"
     )
+    if not dry_run:
+        ed.rewire_input(SET_INPUT_IMAGE_ID, 0, target_src, 0, "IMAGE")
+        ed.save(wf_path)
+
+    if revert:
+        return f"{verb} (446 -> 445 as input_image source)"
+    return f"{verb} (loop guide now shares LTXVPreprocess output)"
 
 
-def apply(revert: bool) -> int:
-    action = "Reverting" if revert else "Applying"
+def apply(revert: bool, dry_run: bool) -> int:
+    if dry_run:
+        action = f"Would {'revert' if revert else 'apply'}"
+    else:
+        action = "Reverting" if revert else "Applying"
     print(f"{action} loop-guide preprocess symmetry fix across example_workflows/...")
     fail = 0
     for wf_path in sorted(WORKFLOWS_DIR.glob("*.json")):
-        status = _apply_one(wf_path, revert)
+        status = _apply_one(wf_path, revert, dry_run)
         print(f"  {wf_path.name}: {status}")
         if status.startswith("load error"):
             fail += 1
@@ -110,8 +120,12 @@ def main() -> int:
         "--revert", action="store_true",
         help="Restore the original 445 -> 650 wiring (loop guide skips LTXVPreprocess).",
     )
+    ap.add_argument(
+        "--dry-run", action="store_true",
+        help="Report what WOULD change without writing files.",
+    )
     args = ap.parse_args()
-    return apply(revert=args.revert)
+    return apply(revert=args.revert, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

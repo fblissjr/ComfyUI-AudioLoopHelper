@@ -305,13 +305,29 @@ class WorkflowEditor:
         return None
 
     def find_subgraph_link(self, link_id: int, sg_index: int = 0) -> dict | None:
-        """Find an internal link inside a subgraph."""
+        """Find an internal link inside a subgraph by link id."""
         sg = self.get_subgraph(sg_index)
         if sg:
             for l in sg.get("links", []):
                 if l["id"] == link_id:
                     return l
         return None
+
+    def find_subgraph_link_to_slot(
+        self, tgt_node: int, tgt_slot: int, sg_index: int = 0,
+    ) -> dict | None:
+        """Find the internal subgraph link feeding a specific input slot.
+        Mirrors top-level `find_link_to_slot` but returns the dict-format
+        subgraph link. ComfyUI allows only one inbound link per input, so
+        there is at most one."""
+        sg = self.get_subgraph(sg_index)
+        if not sg:
+            return None
+        return next(
+            (l for l in sg.get("links", [])
+             if l.get("target_id") == tgt_node and l.get("target_slot") == tgt_slot),
+            None,
+        )
 
     def remove_subgraph_link(self, link_id: int, sg_index: int = 0):
         """Remove an internal link from a subgraph. Cleans target input.link,
@@ -400,14 +416,9 @@ class WorkflowEditor:
         """Replace whatever feeds `tgt_node[tgt_slot]` (inside the subgraph)
         with `new_src[new_src_slot]`. Mirrors top-level `rewire_input`.
         Returns the new link id (or the existing one if wiring already matches)."""
-        sg = self.get_subgraph(sg_index)
-        if not sg:
+        if self.get_subgraph(sg_index) is None:
             raise ValueError(f"Subgraph {sg_index} not found")
-        existing = next(
-            (l for l in sg["links"]
-             if l["target_id"] == tgt_node and l["target_slot"] == tgt_slot),
-            None,
-        )
+        existing = self.find_subgraph_link_to_slot(tgt_node, tgt_slot, sg_index)
         if existing is not None:
             if existing["origin_id"] == new_src and existing["origin_slot"] == new_src_slot:
                 return existing["id"]
