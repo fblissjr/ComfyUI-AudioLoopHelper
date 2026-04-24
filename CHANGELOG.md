@@ -6,6 +6,40 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **`scripts/apply_spectrogram_iclora_minimal.py` rewritten as a
+  production-fork builder.** Previous scratch-built 25-node workflow
+  produced chroma-static output because LTX 2.3 distilled needs the
+  full production patch chain (sage → chunk-FF → tuner → NAG →
+  preview-override → ModelSamplingSD3). The new script forks
+  `example_workflows/audio-loop-music-video_latent.json`, strips loop
+  infrastructure (TensorLoopOpen/Close, subgraph, AudioLoopController,
+  batch-encode, MelBand, LoadAudio + TrimAudioDuration), strips the
+  audio-freeze chain (`LTXVAudioVAEEncode` + `SetLatentNoiseMask`),
+  and adds `LTXVEmptyLatentAudio` + `LTXVAudioVAEDecode` so the
+  sampler generates both video AND audio (V2A round-trip test).
+  `LTXICLoRALoaderModelOnly` + `LTXAddVideoICLoRAGuide` inserted on
+  the initial-render path with the spectrogram mp4 as IC-LoRA IMAGE
+  input via `LoadVideo` + `GetVideoComponents`. Bypasses
+  `LatentConcat(1605)` "Prepend Initial Render" whose second input
+  dangles after the loop strip; wires `LTXVCropGuides(381).latent →
+  LTXVTiledVAEDecode(1604)` directly. Topology verified via
+  `scripts/analyze_workflow_dag.py`. Output:
+  `example_workflows/experimental/spectrogram_iclora_minimal.json`
+  (78 nodes, 66 links).
+- **`docs/experimental/spectrogram_iclora_tutorial.md` rewritten** to
+  reflect the production-fork topology. Drops the "scratch-built
+  minimal" framing. Adds §Extensions section covering
+  `ComfyUI-LTXAVTools` nodes now available (`LTXFrameCalculator`,
+  `LTXDimensionCalculator`, `LTXVAddAudioLatentGuide`,
+  `LTXAudioLatentTrim/Pad`, `LTXVAVLoopingSampler`, `LTXDetailSigmas`).
+  Notes prompt-simplicity guidance ("descriptive prompts break
+  things, let other modalities drive"). Notes with/without sage A/B
+  as a variant worth running. Troubleshooting section maps actual
+  failure modes we hit during testing (chroma noise → patch chain
+  missing; empty mp4 → LatentConcat dangling; audio silent → LTX's
+  audio head limits) to recovery actions.
+
 ### Added
 - **`LatentTemporalMask` node (`nodes.py`)** — retake support. Writes a
   `noise_mask` to a video latent so only `[start_time, end_time]`

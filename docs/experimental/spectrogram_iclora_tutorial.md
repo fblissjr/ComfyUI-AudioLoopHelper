@@ -1,25 +1,27 @@
 Last updated: 2026-04-24
 
-# Spectrogram-as-reference IC-LoRA — Phase 2.0 tutorial
+# Spectrogram-as-reference IC-LoRA — experimental test rig
 
-Experimental. This tutorial shows how to test whether a Mel spectrogram of a song, rendered as a video sequence and fed as an IC-LoRA structural reference, makes LTX 2.3 generate video with beat-locked visual rhythm.
+Experimental. Tests whether feeding a Mel spectrogram of a song as the IMAGE reference to `LTXAddVideoICLoRAGuide` drives generated video motion that tracks the song's rhythm — and optionally whether LTX 2.3 can GENERATE audio from that visual encoding (V2A round-trip).
 
-Architectural design + iteration ladder lives in `internal/design/spectrogram_reference_design.md` (gitignored internal doc). This file is the hands-on "how do I actually run it" guide.
+Architecture + long-term roadmap: `internal/design/spectrogram_reference_design.md`.
 
 ---
 
-## What you're testing
+## What this workflow does
 
-**Hypothesis:** LTX 2.3's IC-LoRA attention layer, trained on (canny-like structural reference, real video) pairs, will partially generalize if you feed it a spectrogram as the reference — producing video whose visual motion pulses with the music's beat structure.
+Forks the production `example_workflows/audio-loop-music-video_latent.json` initial-render path, strips the TensorLoop + subgraph + audio-freeze machinery, and inserts:
 
-**What this tests:** does an out-of-distribution structural signal (spectrogram ≠ canny edges) survive the IC-LoRA's VAE-compressed reference encoding enough to influence generation?
+- `LTXICLoRALoaderModelOnly` between `LTX2SamplingPreviewOverride` and the MODEL-Set node
+- `LTXAddVideoICLoRAGuide` on the initial-render conditioning + latent path, with the spectrogram mp4 as the IMAGE input
+- `LTXVEmptyLatentAudio` feeding the AV concat (no audio input — sampler generates the audio)
+- `LTXVAudioVAEDecode` on the separated audio latent → pipes into `VHS_VideoCombine.audio`
 
-**What this does NOT test** (deferred to later Phases):
-- Whether it works inside the full audio-loop architecture (Phase 2.3)
-- Quantitative beat-sync scoring (Phase 2.2 via `scripts/measure_beat_sync.py`, not yet built)
-- Per-iteration vocal/instrumental blending (Phase 2.4)
+The output mp4 has **generated video + generated audio** baked in. You compare the generated audio against the original song to see what the spectrogram-driven generation "thinks" the audio should sound like.
 
-**Go/no-go gate:** does the spectrogram-referenced render show visibly more rhythm-aligned motion than the same prompt without IC-LoRA? Yes → Phase 2.1 mode-sweep. No / heatmap artifacts → Phase 2 retired with documented failure mode.
+Keeps the full production patch chain (sage → chunk-FF → tuner → NAG → preview-override → ModelSamplingSD3 shift=13), authoritative distilled sigmas (linear_quadratic 8 1), distilled I2V init via `LTXVImgToVideoInplaceKJ(reference_image.png)`. An earlier scratch-built "minimal" topology (fewer nodes, no patch chain) produced chroma noise in testing — the full patch chain is load-bearing for distilled LTX 2.3.
+
+Post-build DAG verified via `scripts/analyze_workflow_dag.py`.
 
 ---
 
@@ -27,162 +29,172 @@ Architectural design + iteration ladder lives in `internal/design/spectrogram_re
 
 ### Models + LoRAs
 
-Paths below use `<comfyui_models>` as a placeholder for your ComfyUI `models/` directory. If you already run the main AudioLoopHelper workflow you'll have most of these; otherwise, download them from their respective sources (linked in the AudioLoopHelper main README + Lightricks' LTX 2.3 Hugging Face repos).
+Paths use `<comfyui_models>` placeholder for your ComfyUI models directory.
 
-| File | Path | Size | Purpose |
-|---|---|---|---|
-| `ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors` | `<comfyui_models>/diffusion_models/` | ~12 GB | Merged distilled diffusion MODEL |
-| `gemma_3_12B_it_fpmixed.safetensors` | `<comfyui_models>/text_encoders/` | ~6 GB | Gemma 3 text encoder |
-| `ltx-2.3_text_projection_bf16.safetensors` | `<comfyui_models>/text_encoders/` | small | LTX 2.3 text-projection head |
-| `LTX23_video_vae_bf16.safetensors` | `<comfyui_models>/vae/` | ~600 MB | Video VAE |
-| `LTX23_audio_vae_bf16.safetensors` | `<comfyui_models>/vae/` | ~80 MB | Audio VAE (for dummy silent audio latent) |
-| `MergeGreen_IC-lora_ltx2.3.safetensors` | `<comfyui_models>/loras/` | ~1 GB | IC-LoRA adapter (community Union Control variant; Hugging Face: `MergeGreen/LTX-2.3-IC-LoRA`) |
+| File | Path | Purpose |
+|---|---|---|
+| `ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors` | `<comfyui_models>/diffusion_models/` | Merged distilled MODEL |
+| `gemma_3_12B_it_fpmixed.safetensors` | `<comfyui_models>/text_encoders/` | Gemma 3 text encoder |
+| `ltx-2.3_text_projection_bf16.safetensors` | `<comfyui_models>/text_encoders/` | LTX 2.3 text projection |
+| `LTX23_video_vae_bf16.safetensors` | `<comfyui_models>/vae/` | Video VAE |
+| `LTX23_audio_vae_bf16.safetensors` | `<comfyui_models>/vae/` | Audio VAE |
+| Union Control IC-LoRA safetensors | `<comfyui_models>/loras/` | IC-LoRA adapter |
 
-**IC-LoRA rationale:** `LTXAddVideoICLoRAGuide` is a *generic* node that appends reference images to the sampler's latent + conditioning metadata — by itself, it doesn't teach the model what the reference means. The IC-LoRA file is what's trained on structural-reference → real-video pairs. Without the LoRA, the model gets the guide tokens but ignores them. The MergeGreen Union Control IC-LoRA is trained on canny/depth/pose-style references; this tutorial tests whether that training generalizes out-of-distribution to spectrograms.
+### IC-LoRA options
 
-**File-name compatibility:** if you have a different Union Control IC-LoRA (e.g. Lightricks' upstream `ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors`), edit the `ICLORA_FILE` constant at the top of `scripts/apply_spectrogram_iclora_minimal.py` and re-run it. Any Union-Control-trained IC-LoRA should work; the workflow wiring is file-agnostic.
+| LoRA | Source | Notes |
+|---|---|---|
+| `MergeGreen_IC-lora_ltx2.3.safetensors` | HF: `MergeGreen/LTX-2.3-IC-LoRA` | Community Union Control variant; used by default in the apply script |
+| `ltx-2.3-22b-ic-lora-union-control.safetensors` | HF: `Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control` | First-party Lightricks Union Control; trained on `Lightricks/Canny-Control-Dataset` |
+| `ltx-2.3-22b-ic-lora-motion-track-control.safetensors` | HF: `Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control` | Motion-Track variant; less likely to match spectrogram edge structure than Union Control |
+
+Edit the `ICLORA_FILE` constant at the top of `scripts/apply_spectrogram_iclora_minimal.py` and re-run to swap.
+
+### Custom nodes
+
+- `ComfyUI-LTXVideo` (Lightricks official) — required
+- `ComfyUI-KJNodes` — required (sage attention, Get/Set, etc.)
+- `ComfyUI-VideoHelperSuite` (VHS) — required (LoadVideo, GetVideoComponents, VHS_VideoCombine)
+- `ComfyUI-NativeLooping_testing` — required (production workflow has these nodes even though we strip the loop)
+- `ComfyUI-LTXAVTools` — **optional but recommended** for `LTXFrameCalculator` + `LTXVAddAudioLatentGuide` (see §Extensions below)
+- `ComfyUI-AudioLoopHelper` — you're in it
 
 ### Tools
 
-- `ffmpeg` on PATH (spectrogram → mp4 + audio dubbing).
-- `uv` for Python.
-- ComfyUI with `ComfyUI-LTXVideo`, `ComfyUI-KJNodes`, `ComfyUI-VideoHelperSuite` installed.
-- A 4090 (or comparable) with ~18 GB VRAM for a 5s render at 832×448.
+- `ffmpeg` on PATH (spectrogram → mp4)
+- `uv` for Python scripts
 
 ### Audio
 
-A short, **drum-forward** clip of a song. 5–10 seconds is plenty for the PoC. Avoid:
-- Ambient pads, sustained chords (no spectrogram variance → no signal)
-- Vocal-only passages (less rhythmic structure in the spectrogram)
-
-Lead with a drum break, a snare-heavy chorus, or a dance-track intro. Whatever the IC-LoRA has the best chance of showing rhythm-lock on.
+A short, **drum-forward** clip. Avoid ambient pads, sustained tones, vocals-only — the spectrogram test needs visible rhythmic variance. 5–20 seconds is plenty.
 
 ---
 
 ## Step-by-step
 
-### 1. Build the workflow (~1 second, one-time)
+### 1. Generate the spectrogram mp4
+
+```bash
+uv run --group analysis python scripts/spectrogram_to_reference.py \
+    --audio /path/to/song.wav --start 0 --duration 20 \
+    --mode edge_detected --emit-video
+```
+
+- `--mode edge_detected` produces sharp vertical beat transitions (closest to canny-trained IC-LoRA distribution)
+- Use `--mode normalized` (middle-ground VAE-friendly contrast) or `blurred` (softest) as alternates for mode sweeps
+- **Match the duration to your intended render length.** The default production render is ~20 seconds; if your spectrogram is only 5s, the remaining 15s of render has no IC-LoRA reference and will drift into pure text-driven output. Longer is fine — the guide just won't exceed the working latent's frame count.
+
+Output lands in `data/spectrogram_runs/<timestamp>_<mode>/`:
+- `spectrogram.mp4` — stitched PNG sequence via ffmpeg, near-lossless x264
+- `metadata.json` — all render params
+- `frame_*.png` — raw PNG sequence
+
+Copy the mp4 to ComfyUI's input directory (`<comfyui_input>/`) so `LoadVideo` can find it.
+
+### 2. Build the workflow
 
 ```bash
 uv run --group dev python scripts/apply_spectrogram_iclora_minimal.py
 # → example_workflows/experimental/spectrogram_iclora_minimal.json
 ```
 
-25-node workflow, scratch-built. Uses our production loader stack + `AudioLoopHelperSageAttention` with the mask-aware default. No API nodes. All files listed above. Idempotent; `--revert` deletes it.
+Forks production, strips loop, inserts IC-LoRA, switches audio to generated. ~78 nodes, DAG-verified. Idempotent; `--revert` deletes.
 
-### 2. Generate the spectrogram video (~10–30 seconds)
+### 3. Open workflow + queue
 
-```bash
-uv run --group analysis python scripts/spectrogram_to_reference.py \
-    --audio /path/to/your/song.wav \
-    --duration 5.0 \
-    --emit-video
-```
+1. Open `example_workflows/experimental/spectrogram_iclora_minimal.json` in ComfyUI.
+2. Click the `LoadVideo` widget, set filename to your `spectrogram.mp4`.
+3. **Keep prompts simple.** Inherited from production — probably already right. Lesson from music-video work: descriptive prompts break things; let init image + IC-LoRA reference drive the output. Avoid long adjective chains.
+4. Optional: edit `EmptyLTXVLatentVideo.length` (via `PrimitiveNode(526)`) if you want a shorter/longer render. Valid values satisfy `(length - 1) % 8 == 0` (e.g. 121, 129, 249, 497). If you install `ComfyUI-LTXAVTools`, the `LTXFrameCalculator` node computes this for you from a target seconds + fps.
+5. Queue.
 
-Output appears at `data/spectrogram_runs/<timestamp>/`:
-- `spectrogram.mp4` — 121 frames at 25 fps, 832×448, near-lossless x264. **This is what you feed into ComfyUI.**
-- `frame_XXXXX.png` — raw PNG sequence (ignore; same data as the mp4).
-- `metadata.json` — all render params.
-- `README.txt` — echoes wiring steps.
+### 4. Dub + compare (optional, if you want A/B against frozen-audio baseline)
 
-Default mode is `blurred` (Gaussian σ=1.5, natural-image contrast range) — the safest first test. Phase 2.1 will sweep other modes; for this tutorial, use the default.
-
-### 3. Load the workflow + point LoadVideo at the mp4 (~30 seconds)
-
-In ComfyUI:
-1. Load `example_workflows/experimental/spectrogram_iclora_minimal.json`.
-2. Find the `LoadVideo` node (titled "Spectrogram mp4 (REPLACE widget)"). Its widget says `REPLACE_WITH_SPECTROGRAM.mp4` — click and point it at the absolute path of the `spectrogram.mp4` from step 2.
-3. (Optional) Edit the positive prompt. The default is a reasonable start:
-   > "A drummer performing energetically on a dimly lit stage, warm stage lighting, shallow depth of field, cinematic. The performer's motion pulses with the music, confident and rhythmic."
-
-### 4. Render the test pass (~60–90s on a 4090)
-
-Queue. The workflow:
-1. Loads models (first queue caches them; subsequent queues are fast)
-2. Encodes the spectrogram mp4 → IMAGE batch via `GetVideoComponents`
-3. IC-LoRA guide injects the sequence as structural reference
-4. Samples 8 distilled steps → decodes → outputs silent mp4
-
-### 5. Render the baseline for A/B (~60–90s)
-
-Same workflow. Either:
-- Set `LTXICLoRALoaderModelOnly.strength_model` to `0.0` (loader becomes pass-through, LoRA disengages), OR
-- Set `LTXAddVideoICLoRAGuide.mode` to `4` via the node's right-click menu (bypassed — outputs pass upstream conditioning + latent unchanged)
-
-Either produces the "no IC-LoRA, same prompt + seed" control. Queue, wait.
-
-### 6. Dub the original audio (ffmpeg one-liner)
-
-Your ComfyUI output lands under `<comfyui_output>/spectrogram_iclora_test_NNNNN.mp4` (silent — we intentionally didn't render audio for clarity).
+The output mp4 already has generated audio. For comparison with the original song:
 
 ```bash
 ffmpeg -y \
-    -i <comfyui_output>/spectrogram_iclora_test_00001.mp4 \
-    -i /path/to/your/song.wav \
+    -i <comfyui_output>/LTX-2_00001.mp4 \
+    -i /path/to/song.wav \
     -c:v copy -c:a aac -shortest \
-    /tmp/spectrogram_run.mp4
-
-ffmpeg -y \
-    -i <comfyui_output>/spectrogram_iclora_test_00002.mp4 \
-    -i /path/to/your/song.wav \
-    -c:v copy -c:a aac -shortest \
-    /tmp/baseline_run.mp4
+    /tmp/original_audio_dub.mp4
 ```
 
-Open both in a video player. Compare.
+Then play both side-by-side.
+
+---
+
+## Variants worth running
+
+### With vs without sage attention
+
+Set `AudioLoopHelperSageAttention(268).mode` to `4` (bypassed) via right-click → Bypass, queue again, compare. Tells us whether sage's attention routing affects the IC-LoRA × spectrogram interaction. Per CLAUDE.md, `auto_mask_aware` is the production default and is preserved here; ablating it isolates its contribution.
+
+### Different IC-LoRA files
+
+Download Lightricks' first-party Union Control, edit `ICLORA_FILE` in `apply_spectrogram_iclora_minimal.py`, regenerate the workflow. Clean A/B against the community MergeGreen variant using otherwise identical inputs.
+
+### Different render modes (Phase 2.1 sweep)
+
+Re-run `spectrogram_to_reference.py` with `--mode raw` / `--mode normalized` / `--mode blurred` / `--mode edge_detected`. Each produces a distinctly-named output dir. Queue each and compare. Design doc's §Phase 2.1 covers what each mode tests.
+
+### Frozen-audio variant (if you want to isolate IC-LoRA's visual effect)
+
+Currently the apply script always switches to generated audio. For a frozen-audio variant (song stays, only video changes), the surgery would be: stop stripping `LTXVAudioVAEEncode(566)` + `SetLatentNoiseMask(570)`, don't add the `LTXVEmptyLatentAudio` / `LTXVAudioVAEDecode` / VHS-audio-rewire. Easy to fork the apply script. Left as a follow-up.
 
 ---
 
 ## Interpreting the result
 
-| Observation (visual A/B) | Verdict | Next |
+| Observation | Verdict | Next |
 |---|---|---|
-| Spectrogram version shows visibly more rhythm-aligned motion than baseline; both look reasonable | **YES — beat signal survives** | Phase 2.1: sweep `--mode` and `--blur-sigma`, find strongest config |
-| Both look nearly identical; IC-LoRA has no visible influence | **Weak / no signal** | Re-run spectrogram with `--mode edge_detected` (closer to canny distribution). If still flat after that, retire Phase 2 |
-| Spectrogram version shows dense horizontal bands / color tears / heatmap artifacts | **OOD break — model rejects reference** | Try `--mode blurred --blur-sigma 3.0` (heavier smoothing). If still ugly, retire Phase 2 with documented failure |
-| Spectrogram version moves rhythmically but identity drifts (subject changes) | **Reference competes with prompt** | Re-run workflow with LoRA strength=0.5 or 0.7 (the loader widget). Retry A/B |
-
-This is qualitative. Phase 2.2 will add an objective `beat_sync_score` metric.
+| Video shows coherent subject with motion visibly tracking the beat; generated audio resembles rocks.wav in rhythmic structure even if not melodically | **Strong signal** — spectrogram encoding round-trips both visually and audibly | Quantify via Phase 2.2 `beat_sync_score`; promote from experimental |
+| Video coherent with some rhythmic motion; generated audio is ambient / noise-like | **Partial signal** — visual path works, audio path is harder | Expected — LTX's audio head isn't trained for pure A2V without audio conditioning. Visual result is the win. |
+| Video shows subject but no beat-lock; generated audio is random | **No signal** — IC-LoRA isn't picking up spectrogram structure | Try `--mode edge_detected`, raise IC-LoRA strength to 1.0, swap to Lightricks first-party LoRA |
+| Output is noise / heatmap artifacts | **OOD break** — model rejects the reference | Check DAG with `analyze_workflow_dag.py`; try `--mode blurred --blur-sigma 3.0`; if still bad, retire Phase 2 per design doc §8 |
 
 ---
 
 ## Troubleshooting
 
-**"Failed to extract reference_downscale_factor from metadata"** in the ComfyUI log when the IC-LoRA loader runs: the MergeGreen LoRA's safetensors header may not declare this field. The loader falls back to `1.0`, which typically works for this LoRA. Not an error — just an information message. If generation looks degenerate, check `metadata_format` in the `.json` sidecar file next to the .safetensors.
+**"Output is pure static / chroma noise."** Production's patch chain (sage → chunk-FF → tuner → NAG → preview-override → ModelSamplingSD3) is load-bearing for distilled LTX 2.3. If you've edited the workflow and stripped any of those nodes, re-generate from the apply script. Run `uv run --group dev python scripts/analyze_workflow_dag.py example_workflows/experimental/spectrogram_iclora_minimal.json --format ascii | tail -30` and verify every link into the sampler is connected.
 
-**OOM at 832×448**: drop to `768×416` (both still div-32) via the `EmptyLTXVLatentVideo` widgets. Or drop length to `105` (`(105-1)%8 == 0`) for a 4.2-second clip.
+**"Output is 0 seconds / empty mp4."** A node downstream of the sampler has a dangling input. Common cause: in past debugging a `LatentConcat(1605)` "Prepend Initial Render" had a dangling second input once the loop was stripped. The apply script strips it and rewires `LTXVCropGuides → LTXVTiledVAEDecode(1604)` directly; if you see this, re-run the apply script.
 
-**"LoadVideo failed"**: path problem or codec. The script emits h264-mp4 yuv420p — widely readable. If ComfyUI's LoadVideo can't read it, try `ffprobe <comfyui_output>/spectrogram.mp4` and compare to a known-working mp4 in your workflow.
+**"DAG analysis shows dead nodes."** Most are harmless Set/Get/Reroute orphans from the loop strip — they don't execute. The critical DEAD tell is when a VHS_VideoCombine or TiledVAEDecode output has no consumers. If those are dead, the video path is broken.
 
-**"Node `AudioLoopHelperSageAttention` not found"**: this is our custom node. Ensure `ComfyUI-AudioLoopHelper` is installed (you're in its repo, so this should already be true).
+**"Audio is silent / inaudible."** Not a bug — LTX 2.3's audio head wasn't designed to generate audio from empty latent + text alone. It may produce silence, hiss, or partial sound. If you want audible audio, wire the real song audio back in (frozen-audio variant) or explore `LTXVAddAudioLatentGuide` from `ComfyUI-LTXAVTools` for true A2V conditioning.
 
-**The spectrogram mp4 looks like a static image**: your audio is too quiet or too steady. Boost volume or pick a more dynamic clip.
-
-**You get a render but the "rhythm-aligned motion" is hard to tell from random camera shake**: compare 4-5 A/B pairs before concluding. Cherry-pick drum hits in the song and see if the video has visible energy at those timestamps.
+**"Sampler takes forever / OOMs."** Check `EmptyLTXVLatentVideo` widget — production default is 497 frames (~20s at 25fps), requires ~18 GB VRAM. Drop to 121 or 249 to reduce. Also verify `LTXVPreprocess.img_compression >= 18` (CLAUDE.md gotcha).
 
 ---
 
-## What's next
+## Extensions (ComfyUI-LTXAVTools)
 
-If the test works (qualitative yes on beat-sync):
-- Phase 2.1: sweep render modes. Same workflow, regenerate the spectrogram with different `--mode` / `--blur-sigma` / `--window-seconds`.
-- Phase 2.2: build `scripts/measure_beat_sync.py` for quantitative scoring.
-- Phase 2.3: integrate into the full audio-loop architecture (`example_workflows/audio-loop-music-video_latent_iclora.json` gets built).
-- Phase 2.4: pair with `AudioPitchDetect.vocal_fraction` for instrumental-vs-vocal-gated reference blending.
+If you install `ckinpdx/ComfyUI-LTXAVTools`, several nodes become available that improve this workflow:
 
-If the test doesn't work:
-- Document the failure mode (heatmap? no influence? identity drift?) in `internal/design/spectrogram_reference_design.md` §8 kill switches.
-- Phase 2 retires. Remaining Phase 2-ish work (`measure_beat_sync.py`, runtime node) is dropped.
+- **`LTXFrameCalculator`** — snaps a target `seconds × fps` to the nearest valid `(N-1)%8==0` frame count. Replaces the hardcoded `PrimitiveNode(526)` length widget with a proper calculation. Returns `frame_count`, `latent_frames`, `actual_seconds`, plus `clean_*` variants for contamination-buffer handling.
+- **`LTXDimensionCalculator`** — aspect-ratio-aware picker for div-by-64 resolutions; dynamic dropdown updates when ratio/orientation changes. Cleaner than our hardcoded 832×448.
+- **`LTXVAddAudioLatentGuide`** — injects a raw audio latent as reference conditioning at NEGATIVE temporal RoPE positions (before t=0). Different mechanism than our `noise_mask=0` freeze approach; the audio conditions generation but doesn't appear in the output latent. Could be the cleaner way to do "song drives video without appearing in the AV NestedTensor."
+- **`LTXAudioLatentTrim`** / **`LTXAudioLatentPad`** — direct 4D audio latent slicing `[B, C, T, F]`. Relevant if we build custom per-iteration audio windows for the loop architecture.
+- **`LTXVAVLoopingSampler`** — native AV tiling sampler. CLAUDE.md currently states `LTXVLoopingSampler` can't do AV (video-only); this node claims to do AV via temporal+spatial tiling. Potential alternative to our TensorLoop architecture — worth evaluating if it produces coherent output on long-form music videos.
+- **`LTXDetailSigmas`** — parametric distilled sigma schedule. Not recommended for production (our canonical `linear_quadratic 8 1` produces the authoritative distilled sigmas per `coderef/LTX-2/.../constants.py:16`). Useful for Phase 2.1 sigma-variation experiments.
+
+Use `LTXFrameCalculator` + `LTXDimensionCalculator` for interactive UX in the workflow; `LTXVAddAudioLatentGuide` + `LTXVAVLoopingSampler` are candidates for architectural follow-ups in the broader project.
 
 ---
 
 ## Related reading
 
-- `internal/design/spectrogram_reference_design.md` — full architecture + 5-phase ladder + kill switches + decision log. The "why" behind all choices here.
-- `internal/ic_lora_assessment.md §6.5 D14-D18` — topic-searchable decisions index for this track (blurred default, offline-first, global normalization, Pillow-in-analysis-not-runtime).
-- `docs/reference/nag_technical_reference.md` — adjacent ("NAG also uses object_patches"). Relevant because IC-LoRA's `guide_attention_entries` has the same offload-asymmetry risk surface; verify via `scripts/verify_sage_iteration_trace.sh` on any longer-form integration test.
-- `<comfyui_custom_nodes>/ComfyUI-LTXVideo/iclora.py` — source of `LTXAddVideoICLoRAGuide`, `LTXICLoRALoaderModelOnly`. Read if the runtime behavior surprises you.
+- `internal/design/spectrogram_reference_design.md` — full architecture + 5-phase iteration ladder + kill switches + decision log.
+- `internal/ic_lora_assessment.md §6.5 D14–D18` — decisions index for the spectrogram track.
+- `docs/reference/nag_technical_reference.md` — adjacent. `LTXAddVideoICLoRAGuide` uses `guide_attention_entries` which has similar offload-asymmetry concerns to NAG's `object_patches` (verify via `scripts/verify_sage_iteration_trace.sh` on any longer-form integration test).
+- `scripts/analyze_workflow_dag.py` — static DAG analyzer. Run it on your edited workflow before queuing if you suspect a wiring bug.
 
 ### What is ComfyUI-LTXVideo?
 
-Lightricks' official ComfyUI integration for LTX-2 / LTX-2.3. Provides the runtime wrappers around LTX's inference primitives: model/VAE/text-encoder loaders, the AV-joint latent concat/separate nodes, guide nodes (`LTXVAddLatentGuide`, `LTXAddVideoICLoRAGuide`), IC-LoRA loader, STG and APG guiders, sparse-track editor, tiled VAE decoder. Every `LTXV*` / `LTXAV*` / `LTXAddVideo*` / `LTXICLoRA*` node in any workflow comes from there. Treat it as read-only reference — our runtime nodes in `nodes.py` / `nodes_analysis.py` / `nodes_sage.py` are designed to compose with it, not modify it.
+Lightricks' official ComfyUI integration for LTX-2 / LTX-2.3. Provides the runtime wrappers around LTX's inference primitives. Every `LTXV*` / `LTXAV*` / `LTXAddVideo*` / `LTXICLoRA*` node in any workflow comes from there. Read-only reference.
+
+### What is ComfyUI-LTXAVTools?
+
+Community-built tools for LTX 2 AV workflows. Frame/dimension calculators, audio-latent trim/pad, A2V guide, AV looping sampler. Complementary to `ComfyUI-LTXVideo`; fills gaps the official nodes don't cover. Recommended.
