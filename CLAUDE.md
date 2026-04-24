@@ -151,7 +151,7 @@ Companion custom nodes (used alongside, not imported):
 
 ## Documentation layout
 
-Public docs: `docs/README.md` (task-first nav) → `docs/guides/` (how-to), `docs/reference/` (deep-dive), `docs/analysis/` (research/postmortems), `docs/examples/` (scrubbed case studies), `docs/experimental/` (scaffolded-but-not-validated features paired with workflows in `example_workflows/experimental/`). `docs/architecture_overview.md` is the single-entry-point architecture reference.
+Public docs: `docs/README.md` (task-first nav) → `docs/guides/` (how-to), `docs/reference/` (deep-dive), `docs/analysis/` (research/postmortems on shipped code), `docs/examples/` (scrubbed case studies), `docs/experimental/` (scaffolded-but-not-validated features paired with workflows in `example_workflows/experimental/`), `docs/experiments/` (per-experiment logs: hypothesis → setup → observations → inferences → next; convention in `docs/experiments/README.md`). `docs/architecture_overview.md` is the single-entry-point architecture reference.
 
 Reference codebases (read-only): `coderef/LTX-2/` (LTX-2 native), `coderef/LTX-Desktop/` (Lightricks Desktop), `<comfyui_custom_nodes>/ComfyUI-LTXVideo/` (ComfyUI LTX integration).
 

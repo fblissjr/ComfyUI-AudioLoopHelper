@@ -46,6 +46,23 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # noqa: E402 (workflow
 RenderMode = Literal["raw", "normalized", "blurred", "edge_detected"]
 VALID_MODES: tuple[RenderMode, ...] = ("raw", "normalized", "blurred", "edge_detected")
 
+Colormap = Literal["gray", "viridis", "spectrum"]
+VALID_COLORMAPS: tuple[Colormap, ...] = ("gray", "viridis", "spectrum")
+
+# Viridis LUT (9-stop, sampled from matplotlib's viridis colormap at uniform
+# intensity steps). Sampled rather than vendored as a 256-stop table to keep
+# the script dependency-free and the LUT auditable inline. Linear interpolation
+# between stops is visually indistinguishable from matplotlib's full LUT for
+# spectrogram rendering.
+_VIRIDIS_STOPS = np.array(
+    [
+        [68, 1, 84], [72, 35, 116], [64, 67, 135], [52, 94, 141],
+        [41, 120, 142], [32, 144, 140], [34, 167, 132], [68, 190, 112],
+        [253, 231, 36],
+    ],
+    dtype=np.float32,
+)
+
 LTX_TEMPORAL_SCALE = 8  # matches nodes.py; offline script intentionally duplicates to avoid importing ComfyUI
 LTX_RESOLUTION_DIVISOR = 32  # single-stage constraint; matches scripts/validate_workflow_resolution.py DIV_PERMISSIVE
 
@@ -134,17 +151,64 @@ def prepare_mel_for_render(
     return (np.flipud(normalized) * 255.0).astype(np.uint8)
 
 
+def _apply_colormap(gray: np.ndarray, colormap: str) -> np.ndarray:
+    """Map a (H, W) uint8 intensity array to (H, W, 3) RGB via colormap.
+
+    `gray`: B&W stack (legacy default, baseline for IC-LoRA tests).
+    `viridis`: matplotlib-style modern spectrogram aesthetic. Tests whether
+        OOD priors triggered by B&W aesthetic (vintage radio audio in run 1
+        and 2) shift when the visual matches modern audio-tooling colors.
+    `spectrum`: HSV rainbow with hue mapped to vertical position (frequency
+        axis). Mimics classic audio-spectrum-analyzer displays.
+    """
+    if colormap == "gray":
+        return np.stack([gray, gray, gray], axis=-1)
+    if colormap == "viridis":
+        unit = gray.astype(np.float32) / 255.0
+        idx_f = unit * (len(_VIRIDIS_STOPS) - 1)
+        lo = np.floor(idx_f).astype(np.int32)
+        hi = np.minimum(lo + 1, len(_VIRIDIS_STOPS) - 1)
+        frac = (idx_f - lo)[..., None]
+        rgb = _VIRIDIS_STOPS[lo] * (1 - frac) + _VIRIDIS_STOPS[hi] * frac
+        return rgb.clip(0, 255).astype(np.uint8)
+    if colormap == "spectrum":
+        h, w = gray.shape
+        # Hue = vertical position (0 at top = high freq, 1 at bottom = low freq).
+        # Saturation = full. Value = intensity.
+        hue = np.linspace(0.66, 0.0, h, dtype=np.float32)[:, None].repeat(w, axis=1)
+        sat = np.ones_like(hue)
+        val = gray.astype(np.float32) / 255.0
+        # HSV -> RGB (numpy implementation, no PIL/colorsys per-pixel loop).
+        c = val * sat
+        hp = hue * 6.0
+        x = c * (1 - np.abs((hp % 2) - 1))
+        z = np.zeros_like(c)
+        rgb = np.where(hp[..., None] < 1, np.stack([c, x, z], -1),
+              np.where(hp[..., None] < 2, np.stack([x, c, z], -1),
+              np.where(hp[..., None] < 3, np.stack([z, c, x], -1),
+              np.where(hp[..., None] < 4, np.stack([z, x, c], -1),
+              np.where(hp[..., None] < 5, np.stack([x, z, c], -1),
+                                          np.stack([c, z, x], -1))))))
+        m = (val - c)[..., None]
+        return ((rgb + m) * 255).clip(0, 255).astype(np.uint8)
+    raise ValueError(f"Unknown colormap {colormap!r}. Valid: {VALID_COLORMAPS}")
+
+
 def render_frame(
     prepared: np.ndarray,
     time_idx: int,
     window_bins: int,
     resolution: tuple[int, int],
+    colormap: Colormap = "gray",
 ) -> np.ndarray:
     """Slice a prepared mel (preprocessed + globally normalized, uint8)
     and resize to `resolution` as (H, W, 3) RGB.
 
     Sliding window: frame at time_idx shows mel bins
     [time_idx - window_bins, time_idx]. Left-pad with dark when early.
+
+    `colormap` defaults to `gray` (B&W baseline preserved for backwards
+    compat). See `_apply_colormap` for color-aesthetic ablation rationale.
     """
     start = max(0, time_idx - window_bins)
     slice_ = prepared[:, start:time_idx + 1]
@@ -157,7 +221,7 @@ def render_frame(
     h, w = resolution
     pil = Image.fromarray(slice_).resize((w, h), resample=Image.Resampling.BILINEAR)
     gray = np.asarray(pil, dtype=np.uint8)
-    return np.stack([gray, gray, gray], axis=-1)
+    return _apply_colormap(gray, colormap)
 
 
 def render_spectrogram_frame(
@@ -285,7 +349,8 @@ def _render_run(cfg: argparse.Namespace) -> Path:
             mel.shape[1] - 1,
         )
         frame = render_frame(prepared, time_idx=time_idx, window_bins=window_bins,
-                             resolution=(cfg.resolution_h, cfg.resolution_w))
+                             resolution=(cfg.resolution_h, cfg.resolution_w),
+                             colormap=cfg.colormap)
         Image.fromarray(frame).save(run_dir / f"frame_{frame_idx:05d}.png")
         if frame_idx % 50 == 0 or frame_idx == total_frames - 1:
             print(f"  frame {frame_idx + 1}/{total_frames}")
@@ -392,6 +457,11 @@ def main() -> None:
                     help=f"Output width. Must be div by {LTX_RESOLUTION_DIVISOR} for LTX 2.3.")
     ap.add_argument("--mode", choices=VALID_MODES, default="blurred",
                     help="Render mode (default: blurred -- tamer edge stats).")
+    ap.add_argument("--colormap", choices=VALID_COLORMAPS, default="gray",
+                    help="Visual aesthetic. `gray` is B&W baseline; `viridis` is "
+                         "modern-spectrogram aesthetic; `spectrum` is rainbow audio-"
+                         "analyzer aesthetic. Tests whether visual aesthetic triggers "
+                         "OOD audio priors during V2A generation.")
     ap.add_argument("--blur-sigma", type=float, default=1.5,
                     help="Gaussian blur sigma for `blurred` mode.")
     ap.add_argument("--window-seconds", type=float, default=2.0,

@@ -2,7 +2,7 @@
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
   "last_node_id": 1624,
-  "last_link_id": 3088,
+  "last_link_id": 3089,
   "nodes": [
     {
       "id": 252,
@@ -1255,7 +1255,7 @@
         {
           "name": "audio_latent",
           "type": "LATENT",
-          "link": 3084
+          "link": 3085
         }
       ],
       "outputs": [
@@ -1435,7 +1435,7 @@
           "name": "audio",
           "shape": 7,
           "type": "AUDIO",
-          "link": 3088
+          "link": 3089
         },
         {
           "name": "meta_batch",
@@ -1776,7 +1776,8 @@
             "name": "length"
           },
           "links": [
-            1408
+            1408,
+            3084
           ]
         }
       ],
@@ -1843,7 +1844,10 @@
         {
           "name": "VAE",
           "type": "VAE",
-          "links": []
+          "links": [
+            3083,
+            3088
+          ]
         }
       ],
       "title": "Get_audio_vae",
@@ -2308,7 +2312,7 @@
           "name": "audio_latent",
           "type": "LATENT",
           "links": [
-            3086
+            3087
           ]
         }
       ],
@@ -2367,7 +2371,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            3085
+            3086
           ]
         }
       ],
@@ -2579,10 +2583,7 @@
         {
           "name": "VAE",
           "type": "VAE",
-          "links": [
-            3083,
-            3087
-          ]
+          "links": []
         }
       ],
       "title": "Get_video_vae",
@@ -2982,7 +2983,7 @@
         {
           "name": "latents",
           "type": "LATENT",
-          "link": 3085
+          "link": 3086
         }
       ],
       "outputs": [
@@ -3240,6 +3241,14 @@
           "name": "audio_vae",
           "type": "VAE",
           "link": 3083
+        },
+        {
+          "name": "frames_number",
+          "type": "INT",
+          "widget": {
+            "name": "frames_number"
+          },
+          "link": 3084
         }
       ],
       "outputs": [
@@ -3247,7 +3256,7 @@
           "name": "Latent",
           "type": "LATENT",
           "links": [
-            3084
+            3085
           ]
         }
       ],
@@ -3255,7 +3264,6 @@
         "Node name for S&R": "LTXVEmptyLatentAudio"
       },
       "widgets_values": [
-        121,
         25,
         1
       ],
@@ -3277,14 +3285,14 @@
       "mode": 0,
       "inputs": [
         {
-          "name": "Audio Latent",
+          "name": "samples",
           "type": "LATENT",
-          "link": 3086
+          "link": 3087
         },
         {
-          "name": "Audio VAE",
+          "name": "audio_vae",
           "type": "VAE",
-          "link": 3087
+          "link": 3088
         }
       ],
       "outputs": [
@@ -3292,7 +3300,7 @@
           "name": "AUDIO",
           "type": "AUDIO",
           "links": [
-            3088
+            3089
           ]
         }
       ],
@@ -3785,7 +3793,7 @@
     ],
     [
       3083,
-      619,
+      599,
       0,
       1623,
       0,
@@ -3793,6 +3801,14 @@
     ],
     [
       3084,
+      526,
+      0,
+      1623,
+      1,
+      "INT"
+    ],
+    [
+      3085,
       1623,
       0,
       350,
@@ -3800,7 +3816,7 @@
       "LATENT"
     ],
     [
-      3085,
+      3086,
       381,
       2,
       1604,
@@ -3808,7 +3824,7 @@
       "LATENT"
     ],
     [
-      3086,
+      3087,
       245,
       1,
       1624,
@@ -3816,15 +3832,15 @@
       "LATENT"
     ],
     [
-      3087,
-      619,
+      3088,
+      599,
       0,
       1624,
       1,
       "VAE"
     ],
     [
-      3088,
+      3089,
       1624,
       0,
       617,

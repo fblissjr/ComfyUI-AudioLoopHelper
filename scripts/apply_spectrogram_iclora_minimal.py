@@ -67,8 +67,9 @@ LTXV_CONCAT_AV = 350
 LTXV_SEPARATE_AV = 245
 VHS_COMBINE_INITIAL = 617
 GET_VIDEO_VAE = 413
-GET_AUDIO_VAE = 619
+GET_AUDIO_VAE = 599  # Get_audio_vae (not 619 -- that's video_vae despite the prior assumption)
 LTXV_TILED_DECODE_FINAL = 1604
+LENGTH_PRIMITIVE = 526  # PrimitiveNode "length" -- single-source-of-truth for video length
 
 ICLORA_FILE = "MergeGreen_IC-lora_ltx2.3.safetensors"
 ICLORA_STRENGTH = 0.9
@@ -257,13 +258,19 @@ def build(output_path: Path) -> None:
     wf["nodes"].append({
         "id": empty_audio, "type": "LTXVEmptyLatentAudio",
         "pos": [-1800, 1050], "size": [300, 106], "flags": {}, "order": 0, "mode": 0,
-        "inputs": [_in("audio_vae", "VAE")],
+        "inputs": [
+            _in("audio_vae", "VAE"),
+            {"name": "frames_number", "type": "INT", "widget": {"name": "frames_number"}, "link": None},
+        ],
         "outputs": [_out("Latent", "LATENT")],
         "properties": {"Node name for S&R": "LTXVEmptyLatentAudio"},
-        "widgets_values": [121, 25, 1],  # frames_number (mel), fps, batch -- upstream shape
+        "widgets_values": [25, 1],  # fps, batch -- frames_number wired from PrimitiveNode 'length'
         "title": "Empty audio latent (generate)",
     })
     _add_link(wf, GET_AUDIO_VAE, 0, empty_audio, 0, "VAE")
+    # Wire frames_number from the same PrimitiveNode that drives EmptyLTXVLatentVideo.length
+    # so audio + video latent length stay in sync (single source of truth).
+    _add_link(wf, LENGTH_PRIMITIVE, 0, empty_audio, 1, "INT")
     concat = _find_node(wf, LTXV_CONCAT_AV)
     if concat is None:
         raise SystemExit(f"Production workflow missing expected LTXVConcatAVLatent({LTXV_CONCAT_AV})")
@@ -290,7 +297,7 @@ def build(output_path: Path) -> None:
     wf["nodes"].append({
         "id": audio_decode, "type": "LTXVAudioVAEDecode",
         "pos": [800, 1600], "size": [300, 78], "flags": {}, "order": 0, "mode": 0,
-        "inputs": [_in("Audio Latent", "LATENT"), _in("Audio VAE", "VAE")],
+        "inputs": [_in("samples", "LATENT"), _in("audio_vae", "VAE")],
         "outputs": [_out("AUDIO", "AUDIO")],
         "properties": {"Node name for S&R": "LTXVAudioVAEDecode"},
         "widgets_values": [],
