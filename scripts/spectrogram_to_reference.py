@@ -27,6 +27,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Callable, Literal
@@ -243,6 +245,11 @@ def _render_run(cfg: argparse.Namespace) -> Path:
         if frame_idx % 50 == 0 or frame_idx == total_frames - 1:
             print(f"  frame {frame_idx + 1}/{total_frames}")
 
+    video_path: Path | None = None
+    if cfg.emit_video:
+        video_path = _emit_video(run_dir, fps=cfg.fps)
+        print(f"  emitted video: {video_path}")
+
     metadata = {
         **{k: v for k, v in vars(cfg).items() if k != "audio"},
         "audio_path": str(audio_path),
@@ -250,6 +257,7 @@ def _render_run(cfg: argparse.Namespace) -> Path:
         "duration_seconds": duration,
         "total_frames": total_frames,
         "sr_effective": sr,
+        "video_path": str(video_path) if video_path else None,
     }
     (run_dir / "metadata.json").write_bytes(
         orjson.dumps(metadata, option=orjson.OPT_INDENT_2),
@@ -257,6 +265,27 @@ def _render_run(cfg: argparse.Namespace) -> Path:
     (run_dir / "README.txt").write_text(_wiring_instructions(metadata))
     print(f"\nDone. Next steps in {run_dir / 'README.txt'}")
     return run_dir
+
+
+def _emit_video(frames_dir: Path, fps: float) -> Path:
+    """Stitch frame_*.png sequence into a single mp4 via ffmpeg. Lets the
+    user feed a single file into ComfyUI's LoadVideo instead of wiring
+    N LoadImage nodes. Near-lossless (crf=18) since we want the reference
+    to survive VAE encoding intact."""
+    if shutil.which("ffmpeg") is None:
+        raise SystemExit("ffmpeg not found on PATH; install it or re-run without --emit-video.")
+    out_path = frames_dir / "spectrogram.mp4"
+    cmd = [
+        "ffmpeg", "-y", "-loglevel", "error",
+        "-framerate", str(fps),
+        "-i", str(frames_dir / "frame_%05d.png"),
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-crf", "18",
+        str(out_path),
+    ]
+    subprocess.run(cmd, check=True)
+    return out_path
 
 
 def _wiring_instructions(meta: dict) -> str:
@@ -326,6 +355,8 @@ def main() -> None:
     ap.add_argument("--no-align-ltx-latent", dest="align_ltx_latent", action="store_false")
     ap.add_argument("--duration", type=float, default=None,
                     help="Truncate audio to this many seconds (for quick tests).")
+    ap.add_argument("--emit-video", action="store_true", default=False,
+                    help="After PNG emission, stitch frames into spectrogram.mp4 via ffmpeg.")
 
     cfg = ap.parse_args()
 
