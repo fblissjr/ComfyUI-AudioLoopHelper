@@ -1,7 +1,6 @@
 """Tests for schedule boundary snapping and raised-cosine blend ramp.
 
-Covers the Phase 1 fix for the `blend_seconds` jitter bug — see
-`(internal plan ref redacted)`.
+Covers the Phase 1 fix for the `blend_seconds` jitter bug.
 """
 
 import pytest

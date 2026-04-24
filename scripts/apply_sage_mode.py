@@ -7,7 +7,7 @@ Usage:
 Modes (shorthand accepted in parens):
     fp16_cuda    (fp16c)   INT8 QK + FP16 PV, fp32 accum. Requires _qattn_sm80
                            extension. Original conservative choice for audio-video
-                           cross-attention quality. Use after <sage_fork_repo> rebuild.
+                           cross-attention quality. Use after sage-fork rebuild.
     fp16_triton  (triton)  INT8 QK + FP16 PV, fp32 accum. JIT Triton, no SM80
                            extension required. ~10-15% slower than fp16_cuda.
     fp8_cuda     (fp8)     INT8 QK + FP8 PV, fp32+fp32 accum. Native Ada fp8
