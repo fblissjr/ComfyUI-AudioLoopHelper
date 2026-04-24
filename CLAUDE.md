@@ -48,6 +48,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **`snap_boundaries=True`** (default) lets `overlap_seconds` change without schedule re-authoring.
 - **CLIP must not enter the loop body.** Pre-encode via `TimestampPromptScheduleBatchEncode`; `object_patches` don't survive the offload/reload → silent NAG disengagement iter 2+. Mechanism: `docs/analysis/nag_object_patches_offload_asymmetry.md`.
 - **Loop-body CONDITIONING must carry `frame_rate`** (default 25.0). Batch encoder stamps it; any new CONDITIONING-producing loop-body node must too (via `node_helpers.conditioning_set_values`). Missing → identity drift + hallucinated objects iter-over-iter.
+- **Bake new topology constraints into `scripts/audit_workflows.py`.** Every fix that ships an apply script should ship a matching audit check (ERR status with a `Run scripts/apply_X.py` remediation pointer). Canonical pairs: F2 (`preprocess_symmetry`) and F3 (`loop_cropguides_symmetry`). Prevents silent regression of fixes a sibling branch might revert.
 
 ## ComfyUI gotchas
 
@@ -115,7 +116,7 @@ Companion custom nodes (used alongside, not imported):
 
 ## Debug tools
 
-- `scripts/audit_workflows.py [--verbose]` — health audit across all `example_workflows/`: sage, batch-encode, sigma chain, resolution, `(L-1)%8`, preprocess, decoder. Exits 1 on ERR. Run after bulk edits.
+- `scripts/audit_workflows.py [--verbose]` — health audit across all `example_workflows/`: sage, batch-encode, sigma chain, resolution, `(L-1)%8`, preprocess, decoder, F2/F3 symmetry. Exits 1 on ERR. Run after bulk edits. **Intentionally `WorkflowEditor`-independent** — raw `orjson.loads` + inline link scans. Debug tool must stay usable when the editor it audits has a bug; don't DRY these scans against `WorkflowEditor` helpers.
 - `scripts/trace_node_source.py <wf> <id> --include-inputs` — resolve any node to AST-extracted source + wiring. Flags `object_patches`, captured tensors, bypasses, widget overrides. **Run before trusting any widget annotation.**
 - `scripts/analyze_workflow_dag.py <wf> --format <ascii|mermaid|dot|json>` — topo-sorted execution order.
 - `COMFYUI_EXEC_LOG=/tmp/exec.jsonl python <comfyui>/main.py` — runtime per-node JSONL log. Zero overhead unset.
@@ -133,6 +134,7 @@ Companion custom nodes (used alongside, not imported):
 
 - **Check sibling-session backlogs (`internal/design/*_backlog.md`) before executing stale PLAN items** that touch defaults. Stale items can silently regress decisions another session has since made.
 - **Run `/simplify` after non-trivial code changes.** Three-agent review (reuse / quality / efficiency) catches data-flow correctness bugs that shape-only tests miss.
+- **Promote helpers at the 3rd call site, not the 2nd.** Reviewer consensus across multiple `/simplify` passes. Prevents premature extraction: two sites can share a short inline pattern without paying the abstraction cost; by the third, the pattern is load-bearing and the name-plus-tests earn their keep.
 - **`PLAN.md` (or feature design doc) is the spec.** When red TDD tests disagree with the spec formula, fix the test — the spec wins unless you explicitly update PLAN first.
 - **Decisions-index pattern**: DECISION / WHY / CONTEXT triples, grouped by feature. Template at `internal/ic_lora_assessment.md §6.5`. Roll up any feature >3 commits to avoid re-deriving rationale from git log.
 
