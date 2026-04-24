@@ -83,9 +83,11 @@ def _apply_one(wf_path: Path, revert: bool, dry_run: bool) -> str:
 
 
 def apply(revert: bool, dry_run: bool) -> int:
-    verb = "Would " if dry_run else ""
-    action = f"{verb}{'Revert' if revert else 'Apply'}"
-    print(f"{action}ing <SCRIPT_NAME> across example_workflows/...")
+    if dry_run:
+        action = f"Would {'revert' if revert else 'apply'}"
+    else:
+        action = "Reverting" if revert else "Applying"
+    print(f"{action} <SCRIPT_NAME> across example_workflows/...")
     fail = 0
     for wf_path in sorted(WORKFLOWS_DIR.glob("*.json")):
         status = _apply_one(wf_path, revert, dry_run)

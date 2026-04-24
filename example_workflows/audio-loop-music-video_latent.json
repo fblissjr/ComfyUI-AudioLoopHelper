@@ -2,7 +2,7 @@
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
   "last_node_id": 1618,
-  "last_link_id": 3062,
+  "last_link_id": 3068,
   "nodes": [
     {
       "id": 252,
@@ -5618,13 +5618,17 @@
                 "localized_name": "positive",
                 "name": "positive",
                 "type": "CONDITIONING",
-                "links": null
+                "links": [
+                  3067
+                ]
               },
               {
                 "localized_name": "negative",
                 "name": "negative",
                 "type": "CONDITIONING",
-                "links": null
+                "links": [
+                  3068
+                ]
               },
               {
                 "localized_name": "latent",
@@ -5717,13 +5721,13 @@
                 "localized_name": "positive",
                 "name": "positive",
                 "type": "CONDITIONING",
-                "link": 2830
+                "link": 3067
               },
               {
                 "localized_name": "negative",
                 "name": "negative",
                 "type": "CONDITIONING",
-                "link": 2831
+                "link": 3068
               }
             ],
             "outputs": [
@@ -5858,7 +5862,6 @@
                 "name": "positive",
                 "type": "CONDITIONING",
                 "links": [
-                  2830,
                   2832
                 ]
               },
@@ -5867,7 +5870,6 @@
                 "name": "negative",
                 "type": "CONDITIONING",
                 "links": [
-                  2831,
                   2833
                 ]
               },
@@ -6449,22 +6451,6 @@
             "type": "LATENT"
           },
           {
-            "id": 2830,
-            "origin_id": 1519,
-            "origin_slot": 0,
-            "target_id": 644,
-            "target_slot": 1,
-            "type": "CONDITIONING"
-          },
-          {
-            "id": 2831,
-            "origin_id": 1519,
-            "origin_slot": 1,
-            "target_id": 644,
-            "target_slot": 2,
-            "type": "CONDITIONING"
-          },
-          {
             "id": 2832,
             "origin_id": 1519,
             "origin_slot": 0,
@@ -6607,6 +6593,22 @@
             "target_id": 1519,
             "target_slot": 4,
             "type": "LATENT"
+          },
+          {
+            "id": 3067,
+            "origin_id": 655,
+            "origin_slot": 0,
+            "target_id": 644,
+            "target_slot": 1,
+            "type": "CONDITIONING"
+          },
+          {
+            "id": 3068,
+            "origin_id": 655,
+            "origin_slot": 1,
+            "target_id": 644,
+            "target_slot": 2,
+            "type": "CONDITIONING"
           }
         ],
         "extra": {

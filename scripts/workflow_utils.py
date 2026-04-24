@@ -314,25 +314,23 @@ class WorkflowEditor:
         return None
 
     def remove_subgraph_link(self, link_id: int, sg_index: int = 0):
-        """Remove an internal link from a subgraph. Cleans up node inputs and input linkIds."""
+        """Remove an internal link from a subgraph. Cleans target input.link,
+        source output.links, and the virtual boundary node's linkIds."""
         sg = self.get_subgraph(sg_index)
         if not sg:
             raise ValueError(f"Subgraph {sg_index} not found")
 
-        # Find and remove the link
-        link_data = None
-        for l in sg["links"]:
-            if l["id"] == link_id:
-                link_data = l
-                break
+        link_data = next((l for l in sg["links"] if l["id"] == link_id), None)
         if not link_data:
             raise ValueError(f"Subgraph link {link_id} not found")
 
         sg["links"] = [l for l in sg["links"] if l["id"] != link_id]
 
-        # Clean target node input
         tgt_id = link_data["target_id"]
         tgt_slot = link_data["target_slot"]
+        src_id = link_data["origin_id"]
+        src_slot = link_data["origin_slot"]
+
         for n in sg.get("nodes", []):
             if n["id"] == tgt_id:
                 inputs = n.get("inputs", [])
@@ -340,11 +338,81 @@ class WorkflowEditor:
                     inputs[tgt_slot]["link"] = None
                 break
 
-        # Clean subgraph input linkIds
+        for n in sg.get("nodes", []):
+            if n["id"] == src_id:
+                outputs = n.get("outputs", [])
+                if src_slot < len(outputs):
+                    existing = outputs[src_slot].get("links") or []
+                    cleaned = [l for l in existing if l != link_id]
+                    outputs[src_slot]["links"] = cleaned if cleaned else None
+                break
+
         for inp in sg.get("inputs", []):
             link_ids = inp.get("linkIds", [])
             if link_id in link_ids:
                 inp["linkIds"] = [l for l in link_ids if l != link_id]
+
+    def add_subgraph_link(
+        self, src_node: int, src_slot: int, tgt_node: int, tgt_slot: int,
+        dtype: str, sg_index: int = 0,
+    ) -> int:
+        """Add an internal link inside a subgraph. Mirrors top-level `add_link`.
+        Updates source node output.links and target node input.link. Returns
+        new link id (pulled from the top-level `last_link_id` counter, which
+        is shared across top-level and subgraph links in ComfyUI)."""
+        sg = self.get_subgraph(sg_index)
+        if not sg:
+            raise ValueError(f"Subgraph {sg_index} not found")
+        lid = self.next_link_id()
+        sg["links"].append({
+            "id": lid,
+            "origin_id": src_node,
+            "origin_slot": src_slot,
+            "target_id": tgt_node,
+            "target_slot": tgt_slot,
+            "type": dtype,
+        })
+
+        for n in sg.get("nodes", []):
+            if n["id"] == src_node:
+                outs = n.get("outputs", [])
+                if src_slot < len(outs):
+                    existing = outs[src_slot].get("links") or []
+                    if lid not in existing:
+                        existing.append(lid)
+                    outs[src_slot]["links"] = existing
+                break
+
+        for n in sg.get("nodes", []):
+            if n["id"] == tgt_node:
+                ins = n.get("inputs", [])
+                if tgt_slot < len(ins):
+                    ins[tgt_slot]["link"] = lid
+                break
+
+        return lid
+
+    def rewire_subgraph_input(
+        self, tgt_node: int, tgt_slot: int,
+        new_src: int, new_src_slot: int, dtype: str,
+        sg_index: int = 0,
+    ) -> int:
+        """Replace whatever feeds `tgt_node[tgt_slot]` (inside the subgraph)
+        with `new_src[new_src_slot]`. Mirrors top-level `rewire_input`.
+        Returns the new link id (or the existing one if wiring already matches)."""
+        sg = self.get_subgraph(sg_index)
+        if not sg:
+            raise ValueError(f"Subgraph {sg_index} not found")
+        existing = next(
+            (l for l in sg["links"]
+             if l["target_id"] == tgt_node and l["target_slot"] == tgt_slot),
+            None,
+        )
+        if existing is not None:
+            if existing["origin_id"] == new_src and existing["origin_slot"] == new_src_slot:
+                return existing["id"]
+            self.remove_subgraph_link(existing["id"], sg_index)
+        return self.add_subgraph_link(new_src, new_src_slot, tgt_node, tgt_slot, dtype, sg_index)
 
     # --- Inspection ---
 
