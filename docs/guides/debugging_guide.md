@@ -1,4 +1,4 @@
-Last updated: 2026-04-23 (moved to docs/guides/)
+Last updated: 2026-04-24 (added F2 preprocess-symmetry and F3 loop-cropguides-symmetry recipes)
 
 # Debugging Guide: Quality Problems in the Audio-Loop Pipeline
 
@@ -53,6 +53,8 @@ often reveals the next one. That's not a regression — it's progress.
 | Big jump at the boundary where a prompt changes | Prompt delta too large, or blend_seconds mis-set | [Iteration-boundary seams](#iteration-boundary-seams) + [Blend_seconds pitfalls](#blend_seconds-pitfalls) |
 | First few seconds have no motion / frozen frames | `LTXVPreprocess img_compression` widget is `0` — preprocessing is skipped, model treats pristine init as "stay here" | [Frozen first frames](#frozen-first-frames) |
 | Illustrated init progressively becomes photoreal / "broadway musical" over iterations | LTX 2.3's audio-video cross-attention has photoreal-trained prior; `Style: illustrated.` at CFG=1 can't overcome it | [Style drift toward photoreal](#style-drift-toward-photoreal) |
+| ~20% of generations: an unrelated photoreal woman (often holding a microphone) replaces the reference subject in later windows; iter 0 looks correct | Loop-guide branch skips `LTXVPreprocess` — anchors to raw resized init instead of the preprocessed one the initial render uses. Cross-attention drifts across the delta and reasserts its "singing woman" prior | [Preprocess asymmetry (F2)](#preprocess-asymmetry-f2) |
+| Subtle identity feature drift (hair/clothing/face) over later windows with no microphone — subtler than F2, present even after the preprocess fix | Loop-body CFGGuider bypasses `LTXVCropGuides` on the CONDITIONING path; guide-keyframe metadata accumulates across iterations in ways the initial render never saw | [Loop-cropguides asymmetry (F3)](#loop-cropguides-asymmetry-f3) |
 | Lip-sync desyncs progressively over 10 iterations | Integer-latent stride drift (fixed 2026-04-20 in `AudioLoopController`) | [Lip-sync drift over iterations](#lip-sync-drift-over-iterations) |
 | Resolution-related sampling oddness | `ImageResizeKJv2` width/height not divisible by 32 (single-stage) or 64 (distilled) | [Resolution alignment](#resolution-alignment) |
 | Items from the negative prompt (microphones, duplicate characters, etc.) reappear starting iter 2+ even though iter 1 is clean; or `Style: illustrated.` inits slide toward photoreal; or anatomy glitches (deformed hands, extra limbs) return after the first iteration — and the schedule-bypassed run is clean | CLIP loaded inside the loop body is evicting the DiT; LTX2_NAG's captured negative-conditioning tensor goes stale across the offload/reload round-trip (`object_patches` are not device-migrated by ComfyUI). Fixed 2026-04-22 by moving CLIP out of the loop via `TimestampPromptScheduleBatchEncode`. | Migrate the workflow: `uv run --group dev python scripts/apply_batch_encode_fix.py`. Full technical reference: `docs/analysis/nag_object_patches_offload_asymmetry.md`. |
@@ -436,6 +438,86 @@ upstream 2.3 value in `LTX-2.3_T2V_I2V_Single_Stage_Distilled_Full.json`).
 
 **Verification**: Re-run. The first frames should show ambient motion
 (eye saccade, slight head sway, hair movement) instead of a held still.
+
+### Preprocess asymmetry (F2)
+
+**Symptom**: in ~1 out of 5 generations, an unrelated photoreal woman —
+often holding a microphone — replaces the reference subject in later
+loop windows. Iter 0 is correct; the drift compounds from iter 1 onward.
+Overall generation quality is noticeably better 80% of the time, making
+the regression easy to miss.
+
+**Root cause**: the loop guide branch was picking up the RAW resized init
+image (from `#445 ImageResizeKJv2`) instead of the preprocessed one the
+initial render consumes (from `#446 LTXVPreprocess img_compression=18`).
+Iter 0 locks in preprocessed stats via `#531 LTXVImgToVideoInplaceKJ`;
+iters 1+ anchor via `#1519 LTXVAddLatentGuide` to the raw image. Cross-
+attention (photoreal-trained) drifts across that delta iteration-over-
+iteration and reasserts its "singing woman with microphone" prior —
+the textbook fingerprint.
+
+CLAUDE.md flags `img_compression=0` vs `18` as a frozen-first-frame
+footgun; the loop branch was effectively running `=0` while initial
+ran `=18`.
+
+**Fix**:
+
+```bash
+uv run --group dev python scripts/apply_loop_guide_preprocess_symmetry.py
+```
+
+Applied to all six shipped workflows. After the fix both paths share
+`#446 LTXVPreprocess` output:
+
+```
+#445 ImageResizeKJv2 → #446 LTXVPreprocess → { #531 (initial), #650 Set_input_image (loop guide) }
+```
+
+`--dry-run` previews the diff without writing; `--revert` undoes.
+
+**Verification**: `uv run --group dev python scripts/audit_workflows.py`
+must report `preprocess_symmetry OK` for every workflow. The audit check
+was added specifically to prevent this regression recurring.
+
+### Loop-cropguides asymmetry (F3)
+
+**Symptom**: subtle iter-over-iter identity drift — small feature shifts
+in hair, clothing, facial structure — concentrated in later windows. No
+microphone (that's F2). Often shows up AFTER you've applied the F2 fix
+and the worst regression is gone but something still feels slightly off
+in long generations.
+
+**Root cause**: the initial-render CONDITIONING path runs through
+`#381 LTXVCropGuides` before `#153 CFGGuider` — guide-keyframe metadata
+is stripped from CONDITIONING before the sampler sees it. Inside the
+loop subgraph, `#655 LTXVCropGuides` exists with both inputs wired from
+`#1519 LTXVAddLatentGuide`, but its CONDITIONING outputs are unconsumed.
+`#644 CFGGuider` reads directly from `#1519[0,1]`, bypassing `#655`.
+Cropped conditioning is computed every iteration, then discarded.
+Guide metadata accumulates in CONDITIONING across N iterations in a way
+the initial render never saw.
+
+**Fix**:
+
+```bash
+uv run --group dev python scripts/apply_loop_cropguides_symmetry.py
+```
+
+After the fix, `#644` reads from `#655[0,1]` — topologically symmetric
+to the initial path's `#164 → #381 → #153`.
+
+`--dry-run` and `--revert` supported.
+
+**Verification**: `audit_workflows.py` must report
+`loop_cropguides_symmetry OK` across all workflows. The audit check was
+added specifically to prevent this regression recurring.
+
+**Related**: F2 is the preprocess-branch symmetry on the LATENT path;
+F3 is the crop symmetry on the CONDITIONING path. They're independent
+fixes addressing two different halves of the same broader constraint:
+"loop-body DiT inputs must be preprocessed identically to the initial
+render." When diagnosing identity drift, check both before reaching for
+sampler/prompt changes.
 
 ### Style drift toward photoreal
 
