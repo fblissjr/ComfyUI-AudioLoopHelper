@@ -4,7 +4,8 @@ Verifies each shipped workflow matches the current CLAUDE.md invariants:
 sage node + mode, iteration stamp, batch-encode prompt schedule,
 distilled sampler chain (linear_quadratic 8 1 + shift=13 + euler +
 cfg=1, with STG-variant exception), resolution div-32, (L-1)%8==0,
-LTXVPreprocess img_compression >= 18, LTXVTiledVAEDecode preferred.
+LTXVPreprocess img_compression >= 18, LTXVTiledVAEDecode preferred,
+preprocess symmetry (F2), and loop-body cropguides symmetry (F3).
 
 Exits 0 all-green; 1 on any ERR. WARNs don't fail.
 
@@ -171,6 +172,61 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         record("OK", "decoder", "LTXVTiledVAEDecode")
     elif by_type.get("VAEDecodeTiled"):
         record("WARN", "decoder", "VAEDecodeTiled (generic) -- consider LTXVTiledVAEDecode")
+
+    # F2: preprocess symmetry -- #650 Set_input_image must source from
+    # #446 LTXVPreprocess, not #445 ImageResizeKJv2 directly. Skipping
+    # preprocess on the loop branch reintroduces the microphone/subject-
+    # replacement drift. See scripts/apply_loop_guide_preprocess_symmetry.py.
+    set_input_image = next((n for n in wf["nodes"] if n["id"] == 650), None)
+    preprocess_node = next((n for n in wf["nodes"] if n["id"] == 446), None)
+    if set_input_image and preprocess_node:
+        link_id = set_input_image.get("inputs", [{}])[0].get("link") if set_input_image.get("inputs") else None
+        link_row = next((lk for lk in wf["links"] if isinstance(lk, list) and lk[0] == link_id), None) if link_id else None
+        if link_row is None:
+            record("WARN", "preprocess_symmetry", "#650 Set_input_image has no inbound link")
+        elif link_row[1] == 446 and link_row[2] == 0:
+            record("OK", "preprocess_symmetry", "#650 <- #446 LTXVPreprocess (symmetric)")
+        elif link_row[1] == 445:
+            record(
+                "ERR", "preprocess_symmetry",
+                "#650 <- #445 ImageResizeKJv2 DIRECTLY (skips #446 LTXVPreprocess). "
+                "Run scripts/apply_loop_guide_preprocess_symmetry.py.",
+            )
+        else:
+            record(
+                "WARN", "preprocess_symmetry",
+                f"#650 inbound from unexpected source {link_row[1]}/{link_row[2]}",
+            )
+
+    # F3: loop-body cropguides symmetry -- inside the subgraph, CFGGuider
+    # (#644) positive/negative must come from LTXVCropGuides (#655), not
+    # LTXVAddLatentGuide (#1519) directly. Mirrors initial path's
+    # #164 -> #381 -> #153. See scripts/apply_loop_cropguides_symmetry.py.
+    defs = wf.get("definitions") or {}
+    sgs = defs.get("subgraphs", []) if isinstance(defs, dict) else []
+    if sgs:
+        sg = sgs[0]
+        sg_node_ids = {n["id"] for n in sg.get("nodes", [])}
+        if {644, 655, 1519}.issubset(sg_node_ids):
+            pos = next((l for l in sg.get("links", [])
+                       if l.get("target_id") == 644 and l.get("target_slot") == 1), None)
+            neg = next((l for l in sg.get("links", [])
+                       if l.get("target_id") == 644 and l.get("target_slot") == 2), None)
+            if pos is None or neg is None:
+                record("WARN", "loop_cropguides_symmetry", "CFGGuider(644) missing pos/neg inbound links")
+            elif pos["origin_id"] == 655 and neg["origin_id"] == 655:
+                record("OK", "loop_cropguides_symmetry", "#644 <- #655 LTXVCropGuides (symmetric)")
+            elif pos["origin_id"] == 1519 and neg["origin_id"] == 1519:
+                record(
+                    "ERR", "loop_cropguides_symmetry",
+                    "#644 <- #1519 LTXVAddLatentGuide DIRECTLY (bypasses #655 LTXVCropGuides). "
+                    "Run scripts/apply_loop_cropguides_symmetry.py.",
+                )
+            else:
+                record(
+                    "WARN", "loop_cropguides_symmetry",
+                    f"#644 inbound from unexpected sources pos={pos['origin_id']} neg={neg['origin_id']}",
+                )
 
     return findings
 
