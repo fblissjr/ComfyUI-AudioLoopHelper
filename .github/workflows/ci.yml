@@ -1,0 +1,44 @@
+name: ci
+
+# Safe-input posture: this workflow does NOT interpolate any github.event.*
+# fields (issue titles, PR bodies, commit messages, head refs) into run:
+# commands. All run: steps operate only on the checked-out code. No untrusted
+# input is passed to a shell, so the command-injection class is not reachable.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.13
+
+      - name: Sync dependencies
+        run: uv sync --group dev --group analysis
+
+      - name: pytest
+        run: uv run --group dev --group analysis python -m pytest tests/ --rootdir=. -v
+
+      - name: Workflow integrity audit
+        run: uv run --group dev python scripts/audit_workflows.py
+
+      - name: Docs consistency (stale-phrase scan)
+        run: uv run --group dev --group analysis python -m pytest tests/test_docs_consistency.py --rootdir=. -v
