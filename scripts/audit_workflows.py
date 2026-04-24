@@ -227,7 +227,72 @@ def _audit_one(wf_path: Path) -> list[Finding]:
                     f"#644 inbound from unexpected sources pos={pos['origin_id']} neg={neg['origin_id']}",
                 )
 
+    _check_prompt_relay_wiring(wf, by_type, record)
+
     return findings
+
+
+# PromptRelayEncode installs object_patches on attn2 / audio_attn2 which don't
+# survive TensorLoop offload/reload. The patched MODEL must reach ONLY the
+# initial CFGGuider, never the loop subgraph invoker's model slot. Remediation:
+# scripts/apply_prompt_relay_initial_render.py.
+def _check_prompt_relay_wiring(wf, by_type, record) -> None:
+    relay_nodes = by_type.get("PromptRelayEncode", [])
+    if not relay_nodes:
+        return
+
+    if len(relay_nodes) > 1:
+        record(
+            "WARN", "prompt_relay_wiring",
+            f"{len(relay_nodes)} PromptRelayEncode nodes found; audit only checks the first.",
+        )
+
+    relay_id = relay_nodes[0]["id"]
+    invoker_id = _subgraph_invoker_id(wf)
+    model_targets: set[int] = set()
+    leaked_into_loop = False
+    for lk in wf["links"]:
+        if not isinstance(lk, list) or lk[1] != relay_id or lk[2] != 0:
+            continue
+        model_targets.add(lk[3])
+        if invoker_id is not None and lk[3] == invoker_id and lk[4] == 2:
+            leaked_into_loop = True
+
+    if not model_targets:
+        record("WARN", "prompt_relay_wiring", "PromptRelayEncode MODEL output has no consumers")
+        return
+
+    if leaked_into_loop:
+        record(
+            "ERR", "prompt_relay_wiring",
+            f"PromptRelayEncode MODEL leaks into subgraph invoker {invoker_id} "
+            "(slot 2 = model). object_patches will be stripped by loop offload; "
+            "fork the MODEL upstream of this node.",
+        )
+        return
+
+    if 153 not in model_targets:
+        record(
+            "ERR", "prompt_relay_wiring",
+            f"PromptRelayEncode MODEL does not reach initial CFGGuider(153) (targets={sorted(model_targets)})",
+        )
+        return
+
+    record("OK", "prompt_relay_wiring", "PromptRelayEncode MODEL -> CFGGuider(153) only")
+
+
+def _subgraph_invoker_id(wf) -> int | None:
+    defs = wf.get("definitions") or {}
+    sgs = defs.get("subgraphs", []) if isinstance(defs, dict) else []
+    if not sgs:
+        return None
+    sg_id = sgs[0].get("id")
+    if not sg_id:
+        return None
+    for n in wf["nodes"]:
+        if n.get("type") == sg_id:
+            return n["id"]
+    return None
 
 
 def main() -> int:
