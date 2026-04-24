@@ -29,6 +29,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - Video VAE formula: `latent = (pixel - 1) // 8 + 1`. Not `pixel // 8`.
 - `noise_mask=0` = fixed context; `mask=1` = regenerate. Audio is 0; video is 1.
 - Guide chaining: multiple `LTXVAddLatentGuide` / `LTXVAddGuideMulti` (up to 20) accumulate via `keyframe_idxs`; `LTXVCropGuides` strips them.
+- **CFG-analog amplification of any conditional contribution**: feed `(positive_with_X, positive_without_X)` to `CFGGuider` as `(positive, negative)`. Existing sampler computes `eps = eps_without + cfg * (eps_with - eps_without)` per step. Zero new sampler code; generalizes beyond IC-LoRA to any conditional (style LoRAs, identity LoRAs, per-reference ablation). Distinct from control-vector / concept-slider techniques (static directions) — this is dynamic per-step differential. Canonical POC: `scripts/apply_ttc_iclora_amplification_poc.py`. Landscape: `internal/analysis/iclora_landscape_analysis.md` §TTC.
 
 ## Critical constraints
 
@@ -54,7 +55,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 
 - Workflow JSON has two link representations: node-body `"link"` fields AND top-level `"links"` array. Both must sync.
 - Link array: `[link_id, src, src_slot, tgt, tgt_slot, type]`.
-- `"mode": 0` = active, `"mode": 4` = bypassed.
+- `"mode": 0` = active, `"mode": 4` = bypassed. **Bypass passes inputs to outputs of same TYPE only**; inputs with no matching-type output dead-end silently. E.g., bypassing `LTXAddVideoICLoRAGuide` leaves its `image` input unconsumed. Verify truly-inert bypass by swapping the upstream input and byte-diffing outputs (`md5sum` on sampled frames, `wave` on decoded audio).
 - `PrimitiveNode` can't feed `DynamicCombo` sub-inputs — set on the widget directly.
 - `TensorLoopClose` checks `should_stop` AFTER the body; handle edge inputs.
 - **Subgraph schema changes force a UI re-add** (slot indices baked at save time). Same for any `define_schema()` change.
@@ -111,8 +112,8 @@ Companion custom nodes (used alongside, not imported):
 ## Audio analysis scripts
 
 - `scripts/analyze_audio.py` — ffmpeg-only energy/structure detection, zero Python deps.
-- `scripts/analyze_audio_features.py` — librosa: BPM, key, F0, structure, JSON export for LLM (`--scene-diversity`, `--montage`, `--style`). Full guide: `docs/guides/audio_analysis_guide.md`; end-to-end: `docs/guides/prompt_workflow_end_to_end.md`.
-- `scripts/spectrogram_to_reference.py` — Mel spectrogram → PNG frame sequence for IC-LoRA spectrogram-as-reference (Phase 2.0 PoC). **Global normalization runs ONCE in `prepare_mel_for_render`** (do NOT switch to per-frame — washes out beat-amplitude). Design + iteration ladder: `internal/design/spectrogram_reference_design.md`.
+- `scripts/analyze_audio_features.py` — librosa: BPM, key, F0, structure, JSON export for LLM (`--scene-diversity`, `--montage`, `--style`). Full guide: `docs/guides/audio_analysis_guide.md`; end-to-end: `docs/guides/prompt_workflow_end_to_end.md`. **Works on generated audio too**: extract via `ffmpeg -i <mp4> -vn -acodec pcm_s16le <wav>` then analyze — primary tool for comparing source vs. generated audio features.
+- `scripts/spectrogram_to_reference.py` — Mel spectrogram → PNG frame sequence for IC-LoRA spectrogram-as-reference (Phase 2.0 PoC). **Global normalization runs ONCE in `prepare_mel_for_render`** (do NOT switch to per-frame — washes out beat-amplitude). **Dual-use**: primary use is reference rendering; diagnostic use is visualizing generated audio via `--audio <wav>` (Claude can't hear mp4 streams; spectrograms of the output make audio behavior reviewable). Supports `--colormap {gray,viridis,spectrum}`; B&W triggers vintage-broadcast audio priors in LTX 2.3 — use color for V2A experiments. Design + iteration ladder: `internal/design/spectrogram_reference_design.md`.
 
 ## Debug tools
 
@@ -138,6 +139,7 @@ Companion custom nodes (used alongside, not imported):
 - **Promote helpers at the 3rd call site, not the 2nd.** Reviewer consensus across multiple `/simplify` passes. Prevents premature extraction: two sites can share a short inline pattern without paying the abstraction cost; by the third, the pattern is load-bearing and the name-plus-tests earn their keep.
 - **`PLAN.md` (or feature design doc) is the spec.** When red TDD tests disagree with the spec formula, fix the test — the spec wins unless you explicitly update PLAN first.
 - **Decisions-index pattern**: DECISION / WHY / CONTEXT triples, grouped by feature. Template at `internal/ic_lora_assessment.md §6.5`. Roll up any feature >3 commits to avoid re-deriving rationale from git log.
+- **LTX 2.3 audio-feature seed variance is ~±20 BPM** for equivalent electronic-genre conditioning. Single-seed comparisons between configs are noise; multi-seed (3-5 per config) needed to detect audio-effect changes. Ref: `docs/experiments/exp_2026-04-24_spectrogram_iclora_v2a.md` §Inferences.
 
 ## Documentation conventions
 

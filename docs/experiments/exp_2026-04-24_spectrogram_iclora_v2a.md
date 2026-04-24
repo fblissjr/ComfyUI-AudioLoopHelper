@@ -97,33 +97,38 @@ The output is "in the neighborhood" of the source genre/mood/register — not a 
 
 10. **IC-LoRA + spectrogram may actively hurt audio-feature alignment to source, not help.** R14 (no IC-LoRA): 143.6 BPM C minor. R16 (IC-LoRA active, same seed if unchanged): 123 BPM G Major. Both tempo and tonality moved *away* from source (136 BPM F minor). If same-seed comparison holds across multiple samples, this kills the hypothesis that spectrogram-as-IC-LoRA transfers audio info. The best audio alignment in the experiment is from runs without IC-LoRA at all.
 
-## Next run to close out (R17)
+## Next run to close out (R17 with TTC1 amplification sweep)
 
-The one remaining run that cleanly decides whether spectrogram-as-IC-LoRA is alive or dead for audio alignment:
+Updated 2026-04-24: the original R17 recipe (single cfg=1 run) is insufficient given inference #6 (seed variance ~±20 BPM). A single R17 sample could trivially land anywhere in that range regardless of whether IC-LoRA + spectrogram transmits signal. TTC1 CFG-analog amplification (`scripts/apply_ttc_iclora_amplification_poc.py`) lifts weak signal above noise without requiring multi-seed runs.
 
-**R17 — "everything working together"**
+**R17 — "everything working together, amplified"**
 
 | Setting | Value | Why |
 |---|---|---|
-| Init image | **<concert_photo>.jpg** | Required anchor so IC-LoRA blends rather than copies (inference #8) |
+| Workflow | `example_workflows/experimental/iclora_amplification_poc.json` | TTC1 POC — CFGGuider wired for IC-LoRA amplification |
+| Init image | **`<concert_photo>.jpg`** | Required anchor so IC-LoRA blends rather than copies (inference #8) |
 | Spectrogram | **`<song>_spec_viridis.mp4`** | Color avoids radio-voice failure; viridis is modern-spectrogram aesthetic |
 | LoRA | Lightricks Union Control | MergeGreen mode-collapses; Union Control is the better OOD interpreter |
 | LoRA `strength_model` | **0.6** | Preserves init (R2 at 1.0 wiped init; 0.6 is mid-range) |
 | Guide `strength` | **0.7** | Independent dial; moderate pull |
 | Prompt | `"concert lights pulsing"` | Genre-locked, matches init |
-| NAG scale | 5 | Dialed back from production 11 for distilled |
-| Seed | **Same seed as R14 (143.6 BPM baseline)** | Controls variance — single-variable vs R14 is "IC-LoRA + spectrogram active" |
+| NAG | **bypass** | POC variable isolation (negative slot repurposed) |
+| Seed | **Same seed as R14** (143.6 BPM baseline, no-IC-LoRA) | Fixed across all cfg values |
+| CFGGuider.cfg | sweep: **0, 1, 2, 3, 5, -1** | Amplification factor; each is one run at the same seed |
 
-Expected outcomes and what each means:
+After each run, extract audio (`ffmpeg -i <out.mp4> -vn -acodec pcm_s16le <out.wav>`) and analyze (`scripts/analyze_audio_features.py <out.wav>`). Tabulate BPM / key / F0 across the cfg sweep.
 
-| R17 audio output | Interpretation |
+Expected patterns and what each means:
+
+| Pattern across cfg sweep | Interpretation |
 |---|---|
-| BPM shifts toward 136 from R14's 143.6; key shifts toward F minor | **Hypothesis partial-rescue.** IC-LoRA + color spectrogram + init transmits audio info. Proceed to multi-seed replication + strength sweep. |
-| BPM near 143.6; genre-coherent music; minor key | IC-LoRA neutral — doesn't hurt, doesn't help. Probably not worth pursuing (adds complexity for no win), but not actively broken. |
-| BPM shifts *away* from 136; key changes to Major; audio degrades | **Hypothesis dead.** R16 pattern repeats. Close out and pivot. |
-| Visual collapse (buildings from R2, or leakage) | IC-LoRA family can't handle spectrogram references even with init + color. Close out and pivot. |
+| BPM / key / F0 shift **monotonically** toward source as cfg increases (e.g., 143.6 → 140 → 138 → 136 as cfg goes 0 → 1 → 2 → 3) | **Hypothesis partial-rescue.** Spectrogram IS transmitting signal; the signal was below seed-variance noise floor at standard trained strength. Proceed with TTC1 as a deployment knob, or train a stronger variant. |
+| BPM / key / F0 **invariant** across all cfg values | Spectrogram is genuinely inert. Amplifying zero gives zero. Hypothesis dead — close out, pivot. |
+| BPM / key / F0 **drift chaotically** across cfg values (no monotonic pattern) | Amplification is exploring off-distribution territory rather than scaling a coherent signal. Hypothesis dead — close out, pivot. |
+| Visual collapse at cfg > 1 (buildings from R2, leakage, mode collapse) | IC-LoRA family can't tolerate amplification of an OOD reference. Close out and pivot. |
+| BPM shifts *away* from 136 as cfg increases | Spectrogram signal exists but points AWAY from source — the reference misleads the model. cfg=-1 should then push TOWARD source (inverted); if it does, confirms signal-exists-but-inverted. |
 
-After R17, write up verdict and close the spectrogram-as-IC-LoRA exploration. Pivot paths listed below.
+After R17, write up verdict and close the spectrogram-as-IC-LoRA exploration. Every outcome is informative because TTC1 disentangles "signal absent" from "signal below noise" — previously indistinguishable. Pivot paths listed below.
 
 ## Critical missing experiment
 
