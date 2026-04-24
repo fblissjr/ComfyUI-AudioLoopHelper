@@ -1,0 +1,37 @@
+Last updated: 2026-04-24
+
+# Experimental features
+
+Work-in-progress features. Each has a working implementation and a hands-on tutorial, but is **not production-validated**. Use at your own risk; gates for promotion to `docs/` + `example_workflows/` are listed per feature.
+
+Corresponding workflow files live under `example_workflows/experimental/`. They are checked into git (unlike `internal/scratch/`) so users can download + run them.
+
+## Current experiments
+
+### Spectrogram-as-reference IC-LoRA (Phase 2.0)
+
+- **Tutorial:** [`spectrogram_iclora_tutorial.md`](./spectrogram_iclora_tutorial.md)
+- **Workflow:** `example_workflows/experimental/spectrogram_iclora_minimal.json`
+- **Build script:** `scripts/apply_spectrogram_iclora_minimal.py`
+- **Internal design doc:** `internal/design/spectrogram_reference_design.md` (gitignored; architecture + kill switches + iteration ladder)
+- **Hypothesis:** a Mel spectrogram fed to `LTXAddVideoICLoRAGuide` drives beat-locked visual rhythm.
+- **Gate for promotion out of experimental:** qualitative A/B shows rhythm-alignment (Phase 2.0) AND `scripts/measure_beat_sync.py` scores > 0.5 (Phase 2.2, not yet built).
+- **Status:** scaffolded + awaiting user A/B validation.
+
+## Not-yet-experimental (still internal-only)
+
+Things that haven't earned even experimental placement yet. They live in `internal/design/*.md` (gitignored). Once an initial PoC + tutorial exist, they graduate here.
+
+- Upscale workflow (design: `internal/design/upscale_workflow_design.md`).
+- IC-LoRA Phase 0b subgraph integration (design: `internal/ic_lora_assessment.md`).
+
+## Promotion criteria
+
+A feature graduates from `docs/experimental/` to the public-facing `docs/` tree when:
+
+1. It ships with a validated `example_workflows/*.json` that audits clean (`scripts/audit_workflows.py`).
+2. Its design doc moves from `internal/design/` to `docs/reference/` or `docs/guides/`.
+3. There's at least one case study in `docs/examples/` or a real user validation note.
+4. CLAUDE.md references it without qualifying as "experimental."
+
+Until all four land, keep it here.

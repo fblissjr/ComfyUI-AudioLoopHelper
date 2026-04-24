@@ -1,0 +1,1376 @@
+{
+  "id": "bfa3ae5f-8e7f-49b1-bcb0-bd032e8ce6fd",
+  "revision": 0,
+  "last_node_id": 25,
+  "last_link_id": 33,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "UNETLoader",
+      "pos": [
+        -2400,
+        -400
+      ],
+      "size": [
+        480,
+        82
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "UNETLoader"
+      },
+      "widgets_values": [
+        "ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors",
+        "default"
+      ],
+      "title": "UNET (merged distilled 22B)"
+    },
+    {
+      "id": 2,
+      "type": "DualCLIPLoader",
+      "pos": [
+        -2400,
+        -260
+      ],
+      "size": [
+        480,
+        130
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            4,
+            5
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "DualCLIPLoader"
+      },
+      "widgets_values": [
+        "gemma_3_12B_it_fpmixed.safetensors",
+        "ltx-2.3_text_projection_bf16.safetensors",
+        "ltxv",
+        "default"
+      ],
+      "title": "Gemma text encoder"
+    },
+    {
+      "id": 3,
+      "type": "VAELoaderKJ",
+      "pos": [
+        -2400,
+        -80
+      ],
+      "size": [
+        480,
+        106
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            12,
+            31
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAELoaderKJ"
+      },
+      "widgets_values": [
+        "vae/LTX23_video_vae_bf16.safetensors",
+        "main_device",
+        "bf16"
+      ],
+      "title": "Video VAE"
+    },
+    {
+      "id": 4,
+      "type": "VAELoaderKJ",
+      "pos": [
+        -2400,
+        80
+      ],
+      "size": [
+        480,
+        106
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            8
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAELoaderKJ"
+      },
+      "widgets_values": [
+        "vae/LTX23_audio_vae_bf16.safetensors",
+        "main_device",
+        "bf16"
+      ],
+      "title": "Audio VAE (for dummy silent latent)"
+    },
+    {
+      "id": 5,
+      "type": "AudioLoopHelperSageAttention",
+      "pos": [
+        -1850,
+        -400
+      ],
+      "size": [
+        380,
+        82
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            2
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AudioLoopHelperSageAttention"
+      },
+      "widgets_values": [
+        "auto_mask_aware",
+        true
+      ],
+      "title": "Sage attention (mask-aware)"
+    },
+    {
+      "id": 6,
+      "type": "ModelSamplingSD3",
+      "pos": [
+        -1850,
+        -280
+      ],
+      "size": [
+        380,
+        58
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            3
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ModelSamplingSD3"
+      },
+      "widgets_values": [
+        13
+      ],
+      "title": "shift=13 (distilled)"
+    },
+    {
+      "id": 7,
+      "type": "LTXICLoRALoaderModelOnly",
+      "pos": [
+        -1850,
+        -160
+      ],
+      "size": [
+        380,
+        110
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            18,
+            19
+          ]
+        },
+        {
+          "name": "latent_downscale_factor",
+          "type": "FLOAT",
+          "links": [
+            15
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LTXICLoRALoaderModelOnly"
+      },
+      "widgets_values": [
+        "MergeGreen_IC-lora_ltx2.3.safetensors",
+        0.9
+      ],
+      "title": "IC-LoRA loader"
+    },
+    {
+      "id": 8,
+      "type": "CLIPTextEncode",
+      "pos": [
+        -1400,
+        -520
+      ],
+      "size": [
+        420,
+        150
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 4
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            6
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "A drummer performing energetically on a dimly lit stage, warm stage lighting, shallow depth of field, cinematic. The performer's motion pulses with the music, confident and rhythmic."
+      ],
+      "title": "Positive prompt"
+    },
+    {
+      "id": 9,
+      "type": "CLIPTextEncode",
+      "pos": [
+        -1400,
+        -340
+      ],
+      "size": [
+        420,
+        110
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 5
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            7
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "still image, frozen, deformed, duplicate, blurry, low quality"
+      ],
+      "title": "Negative prompt"
+    },
+    {
+      "id": 10,
+      "type": "LTXVConditioning",
+      "pos": [
+        -1400,
+        -190
+      ],
+      "size": [
+        380,
+        78
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 6
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            10
+          ]
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "links": [
+            11
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LTXVConditioning"
+      },
+      "widgets_values": [
+        25
+      ],
+      "title": "LTXV conditioning (frame_rate stamp)"
+    },
+    {
+      "id": 11,
+      "type": "EmptyLTXVLatentVideo",
+      "pos": [
+        -1400,
+        40
+      ],
+      "size": [
+        380,
+        106
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            13
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "EmptyLTXVLatentVideo"
+      },
+      "widgets_values": [
+        832,
+        448,
+        121,
+        1
+      ],
+      "title": "Empty video latent"
+    },
+    {
+      "id": 12,
+      "type": "LTXVEmptyLatentAudio",
+      "pos": [
+        -1400,
+        170
+      ],
+      "size": [
+        380,
+        106
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 8
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Latent",
+          "type": "LATENT",
+          "links": [
+            17
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LTXVEmptyLatentAudio"
+      },
+      "widgets_values": [
+        121,
+        25,
+        1
+      ],
+      "title": "Dummy silent audio latent"
+    },
+    {
+      "id": 13,
+      "type": "LoadVideo",
+      "pos": [
+        -1400,
+        320
+      ],
+      "size": [
+        380,
+        300
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            9
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadVideo"
+      },
+      "widgets_values": [
+        "REPLACE_WITH_SPECTROGRAM.mp4",
+        "image"
+      ],
+      "title": "Spectrogram mp4 (REPLACE widget)"
+    },
+    {
+      "id": 14,
+      "type": "GetVideoComponents",
+      "pos": [
+        -980,
+        320
+      ],
+      "size": [
+        340,
+        106
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 9
+        }
+      ],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [
+            14
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": []
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GetVideoComponents"
+      },
+      "widgets_values": [],
+      "title": "Video → frames"
+    },
+    {
+      "id": 15,
+      "type": "LTXAddVideoICLoRAGuide",
+      "pos": [
+        -900,
+        -400
+      ],
+      "size": [
+        380,
+        280
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 10
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 11
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 12
+        },
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "link": 13
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 14
+        },
+        {
+          "name": "latent_downscale_factor",
+          "type": "FLOAT",
+          "link": 15
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            20,
+            27
+          ]
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "links": [
+            21,
+            28
+          ]
+        },
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "links": [
+            16
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LTXAddVideoICLoRAGuide"
+      },
+      "widgets_values": [
+        0,
+        1.0,
+        1.0,
+        "disabled",
+        false,
+        256,
+        64
+      ],
+      "title": "IC-LoRA guide (spectrogram reference)"
+    },
+    {
+      "id": 16,
+      "type": "LTXVConcatAVLatent",
+      "pos": [
+        -480,
+        80
+      ],
+      "size": [
+        340,
+        78
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video_latent",
+          "type": "LATENT",
+          "link": 16
+        },
+        {
+          "name": "audio_latent",
+          "type": "LATENT",
+          "link": 17
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "links": [
+            26
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LTXVConcatAVLatent"
+      },
+      "widgets_values": [],
+      "title": "AV concat"
+    },
+    {
+      "id": 17,
+      "type": "BasicScheduler",
+      "pos": [
+        -480,
+        -400
+      ],
+      "size": [
+        340,
+        106
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 18
+        }
+      ],
+      "outputs": [
+        {
+          "name": "SIGMAS",
+          "type": "SIGMAS",
+          "links": [
+            25
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "BasicScheduler"
+      },
+      "widgets_values": [
+        "linear_quadratic",
+        8,
+        1.0
+      ],
+      "title": "Distilled 8-step sigmas"
+    },
+    {
+      "id": 18,
+      "type": "KSamplerSelect",
+      "pos": [
+        -480,
+        -260
+      ],
+      "size": [
+        340,
+        58
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "SAMPLER",
+          "type": "SAMPLER",
+          "links": [
+            24
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "KSamplerSelect"
+      },
+      "widgets_values": [
+        "euler"
+      ],
+      "title": "Euler (NOT ancestral)"
+    },
+    {
+      "id": 19,
+      "type": "CFGGuider",
+      "pos": [
+        -480,
+        -180
+      ],
+      "size": [
+        340,
+        98
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 19
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 20
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 21
+        }
+      ],
+      "outputs": [
+        {
+          "name": "GUIDER",
+          "type": "GUIDER",
+          "links": [
+            23
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CFGGuider"
+      },
+      "widgets_values": [
+        1.0
+      ],
+      "title": "CFG=1 (distilled)"
+    },
+    {
+      "id": 20,
+      "type": "RandomNoise",
+      "pos": [
+        -480,
+        -60
+      ],
+      "size": [
+        340,
+        82
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "NOISE",
+          "type": "NOISE",
+          "links": [
+            22
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "RandomNoise"
+      },
+      "widgets_values": [
+        42,
+        "fixed"
+      ],
+      "title": "Seed=42"
+    },
+    {
+      "id": 21,
+      "type": "SamplerCustomAdvanced",
+      "pos": [
+        -100,
+        -200
+      ],
+      "size": [
+        320,
+        106
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "noise",
+          "type": "NOISE",
+          "link": 22
+        },
+        {
+          "name": "guider",
+          "type": "GUIDER",
+          "link": 23
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "link": 24
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 25
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 26
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "LATENT",
+          "links": [
+            29
+          ]
+        },
+        {
+          "name": "denoised_output",
+          "type": "LATENT",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SamplerCustomAdvanced"
+      },
+      "widgets_values": [],
+      "title": "Sampler"
+    },
+    {
+      "id": 22,
+      "type": "LTXVCropGuides",
+      "pos": [
+        260,
+        -200
+      ],
+      "size": [
+        320,
+        78
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 27
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 28
+        },
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "link": 29
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": []
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "links": []
+        },
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "links": [
+            30
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LTXVCropGuides"
+      },
+      "widgets_values": [],
+      "title": "Strip IC-LoRA guide frames"
+    },
+    {
+      "id": 23,
+      "type": "LTXVSeparateAVLatent",
+      "pos": [
+        620,
+        -200
+      ],
+      "size": [
+        320,
+        78
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "link": 30
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video_latent",
+          "type": "LATENT",
+          "links": [
+            32
+          ]
+        },
+        {
+          "name": "audio_latent",
+          "type": "LATENT",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LTXVSeparateAVLatent"
+      },
+      "widgets_values": [],
+      "title": "Separate video from audio"
+    },
+    {
+      "id": 24,
+      "type": "LTXVTiledVAEDecode",
+      "pos": [
+        620,
+        -60
+      ],
+      "size": [
+        320,
+        150
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 31
+        },
+        {
+          "name": "latents",
+          "type": "LATENT",
+          "link": 32
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            33
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LTXVTiledVAEDecode"
+      },
+      "widgets_values": [
+        2,
+        2,
+        1,
+        true,
+        "auto",
+        "auto"
+      ],
+      "title": "Tiled VAE decode"
+    },
+    {
+      "id": 25,
+      "type": "VHS_VideoCombine",
+      "pos": [
+        980,
+        -200
+      ],
+      "size": [
+        340,
+        560
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 33
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "meta_batch",
+          "type": "VHS_BatchManager",
+          "link": null
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": {
+        "frame_rate": 25,
+        "loop_count": 0,
+        "filename_prefix": "spectrogram_iclora_test",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 19,
+        "save_metadata": true,
+        "trim_to_audio": false,
+        "pingpong": false,
+        "save_output": true
+      },
+      "title": "Save video (silent; dub audio via ffmpeg)"
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      5,
+      0,
+      "MODEL"
+    ],
+    [
+      2,
+      5,
+      0,
+      6,
+      0,
+      "MODEL"
+    ],
+    [
+      3,
+      6,
+      0,
+      7,
+      0,
+      "MODEL"
+    ],
+    [
+      4,
+      2,
+      0,
+      8,
+      0,
+      "CLIP"
+    ],
+    [
+      5,
+      2,
+      0,
+      9,
+      0,
+      "CLIP"
+    ],
+    [
+      6,
+      8,
+      0,
+      10,
+      0,
+      "CONDITIONING"
+    ],
+    [
+      7,
+      9,
+      0,
+      10,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      8,
+      4,
+      0,
+      12,
+      0,
+      "VAE"
+    ],
+    [
+      9,
+      13,
+      0,
+      14,
+      0,
+      "VIDEO"
+    ],
+    [
+      10,
+      10,
+      0,
+      15,
+      0,
+      "CONDITIONING"
+    ],
+    [
+      11,
+      10,
+      1,
+      15,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      12,
+      3,
+      0,
+      15,
+      2,
+      "VAE"
+    ],
+    [
+      13,
+      11,
+      0,
+      15,
+      3,
+      "LATENT"
+    ],
+    [
+      14,
+      14,
+      0,
+      15,
+      4,
+      "IMAGE"
+    ],
+    [
+      15,
+      7,
+      1,
+      15,
+      5,
+      "FLOAT"
+    ],
+    [
+      16,
+      15,
+      2,
+      16,
+      0,
+      "LATENT"
+    ],
+    [
+      17,
+      12,
+      0,
+      16,
+      1,
+      "LATENT"
+    ],
+    [
+      18,
+      7,
+      0,
+      17,
+      0,
+      "MODEL"
+    ],
+    [
+      19,
+      7,
+      0,
+      19,
+      0,
+      "MODEL"
+    ],
+    [
+      20,
+      15,
+      0,
+      19,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      21,
+      15,
+      1,
+      19,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      22,
+      20,
+      0,
+      21,
+      0,
+      "NOISE"
+    ],
+    [
+      23,
+      19,
+      0,
+      21,
+      1,
+      "GUIDER"
+    ],
+    [
+      24,
+      18,
+      0,
+      21,
+      2,
+      "SAMPLER"
+    ],
+    [
+      25,
+      17,
+      0,
+      21,
+      3,
+      "SIGMAS"
+    ],
+    [
+      26,
+      16,
+      0,
+      21,
+      4,
+      "LATENT"
+    ],
+    [
+      27,
+      15,
+      0,
+      22,
+      0,
+      "CONDITIONING"
+    ],
+    [
+      28,
+      15,
+      1,
+      22,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      29,
+      21,
+      0,
+      22,
+      2,
+      "LATENT"
+    ],
+    [
+      30,
+      22,
+      2,
+      23,
+      0,
+      "LATENT"
+    ],
+    [
+      31,
+      3,
+      0,
+      24,
+      0,
+      "VAE"
+    ],
+    [
+      32,
+      23,
+      0,
+      24,
+      1,
+      "LATENT"
+    ],
+    [
+      33,
+      24,
+      0,
+      25,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [],
+  "definitions": {
+    "subgraphs": []
+  },
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.5,
+      "offset": [
+        0,
+        0
+      ]
+    }
+  },
+  "version": 0.4
+}
