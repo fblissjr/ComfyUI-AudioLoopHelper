@@ -1419,6 +1419,88 @@ class StripLatentNoiseMask(io.ComfyNode):
         return io.NodeOutput(out)
 
 
+class LatentTemporalMask(io.ComfyNode):
+    """Writes a `noise_mask` to a video latent so only a time range regenerates.
+
+    Canonical retake use: run produces a video with one bad N-second
+    section. User loads the accumulated latent, sets
+    `[start_time, end_time]` to the bad range, feeds into a sampler
+    with a fresh prompt. Only the masked region regenerates; the rest
+    is held fixed by `noise_mask == 0`.
+
+    Mask semantics (per CLAUDE.md "Critical constraints"):
+      * `noise_mask == 1.0` → frame regenerates from noise
+      * `noise_mask == 0.0` → frame stays fixed (context)
+
+    Latent-frame math (per CLAUDE.md "Key patterns"):
+      * `start_latent_frame = int(start_time * fps / 8)` inclusive
+      * `end_latent_frame   = int(end_time   * fps / 8) + 1` exclusive
+      * Out-of-range indices clamp to `[0, total_latent_frames]`.
+      * Reversed (`end < start`) or zero-width ranges yield an all-zero
+        mask (nothing regenerates) rather than raising — safer for UI
+        widget drift; the user sees no change and notices the bug.
+
+    Port of `TemporalRegionMask.apply_to` from
+    `coderef/LTX-2/packages/ltx-pipelines/src/ltx_pipelines/retake.py`.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="LatentTemporalMask",
+            display_name="Latent Temporal Mask (Retake)",
+            category="looping/audio",
+            description=(
+                "Writes a noise_mask to a video latent so only [start_time, end_time] "
+                "regenerates. Rest stays fixed as context. Use for retake / section-regen."
+            ),
+            inputs=[
+                io.Latent.Input("latent", tooltip="Accumulated video latent to retake a section of."),
+                io.Float.Input(
+                    "start_time", default=0.0, min=0.0, max=10_000.0, step=0.01,
+                    tooltip="Start of the retake window in seconds. Clamped to 0 if negative.",
+                ),
+                io.Float.Input(
+                    "end_time", default=10.0, min=0.0, max=10_000.0, step=0.01,
+                    tooltip="End of the retake window in seconds. Clamped to video duration.",
+                ),
+                io.Float.Input(
+                    "fps", default=25.0, min=1.0, max=120.0, step=0.01,
+                    tooltip="Video frame rate. LTX 2.3 pipeline default is 25.",
+                ),
+            ],
+            outputs=[
+                io.Latent.Output(tooltip="Latent with noise_mask set: 1.0 inside [start,end], 0.0 outside."),
+            ],
+        )
+
+    @classmethod
+    def execute(
+        cls,
+        latent: dict,
+        start_time: float,
+        end_time: float,
+        fps: float,
+    ) -> io.NodeOutput:
+        with _profile_span("LatentTemporalMask"):
+            out = latent.copy()
+            samples = out["samples"]
+            total_frames = samples.shape[2]
+
+            mask = torch.zeros_like(samples)
+            if end_time > start_time:
+                start_latent = max(0, int(start_time * fps / LTX_TEMPORAL_SCALE))
+                end_latent = min(
+                    total_frames,
+                    int(end_time * fps / LTX_TEMPORAL_SCALE) + 1,
+                )
+                if end_latent > start_latent:
+                    mask[:, :, start_latent:end_latent] = 1.0
+            out["noise_mask"] = mask
+
+        return io.NodeOutput(out)
+
+
 class KeyframeImageSchedule(io.ComfyNode):
     """Selects a keyframe image based on the current audio position using a
     timestamp schedule, analogous to how TimestampPromptSchedule selects prompts.
@@ -2185,6 +2267,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LatentContextExtract,
             LatentOverlapTrim,
             StripLatentNoiseMask,
+            LatentTemporalMask,
             AudioDuration,
             AudioPitchDetect,
             KeyframeImageSchedule,
