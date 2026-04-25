@@ -56,13 +56,26 @@ Semantics:
   CUDA kernels do not implement mask support — `MaskMode` is
   `{kNone, kCausal}` only, and `attn_mask` passed via kwargs is silently
   dropped. Padded positions then contribute as if unmasked, contaminating
-  the attention. The LTX-shape sweep measures rtol 0.26–0.94 vs SDPA
-  across seq_kv = 32–1024 (more padding → worse rtol, as expected from
-  "mask ignored"). Triton is the only sage kernel that implements
-  masked attention (rtol ≈ 0.039 across the same range). Stateless
-  per-call decision: no closure caches, no offload-survival risk beyond
-  the base override. Full characterization:
-  `internal/design/sage_backlog.md` item 2.
+  the attention. The LTX-shape sweep measures **mean per-element
+  relative error of 0.26–0.94 vs SDPA** across seq_kv = 32–1024 (more
+  padding → worse error, as expected from "mask ignored"). Triton is
+  the only sage kernel that implements masked attention; its mean
+  per-element relative error stays at **~0.039** across the same
+  range. Stateless per-call decision: no closure caches, no
+  offload-survival risk beyond the base override. Full
+  characterization: `internal/design/sage_backlog.md` item 2.
+
+  > **What `rtol` means in this section:** these numbers are
+  > *measured divergence*, not a `torch.allclose` tolerance
+  > parameter. Computed as the per-element relative difference
+  > `|sage − sdpa| / max(|sage|, |sdpa|, eps)` aggregated as
+  > `.mean()` (mean_rtol) or `.max()` (max_rtol) across all output
+  > elements. SDPA is the ground-truth reference. Lower is better.
+  > A reading of `0.04` means the kernel's output disagrees with
+  > SDPA by ~4% per element on average; `0.94` means ~94% per-element
+  > disagreement (i.e., the mask-ignoring kernels are producing
+  > essentially garbage on padded shapes). Formula:
+  > `~/dev/sage-fork/tests/test_sageattn_ltx_shapes.py::accuracy_metrics`.
 - **`disabled`** — no-op, returns the input model unchanged.
 - **`auto`** — calls `sageattention.sageattn()` and lets sage's own
   dispatch pick the best kernel. On sm89 + CUDA >= 12.8 this lands on
