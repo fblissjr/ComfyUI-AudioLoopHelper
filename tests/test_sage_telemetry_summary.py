@@ -140,13 +140,13 @@ def test_load_jsonl_skips_blank_and_malformed_lines(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 4. Phase 0 gate cross-section
+# 4. Gate cross-section
 # ---------------------------------------------------------------------------
 
-def test_masked_triton_section_matches_plan_format():
-    """The optimization plan expects: 'masked_triton: median=X ms, p90=Y ms,
-    count=N, %_of_total=Z%'. Verify the aggregator surfaces exactly those
-    fields under the canonical key."""
+def test_masked_triton_section_matches_canonical_format():
+    """The aggregator surfaces 'masked_triton: median=X ms, p90=Y ms,
+    count=N, %_of_total=Z%' under the canonical (effective_mode, has_mask)
+    key. This row is the gate input for further mask-kernel work decisions."""
     m = _mod()
     rows = [
         _row(mode="auto", effective_mode="fp16_triton", has_mask=True, elapsed_us=800.0),
@@ -154,7 +154,7 @@ def test_masked_triton_section_matches_plan_format():
         _row(mode="auto", effective_mode="fp16_triton", has_mask=True, elapsed_us=1100.0),
     ]
     summary = m.aggregate(rows, total_wall_us=100_000.0)
-    section = m.phase0_section(summary, effective_mode="fp16_triton", has_mask=True)
+    section = m.gate_section(summary, effective_mode="fp16_triton", has_mask=True)
     # Section is a dict ready for JSON output or pretty-printing.
     assert section["count"] == 3
     assert section["median_us"] == 900.0

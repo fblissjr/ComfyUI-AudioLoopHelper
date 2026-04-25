@@ -71,7 +71,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - Pyright `reportIncompatibleMethodOverride` on `execute()` is a false positive.
 - **`LTXVConcatAVLatent` isn't buggy.** `output.update(video); output.update(audio)` gets overwritten by a proper `NestedTensor` assignment on the next line. Don't chase.
 - Validate after edits: `python3 -c "import json; json.load(open('file.json'))"`.
-- **New node modules** that need `comfy_api` / `comfy.patcher_extension` imports use `try: from comfy_api.latest import io / except: from _comfy_stubs import io_stub as io` (absolute, NOT relative — pytest imports node modules top-level, not as package members; relative breaks tests).
+- **New node modules** that need `comfy_api` / `comfy.patcher_extension` imports define inline `_Passthrough` / `_IOStub` / `override` fallbacks under a `try: from comfy_api.latest import io / except ImportError:` block. See `nodes_sage.py` and `nodes_easycache.py`. Two consumers is the minimum threshold for extracting to a shared helper; factor out only if a third node needs the same stubs.
 - **LTX denoiser-level wrapping** uses `model.add_wrapper_with_key(WrappersMP.DIFFUSION_MODEL, key, fn)`. Supported wrapper API; not a monkey patch. Reference: `nodes_easycache.py`. Cleaner than patching `BasicTransformerBlock.forward` directly.
 - **Always `git status --short` before `git commit`**. Pre-staged files (privacy_guard hook, linter mutations, half-finished prior work) get swept into your commit otherwise; the commit title then misrepresents the content.
 - Scrub workflows before open-sourcing: filenames, paths, UUIDs, previews, creative prompts.

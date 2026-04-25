@@ -140,10 +140,6 @@ def gate_section(summary: dict, *, effective_mode: str, has_mask: bool) -> dict 
     return summary["groups"].get((effective_mode, has_mask))
 
 
-# Backwards-compatible alias for prior callers / tests.
-phase0_section = gate_section
-
-
 def total_wall_us_from_exec_log(exec_log_path: Path, ksampler_classes: tuple[str, ...]) -> float | None:
     """Sum duration_s of nodes whose class_type is in ksampler_classes.
     Returns total in microseconds, or None if no matching events found."""

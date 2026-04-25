@@ -23,18 +23,35 @@ try:
     from comfy_api.latest import io
     from typing_extensions import override
 except ImportError:
-    # Absolute (not relative) so this works whether the plugin is loaded
-    # as a package by ComfyUI or as a top-level module by pytest. The
-    # pytest rootdir puts the plugin root on sys.path either way.
-    from _comfy_stubs import io_stub as io, override_stub as override  # type: ignore[assignment,no-redef]
+    # pytest stubs: importable without ComfyUI runtime. Mirror the inline
+    # pattern in nodes_sage.py rather than sharing a helper module --
+    # two consumers is the bare minimum threshold for extraction, and
+    # the test importing nodes_easycache top-level (not as a package
+    # member) already trips relative imports.
+    class _Passthrough:
+        def __getattr__(self, _name): return _Passthrough()
+        def __call__(self, *_args, **_kwargs): return _Passthrough()
+
+    class _IOStub(_Passthrough):
+        class ComfyNode: pass
+
+        @staticmethod
+        def NodeOutput(*args): return args
+
+    io = _IOStub()  # type: ignore[assignment]
+
+    def override(fn):  # type: ignore[no-redef]
+        return fn
 
 try:
     from comfy.patcher_extension import CallbacksMP, WrappersMP  # type: ignore
     _DIFFUSION_MODEL = WrappersMP.DIFFUSION_MODEL
     _ON_CLEANUP = CallbacksMP.ON_CLEANUP
 except ImportError:
-    from _comfy_stubs import _stub_constants  # type: ignore[no-redef]
-    _DIFFUSION_MODEL, _ON_CLEANUP = _stub_constants()
+    # String literals match the runtime constants in
+    # comfy.patcher_extension; tests rely on the literal match.
+    _DIFFUSION_MODEL = "diffusion_model"
+    _ON_CLEANUP = "on_cleanup"
 
 
 # Single key for the wrapper registration. add_wrapper_with_key uses this as
