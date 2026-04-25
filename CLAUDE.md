@@ -52,6 +52,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **CLIP must not enter the loop body.** Pre-encode via `TimestampPromptScheduleBatchEncode`; `object_patches` don't survive the offload/reload → silent NAG disengagement iter 2+. Mechanism: `docs/analysis/nag_object_patches_offload_asymmetry.md`.
 - **Loop-body CONDITIONING must carry `frame_rate`** (default 25.0). Batch encoder stamps it; any new CONDITIONING-producing loop-body node must too (via `node_helpers.conditioning_set_values`). Missing → identity drift + hallucinated objects iter-over-iter.
 - **Bake new topology constraints into `scripts/audit_workflows.py`.** Every fix that ships an apply script should ship a matching audit check (ERR status with a `Run scripts/apply_X.py` remediation pointer). Canonical pairs: F2 (`preprocess_symmetry`) and F3 (`loop_cropguides_symmetry`). Prevents silent regression of fixes a sibling branch might revert.
+- **Authoritative LTX 2.3 prompting evidence**: `docs/reference/ltx23_prompt_system_prompts.md:44, 56, 93` (Lightricks's own i2v + t2v system prompts: "DO NOT describe scene cuts", "Inaccurate descriptions may cause scene cuts"). What retracted our `Cut to` convention 2026-04-25. Check before relitigating any prompt-rule debate.
 
 ## ComfyUI gotchas
 
@@ -101,6 +102,7 @@ uv run --group dev --group analysis python -m pytest tests/ -v --rootdir=.
 - `tests/conftest.py` adds `scripts/` + `tests/` to `sys.path`. Shared fakes: `tests/_fakes.py` (`FakeModelPatcher`, `FakeModelWithCallbacks`). Root `./conftest.py` has `collect_ignore` — shadows `tests/conftest.py` for `from conftest import X`.
 - **Memoization fixes need REPEATED-call tests.** Single-call tests can't detect framework-cache-invalidation. Canonical shape: `tests/test_batch_encode.py::TestBatchEncoderCaching`.
 - **`id()`-keyed caches need autouse clear-fixtures.** `FakeCLIP` gets GC'd rapidly; Python address recycling produces ghost hits. Production cache keys now include `type(clip).__name__` as cheap cross-class insurance; test fixtures still required.
+- **`_LLM_SYSTEM_PROMPT` rewrites need test-invariant check first.** 8 tests in `tests/test_audio_features.py::TestFormatJsonReport::test_llm_system_prompt_*` assert specific load-bearing substrings: `is singing` / `are singing together`, `verbatim`/`identical`/`exactly`, all 6 tier names, `montage` + `emotional`, `dolly out`, `present progressive`, `frozen`, `init image` + `do not re-describe`, style-family examples (`comic` / `graphic-novel` / `animated` / `live-action`). Read these before rewriting the system prompt — a substring you remove silently breaks the test.
 
 ## Dependencies
 
@@ -144,6 +146,7 @@ Companion custom nodes (used alongside, not imported):
 - **`PLAN.md` (or feature design doc) is the spec.** When red TDD tests disagree with the spec formula, fix the test — the spec wins unless you explicitly update PLAN first.
 - **Decisions-index pattern**: DECISION / WHY / CONTEXT triples, grouped by feature. Template at `internal/ic_lora_assessment.md §6.5`. Roll up any feature >3 commits to avoid re-deriving rationale from git log.
 - **LTX 2.3 audio-feature seed variance is ~±20 BPM** for equivalent electronic-genre conditioning. Single-seed comparisons between configs are noise; multi-seed (3-5 per config) needed to detect audio-effect changes. Ref: `docs/experiments/exp_2026-04-24_spectrogram_iclora_v2a.md` §Inferences.
+- **Bulk `replace_all` AFTER adding prose to the same file is dangerous.** A retraction note or callout that *quotes* the pattern being replaced (e.g. a note saying "used to use `Cut to a [shot]...`" followed by `replace_all "Cut to a " → "In a "`) sweeps your own freshly-added prose, corrupting the annotation. Add prose annotations AFTER bulk pattern edits, or scope the pattern (only schedule-line matches, only inside fenced blocks). Caught 2026-04-25 in Cut-to retraction; only `/simplify` review caught it.
 
 ## Documentation conventions
 
