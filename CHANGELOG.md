@@ -6,6 +6,27 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Second TTC1 amplification POC, no IC-LoRA required.**
+  `scripts/apply_ttc_init_guide_amplification_poc.py` stages
+  `example_workflows/experimental/init_guide_amplification_poc.json` —
+  forks the production audio-loop latent workflow and rewires
+  `CFGGuider(644).negative` inside the loop subgraph to read from the
+  subgraph input distributor's positive slot (before
+  `LTXVAddLatentGuide`). Demonstrates that the CFG-analog amplification
+  mechanism generalizes per-conditional: same recipe as
+  `apply_ttc_iclora_amplification_poc.py`, different upstream node, no
+  IC-LoRA in the graph. Pairs with a new `ttc1_init_guide_amplification`
+  audit check that recognizes the deliberate F3 asymmetry on the
+  negative branch as intentional and ERRs if the rewire is damaged.
+  `audit_workflows.py` now scans an explicit allowlist of experimental
+  POC files (`EXPERIMENTAL_AUDITED_FILES`) so the new variant is
+  CI-checked alongside production workflows. Public docs framing
+  updated (`README.md`, `docs/experiments/README.md`,
+  `docs/experiments/exp_2026-04-24_spectrogram_iclora_v2a.md`) to make
+  clear that TTC1 is a generalized inference-time technique and IC-LoRA
+  is just the first wiring.
+
 ### Changed
 - **Hygiene bundle 2026-04-25** — small/low-risk items closing flags from
   prior sessions. (1) `LTXFrameCalculator` (LTXAVTools) referenced from

@@ -39,6 +39,19 @@ EXPECTED_CHAIN = {
     "KSamplerSelect": (["euler"], "sampler_type"),
 }
 
+# Experimental POC files that ship alongside production workflows and
+# have audit checks of their own. Anything outside this allowlist (e.g.
+# spectrogram_iclora_minimal.json, iclora_amplification_poc.json) is
+# intentionally NOT audited — those are forks with non-standard topology
+# that pre-date the audit and would just generate noise.
+EXPERIMENTAL_AUDITED_FILES = {"init_guide_amplification_poc.json"}
+
+# Title prefix the init-guide POC stamps onto CFGGuider(644). Narrow
+# enough to not collide with future TTC variants (e.g. an IC-LoRA POC
+# fork that reuses the "TTC1:" prefix) — the audit dispatches on this
+# string, so it has to be unambiguous per variant.
+TTC1_INIT_GUIDE_TITLE_PREFIX = "CFGGuider (TTC1: cfg = init-guide"
+
 
 def _is_validator(name: str) -> bool:
     return "validator" in name
@@ -219,8 +232,34 @@ def _audit_one(wf_path: Path) -> list[Finding]:
             sg_links = sg.get("links", [])
             pos = next((l for l in sg_links if l.get("target_id") == 644 and l.get("target_slot") == 1), None)
             neg = next((l for l in sg_links if l.get("target_id") == 644 and l.get("target_slot") == 2), None)
+            cfg_title = next(
+                (n.get("title", "") for n in sg.get("nodes", []) if n.get("id") == 644),
+                "",
+            )
+            is_ttc1_init_guide = cfg_title.startswith(TTC1_INIT_GUIDE_TITLE_PREFIX)
             if pos is None or neg is None:
                 record("WARN", "loop_cropguides_symmetry", "CFGGuider(644) missing pos/neg inbound links")
+            elif is_ttc1_init_guide:
+                # F3 asymmetry on negative is intentional for this variant.
+                if (
+                    pos["origin_id"] == 655
+                    and neg["origin_id"] == -10
+                    and neg["origin_slot"] == 6
+                ):
+                    record(
+                        "OK", "ttc1_init_guide_amplification",
+                        "CFGGuider(644).negative <- INPUT_DISTRIBUTOR(slot 6) "
+                        "[F3 asymmetry intentional]",
+                    )
+                else:
+                    record(
+                        "ERR", "ttc1_init_guide_amplification",
+                        f"#644 titled TTC1 init-guide variant but rewire damaged "
+                        f"(pos={pos['origin_id']}/{pos['origin_slot']}, "
+                        f"neg={neg['origin_id']}/{neg['origin_slot']}). "
+                        "Run scripts/apply_ttc_init_guide_amplification_poc.py --revert "
+                        "and re-stage.",
+                    )
             elif pos["origin_id"] == 655 and neg["origin_id"] == 655:
                 record("OK", "loop_cropguides_symmetry", "#644 <- #655 LTXVCropGuides (symmetric)")
             elif pos["origin_id"] == 1519 and neg["origin_id"] == 1519:
@@ -363,7 +402,13 @@ def main() -> int:
     args = ap.parse_args()
 
     all_findings: list[Finding] = []
-    for wf_path in sorted(EXAMPLE_WORKFLOWS_DIR.glob("*.json")):
+    paths = list(EXAMPLE_WORKFLOWS_DIR.glob("*.json"))
+    exp_dir = EXAMPLE_WORKFLOWS_DIR / "experimental"
+    for fn in EXPERIMENTAL_AUDITED_FILES:
+        p = exp_dir / fn
+        if p.exists():
+            paths.append(p)
+    for wf_path in sorted(paths):
         all_findings.extend(_audit_one(wf_path))
 
     err_count = sum(1 for f in all_findings if f.status == "ERR")

@@ -57,6 +57,15 @@ experiments. Current contents:
   existing sampler math computes the blend with cfg as the amplification
   factor. Zero new sampler code. Apply script:
   `scripts/apply_ttc_iclora_amplification_poc.py`.
+- **`init_guide_amplification_poc.json`** — same TTC1 mechanism as
+  above, wired against the production audio-loop subgraph's init-frame
+  `LTXVAddLatentGuide` instead of an IC-LoRA reference. Demonstrates
+  the technique without IC-LoRA in the graph at all and gives an
+  amplification knob on init-frame identity drift across loop
+  iterations. Apply script:
+  `scripts/apply_ttc_init_guide_amplification_poc.py`. Audit
+  recognizes the deliberate F3 asymmetry on the negative branch as
+  intentional.
 
 Per-experiment logs with hypothesis, setup, observations, inferences, and
 next steps live under `docs/experiments/` (convention in

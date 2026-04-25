@@ -1,6 +1,6 @@
 # Experiment: spectrogram-as-canny IC-LoRA + V2A round-trip
 
-Last updated: 2026-04-24
+Last updated: 2026-04-25
 Status: open — leaning toward dead path; R17 is the single run that closes out or rescues the hypothesis
 
 ## TL;DR (current state)
@@ -250,9 +250,27 @@ For R8b to count as "closer to source," it should land at mean BPM noticeably > 
 
 A new direction emerged from the experiment's close-out reflection: **test-time compute methods applied to the IC-LoRA reference channel**. Spectrogram-as-reference was about picking the right reference modality; TTC methods operate on the existing reference at inference time (amplify, search, iterate, ensemble, schedule).
 
-POC for the first method (amplification inspired by the CFG formula) landed as `scripts/apply_ttc_iclora_amplification_poc.py` and `example_workflows/experimental/iclora_amplification_poc.json`. Full landscape: `internal/analysis/iclora_landscape_analysis.md`.
+The POC for the first method (CFG-analog amplification inspired by the classifier-free-guidance formula) landed as `scripts/apply_ttc_iclora_amplification_poc.py` and `example_workflows/experimental/iclora_amplification_poc.json`. Full landscape: `internal/analysis/iclora_landscape_analysis.md` §TTC.
 
-This direction is independent of whether spectrogram-as-IC-LoRA works — the TTC methods apply to any IC-LoRA + reference pair, not just spectrograms.
+### TTC1 generalizes — IC-LoRA is the first wiring, not a requirement
+
+The CFG-analog amplification mechanism is **not IC-LoRA-specific**. CLAUDE.md frames it as a key pattern of the project: feeding `(positive_with_X, positive_without_X)` into `CFGGuider`'s `(positive, negative)` slots makes the existing sampler compute `eps_without + cfg * (eps_with - eps_without)` per denoising step, with `cfg` becoming the amplification knob for whatever conditional sits in the differential.
+
+What `X` can be:
+
+- **IC-LoRA reference** (the canonical POC, wired here as `scripts/apply_ttc_iclora_amplification_poc.py`)
+- **Style LoRAs / identity LoRAs** when applied via conditioning-side patches
+- **Per-keyframe guide stacks** (`LTXVAddGuideMulti`, multi-`LTXVAddLatentGuide`) — branch with vs without the guide chain
+- **Conditioning-blend stages** — branch with vs without the blend
+- **Per-reference ablation** — any single reference in a multi-reference setup, isolated as the differential
+
+What it can't be: pure model-side patches that don't reach the CONDITIONING tensor (UNet-weight LoRAs apply equally to both pos and neg through the same model, so the differential is zero — those need a different mechanism). The technique is constrained to nodes that take a CONDITIONING in and emit a modified CONDITIONING out.
+
+Distinct from control-vector / concept-slider techniques (static directions): the steering direction here is recomputed every step from two full forward passes — dynamic, input-dependent, 2× compute per step.
+
+The IC-LoRA name in the POC filename is a historical artifact of where it was first wired (this experiment was the active context). A second POC now ships that demonstrates the same mechanism on a different conditional with **no IC-LoRA in the graph**: `scripts/apply_ttc_init_guide_amplification_poc.py` rewires `CFGGuider.negative` inside the production audio-loop subgraph to read the conditioning *before* `LTXVAddLatentGuide(1519)`, making `cfg` an amplification knob on the init-frame guide contribution rather than the IC-LoRA reference. Same `rewire_subgraph_input` recipe, different upstream node — confirms the technique generalizes per-conditional. Sequenced playbook for both POCs: `internal/action_items_for_ttc1_amplification.md`.
+
+This whole direction is independent of whether spectrogram-as-IC-LoRA works.
 
 ## Pivot directions if spectrogram-as-IC-LoRA path is dead
 
@@ -290,7 +308,13 @@ Four durable insights from this experiment, independent of whether spectrogram-a
 
 - `internal/design/spectrogram_reference_design.md` — Phase ladder + kill switches
 - `internal/ic_lora_assessment.md` — IC-LoRA tier evaluation (D1-D18 decisions)
+- `internal/analysis/iclora_landscape_analysis.md` — Full TTC landscape (TTC1-TTC6: amplification / search / refine / sample / schedule)
 - `docs/experimental/spectrogram_iclora_tutorial.md` — User-facing tutorial
 - `scripts/spectrogram_to_reference.py` — Spectrogram rendering script
-- `scripts/apply_spectrogram_iclora_minimal.py` — Workflow apply script
-- `example_workflows/experimental/spectrogram_iclora_minimal.json` — Workflow file
+- `scripts/apply_spectrogram_iclora_minimal.py` — Workflow apply script (spectrogram + IC-LoRA setup)
+- `scripts/apply_ttc_iclora_amplification_poc.py` — TTC1 POC, IC-LoRA wiring (canonical instance)
+- `scripts/apply_ttc_init_guide_amplification_poc.py` — TTC1 POC, init-frame `LTXVAddLatentGuide` wiring on the production audio-loop subgraph (proves the technique is not IC-LoRA-specific)
+- `example_workflows/experimental/spectrogram_iclora_minimal.json` — Workflow file (this experiment)
+- `example_workflows/experimental/iclora_amplification_poc.json` — Workflow file (TTC1 amplification fork, IC-LoRA target)
+- `CLAUDE.md` §"Key patterns" → "CFG-analog amplification of any conditional contribution" — authoritative one-liner
+- `internal/action_items_for_ttc1_amplification.md` — sequenced playbook for testing both POCs end-to-end
