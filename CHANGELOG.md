@@ -36,16 +36,17 @@ This project uses [Semantic Versioning](https://semver.org/).
   blocking `VHS_VideoCombine` output; users got the initial sampler
   pass (8/8 steps) but no `.mp4`. Cycle existed in canonical for 10+
   commits — users had been working around it via in-UI graph edits
-  before render. Fix: feed `CropGuides.latent` (slot 2) from a
-  pre-sampling source — `LTXVConcatAVLatent(583)` — and route the
-  sampled-latent output path directly: `Sampler → SeparateAV →
-  AdainLatent → LatentOverlapTrim → IterationCleanup → output`,
-  bypassing CropGuides for the LATENT-side flow. `CropGuides.execute()`
-  derives `num_keyframes` from the positive CONDITIONING (not from the
-  latent contents), so its CONDITIONING outputs remain correct; only
-  its LATENT pass-through output becomes a dead-end (acceptable trade
-  vs. losing F3 or color correction). Applied across 5 production + 3
-  experimental workflows.
+  before render. Fix: feed `CropGuides.latent` (slot 2) from
+  `LTXVAddLatentGuide(1519).slot 2` — the pure video LATENT just
+  upstream of `LTXVConcatAVLatent` (which would emit a `NestedTensor`
+  that CropGuides can't `.clone()`). All three CropGuides inputs now
+  come from AddLatentGuide directly: clean linear path, no cycle, no
+  NestedTensor crash. The sampled-latent output path runs in parallel:
+  `Sampler → SeparateAV → AdainLatent → LatentOverlapTrim →
+  IterationCleanup → output`. `CropGuides.execute()` derives
+  `num_keyframes` from the positive CONDITIONING (not from the latent
+  contents), so its CONDITIONING outputs to CFGGuider remain correct
+  (F3 honored). Applied across 5 production + 3 experimental workflows.
 
   **Known trade-off**: the LATENT-side of CropGuides (which previously
   cropped keyframe-padding from the sampled output) is now a dead-end

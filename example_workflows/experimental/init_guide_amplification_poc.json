@@ -5788,12 +5788,9 @@
                 "name": "latent",
                 "type": "LATENT",
                 "links": [
-                  1598,
-                  3004
+                  1598
                 ],
-                "linkIds": [
-                  3004
-                ]
+                "linkIds": []
               }
             ],
             "properties": {
@@ -5880,7 +5877,11 @@
                 "name": "latent",
                 "type": "LATENT",
                 "links": [
-                  2829
+                  2829,
+                  3004
+                ],
+                "linkIds": [
+                  3004
                 ]
               }
             ],
@@ -6609,8 +6610,8 @@
           },
           {
             "id": 3004,
-            "origin_id": 583,
-            "origin_slot": 0,
+            "origin_id": 1519,
+            "origin_slot": 2,
             "target_id": 655,
             "target_slot": 2,
             "type": "LATENT"
