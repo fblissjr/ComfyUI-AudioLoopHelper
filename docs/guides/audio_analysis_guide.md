@@ -72,16 +72,16 @@ cross-attention signal for lip sync.
 
 **Node 169 (initial render prompt):**
 ```
-Style: cinematic. In a wide establishing shot, static camera, locked off shot, a woman singing in a workshop is singing softly, easing into the song, static camera, mouth opening softly, handheld energy, rock-video motion. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
+Style: cinematic. In a medium shot, static camera, locked off shot, a woman singing in a workshop is singing, easing into the song, mouth opening softly, handheld energy. Soft lighting.
 ```
 
 **Schedule (paste into `TimestampPromptScheduleBatchEncode` after 2026-04-22; older workflow copies had this on node 1558 `TimestampPromptSchedule`):**
 ```
-0:00-0:22: Style: cinematic. In a wide establishing shot, static camera, locked off shot, a woman singing in a workshop is singing softly, easing into the song, static camera, mouth opening softly, handheld energy, rock-video motion. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
-0:22-0:45: Style: cinematic. In a wide establishing shot, static camera, locked off shot, a woman singing in a workshop is singing softly, easing into the song, slow dolly in, head tilted slightly, handheld energy, rock-video motion. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
-0:45-1:01: Style: cinematic. In a medium shot, a woman singing in a workshop is singing with a steady voice, static camera, head bobbing slightly, handheld energy, rock-video motion. Warm lighting, steady energy. The voice fills the space. Soft ambient hum.
+0:00-0:22: Style: cinematic. In a medium shot, static camera, locked off shot, a woman singing in a workshop is singing, easing into the song, mouth opening softly, handheld energy. Soft lighting.
+0:22-0:45: In a medium shot, static camera, locked off shot, a woman singing in a workshop is singing, head tilted slightly, handheld energy. Soft lighting.
+0:45-1:01: In a medium shot, dolly in, camera pushing forward, a woman singing in a workshop is singing, head bobbing slightly. Light shifts warmer.
 ...
-1:39+: Style: cinematic. In a close-up, a woman singing in a workshop is singing with full power, voice rising, slow jib up, arms slightly raised, handheld energy, rock-video motion. Bright, dynamic lighting. The voice is powerful and resonant.
+1:39+: In a close-up, jib up, camera rising up, a woman singing in a workshop is singing, eyes wide, mouth open, arms slightly raised. Bright lighting on her face.
 ```
 
 Paste the node 169 prompt into node 169 (CLIPTextEncode). Paste the schedule
@@ -96,17 +96,22 @@ song produces 7+ entries instead of 4-5.
 
 ### Section modifier mapping
 
-| Section | Framing | Lighting | Action | Audio description |
-|---------|---------|----------|--------|-------------------|
-| INTRO   | Wide establishing shot, static camera | Soft, gentle | is singing softly, easing into the song | Quiet ambient tone |
-| VERSE   | Medium shot | Warm, steady | is singing with a steady voice | Voice fills space |
-| CHORUS  | Close-up | Bright, dynamic | is singing with full power, voice rising | Powerful and resonant |
-| BRIDGE  | Wide shot | Moody, low contrast | is singing with quiet emotion | Subdued, reflective |
-| OUTRO   | Wide shot, dolly out | Fading, gentle | is singing the final notes, voice trailing off | Sound fades, room tone |
-| BREAK   | Medium shot, static | Dim, still | is singing softly, pausing in place | Instrumental moment |
+| Section | Framing | Lighting | Action |
+|---------|---------|----------|--------|
+| INTRO   | Medium shot, static camera, locked off shot | Soft | is singing, easing into the song |
+| VERSE   | Medium shot | Warm | is singing |
+| CHORUS  | Close-up | Bright on her face | is singing, eyes wide, mouth open |
+| BRIDGE  | Medium close-up | Moody, low contrast | is singing |
+| OUTRO   | Close-up, static camera, locked off shot | Fading | is singing, shoulders easing |
+| BREAK   | Medium shot, static camera | Dim | is singing, pausing in place |
 
-These follow LTX 2.3 i2v conventions from the prompt creation guide.
-"Dolly out" is avoided except for OUTRO (it can break limbs/faces).
+These follow `docs/guides/prompt_creation_guide.md` §5.1 (no `Cut to`
+prefix — continuation framing only) + §6.1 (no wide shots, no
+dolly-out — face-driven content) + §3.3 (no vocal-delivery
+ornaments — frozen audio carries delivery). The previous schema's
+"Audio description" column ("Soft ambient hum", "Voice fills space",
+"Sound fades, room tone") was removed 2026-04-25 — those phrases
+double-signal what the frozen audio already carries.
 Multi-subject detection rewrites "is singing" to "are singing together".
 
 ### Scene-diversity taxonomy

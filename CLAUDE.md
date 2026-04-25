@@ -39,6 +39,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **Use `LatentContextExtract` / `LatentOverlapTrim`**, not raw `LTXVSelectLatents` — they strip `noise_mask` automatically.
 - **Node 169 prompt matches schedule 0:00 entry** structurally (`_build_prompt_for_section` via shared `_prepare_sections`; byte-exact).
 - **Every prompt must contain "singing"** (or "are singing together"). LTX 2.3 audio-video cross-attention binds lip sync to the action verb.
+- **Use `In a [shot], [camera]` continuation framing for non-first entries — NOT `Cut to a ...`.** Lightricks's official LTX 2.3 system prompt explicitly trains the model to treat scene-cut language as a discontinuation directive, fighting the loop's continuity mechanisms (`LTXVAddLatentGuide latent_idx=-1` + `LatentContextExtract` 1s overlap). Convention retracted 2026-04-25. Canonical guide: `docs/guides/prompt_creation_guide.md` §5.1.
 - **Always use `WorkflowEditor`** (`scripts/workflow_utils.py`) for JSON edits.
 - **Distilled 8-step sigmas**: `BasicScheduler linear_quadratic 8 1` + `ModelSamplingSD3 shift=13` + `KSamplerSelect euler` + `CFGGuider cfg=1`. Decoder: `LTXVTiledVAEDecode [2,2,1,true,"auto","auto"]`. Don't use `euler_ancestral*`. Full walkthrough: `docs/reference/sampler_reference.md`.
 - **Illustrated inits drift toward photoreal across iterations** (cross-attention is photoreal-trained). Match init-image style family; or re-anchor via `LTXVAddGuideMulti` per iteration.

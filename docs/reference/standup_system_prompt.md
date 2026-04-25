@@ -1,4 +1,16 @@
-Last updated: 2026-04-23 (moved + renamed from docs/system_prompt.md; v2 — added strict timestamp-format rule)
+Last updated: 2026-04-25 (R6/R7 partially superseded by `docs/guides/prompt_creation_guide.md` post-Cut-to retraction — see file-top note below; structural rules R1-R5, R8, R9 still current)
+
+> **Note (2026-04-25):** R6 ("vocal delivery qualifiers encouraged")
+> and R7 ("Available: slow dolly in, ..., handheld sway acceptable")
+> predate the 2026-04-25 prompt-cleanup pass that retracted off-canon
+> camera phrasings and vocal-delivery ornaments for music workflows
+> (`docs/guides/prompt_creation_guide.md` §3.3, §7). Standup is its
+> own audio domain (dialogue, not vocals), but the same architectural
+> argument applies — the audio carries delivery, re-stating in text
+> double-signals. New standup prompts should default to canonical
+> camera phrasings and minimal vocal-delivery descriptors per the
+> music guide; this doc is preserved for historical reference and
+> the v1-v3 standup case studies.
 
 # Standup Comedy — Custom LLM System Prompt
 

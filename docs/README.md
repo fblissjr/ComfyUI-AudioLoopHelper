@@ -128,7 +128,7 @@ docs/
 - `examples/README.md` indexes all case studies with a "patterns that transfer" summary.
 - Music: `music_prompt1.md` … `music_prompt3.md` (illustrated → cinematic realism arc)
 - Action / instrumental: `action_prompt1.md` … `action_prompt6.md` (v5 introduces 20-iter rapid-cut; v6 introduces "frozen audio" insight)
-- Standup / dialogue: `prompt_comedy1.md` … `prompt_comedy5.md` (v4 introduces "Cut to …" technique; v5 covers unusual-character init adaptation)
+- Standup / dialogue: `prompt_comedy1.md` … `prompt_comedy5.md` (v4 originally introduced "Cut to …" technique; **technique retracted 2026-04-25** per `guides/prompt_creation_guide.md` §5.1, schedules retroactively normalized to `In a [shot]` continuation form. v5 covers unusual-character init adaptation.)
 
 ---
 
