@@ -203,8 +203,12 @@ def test_tracer_disabled_writes_nothing(tmp_path: Path):
     assert list(tmp_path.iterdir()) == []
 
 
-def test_tracer_enabled_writes_per_call_rows_and_summary(tmp_path: Path):
+def test_tracer_enabled_writes_per_call_rows_and_summary(tmp_path: Path, monkeypatch):
     m = _mod()
+    # Force no-arch path so the row count is deterministic across CUDA
+    # and CPU-only test hosts. The arch-stamping behavior has its own
+    # test below.
+    monkeypatch.setattr(m, "_detect_arch_tag", lambda: None)
     log = tmp_path / "sage_test.jsonl"
     tracer = m.SageTracer(log_path=log)
     tracer.emit(shape=(1, 64, 64), has_mask=False, mode="auto", fell_back=False, elapsed_us=12.0)
@@ -223,6 +227,146 @@ def test_tracer_enabled_writes_per_call_rows_and_summary(tmp_path: Path):
     assert summary["event"] == "summary"
     assert summary["total_calls"] == 2
     assert summary["fallback_count"] == 1
+
+
+def test_tracer_writes_header_row_with_arch_when_detected(tmp_path: Path, monkeypatch):
+    """When `_detect_arch_tag()` returns a string, the tracer writes a
+    one-time header row at init AND stamps the arch field into every
+    per-call row. This is what makes traces self-describing for the
+    summary script's kernel inference -- no --arch flag needed."""
+    m = _mod()
+    monkeypatch.setattr(m, "_detect_arch_tag", lambda: "sm89_cuda12_8")
+    log = tmp_path / "sage_test_with_arch.jsonl"
+    tracer = m.SageTracer(log_path=log)
+    tracer.emit(shape=(1, 64, 64), has_mask=False, mode="auto", fell_back=False, elapsed_us=10.0)
+    tracer.flush_summary()
+
+    rows = [orjson.loads(line) for line in log.read_text().splitlines()]
+    # 1 header + 1 per-call + 1 summary
+    assert len(rows) == 3
+    assert rows[0]["event"] == "header"
+    assert rows[0]["arch"] == "sm89_cuda12_8"
+    assert rows[1]["arch"] == "sm89_cuda12_8"  # stamped per-call too
+    assert rows[1]["effective_mode"] == "auto"  # unchanged behavior
+
+
+def test_tracer_omits_arch_when_not_detected(tmp_path: Path, monkeypatch):
+    """No GPU / unsupported arch -> no header, no arch field. Don't
+    stamp 'unknown' or empty strings -- the absence is itself signal
+    that the summary script should fall back to --arch / autodetect."""
+    m = _mod()
+    monkeypatch.setattr(m, "_detect_arch_tag", lambda: None)
+    log = tmp_path / "sage_test_no_arch.jsonl"
+    tracer = m.SageTracer(log_path=log)
+    tracer.emit(shape=(1, 64, 64), has_mask=False, mode="auto", fell_back=False, elapsed_us=10.0)
+    tracer.flush_summary()
+
+    rows = [orjson.loads(line) for line in log.read_text().splitlines()]
+    # 1 per-call + 1 summary (no header)
+    assert len(rows) == 2
+    assert "arch" not in rows[0]
+    assert rows[0]["effective_mode"] == "auto"
+
+
+def test_tracer_emit_stamps_dispatched_kernel_when_given(tmp_path: Path, monkeypatch):
+    """When `dispatched_kernel` is passed (non-None), tracer stamps it
+    into the per-call row. This is the field consumed by sage-fork's
+    `get_last_dispatched_kernel()` -- exact string from sage's
+    KNOWN_KERNEL_NAMES vocabulary, no consumer-side inference needed."""
+    m = _mod()
+    monkeypatch.setattr(m, "_detect_arch_tag", lambda: None)
+    log = tmp_path / "sage_dispatched.jsonl"
+    tracer = m.SageTracer(log_path=log)
+    tracer.emit(shape=(1, 64, 64), has_mask=False, mode="auto",
+                fell_back=False, elapsed_us=10.0, dispatched_kernel="fp8_cuda++")
+    tracer.flush_summary()
+
+    rows = [orjson.loads(line) for line in log.read_text().splitlines()]
+    assert rows[0]["dispatched_kernel"] == "fp8_cuda++"
+
+
+def test_tracer_emit_omits_dispatched_kernel_when_none(tmp_path: Path, monkeypatch):
+    """No symbol available / not yet measured -> field absent, not
+    stamped as null. The summary script's contract is 'field present
+    means trustworthy'; stamping null would conflate 'not measured'
+    with 'measured to be unknown'."""
+    m = _mod()
+    monkeypatch.setattr(m, "_detect_arch_tag", lambda: None)
+    log = tmp_path / "sage_no_dispatched.jsonl"
+    tracer = m.SageTracer(log_path=log)
+    tracer.emit(shape=(1, 64, 64), has_mask=False, mode="auto",
+                fell_back=False, elapsed_us=10.0, dispatched_kernel=None)
+    tracer.flush_summary()
+
+    rows = [orjson.loads(line) for line in log.read_text().splitlines()]
+    assert "dispatched_kernel" not in rows[0]
+
+
+def test_override_reads_get_last_dispatched_kernel_after_sage_call(tmp_path: Path, monkeypatch):
+    """The override reads sage-fork's `get_last_dispatched_kernel()`
+    immediately after sage_fn returns and forwards the resolved kernel
+    name to tracer.emit. Thread-local API, must be read before any
+    await/yield -- our override is synchronous, so this is safe."""
+    m = _mod()
+    monkeypatch.setattr(m, "_detect_arch_tag", lambda: None)
+    # Stub sage-fork's symbol: a value that the next override call
+    # should observe and stamp.
+    monkeypatch.setattr(m, "_GET_DISPATCHED_KERNEL", lambda: "fp8_cuda++")
+
+    q = _fake_q()
+    k, v = _fake_kv(q)
+
+    def sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape):
+        return torch.zeros_like(q)
+
+    log = tmp_path / "sage_override.jsonl"
+    tracer = m.SageTracer(log_path=log)
+    override = m.make_sage_override(
+        sage_fn=sage_fn,
+        pytorch_fn=lambda *a, **kw: torch.ones_like(q),
+        mode="auto_mask_aware",
+        fallback_on_error=True,
+        tracer=tracer,
+        logger=m.SageFallbackLogger(emit=lambda _: None),
+    )
+    override(None, q, k, v, heads=4, mask=None)
+    tracer.flush_summary()
+
+    rows = [orjson.loads(line) for line in log.read_text().splitlines()]
+    per_call = next(r for r in rows if r.get("event") != "summary" and r.get("event") != "header")
+    assert per_call["dispatched_kernel"] == "fp8_cuda++"
+
+
+def test_override_handles_missing_get_last_dispatched_kernel(tmp_path: Path, monkeypatch):
+    """Older sageattention installs lack the symbol. Override must
+    not crash and must omit the field. Defensive: this is the back-
+    compat case."""
+    m = _mod()
+    monkeypatch.setattr(m, "_detect_arch_tag", lambda: None)
+    monkeypatch.setattr(m, "_GET_DISPATCHED_KERNEL", None)
+
+    q = _fake_q()
+    k, v = _fake_kv(q)
+
+    def sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape):
+        return torch.zeros_like(q)
+
+    log = tmp_path / "sage_no_symbol.jsonl"
+    tracer = m.SageTracer(log_path=log)
+    override = m.make_sage_override(
+        sage_fn=sage_fn,
+        pytorch_fn=lambda *a, **kw: torch.ones_like(q),
+        mode="auto_mask_aware",
+        fallback_on_error=True,
+        tracer=tracer,
+        logger=m.SageFallbackLogger(emit=lambda _: None),
+    )
+    override(None, q, k, v, heads=4, mask=None)
+    tracer.flush_summary()
+
+    rows = [orjson.loads(line) for line in log.read_text().splitlines()]
+    per_call = next(r for r in rows if r.get("event") != "summary" and r.get("event") != "header")
+    assert "dispatched_kernel" not in per_call
 
 
 # ---------------------------------------------------------------------------

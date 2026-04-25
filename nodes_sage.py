@@ -88,6 +88,23 @@ except ImportError:
     _AUTO_TOKENS = {"auto", "1", "true", "yes"}
 
 
+# Sage-fork's `get_last_dispatched_kernel()` returns the resolved kernel
+# name (one of `sageattention.KNOWN_KERNEL_NAMES`) for the most recent
+# `sageattn*` call on this thread. Cached at import for hot-path
+# minimalism. Defensive: older sageattention installs lack the symbol;
+# fall back silently and let the summary script's routing-table mirror
+# resolve the trace post-hoc.
+#
+# Thread-local: read immediately after `sage_fn` returns. The override
+# is synchronous (no awaits between sage_fn and the read), so this is
+# safe. Reference: sageattention commit 246425d -- shipped 2026-04-25.
+try:
+    import sageattention as _sa_mod
+    _GET_DISPATCHED_KERNEL = getattr(_sa_mod, "get_last_dispatched_kernel", None)
+except ImportError:
+    _GET_DISPATCHED_KERNEL = None
+
+
 # ---------------------------------------------------------------------------
 # Arch detection + mode-list construction
 # ---------------------------------------------------------------------------
@@ -199,6 +216,28 @@ def resolve_trace_path() -> Path | None:
     return Path(raw)
 
 
+def _detect_arch_tag() -> str | None:
+    """Best-effort arch tag for self-describing traces. Format
+    'sm<MM>_cuda<MAJ>_<MIN>' (e.g. 'sm89_cuda12_8') so the summary
+    script's `infer_kernel()` can match without a CLI flag.
+
+    Returns None if torch.cuda is unavailable, no GPU, or the arch
+    isn't one we have a routing-table mirror for. The summary script's
+    `--arch` flag remains the override; this just makes traces
+    self-describing for the common case.
+    """
+    try:
+        if not torch.cuda.is_available():
+            return None
+        major, minor = torch.cuda.get_device_capability(0)
+        cuda_v = (torch.version.cuda or "").split(".")
+        if len(cuda_v) < 2:
+            return None
+        return f"sm{major}{minor}_cuda{int(cuda_v[0])}_{int(cuda_v[1])}"
+    except Exception:
+        return None
+
+
 class SageTracer:
     """Eagerly-opened JSONL writer. No-op when log_path is None.
 
@@ -214,12 +253,26 @@ class SageTracer:
         self._fallbacks = 0
         self._shapes: set[tuple] = set()
         self._summary_flushed = False
+        # Detect arch ONCE at tracer init -- not per call, not per row.
+        # Stamped into every emit() so the summary script can resolve
+        # 'auto' -> actual kernel without a --arch flag (self-describing
+        # traces > flag-on-the-CLI). Replace with sage-fork's
+        # get_last_dispatched_kernel() once shipped.
+        self._arch_tag = _detect_arch_tag() if log_path is not None else None
         if log_path is not None:
             log_path.parent.mkdir(parents=True, exist_ok=True)
             # buffering=1 is line-buffered. Flush per line so a crash
             # mid-run still leaves a useful trace -- cost is ~1 syscall
             # per attention call, acceptable for the forensic-only path.
             self._fh = open(log_path, "a", buffering=1)
+            # Header row: arch + ts so per-prompt joins know the trace's
+            # provenance even when per-call rows are filtered out.
+            if self._arch_tag is not None:
+                self._fh.write(orjson.dumps({
+                    "ts": time.time(),
+                    "event": "header",
+                    "arch": self._arch_tag,
+                }).decode() + "\n")
 
     @property
     def enabled(self) -> bool:
@@ -235,6 +288,7 @@ class SageTracer:
         elapsed_us: float,
         iter_idx: int | None = None,
         effective_mode: str | None = None,
+        dispatched_kernel: str | None = None,
     ) -> None:
         if self._fh is None:
             return
@@ -242,20 +296,32 @@ class SageTracer:
         if fell_back:
             self._fallbacks += 1
         self._shapes.add(tuple(shape))
-        self._fh.write(orjson.dumps({
+        record: dict[str, Any] = {
             "ts": time.time(),
             "iter": iter_idx,
             "shape": list(shape),
             "has_mask": has_mask,
             "mode": mode,
-            # effective_mode reflects the kernel that actually dispatched.
+            # effective_mode reflects the consumer-side routing decision.
             # Equal to mode for non-routing modes; differs on mask-aware
             # calls. Reading the trace without this field hides the
             # "mask-aware stopped being mask-aware" failure mode.
             "effective_mode": effective_mode if effective_mode is not None else mode,
             "fell_back": fell_back,
             "elapsed_us": round(elapsed_us, 2),
-        }).decode() + "\n")
+        }
+        if self._arch_tag is not None:
+            record["arch"] = self._arch_tag
+        # `dispatched_kernel` is the resolved kernel name from sage-fork's
+        # `get_last_dispatched_kernel()`. Stamped only when present
+        # (omitted = "no dispatch info available, summary script should
+        # fall back to its routing-table mirror"). Note: None covers two
+        # observationally-identical cases at the consumer -- either the
+        # symbol is missing (old sage) OR no dispatch has happened yet on
+        # this thread. The mirror handles both equivalently.
+        if dispatched_kernel is not None:
+            record["dispatched_kernel"] = dispatched_kernel
+        self._fh.write(orjson.dumps(record).decode() + "\n")
 
     def flush_summary(self) -> None:
         if self._summary_flushed or self._fh is None:
@@ -496,12 +562,34 @@ def make_sage_override(
                 **kwargs,
             )
         if tracer.enabled:
+            # Read sage-fork's thread-local IMMEDIATELY after sage_fn
+            # returns -- before any other call that could overwrite it.
+            # Safe because ComfyUI executes attention layers
+            # sequentially on the worker thread; Python control returns
+            # synchronously even though CUDA work is async on the GPU.
+            # If a future torch.compile / async-graph integration ever
+            # schedules multiple sage calls from the same Python thread
+            # without yielding back between them, switch to contextvars.
+            #
+            # On fallback we skip the read entirely: the thread-local
+            # may hold a stale value from any prior sage call on this
+            # thread (different model layer, different prompt) -- not
+            # necessarily this layer's. Null is the only honest answer
+            # for failed calls; attributing the wrong kernel would
+            # mislead a reader debugging a fallback row.
+            dispatched = None
+            if not fell_back and _GET_DISPATCHED_KERNEL is not None:
+                try:
+                    dispatched = _GET_DISPATCHED_KERNEL()
+                except Exception:
+                    dispatched = None
             tracer.emit(
                 shape=tuple(q.shape), has_mask=mask is not None, mode=mode,
                 fell_back=fell_back,
                 elapsed_us=(time.perf_counter() - t0) * 1e6,
                 iter_idx=_iter_from_kwargs(kwargs),
                 effective_mode=_effective_mode(mode, mask),
+                dispatched_kernel=dispatched,
             )
         return out
 

@@ -12,13 +12,30 @@ The two cross-sections that gate further kernel-side work:
 - `(effective_mode='fp8_cuda++', has_mask=False)` -- the unmasked self-attn
   path. Gives the "where time actually goes" denominator.
 
-Total gen wall time can be provided two ways:
+Total gen wall time can be provided three ways:
 - Explicit: `--total-wall-ms <N>` (most accurate, from a separate timer).
-- Inferred: from a companion exec-log JSONL (`--exec-log <path>`), summing
-  the duration_s of nodes whose class_type matches one of
-  `--ksampler-class` (default: KSampler*, SamplerCustomAdvanced).
+- Inferred from exec log: `--exec-log <path>`. If the exec log spans
+  multiple prompt_ids, the script switches to per-prompt grouping
+  automatically -- single-bucket pct across multiple prompts is the
+  central denominator failure mode (sums ksampler durations regardless
+  of prompt, double-counts loops).
+- Sage-span fallback: `--use-sage-span` uses (max_ts - min_ts) of the
+  sage rows. Self-contained, no exec log needed.
 
-If neither is provided, the report omits `pct_of_total`.
+If none provided, the report omits `pct_of_total`.
+
+Routing-table mirror: sage's `effective_mode` field records the
+consumer-visible routing decision -- masked cross-attn calls correctly
+land on `fp16_triton`, but unmasked calls record `auto` because
+`sageattn()` dispatches inside sage-fork where the consumer can't see.
+`--arch sm89_cuda12_8` (or arch field stamped in the trace itself by
+the tracer) enables post-hoc kernel inference: `(auto, has_mask=False)`
+on sm89+CUDA12.8 maps to `fp8_cuda++` (`sageattn_qk_int8_pv_fp8_cuda`
+with `pv_accum_dtype="fp32+fp16"`). This mirrors the subset of
+`sageattention/core.py::sageattn` that the consumer's call pattern
+reaches (no `smooth_k`, no LSE, head_dim in {64,120,128}); broaden if
+the consumer's call pattern changes. Replace with sage-fork's
+`get_last_dispatched_kernel()` once that ships.
 
 Usage:
     uv run --group dev python scripts/sage_telemetry_summary.py \\
@@ -31,6 +48,7 @@ from __future__ import annotations
 import argparse
 import statistics
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Iterator
 
@@ -43,6 +61,72 @@ _DEFAULT_KSAMPLER_CLASSES = (
     "SamplerCustomAdvanced",
     "SamplerCustom",
 )
+
+
+# ---------------------------------------------------------------------------
+# Per-prompt windowing
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class PromptWindow:
+    """A prompt's lifetime in the exec log: earliest start to latest end.
+
+    `ts_min` and `ts_max` are inclusive boundaries -- a sage row whose ts
+    equals either belongs to this prompt. Half-open intervals silently
+    misattribute the first/last attention call of every prompt; inclusive
+    is the right call for forensic reconstruction.
+    """
+    prompt_id: str
+    ts_min: float
+    ts_max: float
+
+    def contains(self, ts: float) -> bool:
+        return self.ts_min <= ts <= self.ts_max
+
+
+def parse_exec_log_windows(exec_log_path: Path) -> list[PromptWindow]:
+    """Build per-prompt (ts_min, ts_max) windows from an exec log.
+
+    `start` events stamp ts_min, `end` and `error` events stamp ts_max.
+    Multiple events per prompt collapse into the outer envelope.
+    """
+    bounds: dict[str, list[float]] = {}
+    for row in load_jsonl(exec_log_path):
+        prompt_id = row.get("prompt_id")
+        ts = row.get("ts")
+        event = row.get("event")
+        if prompt_id is None or ts is None or event not in ("start", "end", "error"):
+            continue
+        b = bounds.setdefault(str(prompt_id), [float(ts), float(ts)])
+        if ts < b[0]:
+            b[0] = float(ts)
+        if ts > b[1]:
+            b[1] = float(ts)
+    return [PromptWindow(prompt_id=pid, ts_min=lo, ts_max=hi)
+            for pid, (lo, hi) in bounds.items()]
+
+
+def assign_prompt_id(rows: Iterable[dict], windows: list[PromptWindow]) -> Iterator[dict]:
+    """Annotate each row with the prompt_id of the window containing its ts.
+
+    Rows whose ts falls outside every window get `prompt_id="unknown"` --
+    the bucket exists so the operator sees data quality issues (sage
+    trace extending past the exec log's reach, exec log started late,
+    etc.) instead of silently dropping rows. First-match wins on
+    overlapping windows; documented behavior, not undefined.
+    """
+    for row in rows:
+        ts = row.get("ts")
+        if ts is None:
+            yield {**row, "prompt_id": "unknown"}
+            continue
+        annotated = dict(row)
+        annotated["prompt_id"] = "unknown"
+        for w in windows:
+            if w.contains(float(ts)):
+                annotated["prompt_id"] = w.prompt_id
+                break
+        yield annotated
 
 
 def load_jsonl(path: Path) -> Iterator[dict]:
@@ -71,26 +155,129 @@ def _percentile(samples: list[float], pct: float) -> float:
     return sorted_samples[idx]
 
 
-def aggregate(rows: Iterable[dict], total_wall_us: float | None = None) -> dict:
+def infer_kernel(effective_mode: str, *, has_mask: bool, arch: str) -> str:
+    """Map an `effective_mode` recorded by the consumer-side tracer to
+    the actual sage kernel that dispatched, given the GPU arch.
+
+    Concrete kernel names (`fp16_cuda`, `fp16_triton`, `fp8_cuda`,
+    `fp8_cuda++`) pass through unchanged. The consumer's mask-aware
+    routing emits `fp16_triton` for masked calls (correct already),
+    `auto` for unmasked (inside `sageattn()` -- consumer can't see).
+    For `auto` + sm89/CUDA>=12.8, sage's dispatch table resolves to
+    `sageattn_qk_int8_pv_fp8_cuda` with `pv_accum_dtype="fp32+fp16"`,
+    canonical name `fp8_cuda++`.
+
+    This mirrors only the subset of `sageattention/core.py::sageattn`
+    that the consumer's call pattern reaches: no `smooth_k`, no LSE,
+    head_dim in {64,120,128}. Broaden if the call pattern changes.
+
+    Replace with sage-fork's `get_last_dispatched_kernel()` once that
+    ships -- thread-local set during dispatch, exposes the real kernel
+    string. Mirror is a stopgap.
+    """
+    # Already a concrete kernel name -> no-op.
+    if effective_mode in ("fp16_cuda", "fp16_triton", "fp8_cuda", "fp8_cuda++"):
+        return effective_mode
+    if effective_mode != "auto":
+        return effective_mode
+
+    # auto routing: masked path is fp16_triton on every supported arch,
+    # unmasked path varies by arch.
+    if has_mask:
+        return "fp16_triton"
+    if arch == "sm89_cuda12_8":
+        return "fp8_cuda++"
+    # Unknown arch -- leave unchanged so the operator sees the gap.
+    return effective_mode
+
+
+def total_wall_us_from_sage_span(rows: Iterable[dict]) -> float | None:
+    """Use `(max_ts - min_ts) * 1e6` of the sage rows themselves as a
+    self-contained denominator. Returns None for fewer than 2 rows
+    (a single sample doesn't bound a span -- caller decides whether to
+    omit pct or fall back).
+    """
+    timestamps: list[float] = []
+    for row in rows:
+        if row.get("event") == "summary":
+            continue
+        ts = row.get("ts")
+        if ts is None:
+            continue
+        timestamps.append(float(ts))
+    if len(timestamps) < 2:
+        return None
+    return (max(timestamps) - min(timestamps)) * 1_000_000.0
+
+
+def aggregate(
+    rows: Iterable[dict],
+    total_wall_us: float | None = None,
+    *,
+    arch: str | None = None,
+) -> dict:
     """Group per-call samples by (effective_mode, has_mask) and compute
     median/p90/count/total. If `total_wall_us` is supplied, also compute
-    pct_of_total per group."""
+    pct_of_total per group.
+
+    `arch` controls post-hoc kernel inference. Precedence:
+    explicit arg > per-row `arch` field > no inference. Per-row arch lets
+    self-describing traces (tracer stamped arch at init) work without a
+    CLI flag; the explicit arg lets the operator override (e.g. testing
+    'how would this resolve on sm80?').
+    """
+    # Materialize once so we can iterate twice (arch sniff + group pass).
+    materialized = [r for r in rows if r.get("event") != "summary"]
+
     groups: dict[tuple[str, bool], list[float]] = {}
     fallbacks = 0
     total_calls = 0
+    # Trace freshness signal: how many rows resolved their kernel name
+    # via real sage-fork telemetry vs post-hoc mirror inference vs
+    # neither. Operator scans the counts to gauge "do I trust this
+    # gate verdict" without re-reading the per-row data. Three buckets
+    # always present (zeros included) so consumers don't need defensive
+    # `.get()` everywhere.
+    kernel_source_counts = {"sage_telemetry": 0, "mirror_inferred": 0, "unknown": 0}
 
-    for row in rows:
-        # Skip the SageTracer summary line (event=summary). Per-call rows
-        # don't have an "event" field.
-        if row.get("event") == "summary":
-            continue
+    for row in materialized:
         elapsed = row.get("elapsed_us")
         if elapsed is None:
             continue
         total_calls += 1
         if row.get("fell_back"):
             fallbacks += 1
-        key = (row.get("effective_mode") or row.get("mode") or "?", bool(row.get("has_mask")))
+        has_mask = bool(row.get("has_mask"))
+
+        # Precedence for the resolved kernel name:
+        #   1. row['dispatched_kernel'] -- real value from sage-fork's
+        #      `get_last_dispatched_kernel()`. Trust this above all.
+        #   2. row['effective_mode'] / row['mode'] + routing-table mirror
+        #      via `arch`. Mirror is the fallback for older traces and
+        #      old sage installs that don't expose the API.
+        # None / empty string in (1) means "thread-local was unset"
+        # (fresh thread or symbol missing); fall through to (2).
+        dispatched = row.get("dispatched_kernel")
+        if dispatched:
+            effective = dispatched
+            kernel_source_counts["sage_telemetry"] += 1
+        else:
+            base_effective = row.get("effective_mode") or row.get("mode") or "?"
+            row_arch = arch if arch is not None else row.get("arch")
+            if row_arch is not None:
+                inferred = infer_kernel(base_effective, has_mask=has_mask, arch=str(row_arch))
+                if inferred != base_effective:
+                    kernel_source_counts["mirror_inferred"] += 1
+                else:
+                    # Mirror was a no-op (effective_mode already concrete
+                    # OR arch unknown). The kernel name is whatever the
+                    # consumer recorded; no real telemetry, no inference.
+                    kernel_source_counts["unknown"] += 1
+                effective = inferred
+            else:
+                effective = base_effective
+                kernel_source_counts["unknown"] += 1
+        key = (effective, has_mask)
         groups.setdefault(key, []).append(float(elapsed))
 
     out_groups: dict[tuple[str, bool], dict] = {}
@@ -110,7 +297,42 @@ def aggregate(rows: Iterable[dict], total_wall_us: float | None = None) -> dict:
         "fallback_count": fallbacks,
         "groups": out_groups,
         "total_wall_us": total_wall_us,
+        "kernel_source_counts": kernel_source_counts,
     }
+
+
+def aggregate_per_prompt(
+    rows: Iterable[dict],
+    windows: list[PromptWindow],
+    *,
+    arch: str | None = None,
+) -> dict[str, dict]:
+    """Bucket sage rows by prompt_id (via ts), then aggregate each
+    bucket. Per-prompt wall time = window duration in microseconds, so
+    pct_of_total is honest per-prompt and not contaminated by sibling
+    prompts in the same exec log.
+
+    Output: dict mapping prompt_id -> summary (same shape as
+    `aggregate()`). Includes a 'unknown' bucket for rows whose ts fell
+    outside every window, with `total_wall_us=None` (no pct available
+    for orphan rows).
+    """
+    annotated = list(assign_prompt_id(rows, windows))
+    by_window = {w.prompt_id: w for w in windows}
+
+    by_prompt: dict[str, list[dict]] = {}
+    for row in annotated:
+        by_prompt.setdefault(row["prompt_id"], []).append(row)
+
+    out: dict[str, dict] = {}
+    for prompt_id, prompt_rows in by_prompt.items():
+        if prompt_id == "unknown":
+            wall_us = None
+        else:
+            w = by_window[prompt_id]
+            wall_us = (w.ts_max - w.ts_min) * 1_000_000.0
+        out[prompt_id] = aggregate(prompt_rows, total_wall_us=wall_us, arch=arch)
+    return out
 
 
 def load_jsonl_with_count(path: Path) -> tuple[list[dict], int]:
@@ -160,23 +382,46 @@ def total_wall_us_from_exec_log(exec_log_path: Path, ksampler_classes: tuple[str
     return total_s * 1_000_000.0
 
 
+def _format_attribution_line(summary: dict) -> str | None:
+    """One-line trace-freshness signal: how many rows came from real
+    sage telemetry vs mirror inference vs neither. Returns None when
+    `kernel_source_counts` isn't present (legacy summaries / external
+    callers that constructed a summary by hand)."""
+    counts = summary.get("kernel_source_counts")
+    if not counts:
+        return None
+    total = sum(counts.values())
+    if total == 0:
+        return None
+    return (
+        f"attribution: {counts['sage_telemetry']} sage_telemetry / "
+        f"{counts['mirror_inferred']} mirror_inferred / "
+        f"{counts['unknown']} unknown"
+    )
+
+
 def _format_table(summary: dict) -> str:
-    rows = [
+    lines: list[str] = []
+    attribution = _format_attribution_line(summary)
+    if attribution is not None:
+        lines.append(attribution)
+    lines.append(
         f"{'effective_mode':<16} {'mask':<6} {'count':>6} {'median_ms':>10} {'p90_ms':>10} "
-        f"{'total_ms':>10} {'pct':>6}",
-    ]
+        f"{'total_ms':>10} {'pct':>6}"
+    )
     if not summary["groups"]:
-        return rows[0] + "\n  (no per-call samples)"
+        lines.append("  (no per-call samples)")
+        return "\n".join(lines)
     for (mode, has_mask), entry in sorted(summary["groups"].items()):
         median_ms = entry["median_us"] / 1000.0
         p90_ms = entry["p90_us"] / 1000.0
         total_ms = entry["total_us"] / 1000.0
         pct = f"{entry.get('pct_of_total', '-')}" if "pct_of_total" in entry else "  -"
-        rows.append(
+        lines.append(
             f"{mode:<16} {str(has_mask):<6} {entry['count']:>6} {median_ms:>10.3f} "
             f"{p90_ms:>10.3f} {total_ms:>10.3f} {pct:>6}"
         )
-    return "\n".join(rows)
+    return "\n".join(lines)
 
 
 def _format_gate_cross_section(summary: dict) -> list[str]:
@@ -228,6 +473,43 @@ def _latest_jsonl(subdir: str, prefix: str, runs_dir: Path = _DEFAULT_RUNS_DIR) 
     return candidates[-1] if candidates else None
 
 
+def _summary_to_jsonable(summary: dict) -> dict:
+    """Tuple keys aren't JSON-encodable; flatten ('mode', has_mask) to 'mode|0|1'."""
+    out = {
+        "total_calls": summary["total_calls"],
+        "fallback_count": summary["fallback_count"],
+        "total_wall_us": summary["total_wall_us"],
+        "groups": {
+            f"{mode}|{int(has_mask)}": entry
+            for (mode, has_mask), entry in summary["groups"].items()
+        },
+    }
+    if "kernel_source_counts" in summary:
+        out["kernel_source_counts"] = summary["kernel_source_counts"]
+    return out
+
+
+def _autodetect_arch() -> str | None:
+    """Last-resort arch detection from the local GPU. Only meaningful
+    when the summary script runs on the same host that produced the
+    trace. Returns sm89_cuda12_8 if the local box matches; else None.
+    """
+    try:
+        import torch
+        if not torch.cuda.is_available():
+            return None
+        major, minor = torch.cuda.get_device_capability(0)
+        cuda_version = torch.version.cuda or ""
+        if (major, minor) == (8, 9):
+            major_cuda = int(cuda_version.split(".")[0]) if cuda_version else 0
+            minor_cuda = int(cuda_version.split(".")[1]) if "." in cuda_version else 0
+            if (major_cuda, minor_cuda) >= (12, 8):
+                return "sm89_cuda12_8"
+    except Exception:
+        return None
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--sage-log", type=Path, default=None, help="Sage tracer JSONL path.")
@@ -238,6 +520,13 @@ def main(argv: list[str] | None = None) -> int:
                              "--exec-log internal/analysis/runs/exec_log/exec_*.jsonl, picking the "
                              "lexically-greatest match in each).")
     parser.add_argument("--total-wall-ms", type=float, default=None, help="Explicit total gen wall time in ms.")
+    parser.add_argument("--use-sage-span", action="store_true",
+                        help="Use (max_ts - min_ts) of sage rows as the denominator. "
+                             "Self-contained; no exec log needed.")
+    parser.add_argument("--arch", type=str, default=None,
+                        help="GPU/CUDA arch for post-hoc kernel inference (e.g. sm89_cuda12_8). "
+                             "Maps tracer 'auto' (unmasked) to the kernel sage actually dispatches. "
+                             "Precedence: this flag > sage row 'arch' field > local autodetect.")
     parser.add_argument("--ksampler-class", action="append", default=None,
                         help="class_type to treat as a sampler when reading --exec-log. Can repeat.")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON instead of a table.")
@@ -256,30 +545,70 @@ def main(argv: list[str] | None = None) -> int:
         print(f"sage log not found: {args.sage_log}", file=sys.stderr)
         return 2
 
+    sage_rows, malformed = load_jsonl_with_count(args.sage_log)
+    if malformed > 0:
+        print(f"warning: skipped {malformed} malformed line(s) in {args.sage_log}", file=sys.stderr)
+
+    # Arch precedence: --arch > per-row 'arch' field (handled inside
+    # aggregate()) > autodetect (last resort, only when --arch unset and
+    # rows have no arch field).
+    arch = args.arch
+    if arch is None:
+        rows_have_arch = any(r.get("arch") for r in sage_rows if r.get("event") != "summary")
+        if not rows_have_arch:
+            detected = _autodetect_arch()
+            if detected is not None:
+                arch = detected
+                print(f"note: --arch not given; trace has no 'arch' field; "
+                      f"using local autodetect: {detected}", file=sys.stderr)
+
+    # Multi-prompt exec log -> per-prompt path. Single-prompt -> use that
+    # prompt's wall window. No exec log -> --total-wall-ms or
+    # --use-sage-span. Sums-of-ksampler-durations (legacy) is the last
+    # resort; it's the broken denominator from before this fix.
+    windows: list[PromptWindow] = []
+    if args.exec_log is not None and args.exec_log.exists():
+        windows = parse_exec_log_windows(args.exec_log)
+
+    if len(windows) > 1:
+        per_prompt = aggregate_per_prompt(sage_rows, windows, arch=arch)
+        if args.json:
+            print(orjson.dumps(
+                {pid: _summary_to_jsonable(s) for pid, s in per_prompt.items()},
+                option=orjson.OPT_INDENT_2,
+            ).decode())
+            return 0
+        print(f"exec log has {len(windows)} prompt_ids; reporting per-prompt.")
+        print()
+        for pid in sorted(per_prompt):
+            summary = per_prompt[pid]
+            wall = summary["total_wall_us"]
+            wall_str = f"{wall/1e6:.1f}s wall" if wall else "wall=unknown"
+            print(f"prompt_id={pid}  ({summary['total_calls']} calls, {wall_str})")
+            print(_format_table(summary))
+            print("  gate cross-section:")
+            for line in _format_gate_cross_section(summary):
+                print(f"    {line}")
+            print(f"  {_gate_verdict(summary)}")
+            print()
+        return 0
+
     total_wall_us: float | None = None
     if args.total_wall_ms is not None:
         total_wall_us = args.total_wall_ms * 1000.0
+    elif args.use_sage_span:
+        total_wall_us = total_wall_us_from_sage_span(sage_rows)
+    elif len(windows) == 1:
+        w = windows[0]
+        total_wall_us = (w.ts_max - w.ts_min) * 1_000_000.0
     elif args.exec_log is not None and args.exec_log.exists():
         ks_classes = tuple(args.ksampler_class) if args.ksampler_class else _DEFAULT_KSAMPLER_CLASSES
         total_wall_us = total_wall_us_from_exec_log(args.exec_log, ks_classes)
 
-    sage_rows, malformed = load_jsonl_with_count(args.sage_log)
-    if malformed > 0:
-        print(f"warning: skipped {malformed} malformed line(s) in {args.sage_log}", file=sys.stderr)
-    summary = aggregate(sage_rows, total_wall_us=total_wall_us)
+    summary = aggregate(sage_rows, total_wall_us=total_wall_us, arch=arch)
 
     if args.json:
-        # Convert tuple keys to strings for JSON encodability.
-        out = {
-            "total_calls": summary["total_calls"],
-            "fallback_count": summary["fallback_count"],
-            "total_wall_us": summary["total_wall_us"],
-            "groups": {
-                f"{mode}|{int(has_mask)}": entry
-                for (mode, has_mask), entry in summary["groups"].items()
-            },
-        }
-        print(orjson.dumps(out, option=orjson.OPT_INDENT_2).decode())
+        print(orjson.dumps(_summary_to_jsonable(summary), option=orjson.OPT_INDENT_2).decode())
         return 0
 
     print(_format_table(summary))

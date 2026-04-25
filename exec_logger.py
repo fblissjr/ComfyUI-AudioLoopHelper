@@ -140,10 +140,25 @@ def _emit(sink, record: dict) -> None:
         sink.flush()
 
 
+# Stamped on `_exec_mod.execute` itself once we wrap it. Lives on the
+# function object, not on this module -- survives reloads of
+# `audioloophelper`/`exec_logger` that would reset _INSTALLED. Without
+# this, each reload captures the previously-wrapped execute as
+# `original` and adds a new sink, growing a chain of wrappers all
+# writing the same data to different files. (Root cause of the
+# 7-near-duplicate-files mystery on 2026-04-25.)
+_SENTINEL_ATTR = "_audioloophelper_wrapped"
+
+
 def install() -> bool:
     """Install the monkey-patch. Returns True if active, False if no-op.
 
-    Idempotent: safe to call multiple times; only patches once.
+    Idempotent across module reloads: detects an already-wrapped
+    `_exec_mod.execute` via a sentinel on the function object itself.
+    Module-level `_INSTALLED` resets on reload, but the sentinel does
+    not -- it survives until ComfyUI replaces `_exec_mod.execute`
+    wholesale (a future change), at which point re-install correctly
+    proceeds.
     """
     global _INSTALLED
     if _INSTALLED:
@@ -152,7 +167,6 @@ def install() -> bool:
     raw = os.environ.get(_LOG_PATH_ENV, "").strip()
     if not raw:
         return False
-    log_path = _resolve_log_target(raw)
 
     try:
         import execution as _exec_mod  # ComfyUI's execution.py
@@ -161,6 +175,15 @@ def install() -> bool:
               file=sys.stderr)
         return False
 
+    # Sentinel check: if execute is already wrapped (sibling import or
+    # post-reload re-entry), don't chain a new wrapper. Mark our own
+    # _INSTALLED True so subsequent calls in this process short-circuit
+    # at the top of the function.
+    if getattr(_exec_mod.execute, _SENTINEL_ATTR, False):
+        _INSTALLED = True
+        return True
+
+    log_path = _resolve_log_target(raw)
     sink = sys.stderr if log_path == "stderr" else open(log_path, "a", buffering=1)
     # Signature match against ComfyUI's execute() is NOT verified at
     # install time. If ComfyUI changes the signature, the wrapper will
@@ -240,6 +263,7 @@ def install() -> bool:
         })
         return result
 
+    setattr(wrapped_execute, _SENTINEL_ATTR, True)
     _exec_mod.execute = wrapped_execute
     _INSTALLED = True
     print(f"[{__name__}] installed -> {log_path}", file=sys.stderr)

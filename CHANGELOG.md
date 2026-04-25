@@ -7,6 +7,52 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Sage tracer reads `sageattention.get_last_dispatched_kernel()`.**
+  Sage-fork ships a thread-local that records the resolved kernel name
+  (one of `KNOWN_KERNEL_NAMES`: `fp16_triton`, `fp16_cuda`,
+  `fp16_cuda(fp16)`, `fp16_cuda++`, `fp8_cuda`, `fp8_cuda(fp32+fp32)`,
+  `fp8_cuda++`, `fp8_cuda_sm90`, `varlen_triton`) for the most recent
+  `sageattn*` call. The override reads it immediately after `sage_fn`
+  returns and stamps `dispatched_kernel` into the per-call trace row.
+  Defensive: cached `getattr` at module import; absent symbol degrades
+  silently (older sageattention installs / pre-upgrade traces continue
+  to use the routing-table mirror in the summary script).
+- **Summary script prefers `dispatched_kernel` over inference.**
+  `aggregate()` precedence: `row['dispatched_kernel']` > `effective_
+  mode` + routing-table mirror via `arch`. Trust real-data values
+  above operator overrides. Empty / None values fall through to the
+  mirror (treats "thread-local unset" same as "field missing").
+- **`kernel_source_counts` trace-freshness signal.** Each row's kernel
+  resolution path is bucketed into `sage_telemetry` /
+  `mirror_inferred` / `unknown`; counts surfaced in the table header
+  as one line: `attribution: N sage_telemetry / M mirror_inferred /
+  K unknown`. Operator instantly sees whether the gate verdict came
+  from real telemetry (post-upgrade trace) or post-hoc inference
+  (pre-upgrade trace). Three buckets always present (zeros included)
+  so consumers don't need defensive `.get()`.
+- **Sage tracer self-describing arch field.** `nodes_sage.py` detects
+  `sm<MAJ><MIN>_cuda<MAJ>_<MIN>` once at `SageTracer.__init__` and
+  stamps it into a one-time `event="header"` row plus every per-call
+  row. Lets the summary script resolve `auto` → actual kernel without
+  a `--arch` flag — traces are self-describing across hosts.
+- **`scripts/sage_telemetry_summary.py` per-prompt grouping.** New
+  `PromptWindow` / `parse_exec_log_windows()` / `assign_prompt_id()`
+  / `aggregate_per_prompt()`. CLI auto-switches to per-prompt mode
+  when the exec log spans >1 `prompt_id`; rows whose ts falls outside
+  every window go to a `"unknown"` bucket (counted, not dropped).
+  Replaces the broken `sum-of-ksampler-durations-across-all-prompts`
+  denominator that produced wildly inconsistent pct values
+  (4.27 / 17.28 / 3.16% for the same trace).
+- **`scripts/sage_telemetry_summary.py --arch`, `--use-sage-span`,
+  routing-table mirror.** `infer_kernel(effective_mode, has_mask,
+  arch)` mirrors the subset of `sageattention/core.py::sageattn` that
+  the consumer's call pattern reaches (sm89/CUDA12.8, no smooth_k, no
+  LSE, head_dim ∈ {64,120,128}): masked → `fp16_triton`, unmasked
+  → `fp8_cuda++`. Documented as a stopgap until sage-fork ships
+  `get_last_dispatched_kernel()`. `--use-sage-span` uses
+  `(max_ts - min_ts)` of the sage rows as a self-contained
+  denominator. Arch precedence: `--arch` > per-row `arch` field >
+  local autodetect.
 - **`LTXVCropGuidesNoLatent` node** — CONDITIONING-only variant of upstream
   `LTXVCropGuides`. Strips `keyframe_idxs` from positive/negative without
   taking or producing a LATENT (eliminates the wasted `latent["samples"]
@@ -292,6 +338,36 @@ This project uses [Semantic Versioning](https://semver.org/).
   `_image.json` legacy workflow is untouched.
 
 ### Fixed
+- **`exec_logger.py` chained-wrapping across module reloads.** Six+
+  near-duplicate exec_log files all cutting off at the exact same
+  instant with byte-identical trailing content traced to a missing
+  reload guard: `_INSTALLED` resets to `False` when ComfyUI reloads
+  the custom node, `install()` runs again, captures the previously-
+  wrapped `_exec_mod.execute` as `original`, and adds another sink in
+  front of it — N reloads produce N sinks all writing to N files.
+  Fix: stamp `_audioloophelper_wrapped = True` sentinel on
+  `_exec_mod.execute` itself; `install()` checks for it before
+  wrapping. Sentinel survives module reloads (lives on the function
+  object), correctly disappears when ComfyUI replaces `execute`
+  wholesale (re-install proceeds). Tests in `tests/test_exec_logger.py`.
+- **`scripts/sage_telemetry_summary.py` denominator broken for
+  multi-prompt exec logs.** `total_wall_us_from_exec_log` summed
+  every ksampler `end` event regardless of prompt — with loops +
+  multiple queued prompts in the same exec log, the denominator was
+  ~5× too big. CLI now auto-switches to per-prompt grouping when
+  >1 prompt_id is present in the exec log; single-prompt exec log
+  uses that prompt's wall window; legacy sum-of-ksampler-durations
+  is the last-resort fallback only. See Added entry above for the
+  per-prompt grouping API.
+- **Sage gate cross-section "unmasked_fp8++" never populated.** The
+  consumer-side tracer records `effective_mode="auto"` for unmasked
+  calls because `_route_mask_aware()` returns the literal string
+  `"auto"` (the actual kernel is chosen inside `sageattention.
+  sageattn()`, opaque from outside). Without inference, the gate's
+  `(fp8_cuda++, False)` cross-section was permanently empty. Fix in
+  the summary script: `infer_kernel()` post-hoc rewrites `auto` to
+  `fp8_cuda++` on sm89/CUDA12.8 (mirroring sage's actual routing
+  table for our call pattern). See Added entry above.
 - **Frame-rate metadata asymmetry between initial render and loop iterations.**
   `TimestampPromptScheduleBatchEncode` emitted raw CLIP conditioning with
   no `frame_rate` metadata, while the initial render's positive
