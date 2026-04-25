@@ -12,6 +12,7 @@ Core nodes (per-node role + wiring in each class's docstring; full reference at 
 
 - **Loop spine**: `AudioLoopController`, `LoopIterationStamp`, `IterationCleanup`, `AudioLoopPlanner`, `AudioDuration`
 - **Prompt schedule**: `TimestampPromptScheduleBatchEncode` + `ConditioningSelectByIteration` (current) / `TimestampPromptSchedule` + `CachedTextEncode` (legacy; don't wire in loop body)
+- **Keyframe schedule**: `KeyframeLatentScheduleBatchEncode` + `LatentSelectByIteration` (current — VAE-encodes once outside loop) / `KeyframeImageSchedule` + `ImageBlend` (legacy; per-iter VAE)
 - **Latent ops**: `LatentContextExtract`, `LatentOverlapTrim`, `StripLatentNoiseMask`, `LatentTemporalMask` (retake)
 - **Image path**: `KeyframeImageSchedule`, `ImageBlend`, `VideoFrameExtract`
 - **Conditioning blend**: `ConditioningBlend` (works with Gemma 3 + CLIP)

@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1620,
-  "last_link_id": 3059,
+  "last_node_id": 1626,
+  "last_link_id": 3089,
   "nodes": [
     {
       "id": 252,
@@ -3050,7 +3050,7 @@
           "type": "VAE",
           "links": [
             2037,
-            3031
+            3083
           ]
         }
       ],
@@ -3267,7 +3267,7 @@
           "label": "init_image",
           "name": "guide_latent",
           "type": "LATENT",
-          "link": 3032
+          "link": 3089
         },
         {
           "label": "Audio VAE",
@@ -3431,9 +3431,9 @@
           "type": "INT",
           "links": [
             2936,
-            3017,
             3027,
-            3045
+            3045,
+            3088
           ]
         }
       ],
@@ -3645,7 +3645,8 @@
           "name": "audio_duration",
           "type": "FLOAT",
           "links": [
-            3025
+            3025,
+            3086
           ]
         },
         {
@@ -3660,8 +3661,8 @@
           "type": "FLOAT",
           "links": [
             2946,
-            3018,
-            3024
+            3024,
+            3085
           ]
         },
         {
@@ -4038,154 +4039,6 @@
       "widgets_values": []
     },
     {
-      "id": 1609,
-      "type": "KeyframeImageSchedule",
-      "pos": [
-        2700,
-        4100
-      ],
-      "size": [
-        340,
-        200
-      ],
-      "flags": {},
-      "order": 90,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 3037
-        },
-        {
-          "name": "current_iteration",
-          "type": "INT",
-          "link": 3017,
-          "widget": {
-            "name": "current_iteration"
-          }
-        },
-        {
-          "name": "stride_seconds",
-          "type": "FLOAT",
-          "link": 3018,
-          "widget": {
-            "name": "stride_seconds"
-          }
-        },
-        {
-          "name": "schedule",
-          "type": "STRING",
-          "link": null,
-          "widget": {
-            "name": "schedule"
-          }
-        },
-        {
-          "name": "blend_seconds",
-          "type": "FLOAT",
-          "link": null,
-          "widget": {
-            "name": "blend_seconds"
-          }
-        }
-      ],
-      "outputs": [
-        {
-          "name": "image",
-          "type": "IMAGE",
-          "links": [
-            3019
-          ]
-        },
-        {
-          "name": "next_image",
-          "type": "IMAGE",
-          "links": [
-            3020
-          ]
-        },
-        {
-          "name": "blend_factor",
-          "type": "FLOAT",
-          "links": [
-            3021
-          ]
-        },
-        {
-          "name": "current_time",
-          "type": "FLOAT",
-          "links": []
-        },
-        {
-          "name": "image_index",
-          "type": "INT",
-          "links": []
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfyui-audioloophelper",
-        "Node name for S&R": "KeyframeImageSchedule"
-      },
-      "widgets_values": [
-        "0:00-0:42: 0\n0:42-1:28: 1\n1:28+: 2\n",
-        0.0
-      ],
-      "title": "Keyframe Image Schedule"
-    },
-    {
-      "id": 1610,
-      "type": "ImageBlend_AudioLoop",
-      "pos": [
-        3100,
-        4100
-      ],
-      "size": [
-        270,
-        120
-      ],
-      "flags": {},
-      "order": 90,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "image_a",
-          "type": "IMAGE",
-          "link": 3019
-        },
-        {
-          "name": "image_b",
-          "type": "IMAGE",
-          "link": 3020
-        },
-        {
-          "name": "blend_factor",
-          "type": "FLOAT",
-          "link": 3021,
-          "widget": {
-            "name": "blend_factor"
-          }
-        }
-      ],
-      "outputs": [
-        {
-          "name": "image",
-          "type": "IMAGE",
-          "links": [
-            3030
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfyui-audioloophelper",
-        "Node name for S&R": "ImageBlend_AudioLoop"
-      },
-      "widgets_values": [
-        0.0
-      ],
-      "title": "Image Blend"
-    },
-    {
       "id": 1611,
       "type": "TimestampPromptScheduleBatchEncode",
       "pos": [
@@ -4319,48 +4172,6 @@
         0
       ],
       "title": "Conditioning Select (by Iteration)"
-    },
-    {
-      "id": 1613,
-      "type": "VAEEncode",
-      "pos": [
-        3360.0,
-        4100.0
-      ],
-      "size": [
-        210,
-        46
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "pixels",
-          "type": "IMAGE",
-          "link": 3030
-        },
-        {
-          "name": "vae",
-          "type": "VAE",
-          "link": 3031
-        }
-      ],
-      "outputs": [
-        {
-          "name": "LATENT",
-          "type": "LATENT",
-          "links": [
-            3032
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "Node name for S&R": "VAEEncode"
-      },
-      "title": "VAE Encode (init image → guide latent)",
-      "widgets_values": []
     },
     {
       "id": 1614,
@@ -4513,7 +4324,7 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            3037
+            3084
           ]
         }
       ],
@@ -4652,6 +4463,122 @@
         0
       ],
       "title": "Loop Iteration Stamp"
+    },
+    {
+      "id": 1625,
+      "type": "KeyframeLatentScheduleBatchEncode",
+      "pos": [
+        -1100,
+        1900
+      ],
+      "size": [
+        380,
+        200
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 3083
+        },
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 3084
+        },
+        {
+          "name": "stride_seconds",
+          "type": "FLOAT",
+          "link": 3085
+        },
+        {
+          "name": "audio_duration",
+          "type": "FLOAT",
+          "link": 3086
+        },
+        {
+          "name": "schedule",
+          "type": "STRING",
+          "widget": {
+            "name": "schedule"
+          },
+          "link": null
+        },
+        {
+          "name": "snap_boundaries",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "snap_boundaries"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent_list",
+          "type": "*",
+          "links": [
+            3087
+          ]
+        },
+        {
+          "name": "iteration_count",
+          "type": "INT",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "KeyframeLatentScheduleBatchEncode"
+      },
+      "widgets_values": [
+        "0:00+: 0",
+        true
+      ],
+      "title": "Keyframe Latent Schedule (Batch Encode)"
+    },
+    {
+      "id": 1626,
+      "type": "LatentSelectByIteration",
+      "pos": [
+        -650,
+        1900
+      ],
+      "size": [
+        320,
+        100
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "latent_list",
+          "type": "*",
+          "link": 3087
+        },
+        {
+          "name": "current_iteration",
+          "type": "INT",
+          "link": 3088
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "links": [
+            3089
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LatentSelectByIteration"
+      },
+      "widgets_values": [],
+      "title": "Latent Select (by Iteration)"
     }
   ],
   "links": [
@@ -5424,46 +5351,6 @@
       "FLOAT"
     ],
     [
-      3017,
-      1539,
-      3,
-      1609,
-      1,
-      "INT"
-    ],
-    [
-      3018,
-      1582,
-      4,
-      1609,
-      2,
-      "FLOAT"
-    ],
-    [
-      3019,
-      1609,
-      0,
-      1610,
-      0,
-      "IMAGE"
-    ],
-    [
-      3020,
-      1609,
-      1,
-      1610,
-      1,
-      "IMAGE"
-    ],
-    [
-      3021,
-      1609,
-      2,
-      1610,
-      2,
-      "FLOAT"
-    ],
-    [
       3023,
       416,
       0,
@@ -5520,30 +5407,6 @@
       "AUDIO"
     ],
     [
-      3030,
-      1610,
-      0,
-      1613,
-      0,
-      "IMAGE"
-    ],
-    [
-      3031,
-      619,
-      0,
-      1613,
-      1,
-      "VAE"
-    ],
-    [
-      3032,
-      1613,
-      0,
-      843,
-      8,
-      "LATENT"
-    ],
-    [
       3033,
       444,
       0,
@@ -5573,14 +5436,6 @@
       0,
       1617,
       1,
-      "IMAGE"
-    ],
-    [
-      3037,
-      1617,
-      0,
-      1609,
-      0,
       "IMAGE"
     ],
     [
@@ -5646,6 +5501,62 @@
       650,
       0,
       "IMAGE"
+    ],
+    [
+      3083,
+      619,
+      0,
+      1625,
+      0,
+      "VAE"
+    ],
+    [
+      3084,
+      1617,
+      0,
+      1625,
+      1,
+      "IMAGE"
+    ],
+    [
+      3085,
+      1582,
+      4,
+      1625,
+      2,
+      "FLOAT"
+    ],
+    [
+      3086,
+      1582,
+      2,
+      1625,
+      3,
+      "FLOAT"
+    ],
+    [
+      3087,
+      1625,
+      0,
+      1626,
+      0,
+      "*"
+    ],
+    [
+      3088,
+      1539,
+      3,
+      1626,
+      1,
+      "INT"
+    ],
+    [
+      3089,
+      1626,
+      0,
+      843,
+      8,
+      "LATENT"
     ]
   ],
   "groups": [

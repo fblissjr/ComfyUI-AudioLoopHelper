@@ -762,6 +762,29 @@ def _batch_encode_cache_key(
     )
 
 
+# Keyframe-latent batch-encode cache. Mirrors _BATCH_ENCODE_CACHE: same
+# eviction policy (LRU, small cap), same id+typename identity tagging
+# pattern as cheap insurance against future address recycling.
+_KEYFRAME_LATENT_CACHE: OrderedDict = OrderedDict()
+_KEYFRAME_LATENT_CACHE_MAX = 4
+
+
+def _keyframe_latent_cache_key(
+    vae, images, schedule: str, stride_seconds: float,
+    audio_duration: float, snap_boundaries: bool,
+) -> tuple:
+    return (
+        id(vae),
+        type(vae).__name__,
+        id(images),
+        type(images).__name__,
+        schedule,
+        round(stride_seconds, _STRIDE_SECONDS_PRECISION),
+        round(audio_duration, _AUDIO_DURATION_PRECISION),
+        bool(snap_boundaries),
+    )
+
+
 class TimestampPromptScheduleBatchEncode(io.ComfyNode):
     """Pre-encodes every per-iteration prompt up front, OUTSIDE the loop.
 
@@ -1491,6 +1514,239 @@ class LatentTemporalMask(io.ComfyNode):
             out["noise_mask"] = mask
 
         return io.NodeOutput(out)
+
+
+class KeyframeLatentScheduleBatchEncode(io.ComfyNode):
+    """Pre-encodes every per-iteration keyframe LATENT up front, OUTSIDE the loop.
+
+    Pair with LatentSelectByIteration inside the loop. VAE encodes each
+    UNIQUE keyframe image exactly once per generation regardless of how
+    many iterations share it. Replaces the per-iteration
+    `KeyframeImageSchedule + ImageBlend + VAEEncode` chain — same
+    architectural shape as the conditioning-side
+    `TimestampPromptScheduleBatchEncode + ConditioningSelectByIteration`
+    pair shipped 2026-04-22.
+
+    Caching: output is memoized on `(id(vae), id(images), schedule,
+    stride_seconds, audio_duration, snap_boundaries)`. ComfyUI's
+    framework cache invalidates this node each iteration (because
+    upstream AudioLoopController re-executes), so we carry our own LRU
+    — same pattern `TimestampPromptScheduleBatchEncode` and
+    `CachedTextEncode` use.
+
+    Out-of-bounds image indices (schedule references idx >= batch_size,
+    or negative) are clamped at runtime to `[0, batch_size-1]`. Mirrors
+    legacy `KeyframeImageSchedule` clamp; LoopConfigValidator catches
+    the bug pre-render with WARN.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="KeyframeLatentScheduleBatchEncode",
+            display_name="Keyframe Latent Schedule (Batch Encode)",
+            category="looping/audio",
+            description=(
+                "Pre-encodes every per-iteration keyframe LATENT outside "
+                "the loop. Pair with LatentSelectByIteration inside the "
+                "loop. Replaces KeyframeImageSchedule + ImageBlend + "
+                "per-iter VAEEncode."
+            ),
+            inputs=[
+                io.Vae.Input("vae", tooltip="Video VAE (LTX 2.3)."),
+                io.Image.Input(
+                    "images",
+                    tooltip=(
+                        "Batch of keyframe images. Index 0 = first image. "
+                        "Schedule values reference these indices."
+                    ),
+                ),
+                io.String.Input(
+                    "schedule",
+                    default="0:00+: 0",
+                    multiline=True,
+                    tooltip=(
+                        "Timestamp-to-image-index schedule (same format as "
+                        "KeyframeImageSchedule).\n"
+                        "  0:00-0:38: 0\n"
+                        "  0:38-1:15: 1\n"
+                        "  1:15+: 2\n"
+                        "Values are 0-based image indices into the batch."
+                    ),
+                ),
+                io.Float.Input(
+                    "stride_seconds",
+                    default=17.92,
+                    min=0.01,
+                    step=0.01,
+                    tooltip=(
+                        "Audio stride per iteration. Wire from "
+                        "AudioLoopController.stride_seconds."
+                    ),
+                ),
+                io.Float.Input(
+                    "audio_duration",
+                    default=180.0,
+                    min=0.01,
+                    step=0.1,
+                    tooltip=(
+                        "Total audio duration. Wire from "
+                        "AudioLoopController.audio_duration."
+                    ),
+                ),
+                io.Boolean.Input(
+                    "snap_boundaries",
+                    default=True,
+                    tooltip=(
+                        "Snap schedule boundaries to the iteration grid. "
+                        "Default on -- matches TimestampPromptScheduleBatchEncode."
+                    ),
+                ),
+            ],
+            outputs=[
+                io.AnyType.Output(
+                    "latent_list",
+                    tooltip=(
+                        "List of pre-encoded LATENT, one per iteration. "
+                        "Wire to LatentSelectByIteration inside the loop."
+                    ),
+                ),
+                io.Int.Output(
+                    "iteration_count",
+                    tooltip=(
+                        "Number of entries in latent_list. Includes +1 "
+                        "headroom beyond the expected loop length so the "
+                        "selector's clamp absorbs overshoot."
+                    ),
+                ),
+            ],
+        )
+
+    @classmethod
+    def IS_CHANGED(
+        cls,
+        vae,
+        images,
+        schedule: str,
+        stride_seconds: float,
+        audio_duration: float,
+        snap_boundaries: bool = True,
+    ) -> str:
+        return repr(_keyframe_latent_cache_key(
+            vae, images, schedule, stride_seconds,
+            audio_duration, snap_boundaries,
+        ))
+
+    @classmethod
+    def execute(
+        cls,
+        vae,
+        images,
+        schedule: str,
+        stride_seconds: float,
+        audio_duration: float,
+        snap_boundaries: bool = True,
+    ) -> io.NodeOutput:
+        cache_key = _keyframe_latent_cache_key(
+            vae, images, schedule, stride_seconds,
+            audio_duration, snap_boundaries,
+        )
+        cached = _KEYFRAME_LATENT_CACHE.get(cache_key)
+        if cached is not None:
+            _KEYFRAME_LATENT_CACHE.move_to_end(cache_key)
+            return io.NodeOutput(*cached)
+
+        entries = _parse_image_schedule(schedule)
+        if snap_boundaries and entries:
+            entries = _snap_schedule_to_iterations(entries, stride_seconds)
+
+        safe_stride = max(stride_seconds, 1e-6)
+        iteration_count = max(1, math.ceil(audio_duration / safe_stride) + 1)
+
+        # Schedule emits per-iteration image INDICES; clamp to batch range.
+        batch_size = int(images.shape[0])
+        per_iter_indices = [
+            max(0, min(_match_schedule_generic(entries, i * stride_seconds, 0), batch_size - 1))
+            for i in range(iteration_count)
+        ]
+
+        # Dedup preserves insertion order. Encode each unique index once;
+        # all iterations sharing that index reference the SAME LATENT
+        # dict object so the selector returns identity-stable refs.
+        unique_indices: list[int] = []
+        seen: set[int] = set()
+        for idx in per_iter_indices:
+            if idx not in seen:
+                seen.add(idx)
+                unique_indices.append(idx)
+
+        encoded: dict[int, dict] = {}
+        for idx in unique_indices:
+            single = images[idx : idx + 1]
+            encoded[idx] = {"samples": vae.encode(single)}
+
+        latent_list = [encoded[i] for i in per_iter_indices]
+
+        _KEYFRAME_LATENT_CACHE[cache_key] = (latent_list, iteration_count)
+        if len(_KEYFRAME_LATENT_CACHE) > _KEYFRAME_LATENT_CACHE_MAX:
+            _KEYFRAME_LATENT_CACHE.popitem(last=False)
+        return io.NodeOutput(latent_list, iteration_count)
+
+
+class LatentSelectByIteration(io.ComfyNode):
+    """Selects a pre-encoded LATENT by iteration index.
+
+    Runs INSIDE the loop. No VAE dependency. Pair with
+    KeyframeLatentScheduleBatchEncode outside the loop. Mirrors
+    `ConditioningSelectByIteration`.
+
+    Clamp behavior:
+      - current_iteration >= len(latent_list) -> returns last entry
+        (absorbs the batch encoder's +1 headroom).
+      - current_iteration < 0                 -> returns first entry
+        (defensive; real workflows wire current_iteration from
+        TensorLoopOpen which starts at 1).
+      - empty latent_list                     -> raises ValueError.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="LatentSelectByIteration",
+            display_name="Latent Select (by Iteration)",
+            category="looping/audio",
+            description=(
+                "Inside-loop selector for pre-encoded keyframe LATENT. "
+                "Pair with KeyframeLatentScheduleBatchEncode."
+            ),
+            inputs=[
+                io.AnyType.Input(
+                    "latent_list",
+                    tooltip=(
+                        "List of LATENT from KeyframeLatentScheduleBatchEncode."
+                    ),
+                ),
+                io.Int.Input(
+                    "current_iteration",
+                    default=0,
+                    min=0,
+                    tooltip="Iteration index from TensorLoopOpen.",
+                ),
+            ],
+            outputs=[
+                io.Latent.Output("latent"),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, latent_list, current_iteration: int) -> io.NodeOutput:
+        if not latent_list:
+            raise ValueError(
+                "LatentSelectByIteration: latent_list is empty. "
+                "Wire the output of KeyframeLatentScheduleBatchEncode."
+            )
+        idx = max(0, min(current_iteration, len(latent_list) - 1))
+        return io.NodeOutput(latent_list[idx])
 
 
 class KeyframeImageSchedule(io.ComfyNode):
@@ -2265,6 +2521,8 @@ class AudioLoopHelperExtension(ComfyExtension):
             AudioDuration,
             AudioPitchDetect,
             KeyframeImageSchedule,
+            KeyframeLatentScheduleBatchEncode,
+            LatentSelectByIteration,
             VideoFrameExtract,
             ImageBlend,
             CachedTextEncode,

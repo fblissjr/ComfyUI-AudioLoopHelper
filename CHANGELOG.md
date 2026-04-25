@@ -41,6 +41,28 @@ This project uses [Semantic Versioning](https://semver.org/).
   audio head limits) to recovery actions.
 
 ### Added
+- **Phase 1 keyframe-latent batch encode shipped.** New
+  `KeyframeLatentScheduleBatchEncode` (top-level) +
+  `LatentSelectByIteration` (loop body) pair mirrors the
+  conditioning-side `TimestampPromptScheduleBatchEncode +
+  ConditioningSelectByIteration` shape shipped 2026-04-22. VAE encodes
+  each unique keyframe image exactly once per generation regardless of
+  how many iterations share it; the legacy
+  `KeyframeImageSchedule + ImageBlend + per-iter VAEEncode` chain is
+  retired on the latent-keyframe workflow. Module-level
+  `_KEYFRAME_LATENT_CACHE` (LRU, bounded) plus `IS_CHANGED` classmethod
+  prevent re-encoding on the AudioLoopController-driven framework
+  re-execution. Migration:
+  `scripts/apply_keyframe_batch_encode.py` (idempotent, supports
+  `--dry-run` and `--revert`); rewires
+  `example_workflows/audio-loop-music-video_latent_keyframe.json` to
+  the new pattern. 17 new tests in
+  `tests/test_keyframe_batch_encode.py` covering encode-once invariant,
+  cache hit, cache invalidation, identity stability across shared
+  iterations, out-of-bounds and negative index clamps, and integration
+  parity with the legacy `KeyframeImageSchedule` per-iter output. Both
+  nodes registered in `comfy_entrypoint`. CLAUDE.md updated with a
+  dedicated "Keyframe schedule" core-nodes line.
 - **Retake workflow shipped (Phase 3, Option A).** New
   `example_workflows/audio-loop-music-video_retake.json` regenerates a
   `[start_time, end_time]` window of a previously-generated video without
