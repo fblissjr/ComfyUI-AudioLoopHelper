@@ -1,4 +1,4 @@
-Last updated: 2026-04-20
+Last updated: 2026-04-25 (no schedule changes; this file was already free of music descriptors. Revision note added per `docs/guides/prompt_creation_guide.md`.)
 
 # Action Sequence v4 — Dragon Leap (instrumental action)
 

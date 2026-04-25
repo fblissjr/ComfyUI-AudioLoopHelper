@@ -1,4 +1,4 @@
-Last updated: 2026-04-20
+Last updated: 2026-04-25 (audio descriptors stripped per `docs/guides/prompt_creation_guide.md`)
 
 # Action Sequence v3 — Fast-Paced / Cut-Heavy
 
@@ -65,7 +65,7 @@ schedule:
 1:29-1:47: Cut to a medium shot, jib up, camera rising up. A warrior woman with a brown-and-silver braid in black leather flight gear on the Gauntlet hurls her body upward with a hard push off an embedded dagger, her braid whipping like a banner in the wind off the chasm.
 1:47-2:05: Cut to an extreme close-up, focus shift, rack focus. A warrior woman with a brown-and-silver braid in black leather flight gear on the Gauntlet snaps her gaze between two daggers in her grip, choosing which to strike with next, thumb rolling across a hilt, wind coiling through the beams around her.
 2:05-2:23: Cut to a wide shot, static camera, locked off shot. A warrior woman with a brown-and-silver braid in black leather flight gear on the Gauntlet lunges airborne at the apex, driving her primary dagger deep into the highest iron seam, a blinding lightning flash behind her.
-2:23+: Cut to an extreme close-up, dolly in, camera pushing forward. A warrior woman with a brown-and-silver braid in black leather flight gear on the Gauntlet's dagger blade drives deep into wood on the final chord, sparks trailing from iron on iron, the impact held as wind fills the silence.
+2:23+: Cut to an extreme close-up, dolly in, camera pushing forward. A warrior woman with a brown-and-silver braid in black leather flight gear on the Gauntlet's dagger blade drives deep into wood, sparks trailing from iron on iron, the impact held as wind streams across her braid.
 ```
 
 ## Camera + action progression

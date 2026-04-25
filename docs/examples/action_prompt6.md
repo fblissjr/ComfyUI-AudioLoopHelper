@@ -1,4 +1,4 @@
-Last updated: 2026-04-20
+Last updated: 2026-04-25 (no schedule changes; this file IS the canonical post-strip version. Framing updated: v5 has since been retroactively stripped to match v6, but the v5→v6 diff below is preserved as the original 2026-04-20 case study that established the strip rule.)
 
 # Action Sequence v6 — No Audio Descriptors
 
@@ -103,7 +103,14 @@ schedule:
 2:32+: Cut to a wide shot, jib up, camera rising up. A warrior woman with a brown-and-silver braid in black leather flight gear on the storm dragon's back as it beats its wings and rises through parting clouds, wind streaming across them.
 ```
 
-## What changed from v5 (line-by-line)
+## What changed in the original 2026-04-20 strip pass (preserved as discovery record)
+
+> **Note (2026-04-25):** v5 has been retroactively stripped to match
+> v6. The diff table below is the original 2026-04-20 case study that
+> established the "strip music descriptors when audio is frozen" rule
+> (now `docs/guides/prompt_creation_guide.md` §3.1). Comparing v5 and
+> v6 schedules today shows them identical modulo minor wording; the
+> table documents the *discovery*, not the current state.
 
 | Iter | v5 had | v6 has |
 |---|---|---|

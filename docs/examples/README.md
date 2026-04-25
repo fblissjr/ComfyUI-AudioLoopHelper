@@ -1,4 +1,4 @@
-Last updated: 2026-04-23 (sibling doc paths updated for reorg)
+Last updated: 2026-04-25 (all schedules retroactively stripped of audio descriptors and init-committed redundancy per `docs/guides/prompt_creation_guide.md`; original discovery diffs preserved inline as historical case studies.)
 
 # Prompt schedule examples
 
@@ -46,21 +46,31 @@ the specific assets.
 
 ## Patterns that transfer
 
-Reading these in order (comedy 1→4, music 1→3, action 1→6), the
-evolution is:
+Reading these in order (comedy 1→4, music 1→3, action 1→6) documents
+the discovery arc that produced the rules in
+`../guides/prompt_creation_guide.md`. **All files have been
+retroactively stripped (2026-04-25) to match those rules**; the
+"What changed from <prior>" tables inside individual files document
+the original discovery diffs. The arc:
 
 1. **Subject byte-exact across entries** (rule stabilized in comedy
    series)
 2. **"Cut to ..." language at iteration boundaries** (v4-standup
-   finding — reframes seams as intentional edits)
+   finding — reframes seams as intentional edits; **now flagged as a
+   hypothesis under review** in the guide §5.1, since loop architecture
+   continues prior latents and the boundary marker may be undermining
+   that continuity)
 3. **Canonical LTX 2.3 camera phrasings only** (music series)
-4. **No dolly-out anywhere** (music_prompt2 onward)
+4. **No dolly-out anywhere for face-driven content** (music_prompt2
+   onward; generalized to **no wide shots either** for music/comedy
+   per guide §6.1, applied retroactively to comedy v4 / v5 outros)
 5. **`Style:` prefix omitted when init commits style** (music_prompt3
    cinematic run)
 6. **Action verbs replace singing verb for instrumental tracks**
    (action series)
 7. **Audio descriptors removed when audio is frozen** (action_prompt6
-   — the final architectural insight)
+   established the rule on 2026-04-20; on 2026-04-25 retroactively
+   applied to all prior iterations)
 
 See `../guides/prompt_creation_guide.md` and `../guides/debugging_guide.md`
 for the distilled rules extracted from these case studies.

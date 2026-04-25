@@ -1,4 +1,6 @@
-Last updated: 2026-04-17
+Last updated: 2026-04-25 (vocal-delivery ornaments and audio-as-audio descriptors stripped per `docs/guides/prompt_creation_guide.md`; pre-v4 conventions preserved structurally as part of the historical evolution arc.)
+
+Original date: 2026-04-17
 
 # Standup Comedy — Example Prompt Schedule (v3)
 
@@ -238,16 +240,16 @@ node_169_prompt: Style: cinematic. In a medium shot, static camera, a male stand
 
 schedule:
 0:00-0:17: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is pausing for the laugh. Warm stage wash.
-0:17-0:35: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the setup. Warm stage wash. Delivery in a dry deadpan.
-0:35-0:53: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is telling a joke. Warm stage wash. Brisk rhythmic delivery.
-0:53-1:11: Style: cinematic. In a medium close-up, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the punchline. Warm stage wash. The crowd reacting.
-1:11-1:29: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is mid-bit. Warm stage wash. Delivering in a low rhythmic tone.
-1:29-1:47: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is smiling wryly, looking out into the audience. Warm stage wash.
-1:47-2:05: Style: cinematic. In a medium close-up, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is telling a joke, gesturing sharply with his left hand. Warm stage wash.
-2:05-2:23: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the punchline, leaning back slightly, pointing at a crowd member on the right. Warm stage wash.
-2:23-2:41: Style: cinematic. In a medium close-up, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is leaning into the mic, building the final premise. Warm stage wash. Intense, rapid delivery.
-2:41-2:58: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the final punchline, smiling wide. Warm stage wash. The crowd fully laughing.
-2:58+: Style: cinematic. In a wide shot, slow dolly out, a male standup comedian in a striped sweater at a stand-up comedy club is reacting to the crowd, stepping back from the mic stand. Warm stage wash. Room tone settling.
+0:17-0:35: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the setup.
+0:35-0:53: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is telling a joke.
+0:53-1:11: Style: cinematic. In a medium close-up, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the punchline. The crowd reacting.
+1:11-1:29: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is mid-bit.
+1:29-1:47: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is smiling wryly, looking out into the audience.
+1:47-2:05: Style: cinematic. In a medium close-up, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is telling a joke, gesturing sharply with his left hand.
+2:05-2:23: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the punchline, leaning back slightly, pointing at a crowd member on the right.
+2:23-2:41: Style: cinematic. In a medium close-up, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is leaning into the mic, building the final premise.
+2:41-2:58: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the final punchline, smiling wide. The crowd fully laughing.
+2:58+: Style: cinematic. In a wide shot, slow dolly out, a male standup comedian in a striped sweater at a stand-up comedy club is reacting to the crowd, stepping back from the mic stand.
 ```
 
 ## Schedule — overlap = 2 + node 567 trim = 5s (trimmed audio, stride 17.92)
@@ -272,16 +274,16 @@ node_169_prompt: Style: cinematic. In a medium shot, static camera, a male stand
 
 schedule:
 0:00-0:17: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the opening line. Warm stage wash.
-0:17-0:35: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the setup. Warm stage wash. Delivery in a dry deadpan.
-0:35-0:53: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is telling a joke. Warm stage wash. Brisk rhythmic delivery.
-0:53-1:11: Style: cinematic. In a medium close-up, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the punchline. Warm stage wash. The crowd reacting.
-1:11-1:29: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is mid-bit. Warm stage wash. Delivering in a low rhythmic tone.
-1:29-1:47: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is telling a joke, looking out into the audience. Warm stage wash.
-1:47-2:05: Style: cinematic. In a medium close-up, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the setup, gesturing sharply with his left hand. Warm stage wash.
-2:05-2:23: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the punchline, leaning back slightly. Warm stage wash.
-2:23-2:41: Style: cinematic. In a medium close-up, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is leaning into the mic, building the final premise. Warm stage wash. Intense, rapid delivery.
-2:41-2:59: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the final punchline, smiling wide. Warm stage wash. The crowd fully laughing.
-2:59+: Style: cinematic. In a wide shot, slow dolly out, a male standup comedian in a striped sweater at a stand-up comedy club is reacting to the crowd, stepping back from the mic stand. Warm stage wash. Room tone settling.
+0:17-0:35: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the setup.
+0:35-0:53: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is telling a joke.
+0:53-1:11: Style: cinematic. In a medium close-up, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the punchline. The crowd reacting.
+1:11-1:29: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is mid-bit.
+1:29-1:47: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is telling a joke, looking out into the audience.
+1:47-2:05: Style: cinematic. In a medium close-up, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the setup, gesturing sharply with his left hand.
+2:05-2:23: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the punchline, leaning back slightly.
+2:23-2:41: Style: cinematic. In a medium close-up, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is leaning into the mic, building the final premise.
+2:41-2:59: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the final punchline, smiling wide. The crowd fully laughing.
+2:59+: Style: cinematic. In a wide shot, slow dolly out, a male standup comedian in a striped sweater at a stand-up comedy club is reacting to the crowd, stepping back from the mic stand.
 ```
 
 Key verb shifts from the untrimmed variant:
@@ -300,16 +302,16 @@ node_169_prompt: Style: cinematic. In a medium shot, static camera, a male stand
 
 schedule:
 0:00-0:16: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is pausing for the laugh. Warm stage wash.
-0:16-0:33: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the setup. Warm stage wash. Delivery in a dry deadpan.
-0:33-0:50: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is telling a joke. Warm stage wash. Brisk rhythmic delivery.
-0:50-1:07: Style: cinematic. In a medium close-up, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the punchline. Warm stage wash. The crowd reacting.
-1:07-1:24: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is mid-bit. Warm stage wash. Delivering in a low rhythmic tone.
-1:24-1:41: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is smiling wryly, looking out into the audience. Warm stage wash.
-1:41-1:58: Style: cinematic. In a medium close-up, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is telling a joke, gesturing sharply with his left hand. Warm stage wash.
-1:58-2:15: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the punchline, leaning back slightly, pointing at a crowd member on the right. Warm stage wash.
-2:15-2:31: Style: cinematic. In a medium close-up, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is leaning into the mic, building the final premise. Warm stage wash. Intense, rapid delivery.
-2:31-2:48: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the final punchline, smiling wide. Warm stage wash. The crowd fully laughing.
-2:48+: Style: cinematic. In a wide shot, slow dolly out, a male standup comedian in a striped sweater at a stand-up comedy club is reacting to the crowd, stepping back from the mic stand. Warm stage wash. Room tone settling.
+0:16-0:33: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the setup.
+0:33-0:50: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is telling a joke.
+0:50-1:07: Style: cinematic. In a medium close-up, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the punchline. The crowd reacting.
+1:07-1:24: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is mid-bit.
+1:24-1:41: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is smiling wryly, looking out into the audience.
+1:41-1:58: Style: cinematic. In a medium close-up, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is telling a joke, gesturing sharply with his left hand.
+1:58-2:15: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the punchline, leaning back slightly, pointing at a crowd member on the right.
+2:15-2:31: Style: cinematic. In a medium close-up, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is leaning into the mic, building the final premise.
+2:31-2:48: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is delivering the final punchline, smiling wide. The crowd fully laughing.
+2:48+: Style: cinematic. In a wide shot, slow dolly out, a male standup comedian in a striped sweater at a stand-up comedy club is reacting to the crowd, stepping back from the mic stand.
 ```
 
 ## Workflow widget values (v3, post-DR1)

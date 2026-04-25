@@ -1,4 +1,6 @@
-Last updated: 2026-04-17
+Last updated: 2026-04-25 (vocal-delivery ornaments stripped, off-canon camera moves normalized to canonical phrasings, and final outro changed from wide+dolly-out to close-up+static per the face-driven shot-scale rule in `docs/guides/prompt_creation_guide.md` §6.1. The original v4 final entry used `wide shot, slow dolly out, camera pulling back` per the README rule-7 outro exception in effect at the time; that exception has since been retracted for face-driven content because the shrinking face costs lip-sync cross-attention signal across the ~18s outro window.)
+
+Original date: 2026-04-17
 
 # Standup Comedy — Example Prompt Schedule (v4)
 
@@ -14,6 +16,14 @@ lecture camera. Real TV specials cut between framing, push in on
 punchlines, linger in close on reactions, pull back to land an outro.
 We can replicate much of that without breaking lip sync if we respect
 what i2v can and can't do.
+
+> **Prose-vs-schedule note (2026-04-25):** the prose below describes
+> the original v4 camera-vocabulary thinking (`slow dolly in`, `slight
+> handheld sway`, `slow jib up`). The schedule has been retroactively
+> normalized to the canonical-only list per
+> `docs/guides/prompt_creation_guide.md` §7 — those off-canon phrasings
+> no longer appear in the schedule entries. The prose is preserved as
+> the original v4 reasoning.
 
 ## What i2v lets us vary — and what it doesn't
 
@@ -76,20 +86,20 @@ boundary seam as an intentional edit.
 ## Schedule
 
 ```
-node_169_prompt: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is pausing for the laugh, mic held close to his chest, slight smile. Warm stage wash. The crowd on the right mid-laugh.
+node_169_prompt: Style: cinematic. In a medium shot, static camera, locked off shot, a male standup comedian in a striped sweater at a stand-up comedy club is pausing for the laugh, mic held close to his chest, slight smile. Warm stage wash. The crowd on the right mid-laugh.
 
 schedule:
-0:00-0:17: Style: cinematic. In a medium shot, static camera, a male standup comedian in a striped sweater at a stand-up comedy club is pausing for the laugh, mic held close to his chest, slight smile. Warm stage wash. The crowd on the right mid-laugh.
-0:17-0:35: Cut to a medium close-up, static camera. A male standup comedian in a striped sweater at a stand-up comedy club is delivering the setup, raising an eyebrow, delivery in a dry deadpan. Warm stage wash. The crowd quiet, leaning in.
-0:35-0:53: Cut to a close-up, slow dolly in. A male standup comedian in a striped sweater at a stand-up comedy club is telling a joke, eyes wide with conviction, shaking his head slightly. Warm stage wash. Brisk rhythmic delivery.
-0:53-1:11: Cut to a close-up, static camera. A male standup comedian in a striped sweater at a stand-up comedy club is delivering the punchline, leaning into the mic, mouth open. Warm stage wash. One person in the crowd on the right slapping the table laughing.
-1:11-1:29: Cut to a medium shot, slight handheld sway. A male standup comedian in a striped sweater at a stand-up comedy club is mid-bit, gesturing with his free hand, shifting weight between feet. Warm stage wash. The crowd watching attentively.
-1:29-1:47: Cut to a medium close-up, rack focus shifting to the comedian. A male standup comedian in a striped sweater at a stand-up comedy club is smiling wryly, looking out into the audience, head tilted. Warm stage wash. A couple of patrons on the right whispering.
-1:47-2:05: Cut to a medium shot, static camera. A male standup comedian in a striped sweater at a stand-up comedy club is telling a joke, gesturing sharply with his left hand to emphasize a point, mic slightly lowered. Warm stage wash. Crowd members shifting in their seats.
-2:05-2:23: Cut to a close-up, slow dolly in. A male standup comedian in a striped sweater at a stand-up comedy club is delivering the punchline, leaning back slightly, pointing at a crowd member, eyes narrowed playfully. Warm stage wash. Someone on the right wiping their eye from laughing.
-2:23-2:41: Cut to a medium close-up, static camera. A male standup comedian in a striped sweater at a stand-up comedy club is leaning into the mic, building the final premise, voice intimate and intense. Warm stage wash. The crowd leaning in, highly attentive.
-2:41-2:58: Cut to a close-up, slow dolly in. A male standup comedian in a striped sweater at a stand-up comedy club is delivering the final punchline, smiling wide, mic lowered. Warm stage wash. The crowd fully laughing, shoulders shaking.
-2:58+: Cut to a wide shot, slow dolly out, camera pulling back. A male standup comedian in a striped sweater at a stand-up comedy club is reacting to the crowd, waving his free hand, stepping back from the mic stand. Warm stage wash. The crowd animated, some standing, some wiping their eyes. Room tone settling.
+0:00-0:17: Style: cinematic. In a medium shot, static camera, locked off shot, a male standup comedian in a striped sweater at a stand-up comedy club is pausing for the laugh, mic held close to his chest, slight smile. Warm stage wash. The crowd on the right mid-laugh.
+0:17-0:35: Cut to a medium close-up, static camera, locked off shot. A male standup comedian in a striped sweater at a stand-up comedy club is delivering the setup, raising an eyebrow. The crowd quiet, leaning in.
+0:35-0:53: Cut to a close-up, dolly in, camera pushing forward. A male standup comedian in a striped sweater at a stand-up comedy club is telling a joke, eyes wide with conviction, shaking his head slightly.
+0:53-1:11: Cut to a close-up, static camera, locked off shot. A male standup comedian in a striped sweater at a stand-up comedy club is delivering the punchline, leaning into the mic, mouth open. One person in the crowd on the right slapping the table laughing.
+1:11-1:29: Cut to a medium shot, static camera, locked off shot. A male standup comedian in a striped sweater at a stand-up comedy club is mid-bit, gesturing with his free hand, shifting weight between feet. The crowd watching attentively.
+1:29-1:47: Cut to a medium close-up, focus shift, rack focus. A male standup comedian in a striped sweater at a stand-up comedy club is smiling wryly, looking out into the audience, head tilted. A couple of patrons on the right whispering.
+1:47-2:05: Cut to a medium shot, static camera, locked off shot. A male standup comedian in a striped sweater at a stand-up comedy club is telling a joke, gesturing sharply with his left hand to emphasize a point, mic slightly lowered. Crowd members shifting in their seats.
+2:05-2:23: Cut to a close-up, dolly in, camera pushing forward. A male standup comedian in a striped sweater at a stand-up comedy club is delivering the punchline, leaning back slightly, pointing at a crowd member, eyes narrowed playfully. Someone on the right wiping their eye from laughing.
+2:23-2:41: Cut to a medium close-up, static camera, locked off shot. A male standup comedian in a striped sweater at a stand-up comedy club is leaning into the mic, building the final premise. The crowd leaning in, highly attentive.
+2:41-2:58: Cut to a close-up, dolly in, camera pushing forward. A male standup comedian in a striped sweater at a stand-up comedy club is delivering the final punchline, smiling wide, mic lowered. The crowd fully laughing, shoulders shaking.
+2:58+: Cut to a close-up, static camera, locked off shot. A male standup comedian in a striped sweater at a stand-up comedy club is reacting to the crowd, waving his free hand, slight smile spreading. The crowd animated, some standing, some wiping their eyes.
 ```
 
 ## What makes v4 different from v3

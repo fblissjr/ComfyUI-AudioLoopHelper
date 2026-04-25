@@ -86,8 +86,9 @@ To use prompt scheduling:
    migrate an older copy.)
 4. Leave `snap_boundaries=True` (default). The batch encoder hard-cuts
    between schedule entries at the iteration grid; as long as subject
-   strings are consistent across entries (see "Prompt writing guide"
-   below), hard cuts are visually clean.
+   strings are consistent across entries (see
+   [`docs/guides/prompt_creation_guide.md`](docs/guides/prompt_creation_guide.md)),
+   hard cuts are visually clean.
 5. Run. The loop auto-stops when it reaches the end of the audio.
 
 ## Nodes
@@ -210,25 +211,7 @@ When `blend_seconds = 0`, `next_prompt` equals `prompt` and `blend_factor` is
 always 0.0. You can wire just `prompt` through a single text encoder directly
 to the extension component -- no blending needed.
 
-**Schedule format:**
-
-One prompt for the entire song (simplest):
-```
-0:00+: Style: cinematic. A woman in her 30s with dark hair is singing passionately alone in a dimly lit basement workshop. Strings of colorful, mismatched Christmas lights provide a warm glow against damp stone walls. Her voice carries through the small space, resonating with raw emotion. Soft ambient hum of the lights blends with her singing.
-```
-
-Three sections with shot variation (keep core subject consistent):
-```
-0:00-0:38: Style: cinematic. In a medium close-up, a woman in her 30s with dark hair is singing passionately in a dimly lit basement workshop. Christmas lights cast warm colorful reflections on her face. Her voice fills the small space with raw emotion. Soft ambient hum from the lights.
-0:38-1:15: Style: cinematic. A woman in her 30s with dark hair is singing with building energy in a dimly lit basement workshop, static camera, locked off shot. Wide shot reveals the full workshop space, tools on walls, Christmas lights strung across exposed beams. Her voice grows more powerful, echoing off stone walls. The lights buzz softly.
-1:15+: Style: cinematic. In an extreme close-up, a woman in her 30s with dark hair is singing softly in a dimly lit basement. Focus on her face and hands, Christmas light bokeh in background. Her voice is gentle and emotional, almost a whisper. Quiet ambient room tone.
-```
-
-Format rules:
-- Timestamps: `M:SS`, `M:SS.ss`, or bare seconds (`38.5`)
-- Ranges: `start-end` (inclusive) or `start+` (from here onward)
-- Last match wins if ranges overlap
-- Fallback: last entry used if nothing matches
+**Schedule format:** see [`docs/guides/prompt_creation_guide.md`](docs/guides/prompt_creation_guide.md) §9 for syntax (timestamps, ranges, fallback) and concrete examples.
 
 ### Audio Loop Planner
 
@@ -718,156 +701,15 @@ Paste the JSON into Claude or Gemini -- the LLM outputs both `node_169_prompt`
 and `schedule` ready to paste. See `docs/guides/prompt_workflow_end_to_end.md`
 for the full workflow.
 
-## Prompt writing guide (LTX 2.3)
+## Prompt writing
 
-LTX 2.3 is a distilled model — CFG is 1.0 by default. Text prompts have
-less direct influence than in non-distilled models, but different
-conditioning vectors still shift the generation space. Write prompts
-carefully.
-
-### Rules for loop-friendly prompts
-
-1. **Keep the core subject identical across all schedule entries.** Change
-   framing, camera, lighting — not the person or setting. "A woman in her
-   30s with dark hair singing in a basement workshop" should appear in every
-   entry. Keeps Gemma 3 embeddings close in vector space.
-
-2. **Use present-progressive verbs for sustained action, present simple for
-   impact moments.** "is singing", "is climbing" for continuous motion
-   across the iteration window. "slams", "lunges", "leaps" for
-   single-impact-frame moments. LTX interprets progressive as sustained,
-   simple as punctuated.
-
-3. **Describe only what changes from the previous section.** The init
-   image already commits style, palette, setting, subjects. Schedule
-   entries are a *delta* layer. Re-describing invites the
-   text-conditioning branch to fight what the image already set.
-
-4. **Do NOT describe audio in the prompt when audio is frozen (our
-   case).** The official LTX 2.3 i2v/t2v guides assume the model is
-   generating audio — ours doesn't (audio is provided via
-   `noise_mask=0`, fixed as context). Text descriptions like "staccato
-   strings" or "brass swell" tell the text-conditioning branch to
-   expect those sounds in the output audio; with audio frozen, they
-   just double-signal what the audio latent already carries and can
-   over-crank visual intensity at music beats. Stick to visual action;
-   let the frozen audio latent drive cross-attention alone. **Diegetic
-   sounds that aren't on the track are fine** (`wind roaring`,
-   `thunder rumble` when present in scene) — those describe visual
-   elements the audio doesn't.
-
-5. **Omit `Style:` prefix when the init image strongly commits style.**
-   Per Lightricks's own rule in `docs/reference/ltx23_prompt_system_prompts.md:25`:
-   "If unclear, omit to avoid conflicts." For clearly-committed init
-   images (cinematic-realism render, pure illustration, etc.) the
-   prefix fights what the image sets. Use `Style: cinematic.` / `Style:
-   illustrated.` / `Style: painterly illustration.` / `Style:
-   animated.` only when the init is ambiguous and needs text anchoring.
-
-6. **For vocal tracks, every entry MUST contain "is singing" (or "are
-   singing together" for multi-subject).** LTX 2.3's audio-video
-   cross-attention drives lip sync off the singing verb. Generic
-   "performing" loses the signal. For instrumental / action tracks,
-   use concrete action verbs instead — the cross-attention still
-   binds to orchestral hits.
-
-7. **Iteration boundaries are cuts — lean in with `Cut to ...`
-   language.** Violates LTX's official "no scene cuts" rule, but
-   empirically reframes the visible iteration-boundary seams as
-   intentional edits rather than technical jitter. First entry / Node
-   169 should NOT start with `Cut to` (it's the opener, not a cut);
-   subsequent entries should.
-
-8. **Camera motion only from the canonical LTX 2.3 list.** Off-list
-   phrasings like `slow dolly in`, `slight handheld sway`, or
-   `anamorphic lens flare` don't reliably translate. The canonical set
-   is below.
-
-### Camera motion keywords
-
-Append these to your prompt to control camera:
-
-| Keyword | Description |
-|---------|-------------|
-| `static camera, locked off shot` | No camera movement |
-| `dolly in, camera pushing forward` | Smooth forward movement |
-| `dolly left, camera tracking left` | Lateral left movement |
-| `dolly right, camera tracking right` | Lateral right movement |
-| `jib up, camera rising up` | Upward crane movement |
-| `jib down, camera lowering down` | Downward crane movement |
-| `focus shift, rack focus` | Changing focal point |
-| `dolly out, camera pulling back` | ⚠️ **Avoid.** Shrinks the face over ~18s of a sampler pass, loses lip-sync cross-attention signal, breaks limbs. Held close-up + audio fade is the safer outro. |
-
-### Negative prompt
-
-Focused, ~10 terms. At CFG=1.0 each negative term gets relatively
-little weight but they compete for the uncond branch's attention — a
-long negative dilutes. Short = each term carries more.
-
-**For music video / vocal-driven content** (node 507):
-```
-still image with no motion, deformed facial features, extra limbs, disfigured hands, duplicate character, subtitles, twin, clone
-```
-
-**For instrumental / action content** (replace some vocal-specific
-terms with action-specific ones):
-```
-still image with no motion, deformed facial features, extra limbs, disfigured hands, duplicate character, slow motion, frozen pose, floating pose
-```
-
-**Add for dragons / non-human creatures the init doesn't fully
-commit**: `deformed creature`.
-
-**Don't stack the old 15-20 term negatives** (`blurry, out of focus,
-overexposed, low contrast, washed out colors, ...`). At CFG=1 the
-benefit is marginal and they collectively dilute the weight on the
-terms that matter. Target the specific failure modes you see in your
-outputs; don't pre-emptively suppress everything.
-
-### Example: music video schedule (vocal-driven, cinematic-realism init)
-
-With a cinematic-realism init image, omit the `Style:` prefix (init
-commits style). Every entry keeps the subject byte-exact. No `dolly
-out`. Subsequent entries begin with `Cut to ...` to reframe the
-iteration-boundary seam as an intentional edit.
-
-```
-0:00-0:17: In a medium shot, static camera, locked off shot, a woman in her 30s with dark hair is singing with quiet conviction in a dimly lit basement workshop, Christmas lights strung across exposed beams glowing warmly.
-0:17-0:35: Cut to a medium close-up, static camera, locked off shot. A woman in her 30s with dark hair is singing with a steady voice, brow furrowing slightly, warm Christmas-light reflections on her face.
-0:35-0:53: Cut to a close-up, dolly in, camera pushing forward. A woman in her 30s with dark hair is singing with rising intensity, eyes narrowing with the lyric, lights flaring behind her.
-0:53-1:11: Cut to a close-up, static camera, locked off shot. A woman in her 30s with dark hair is singing with full power, eyes wide, mouth open, dynamic lighting wrapping her face.
-1:11-1:29: Cut to a medium shot, jib up, camera rising up. A woman in her 30s with dark hair is singing steadily, shoulders squaring with the melody, workshop space opening up behind her.
-1:29+: Cut to a close-up, static camera, locked off shot. A woman in her 30s with dark hair is singing the final notes, voice softening, eyes lowering, light fading across her face.
-```
-
-Notes:
-- Every entry repeats `a woman in her 30s with dark hair` and
-  `(dimly lit) basement workshop` only when it adds visual
-  information. The workshop is established by the init; re-describing
-  it wastes tokens.
-- No audio descriptors (`her voice echoes`, `lights buzz softly`) —
-  the audio is frozen; those terms would double-signal what the track
-  already carries.
-- `Style:` prefix omitted — init commits style.
-- Final entry is a held close-up, not a dolly-out.
-
-### Example: action sequence schedule (instrumental / no lip-sync)
-
-When the track has no vocals (orchestral, instrumental, action-cinema
-score), drop the singing-verb requirement. Use concrete action verbs
-instead. Audio-video cross-attention still binds visual impact frames
-to orchestral hits — name music-beat callouts sparingly at the most
-critical impact moments.
-
-```
-0:00-0:17: In a wide shot, static camera, locked off shot, a warrior in leather armor sprints across a narrow beam suspended thousands of feet above a mountain chasm, stormy sky churning behind her.
-0:17-0:35: Cut to a close-up, dolly in, camera pushing forward. A warrior in leather armor whips a dagger into a wooden slot at full speed, the blade biting deep into weathered grain.
-0:35-0:53: Cut to a medium shot, dolly right, camera tracking right. A warrior in leather armor launches sideways across a swinging beam, blades flashing in the storm light.
-0:53-1:11: Cut to a wide shot, static camera, locked off shot. A warrior in leather armor slams both daggers home mid-leap across a massive gap as a blue lightning bolt splits the sky behind her.
-1:11-1:29: Cut to a close-up, dolly in, camera pushing forward. A warrior in leather armor rips a dagger free with a backward snap, splinters exploding outward from weathered wood.
-1:29+: Cut to a close-up, static camera, locked off shot. A warrior in leather armor holds at the apex, dagger raised, wind streaming across her as the last thunder rolls away.
-```
+See [`docs/guides/prompt_creation_guide.md`](docs/guides/prompt_creation_guide.md)
+for the canonical guide covering frozen-audio + image-init prompting,
+schedule format, camera-motion keywords, negative-prompt templates,
+and the seven-step authoring process. Worked case studies live in
+[`docs/examples/`](docs/examples/) (music, action, comedy variants).
 
 For action content with more cut density, halve `window_seconds` (and
 `length`) to get ~20 iterations on a 2:30 track. See
-`docs/guides/debugging_guide.md` for the window/length math.
+[`docs/guides/debugging_guide.md`](docs/guides/debugging_guide.md) for
+the window/length math.

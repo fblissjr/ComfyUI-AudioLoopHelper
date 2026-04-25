@@ -1,4 +1,6 @@
-Last updated: 2026-04-21
+Last updated: 2026-04-25 (vocal-delivery ornaments stripped, off-canon camera moves normalized to canonical phrasings, "Warm stage wash" reduced to first entry only, and final outro changed from wide+dolly-out to close-up+static per the face-driven shot-scale rule in `docs/guides/prompt_creation_guide.md` §6.1.)
+
+Original date: 2026-04-21
 
 # Standup Comedy — Example Prompt Schedule (v5) — Unusual-Character Adaptation
 
@@ -47,20 +49,20 @@ Grid-aligned for `overlap_seconds=2` (stride 17.92s). With
 at runtime.
 
 ```
-node_169_prompt: Style: cinematic. In a medium shot, static camera, a pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is mid-bit, mouth wide open, free hand raised in an emphatic gesture. Warm stage wash. The crowd on the right mid-laugh.
+node_169_prompt: Style: cinematic. In a medium shot, static camera, locked off shot, a pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is mid-bit, mouth wide open, free hand raised in an emphatic gesture. Warm stage wash. The crowd on the right mid-laugh.
 
 schedule:
-0:00-0:17: Style: cinematic. In a medium shot, static camera, a pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is mid-bit, mouth wide open, free hand raised in an emphatic gesture. Warm stage wash. The crowd on the right mid-laugh.
-0:17-0:35: Cut to a medium close-up, static camera. A pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is delivering the setup, raising an eyebrow, delivery in a dry deadpan. Warm stage wash. The crowd quiet, leaning in.
-0:35-0:53: Cut to a close-up, slow dolly in. A pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is telling a joke, eyes wide with conviction, shaking his head slightly. Warm stage wash. Brisk rhythmic delivery.
-0:53-1:11: Cut to a close-up, static camera. A pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is delivering the punchline, leaning into the mic, mouth open. Warm stage wash. One person in the crowd on the right slapping the table laughing.
-1:11-1:29: Cut to a medium shot, slight handheld sway. A pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is mid-bit, gesturing with his free hand, shifting weight between feet. Warm stage wash. The crowd watching attentively.
-1:29-1:47: Cut to a medium close-up, rack focus shifting to him. A pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is smiling wryly, looking out into the audience, head tilted. Warm stage wash. A couple of patrons on the right whispering.
-1:47-2:05: Cut to a medium shot, static camera. A pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is telling a joke, gesturing sharply with his free hand to emphasize a point, mic slightly lowered. Warm stage wash. Crowd members shifting in their seats.
-2:05-2:23: Cut to a close-up, slow dolly in. A pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is delivering the punchline, leaning back slightly, pointing at a crowd member, eyes narrowed playfully. Warm stage wash. Someone on the right wiping their eye from laughing.
-2:23-2:41: Cut to a medium close-up, static camera. A pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is leaning into the mic, building the final premise, voice intimate and intense. Warm stage wash. The crowd leaning in, highly attentive.
-2:41-2:58: Cut to a close-up, slow dolly in. A pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is delivering the final punchline, smiling wide, mic lowered. Warm stage wash. The crowd fully laughing, shoulders shaking.
-2:58+: Cut to a wide shot, slow dolly out, camera pulling back. A pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is reacting to the crowd, waving his free hand, stepping back from the mic stand. Warm stage wash. The crowd animated, some standing, some wiping their eyes. Room tone settling.
+0:00-0:17: Style: cinematic. In a medium shot, static camera, locked off shot, a pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is mid-bit, mouth wide open, free hand raised in an emphatic gesture. Warm stage wash. The crowd on the right mid-laugh.
+0:17-0:35: Cut to a medium close-up, static camera, locked off shot. A pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is delivering the setup, raising an eyebrow. The crowd quiet, leaning in.
+0:35-0:53: Cut to a close-up, dolly in, camera pushing forward. A pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is telling a joke, eyes wide with conviction, shaking his head slightly.
+0:53-1:11: Cut to a close-up, static camera, locked off shot. A pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is delivering the punchline, leaning into the mic, mouth open. One person in the crowd on the right slapping the table laughing.
+1:11-1:29: Cut to a medium shot, static camera, locked off shot. A pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is mid-bit, gesturing with his free hand, shifting weight between feet. The crowd watching attentively.
+1:29-1:47: Cut to a medium close-up, focus shift, rack focus. A pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is smiling wryly, looking out into the audience, head tilted. A couple of patrons on the right whispering.
+1:47-2:05: Cut to a medium shot, static camera, locked off shot. A pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is telling a joke, gesturing sharply with his free hand to emphasize a point, mic slightly lowered. Crowd members shifting in their seats.
+2:05-2:23: Cut to a close-up, dolly in, camera pushing forward. A pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is delivering the punchline, leaning back slightly, pointing at a crowd member, eyes narrowed playfully. Someone on the right wiping their eye from laughing.
+2:23-2:41: Cut to a medium close-up, static camera, locked off shot. A pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is leaning into the mic, building the final premise. The crowd leaning in, highly attentive.
+2:41-2:58: Cut to a close-up, dolly in, camera pushing forward. A pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is delivering the final punchline, smiling wide, mic lowered. The crowd fully laughing, shoulders shaking.
+2:58+: Cut to a close-up, static camera, locked off shot. A pale man with an oversized bald head in a floral-patterned blazer and tan mock-neck is reacting to the crowd, waving his free hand, slight smile spreading. The crowd animated, some standing, some wiping their eyes.
 ```
 
 ## Recommended workflow settings (unchanged from v4-post-DR1)

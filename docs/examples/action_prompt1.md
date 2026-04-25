@@ -1,4 +1,4 @@
-Last updated: 2026-04-20
+Last updated: 2026-04-25 (audio descriptors stripped per `docs/guides/prompt_creation_guide.md`)
 
 # Action Sequence — Gauntlet Climb (instrumental action)
 
@@ -80,7 +80,7 @@ node_169_prompt: In a wide establishing shot, static camera, locked off shot, a 
 
 schedule:
 0:00-0:17: In a wide establishing shot, static camera, locked off shot, a warrior woman with a brown-and-silver braid in black leather flight gear stands on the edge of the first wooden beam of a brutalist multi-tiered Gauntlet suspended thousands of feet above a mountain chasm, weathered iron and dark wood, volumetric fog below.
-0:17-0:35: Cut to an extreme close-up, static camera, locked off shot. A warrior woman with a brown-and-silver braid in black leather flight gear is drawing a single dagger from her thigh sheath, blade sliding out with a sharp metallic rasp, her gaze hyper-focused.
+0:17-0:35: Cut to an extreme close-up, static camera, locked off shot. A warrior woman with a brown-and-silver braid in black leather flight gear is drawing a single dagger from her thigh sheath, blade sliding out, her gaze hyper-focused.
 0:35-0:53: Cut to a close-up, dolly in, camera pushing forward. A warrior woman with a brown-and-silver braid in black leather flight gear is slamming her dagger deep into a narrow slot on a massive vertical beam, the blade biting into weathered wood with a shower of splinters, her other boot wedging onto the embedded hilt below.
 0:53-1:11: Cut to a low-angle medium shot, jib up, camera rising up. A warrior woman with a brown-and-silver braid in black leather flight gear is lunging mid-climb, driving her primary dagger into a narrow iron seam with a shower of sparks, a massive blue lightning bolt splitting the storm sky behind her.
 1:11-1:29: Cut to a profile medium shot, dolly right, camera tracking right. A warrior woman with a brown-and-silver braid in black leather flight gear is moving horizontally across a series of swinging logs, using her daggers like ice axes, biting each blade into weathered wood with mechanical tactical precision.

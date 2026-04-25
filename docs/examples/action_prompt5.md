@@ -1,4 +1,4 @@
-Last updated: 2026-04-20
+Last updated: 2026-04-25 (music/audio descriptors stripped to match v6 per `docs/guides/prompt_creation_guide.md`. The v5→v6 diff in `action_prompt6.md:106-130` is preserved as the original 2026-04-20 case study; v5 has since been retroactively stripped to match.)
 
 # Action Sequence v5 — Rapid-Cut 21-Iteration Grid
 
@@ -75,29 +75,29 @@ Paste `node_169_prompt` into Node 169. Paste the `schedule:` block
 into `TimestampPromptSchedule` (Node 1558). First line byte-exact.
 
 ```
-node_169_prompt: In a wide shot, static camera, locked off shot, a warrior woman with a brown-and-silver braid in black leather flight gear sprints across the first beam of the Gauntlet at full speed, daggers drawn in both hands, stormy sky churning, staccato strings entering.
+node_169_prompt: In a wide shot, static camera, locked off shot, a warrior woman with a brown-and-silver braid in black leather flight gear sprints across the first beam of the Gauntlet at full speed, daggers drawn in both hands, stormy sky churning behind her.
 
 schedule:
-0:00-0:08: In a wide shot, static camera, locked off shot, a warrior woman with a brown-and-silver braid in black leather flight gear sprints across the first beam of the Gauntlet at full speed, daggers drawn in both hands, stormy sky churning, staccato strings entering.
-0:08-0:16: Cut to a close-up, dolly in, camera pushing forward. A warrior woman with a brown-and-silver braid in black leather flight gear whips a dagger into the first wooden slot, full-speed impact, snare firing.
-0:16-0:24: Cut to a medium shot, jib up, camera rising up. A warrior woman with a brown-and-silver braid in black leather flight gear vaults off the embedded dagger, rising fast toward the next obstacle, strings accelerating.
-0:24-0:32: Cut to a close-up, dolly left, camera tracking left. A warrior woman with a brown-and-silver braid in black leather flight gear slams a second dagger into a vertical beam on the downbeat, hard metallic impact.
-0:32-0:40: Cut to a close-up, dolly in, camera pushing forward. A warrior woman with a brown-and-silver braid in black leather flight gear rips a dagger free with a backward snap, splinters exploding outward.
-0:40-0:48: Cut to a medium shot, dolly right, camera tracking right. A warrior woman with a brown-and-silver braid in black leather flight gear launches sideways across a swinging beam, blades flashing, strings building into the chorus.
-0:48-0:56: Cut to a wide shot, static camera, locked off shot. A warrior woman with a brown-and-silver braid in black leather flight gear slams both daggers home mid-leap across a massive gap, lightning striking exactly on the chorus brass downbeat.
-0:56-1:04: Cut to a close-up, jib up, camera rising up. A warrior woman with a brown-and-silver braid in black leather flight gear drives up the vertical beam kicking off embedded dagger hilts, chorus driving hard.
-1:04-1:12: Cut to a medium shot, dolly right, camera tracking right. A warrior woman with a brown-and-silver braid in black leather flight gear whips sideways across a swinging iron crossbeam, body parallel to the chasm, full speed.
-1:12-1:20: Cut to a close-up, jib down, camera lowering down. A warrior woman with a brown-and-silver braid in black leather flight gear plunges down a steel rail with her dagger biting iron for control, sparks streaming, chorus peaking.
+0:00-0:08: In a wide shot, static camera, locked off shot, a warrior woman with a brown-and-silver braid in black leather flight gear sprints across the first beam of the Gauntlet at full speed, daggers drawn in both hands, stormy sky churning behind her.
+0:08-0:16: Cut to a close-up, dolly in, camera pushing forward. A warrior woman with a brown-and-silver braid in black leather flight gear whips a dagger into the first wooden slot at full-speed impact, the blade biting deep into weathered grain.
+0:16-0:24: Cut to a medium shot, jib up, camera rising up. A warrior woman with a brown-and-silver braid in black leather flight gear vaults off the embedded dagger and rises fast toward the next obstacle, body airborne mid-push.
+0:24-0:32: Cut to a close-up, dolly left, camera tracking left. A warrior woman with a brown-and-silver braid in black leather flight gear slams a second dagger into a vertical beam with hard metallic impact, sparks off the iron.
+0:32-0:40: Cut to a close-up, dolly in, camera pushing forward. A warrior woman with a brown-and-silver braid in black leather flight gear rips a dagger free with a backward snap, splinters exploding outward from weathered wood.
+0:40-0:48: Cut to a medium shot, dolly right, camera tracking right. A warrior woman with a brown-and-silver braid in black leather flight gear launches sideways across a swinging beam, blades flashing in the storm light.
+0:48-0:56: Cut to a wide shot, static camera, locked off shot. A warrior woman with a brown-and-silver braid in black leather flight gear slams both daggers home mid-leap across a massive gap as a blue lightning bolt splits the sky behind her.
+0:56-1:04: Cut to a close-up, jib up, camera rising up. A warrior woman with a brown-and-silver braid in black leather flight gear drives up the vertical beam kicking off embedded dagger hilts, rising fast.
+1:04-1:12: Cut to a medium shot, dolly right, camera tracking right. A warrior woman with a brown-and-silver braid in black leather flight gear whips sideways across a swinging iron crossbeam, body parallel to the chasm at full speed.
+1:12-1:20: Cut to a close-up, jib down, camera lowering down. A warrior woman with a brown-and-silver braid in black leather flight gear plunges down a steel rail with her dagger biting iron for control, sparks streaming in a trail behind her.
 1:20-1:28: Cut to a close-up, dolly in, camera pushing forward. A warrior woman with a brown-and-silver braid in black leather flight gear drives hard into the next vertical climb, daggers biting deep in rapid succession.
-1:28-1:36: Cut to an extreme close-up, focus shift, rack focus. A warrior woman with a brown-and-silver braid in black leather flight gear switches daggers between hands mid-motion, blades flashing, thumbs rolling across hilts.
-1:36-1:44: Cut to a medium shot, dolly right, camera tracking right. A warrior woman with a brown-and-silver braid in black leather flight gear lays down a rapid sequence of dagger plants along a horizontal beam, staccato anvil strikes.
-1:44-1:52: Cut to a wide shot, static camera, locked off shot. A warrior woman with a brown-and-silver braid in black leather flight gear pauses on a pivotal beam with a dagger raised, wind roaring, music coiling tight before the surge.
-1:52-2:00: Cut to a low-angle shot, jib up, camera rising up. A warrior woman with a brown-and-silver braid in black leather flight gear tilts her gaze skyward, storm clouds churning, a massive dragon's shadow beginning to descend through them.
-2:00-2:08: Cut to a wide shot, static camera, locked off shot. A warrior woman with a brown-and-silver braid in black leather flight gear stands braced at the summit as a massive storm dragon descends through torn clouds, wings blotting out the lightning, orchestra rebuilding.
+1:28-1:36: Cut to an extreme close-up, focus shift, rack focus. A warrior woman with a brown-and-silver braid in black leather flight gear switches daggers between hands mid-motion, blades flashing, thumbs rolling across the hilts.
+1:36-1:44: Cut to a medium shot, dolly right, camera tracking right. A warrior woman with a brown-and-silver braid in black leather flight gear lays down a rapid sequence of dagger plants along a horizontal beam, steel biting wood in fast succession.
+1:44-1:52: Cut to a wide shot, static camera, locked off shot. A warrior woman with a brown-and-silver braid in black leather flight gear pauses on a pivotal beam with a dagger raised, wind roaring through the beams around her.
+1:52-2:00: Cut to a low-angle shot, jib up, camera rising up. A warrior woman with a brown-and-silver braid in black leather flight gear tilts her gaze skyward, storm clouds churning overhead, a massive dragon's shadow beginning to descend through them.
+2:00-2:08: Cut to a wide shot, static camera, locked off shot. A warrior woman with a brown-and-silver braid in black leather flight gear stands braced at the summit as a massive storm dragon descends through torn clouds, wings blotting out the lightning.
 2:08-2:16: Cut to a medium shot, dolly in, camera pushing forward. A warrior woman with a brown-and-silver braid in black leather flight gear sprints hard across the final narrow beam toward the edge of the Gauntlet as the dragon soars beneath.
-2:16-2:24: Cut to a wide shot, static camera, locked off shot. A warrior woman with a brown-and-silver braid in black leather flight gear leaps from the edge with a dagger raised high, suspended mid-air at the apex of her jump, the dragon passing beneath her with its back clear, peak orchestral chorus.
-2:24-2:32: Cut to a close-up, dolly in, camera pushing forward. A warrior woman with a brown-and-silver braid in black leather flight gear drives her dagger deep into the storm dragon's neck scales, anchored, lightning flaring behind her.
-2:32+: Cut to a wide shot, jib up, camera rising up. A warrior woman with a brown-and-silver braid in black leather flight gear on the storm dragon's back as it beats its wings and rises through parting clouds, final chord sustaining into wind.
+2:16-2:24: Cut to a wide shot, static camera, locked off shot. A warrior woman with a brown-and-silver braid in black leather flight gear leaps from the edge with a dagger raised high, suspended mid-air at the apex of her jump, the dragon passing beneath her with its back clear.
+2:24-2:32: Cut to a close-up, dolly in, camera pushing forward. A warrior woman with a brown-and-silver braid in black leather flight gear drives her dagger deep into the storm dragon's neck scales and anchors hard, lightning flaring behind her.
+2:32+: Cut to a wide shot, jib up, camera rising up. A warrior woman with a brown-and-silver braid in black leather flight gear on the storm dragon's back as it beats its wings and rises through parting clouds, wind streaming across them.
 ```
 
 ## Camera rotation (21 iterations, 7 canonical moves)
