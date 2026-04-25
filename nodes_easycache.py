@@ -1,46 +1,20 @@
 """LTX-2.3 EasyCache: training-free step-skipping cache for video DiTs.
 
 Algorithm sourced from "Less is Enough: Training-Free Video Diffusion
-Acceleration via Runtime-Adaptive Caching" (arxiv 2507.02860). Reference
-implementation pattern lifted from a sibling Wan-video custom node which
-exposes the same algorithm as a transformer-block-forward patch. The shape
-of the algorithm is identical -- only the integration mechanism differs.
+Acceleration via Runtime-Adaptive Caching" (arxiv 2507.02860). Hooks via
+`comfy.patcher_extension.WrappersMP.DIFFUSION_MODEL` -- the supported
+wrapper API in ComfyUI core, not a monkey patch.
 
-Why this approach for LTX:
-
-- LTX's diffusion model in ComfyUI core uses
-  `comfy.patcher_extension.WrappersMP.DIFFUSION_MODEL` to thread external
-  wrappers around its `_forward`. Registering a wrapper via
-  `model.add_wrapper_with_key(...)` is the supported, non-monkey-patching
-  hook. Resilient to ComfyUI core upgrades.
-- TeaCache and MagCache need per-model calibration constants we don't have
-  for LTX-2.3. EasyCache is runtime-adaptive: a single threshold knob, no
-  calibration runs.
-- The cache decision is at the step level (skip the entire denoiser forward
-  pass for this step, return previous output's residual added to current
-  input). Orthogonal to attention-kernel choice -- sage still runs inside
-  any step that does compute.
-
-State machine:
-
-1. Window check: if step_idx outside [start_step, end_step], bypass entirely
-   (always compute, no state update). Lets early steps escape caching while
-   the model is still establishing structure.
-2. Seeding: if no history, compute and stash (input, output, residual=output-input).
-3. Comparison: input_change_ratio = mean|x - prev_in| / mean|prev_out|. Add
-   to accumulated_error.
-4. Decision: if accumulated_error < threshold, return x + cached_residual
-   (skip). Else compute, refresh state, reset accumulator to 0.
-
-The threshold value is the cumulative tolerance for input drift before a
-fresh compute is forced. Larger threshold -> more skips -> faster but lower
-quality. Negative threshold disables caching entirely (the strict-never-skip
+State machine: window-gated by [start_step, end_step]. First in-window
+call seeds (compute, stash input/output_norm/residual). Subsequent calls
+accumulate `mean|x - prev_in| / prev_out_norm` per step. Below threshold,
+skip and return `x + cache_residual`. Above, compute, refresh state, reset
+accumulator. Negative threshold disables caching (strict-never-skip
 sentinel since accumulated_error is always >= 0).
 """
 
 from __future__ import annotations
 
-import logging
 from typing import Callable
 
 import torch
@@ -49,41 +23,19 @@ try:
     from comfy_api.latest import io
     from typing_extensions import override
 except ImportError:
-    # Outside ComfyUI runtime (pytest). Mirror the pattern in nodes_sage.py
-    # so this module is importable for unit tests.
-    class _Passthrough:
-        def __getattr__(self, _name):
-            return _Passthrough()
-
-        def __call__(self, *args, **kwargs):
-            return _Passthrough()
-
-    class _IOStub(_Passthrough):
-        class ComfyNode:
-            pass
-
-        @staticmethod
-        def NodeOutput(*args):
-            return args
-
-    io = _IOStub()  # type: ignore[assignment]
-
-    def override(fn):  # type: ignore[no-redef]
-        return fn
+    # Absolute (not relative) so this works whether the plugin is loaded
+    # as a package by ComfyUI or as a top-level module by pytest. The
+    # pytest rootdir puts the plugin root on sys.path either way.
+    from _comfy_stubs import io_stub as io, override_stub as override  # type: ignore[assignment,no-redef]
 
 try:
     from comfy.patcher_extension import CallbacksMP, WrappersMP  # type: ignore
     _DIFFUSION_MODEL = WrappersMP.DIFFUSION_MODEL
     _ON_CLEANUP = CallbacksMP.ON_CLEANUP
 except ImportError:
-    # String literals match the runtime constants in
-    # comfy.patcher_extension. Tests rely on this so they don't need a
-    # ComfyUI runtime.
-    _DIFFUSION_MODEL = "diffusion_model"
-    _ON_CLEANUP = "on_cleanup"
+    from _comfy_stubs import _stub_constants  # type: ignore[no-redef]
+    _DIFFUSION_MODEL, _ON_CLEANUP = _stub_constants()
 
-
-_log = logging.getLogger(__name__)
 
 # Single key for the wrapper registration. add_wrapper_with_key uses this as
 # the dict key inside ModelPatcher.wrappers; reusing the same key on a
@@ -94,16 +46,18 @@ WRAPPER_KEY = "ltxv_easycache"
 class EasyCacheState:
     """Per-patched-model cache state. Lives in a closure over the wrapper.
 
-    `previous_raw_input` and `previous_raw_output` are kept on whichever
-    device they arrived on; the wrapper handles cross-device move on
-    comparison. `cache_residual` is the most recently computed
-    (output - input) tensor used for cache-hit reconstruction.
+    Holds two tensors (`previous_raw_input` for the drift check, and
+    `cache_residual` for skip-path reconstruction) plus a precomputed
+    scalar `prev_out_norm`. The previous output tensor itself is not
+    retained -- only its `.abs().mean()` value, which is the only thing
+    the comparison needs. Saves a full latent-shape tensor per patched
+    model.
     """
 
     __slots__ = (
         "thresh", "start_step", "end_step",
         "step_idx",
-        "previous_raw_input", "previous_raw_output", "cache_residual",
+        "previous_raw_input", "cache_residual", "prev_out_norm",
         "accumulated_error", "skipped_steps",
     )
 
@@ -113,16 +67,16 @@ class EasyCacheState:
         self.end_step = end_step  # -1 sentinel for "no upper bound"
         self.step_idx = 0
         self.previous_raw_input: torch.Tensor | None = None
-        self.previous_raw_output: torch.Tensor | None = None
         self.cache_residual: torch.Tensor | None = None
+        self.prev_out_norm: torch.Tensor | None = None
         self.accumulated_error: float = 0.0
         self.skipped_steps: list[int] = []
 
     def reset(self) -> None:
         self.step_idx = 0
         self.previous_raw_input = None
-        self.previous_raw_output = None
         self.cache_residual = None
+        self.prev_out_norm = None
         self.accumulated_error = 0.0
         self.skipped_steps = []
 
@@ -148,6 +102,15 @@ def build_wrapper(state: EasyCacheState) -> Callable:
     wrapper or to the original `_forward`.
     """
 
+    def _seed(out: torch.Tensor, x: torch.Tensor) -> None:
+        state.previous_raw_input = x.detach()
+        state.cache_residual = (out - x).detach()
+        # Clamp the precomputed norm to avoid divide-by-zero on degenerate
+        # outputs; 1e-8 is below any plausible bf16/fp16 nonzero scale so
+        # it only kicks in on identically-zero outputs.
+        state.prev_out_norm = out.detach().abs().mean().clamp(min=1e-8)
+        state.accumulated_error = 0.0
+
     def _wrapper(executor, *args, **kwargs):
         x = _input_tensor(args, kwargs)
         step = state.step_idx
@@ -160,21 +123,14 @@ def build_wrapper(state: EasyCacheState) -> Callable:
         if not in_window:
             return executor(*args, **kwargs)
 
-        if state.previous_raw_input is None or state.previous_raw_output is None:
+        if state.previous_raw_input is None or state.prev_out_norm is None:
             out = executor(*args, **kwargs)
-            state.previous_raw_input = x.detach()
-            state.previous_raw_output = out.detach()
-            state.cache_residual = (out - x).detach()
-            state.accumulated_error = 0.0
+            _seed(out, x)
             return out
 
         prev_in = state.previous_raw_input.to(x.device)
-        prev_out = state.previous_raw_output.to(x.device)
-        # Clamp output_norm to avoid divide-by-zero on degenerate inputs;
-        # 1e-8 is below any plausible bf16/fp16 nonzero scale so it only
-        # kicks in on identically-zero outputs.
-        output_norm = prev_out.abs().mean().clamp(min=1e-8)
-        change_metric = ((x - prev_in).abs().mean() / output_norm).item()
+        prev_norm = state.prev_out_norm.to(x.device)
+        change_metric = ((x - prev_in).abs().mean() / prev_norm).item()
         state.accumulated_error += change_metric
 
         if state.accumulated_error < state.thresh:
@@ -182,10 +138,7 @@ def build_wrapper(state: EasyCacheState) -> Callable:
             return x + state.cache_residual.to(x.device)  # type: ignore[union-attr]
 
         out = executor(*args, **kwargs)
-        state.previous_raw_input = x.detach()
-        state.previous_raw_output = out.detach()
-        state.cache_residual = (out - x).detach()
-        state.accumulated_error = 0.0
+        _seed(out, x)
         return out
 
     return _wrapper

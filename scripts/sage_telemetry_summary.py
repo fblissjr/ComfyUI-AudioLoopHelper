@@ -1,28 +1,24 @@
 """Aggregate sage tracer JSONL into a per-mode summary.
 
-Phase 0 of the optimization plan: read the JSONL emitted by `nodes_sage.py`
-when `AUDIOLOOPHELPER_SAGE_TRACE` is set, group by effective_mode +
-has_mask, and report median / p90 / count / total_us / pct_of_total per
-group.
+Reads the JSONL emitted by `nodes_sage.py` when `AUDIOLOOPHELPER_SAGE_TRACE`
+is set, groups by effective_mode + has_mask, and reports median / p90 /
+count / total_us / pct_of_total per group.
 
-The two cross-sections that gate the next phase of kernel work:
+The two cross-sections that gate further kernel-side work:
 
 - `(effective_mode='fp16_triton', has_mask=True)` -- the masked cross-attn
-  path. If this is <5% of total gen wall time, the CUDA mask kernel work
-  in sage-fork is closed permanently. If 5-15%, defer for 6 months. If
-  >15%, the mask kernel work is justified.
+  path. If this is <5% of total gen wall time, mask kernel work in
+  sage-fork closes permanently. 5-15%, defer 6 months. >15%, justified.
 - `(effective_mode='fp8_cuda++', has_mask=False)` -- the unmasked self-attn
-  path. Gives the "where time actually goes" denominator for the masked
-  fraction.
+  path. Gives the "where time actually goes" denominator.
 
 Total gen wall time can be provided two ways:
-- Explicit: `--total-wall-ms <N>` (most accurate, from a separate timer)
+- Explicit: `--total-wall-ms <N>` (most accurate, from a separate timer).
 - Inferred: from a companion exec-log JSONL (`--exec-log <path>`), summing
   the duration_s of nodes whose class_type matches one of
   `--ksampler-class` (default: KSampler*, SamplerCustomAdvanced).
 
-If neither is provided, the report omits `pct_of_total` and the gate
-decision must wait for one of the inputs to be supplied.
+If neither is provided, the report omits `pct_of_total`.
 
 Usage:
     uv run --group dev python scripts/sage_telemetry_summary.py \\
@@ -117,10 +113,35 @@ def aggregate(rows: Iterable[dict], total_wall_us: float | None = None) -> dict:
     }
 
 
-def phase0_section(summary: dict, *, effective_mode: str, has_mask: bool) -> dict | None:
-    """Return the canonical Phase 0 dict for one (mode, mask) pair, or
-    None if the pair has no samples in this trace."""
+def load_jsonl_with_count(path: Path) -> tuple[list[dict], int]:
+    """Like `load_jsonl` but materializes the list and returns the count
+    of malformed lines that were skipped. Use when you want the operator
+    to know about silent corruption rather than letting it slide."""
+    rows: list[dict] = []
+    malformed = 0
+    with open(path, "rb") as fh:
+        for raw in fh:
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                rows.append(orjson.loads(raw))
+            except orjson.JSONDecodeError:
+                malformed += 1
+    return rows, malformed
+
+
+def gate_section(summary: dict, *, effective_mode: str, has_mask: bool) -> dict | None:
+    """Return the canonical gate dict for one (mode, mask) pair, or None
+    if the pair has no samples in this trace. The gate cross-section is
+    `(fp16_triton, True)` and `(fp8_cuda++, False)` -- the masked-triton
+    fraction of total wall time decides whether further mask-kernel work
+    in sage-fork is justified."""
     return summary["groups"].get((effective_mode, has_mask))
+
+
+# Backwards-compatible alias for prior callers / tests.
+phase0_section = gate_section
 
 
 def total_wall_us_from_exec_log(exec_log_path: Path, ksampler_classes: tuple[str, ...]) -> float | None:
@@ -162,11 +183,11 @@ def _format_table(summary: dict) -> str:
     return "\n".join(rows)
 
 
-def _format_phase0_gate(summary: dict) -> list[str]:
-    """The plan-relevant cross-sections, formatted in the canonical shape."""
+def _format_gate_cross_section(summary: dict) -> list[str]:
+    """The gate-relevant cross-sections, formatted in the canonical shape."""
     lines = []
-    masked_triton = phase0_section(summary, effective_mode="fp16_triton", has_mask=True)
-    unmasked_fp8pp = phase0_section(summary, effective_mode="fp8_cuda++", has_mask=False)
+    masked_triton = gate_section(summary, effective_mode="fp16_triton", has_mask=True)
+    unmasked_fp8pp = gate_section(summary, effective_mode="fp8_cuda++", has_mask=False)
 
     def _line(label: str, entry: dict | None) -> str:
         if entry is None:
@@ -186,9 +207,9 @@ def _format_phase0_gate(summary: dict) -> list[str]:
 
 
 def _gate_verdict(summary: dict) -> str:
-    """Apply the optimization-plan gate criteria to masked_triton's pct.
+    """Apply the gate criteria to masked_triton's pct of total wall time.
     Decision text only -- the user makes the actual call from the data."""
-    masked = phase0_section(summary, effective_mode="fp16_triton", has_mask=True)
+    masked = gate_section(summary, effective_mode="fp16_triton", has_mask=True)
     if masked is None or "pct_of_total" not in masked:
         return "gate verdict: skipped (no pct_of_total available)"
     pct = masked["pct_of_total"]
@@ -220,7 +241,10 @@ def main(argv: list[str] | None = None) -> int:
         ks_classes = tuple(args.ksampler_class) if args.ksampler_class else _DEFAULT_KSAMPLER_CLASSES
         total_wall_us = total_wall_us_from_exec_log(args.exec_log, ks_classes)
 
-    summary = aggregate(load_jsonl(args.sage_log), total_wall_us=total_wall_us)
+    sage_rows, malformed = load_jsonl_with_count(args.sage_log)
+    if malformed > 0:
+        print(f"warning: skipped {malformed} malformed line(s) in {args.sage_log}", file=sys.stderr)
+    summary = aggregate(sage_rows, total_wall_us=total_wall_us)
 
     if args.json:
         # Convert tuple keys to strings for JSON encodability.
@@ -238,8 +262,8 @@ def main(argv: list[str] | None = None) -> int:
 
     print(_format_table(summary))
     print()
-    print("phase 0 gate cross-section:")
-    for line in _format_phase0_gate(summary):
+    print("gate cross-section:")
+    for line in _format_gate_cross_section(summary):
         print(f"  {line}")
     print()
     print(_gate_verdict(summary))

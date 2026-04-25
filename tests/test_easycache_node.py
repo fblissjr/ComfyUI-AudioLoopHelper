@@ -92,8 +92,8 @@ def test_first_call_always_computes_and_seeds_state():
     assert executor.call_count == 1, "first call must compute"
     assert torch.allclose(out, x + 0.5)
     assert state.previous_raw_input is not None
-    assert state.previous_raw_output is not None
     assert state.cache_residual is not None
+    assert state.prev_out_norm is not None
 
 
 def test_unchanged_input_skips_via_cache():
