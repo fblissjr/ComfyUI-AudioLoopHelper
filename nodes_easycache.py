@@ -50,21 +50,35 @@ class EasyCacheState:
     `cache_residual` for skip-path reconstruction) plus a precomputed
     scalar `prev_out_norm`. The previous output tensor itself is not
     retained -- only its `.abs().mean()` value, which is the only thing
-    the comparison needs. Saves a full latent-shape tensor per patched
-    model.
+    the comparison needs.
+
+    `cache_device` controls where the retained tensors live. None means
+    "wherever the input arrived" (typically GPU). Setting it to "cpu"
+    offloads the cache so it doesn't compete with the model for VRAM --
+    pays a one-time HtoD copy on each cache hit (read path) but frees
+    several latent-shape tensors on the GPU.
     """
 
     __slots__ = (
-        "thresh", "start_step", "end_step",
+        "thresh", "start_step", "end_step", "cache_device",
         "step_idx",
         "previous_raw_input", "cache_residual", "prev_out_norm",
         "accumulated_error", "skipped_steps",
     )
 
-    def __init__(self, thresh: float, start_step: int, end_step: int):
+    def __init__(
+        self,
+        thresh: float,
+        start_step: int,
+        end_step: int,
+        cache_device: str | torch.device | None = None,
+    ):
         self.thresh = thresh
         self.start_step = start_step
         self.end_step = end_step  # -1 sentinel for "no upper bound"
+        self.cache_device = (
+            torch.device(cache_device) if isinstance(cache_device, str) else cache_device
+        )
         self.step_idx = 0
         self.previous_raw_input: torch.Tensor | None = None
         self.cache_residual: torch.Tensor | None = None
@@ -103,12 +117,19 @@ def build_wrapper(state: EasyCacheState) -> Callable:
     """
 
     def _seed(out: torch.Tensor, x: torch.Tensor) -> None:
-        state.previous_raw_input = x.detach()
-        state.cache_residual = (out - x).detach()
         # Clamp the precomputed norm to avoid divide-by-zero on degenerate
         # outputs; 1e-8 is below any plausible bf16/fp16 nonzero scale so
         # it only kicks in on identically-zero outputs.
-        state.prev_out_norm = out.detach().abs().mean().clamp(min=1e-8)
+        prev_in = x.detach()
+        residual = (out - x).detach()
+        norm = out.detach().abs().mean().clamp(min=1e-8)
+        if state.cache_device is not None:
+            prev_in = prev_in.to(state.cache_device)
+            residual = residual.to(state.cache_device)
+            norm = norm.to(state.cache_device)
+        state.previous_raw_input = prev_in
+        state.cache_residual = residual
+        state.prev_out_norm = norm
         state.accumulated_error = 0.0
 
     def _wrapper(executor, *args, **kwargs):
@@ -208,31 +229,58 @@ class LTXVideoEasyCache(io.ComfyNode):
                     step=1,
                     tooltip="-1 = no upper bound. Otherwise: caching disabled past this step.",
                 ),
+                io.Combo.Input(
+                    "cache_device",
+                    options=["main", "cpu"],
+                    default="main",
+                    tooltip=(
+                        "Where to keep the retained cache tensors. 'main' "
+                        "leaves them on whichever device the model runs on "
+                        "(typically GPU). 'cpu' offloads them to host RAM "
+                        "to free VRAM, paying a one-time HtoD copy on each "
+                        "cache hit. Pick 'cpu' if VRAM is tight."
+                    ),
+                ),
             ],
             outputs=[io.Model.Output(display_name="model")],
         )
 
     @classmethod
     @override
-    def execute(cls, model, easycache_thresh, start_step, end_step) -> io.NodeOutput:  # type: ignore[override]
+    def execute(cls, model, easycache_thresh, start_step, end_step, cache_device) -> io.NodeOutput:  # type: ignore[override]
         (patched,) = cls._patch_impl(
             model,
             easycache_thresh=easycache_thresh,
             start_step=start_step,
             end_step=end_step,
+            cache_device=cache_device,
         )
         return io.NodeOutput(patched)
 
     @classmethod
-    def _patch_impl(cls, model, *, easycache_thresh: float, start_step: int, end_step: int):
+    def _patch_impl(
+        cls,
+        model,
+        *,
+        easycache_thresh: float,
+        start_step: int,
+        end_step: int,
+        cache_device: str | torch.device | None = None,
+    ):
         """Testable seam. Wraps the model with the EasyCache state machine
         and returns the patched clone. Same shape as the sage node's
-        _patch_impl so tests can use FakeModelWithWrappers."""
+        _patch_impl so tests can use FakeModelWithWrappers.
+
+        cache_device accepts the widget strings "main" / "cpu" or a real
+        torch.device / device-string. "main" -> None (stay on input device)."""
+        if cache_device == "main":
+            cache_device = None
         clone = model.clone()
         state = EasyCacheState(
             thresh=easycache_thresh,
             start_step=start_step,
             end_step=end_step,
+            cache_device=cache_device,
         )
         wrapper = build_wrapper(state)
         clone.add_wrapper_with_key(_DIFFUSION_MODEL, WRAPPER_KEY, wrapper)
