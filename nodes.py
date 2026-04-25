@@ -2245,6 +2245,7 @@ class AudioLoopHelperExtension(ComfyExtension):
     @override
     async def get_node_list(self) -> list[type[io.ComfyNode]]:
         from .nodes_analysis import AudioPitchDetect
+        from .nodes_easycache import LTXVideoEasyCache
         from .nodes_sage import AudioLoopHelperSageAttention
         from .nodes_validation import LoopConfigValidator
 
@@ -2270,6 +2271,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             IterationCleanup,
             LoopIterationStamp,
             AudioLoopHelperSageAttention,
+            LTXVideoEasyCache,
             ProfileBegin,
             ProfileIterStep,
             ProfileEnd,

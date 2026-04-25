@@ -57,3 +57,16 @@ class FakeModelWithCallbacks(FakeModelPatcher):
 
     def add_callback(self, call_type: str, fn: Callable) -> None:
         self.callbacks[call_type] = fn
+
+
+class FakeModelWithWrappers(FakeModelWithCallbacks):
+    """FakeModelWithCallbacks + the `add_wrapper_with_key` surface used by
+    LTXVideoEasyCache. Mirrors `comfy.model_patcher.ModelPatcher.wrappers`
+    layout: `{wrapper_type: {key: [callable, ...]}}`."""
+
+    def __init__(self, transformer_options: dict | None = None):
+        super().__init__(transformer_options)
+        self.wrappers: dict[str, dict[str | None, list[Callable]]] = {}
+
+    def add_wrapper_with_key(self, wrapper_type: str, key: str | None, fn: Callable) -> None:
+        self.wrappers.setdefault(wrapper_type, {}).setdefault(key, []).append(fn)
