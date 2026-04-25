@@ -297,6 +297,65 @@ def _audit_one(wf_path: Path) -> list[Finding]:
                     f"#644 inbound from unexpected sources pos={pos['origin_id']} neg={neg['origin_id']}",
                 )
 
+        # cropguides_split_topology — paired with scripts/apply_split_cropguides.py.
+        # The split adds a second LTXVCropGuides instance to break the loop cycle
+        # (CFGGuider <- CropGuides <- SeparateAV <- Sampler <- CFGGuider). Required
+        # invariants when split is applied:
+        #   - #655 (CONDITIONING-only) reads its LATENT input from #1519 (pre-sampling)
+        #   - the split node (titled SPLIT_NODE_TITLE) reads LATENT from #596 (post-sampling)
+        #   - AdainLatent(#2006) reads samples from the split node, not from #655
+        # If ALL nodes exist but any of these are damaged, the cycle is back.
+        if sgs and {596, 1519, 2006, 655}.issubset({n["id"] for n in sgs[0].get("nodes", [])}):
+            sg = sgs[0]
+            sg_links = sg.get("links", [])
+            split_node = next(
+                (n for n in sg.get("nodes", [])
+                 if n.get("type") == "LTXVCropGuides"
+                 and n.get("title") == "CropGuides (LATENT-only — split)"),
+                None,
+            )
+            crop_latent_link = next(
+                (l for l in sg_links if l.get("target_id") == 655 and l.get("target_slot") == 2),
+                None,
+            )
+            adain_samples_link = next(
+                (l for l in sg_links if l.get("target_id") == 2006 and l.get("target_slot") == 0),
+                None,
+            )
+            if split_node is None:
+                if (
+                    crop_latent_link
+                    and crop_latent_link["origin_id"] == 596
+                    and adain_samples_link
+                    and adain_samples_link["origin_id"] == 655
+                ):
+                    record(
+                        "ERR", "cropguides_split_topology",
+                        "Cycle restored: #655.latent <- #596 + AdainLatent <- #655. "
+                        "Run scripts/apply_split_cropguides.py.",
+                    )
+                # else: another shape (canonical-original-bypassed-elsewhere); skip silently
+            else:
+                checks_ok = (
+                    crop_latent_link
+                    and crop_latent_link["origin_id"] == 1519
+                    and adain_samples_link
+                    and adain_samples_link["origin_id"] == split_node["id"]
+                )
+                if checks_ok:
+                    record(
+                        "OK", "cropguides_split_topology",
+                        f"#655.latent <- #1519 (pre-sample) + #2006 <- #{split_node['id']} (post-sample)",
+                    )
+                else:
+                    record(
+                        "ERR", "cropguides_split_topology",
+                        f"Split node #{split_node['id']} present but wiring damaged "
+                        f"(#655.latent <- #{crop_latent_link['origin_id'] if crop_latent_link else '?'}, "
+                        f"#2006 <- #{adain_samples_link['origin_id'] if adain_samples_link else '?'}). "
+                        "Run scripts/apply_split_cropguides.py --revert and re-apply.",
+                    )
+
     _check_prompt_relay_wiring(wf, by_type, record)
 
     if _is_retake(name):
