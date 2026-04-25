@@ -11,9 +11,11 @@ aviator goggles on her shoulder) and the track
 
 Built on the same lip-sync-safe bones validated in
 `internal/prompt_comedy4.md` (v4 standup): byte-exact subject anchor,
-`"Cut to ..."` hand-off language at iteration boundaries, no wide shots
-or dolly-out until the outro, stride-aligned timestamps so every entry
-runs on a single pure prompt.
+no wide shots or dolly-out until the outro, stride-aligned timestamps
+so every entry runs on a single pure prompt. (Originally also used
+`"Cut to ..."` hand-off language at iteration boundaries; **retracted
+2026-04-25** per `docs/guides/prompt_creation_guide.md` §5.1 —
+schedule below uses `In a ...` continuation form.)
 
 ## Why these choices
 
@@ -26,11 +28,11 @@ runs on a single pure prompt.
   DoF, practical lighting). Mixing pools reads as visual chaos.
 - **User asked for cuts, not a static camera.** Matches tier `2a`
   (performance_dynamic, handheld / rock-video motion) — camera and
-  body beats rotate every iteration. The `"Cut to ..."` lead-in on
-  every entry after the first re-frames the iteration-boundary seam
-  as an intentional edit (v3→v4 finding: iteration hand-offs are
-  inherent visual discontinuities; naming them makes them feel
-  deliberate).
+  body beats rotate every iteration. (The original v4 finding added
+  `"Cut to ..."` lead-ins to "reframe" the iteration boundary; that
+  technique was retracted 2026-04-25 per guide §5.1 — see file-top
+  note. Camera/body variety is preserved; only the boundary marker
+  changed.)
 - **No dolly-out, even on the outro.** CLAUDE.md's R7 permits dolly
   out on the final OUTRO entry, but in practice it shrinks the face
   over an 18s sampler pass and LTX's cross-attention loses the mouth
@@ -90,15 +92,15 @@ node_169_prompt: Style: illustrated. In a medium shot, static camera, locked off
 
 schedule:
 0:00-0:17: Style: illustrated. In a medium shot, static camera, locked off shot, a warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, mouths open and shaping the words, arms held high with quiet conviction, painterly rendering, illustrated film feel. Faint hum of distant thunder.
-0:17-0:35: Cut to a medium close-up, static camera, locked off shot. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, brow furrowing, jaw set, head turning a fraction toward the kitten. Cool blue rim light beginning to gather. Low distant rumble.
-0:35-0:53: Cut to a close-up, dolly in, camera pushing forward. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, eyes narrowing, mouth shaping each lyric, the kitten alert and twitching its ears, motion blur lines in the braid. Rim light sharpening. Faint thunder building.
-0:53-1:11: Cut to a close-up, static camera, locked off shot. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, eyes wide, mouth open, arms lifting higher, impact frame, supersaturation of color, silhouetted accents at the edges of the frame. Bright, electric backlight. The kitten bracing wide-eyed.
-1:11-1:29: Cut to a medium shot, jib up, camera rising up. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, shoulders squaring, weight shifting forward, the kitten's goggles catching a stray highlight, motion blur lines trailing her braid. Warmer mid-tones settling in.
-1:29-1:47: Cut to a medium close-up, focus shift, rack focus. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, chin lifting, eyes locked straight ahead, the kitten turning its head toward her cheek. Steady rim light.
-1:47-2:05: Cut to a close-up, dolly in, camera pushing forward. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, brow tightening, lips pressing between lines, a single strand of hair lifting against the pull of the frame, speed lines faintly radiating at the edges. Highlights sharpening. Low thunder building.
-2:05-2:23: Cut to a medium shot, dolly right, camera tracking right. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, arms held firm, head rocking a fraction, the kitten's goggles reflecting a flash of light. Punchier contrast. Thunder rolling closer.
-2:23-2:41: Cut to a close-up, static camera, locked off shot. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, eyes wide, mouth fully open, arms at maximum extension, impact frame, supersaturation of color, silhouetted accents, motion blur lines tracing across the frame. Brightest backlight. The kitten wide-eyed and braced.
-2:41+: Cut to a close-up, static camera, locked off shot. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, eyes lowering, arms lowering a fraction, shoulders easing, the kitten relaxing and settling against her neck. Fading, gentle light.
+0:17-0:35: In a medium close-up, static camera, locked off shot. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, brow furrowing, jaw set, head turning a fraction toward the kitten. Cool blue rim light beginning to gather. Low distant rumble.
+0:35-0:53: In a close-up, dolly in, camera pushing forward. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, eyes narrowing, mouth shaping each lyric, the kitten alert and twitching its ears, motion blur lines in the braid. Rim light sharpening. Faint thunder building.
+0:53-1:11: In a close-up, static camera, locked off shot. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, eyes wide, mouth open, arms lifting higher, impact frame, supersaturation of color, silhouetted accents at the edges of the frame. Bright, electric backlight. The kitten bracing wide-eyed.
+1:11-1:29: In a medium shot, jib up, camera rising up. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, shoulders squaring, weight shifting forward, the kitten's goggles catching a stray highlight, motion blur lines trailing her braid. Warmer mid-tones settling in.
+1:29-1:47: In a medium close-up, focus shift, rack focus. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, chin lifting, eyes locked straight ahead, the kitten turning its head toward her cheek. Steady rim light.
+1:47-2:05: In a close-up, dolly in, camera pushing forward. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, brow tightening, lips pressing between lines, a single strand of hair lifting against the pull of the frame, speed lines faintly radiating at the edges. Highlights sharpening. Low thunder building.
+2:05-2:23: In a medium shot, dolly right, camera tracking right. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, arms held firm, head rocking a fraction, the kitten's goggles reflecting a flash of light. Punchier contrast. Thunder rolling closer.
+2:23-2:41: In a close-up, static camera, locked off shot. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, eyes wide, mouth fully open, arms at maximum extension, impact frame, supersaturation of color, silhouetted accents, motion blur lines tracing across the frame. Brightest backlight. The kitten wide-eyed and braced.
+2:41+: In a close-up, static camera, locked off shot. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, eyes lowering, arms lowering a fraction, shoulders easing, the kitten relaxing and settling against her neck. Fading, gentle light.
 ```
 
 ## Workflow widget values
@@ -144,8 +146,11 @@ still image with no motion, subtitles, deformed facial features, extra limbs, di
 ```
 
 No reason to add "scene cut, jump cut" here — the iteration hand-off
-is already the cut, and we're explicitly leaning into it with
-`"Cut to ..."`.
+is already the cut. (Original v4-era reasoning continued: "we're
+explicitly leaning into it with `Cut to ...`" — that technique was
+retracted 2026-04-25 per guide §5.1; schedule above now uses
+`In a ...` continuation form, but the negative-prompt rationale
+above still holds.)
 
 ## Observations
 

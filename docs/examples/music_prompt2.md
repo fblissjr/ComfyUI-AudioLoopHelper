@@ -73,15 +73,15 @@ node_169_prompt: Style: illustrated. In a medium shot, static camera, locked off
 
 schedule:
 0:00-0:17: Style: illustrated. In a medium shot, static camera, locked off shot, a warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together.
-0:17-0:35: Cut to a medium close-up, static camera, locked off shot. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, brow furrowing.
-0:35-0:53: Cut to a close-up, dolly in, camera pushing forward. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, eyes narrowing.
-0:53-1:11: Cut to a close-up, static camera, locked off shot. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, eyes wide, mouth open.
-1:11-1:29: Cut to a medium shot, jib up, camera rising up. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, shoulders squaring.
-1:29-1:47: Cut to a medium close-up, focus shift, rack focus. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, chin lifting.
-1:47-2:05: Cut to a close-up, dolly in, camera pushing forward. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, brow tightening.
-2:05-2:23: Cut to a medium shot, dolly left, camera tracking left. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, head rocking a fraction.
-2:23-2:41: Cut to a close-up, static camera, locked off shot. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, eyes wide, mouth fully open.
-2:41+: Cut to a medium close-up, jib down, camera lowering down. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, eyes lowering.
+0:17-0:35: In a medium close-up, static camera, locked off shot. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, brow furrowing.
+0:35-0:53: In a close-up, dolly in, camera pushing forward. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, eyes narrowing.
+0:53-1:11: In a close-up, static camera, locked off shot. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, eyes wide, mouth open.
+1:11-1:29: In a medium shot, jib up, camera rising up. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, shoulders squaring.
+1:29-1:47: In a medium close-up, focus shift, rack focus. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, chin lifting.
+1:47-2:05: In a close-up, dolly in, camera pushing forward. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, brow tightening.
+2:05-2:23: In a medium shot, dolly left, camera tracking left. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, head rocking a fraction.
+2:23-2:41: In a close-up, static camera, locked off shot. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, eyes wide, mouth fully open.
+2:41+: In a medium close-up, jib down, camera lowering down. A warrior woman with a long silver-blonde braid and her small orange tabby kitten wearing tiny aviator goggles perched on her shoulder are singing together, eyes lowering.
 ```
 
 ## Camera-move rotation (at a glance)
@@ -171,12 +171,18 @@ still image with no motion, subtitles, deformed facial features, extra limbs, di
   image's style family instead of away from it. Alternatives if
   needed: `Style: painterly illustration.` / `Style: digital
   painting.` — more specific, slightly more tokens.
-- **"Cut to ..." survives the simpler rewrite.** README rule 6
-  warns against meta-language, but v4 standup confirmed that naming
-  the iteration-boundary seam as a cut turns a technical discontinuity
-  into a perceived edit. Dropping the rest of the art direction but
-  keeping the cut language is the sweet spot for this simplified
-  pass.
+- **~~"Cut to ..." survives the simpler rewrite~~ (RETRACTED 2026-04-25).**
+  Original v2 reasoning: v4 standup confirmed that naming the
+  iteration-boundary seam as a cut turns a technical discontinuity
+  into a perceived edit; dropping the rest of the art direction but
+  keeping the cut language is the sweet spot. **What was missed**:
+  Lightricks's official LTX 2.3 system prompt
+  (`docs/reference/ltx23_prompt_system_prompts.md:44, 56, 93`)
+  trains the model to treat "scene cut" / "Cut to" as an explicit
+  *discontinuation directive* — working against the loop's
+  continuity mechanisms (`LTXVAddLatentGuide latent_idx=-1` + 1s
+  latent overlap). Schedule above now uses `In a ...` continuation
+  form per `docs/guides/prompt_creation_guide.md` §5.1.
 - **Why no `dolly out` even with the R7 outro exception.** The v2
   philosophy is "don't negotiate with the face". The only move that
   can mutate mouth geometry over a full iteration is one that shrinks

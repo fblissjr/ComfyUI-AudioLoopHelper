@@ -69,15 +69,15 @@ node_169_prompt: Style: cinematic. In a medium shot, static camera, locked off s
 
 schedule:
 0:00-0:17: Style: cinematic. In a medium shot, static camera, locked off shot, a warrior woman with a long silver-blonde braid and her orange tabby cat perched on her shoulder are singing together.
-0:17-0:35: Cut to a medium close-up, static camera, locked off shot. A warrior woman with a long silver-blonde braid and her orange tabby cat perched on her shoulder are singing together, brow furrowing.
-0:35-0:53: Cut to a close-up, dolly in, camera pushing forward. A warrior woman with a long silver-blonde braid and her orange tabby cat perched on her shoulder are singing together, eyes narrowing.
-0:53-1:11: Cut to a close-up, static camera, locked off shot. A warrior woman with a long silver-blonde braid and her orange tabby cat perched on her shoulder are singing together, eyes wide, mouth open.
-1:11-1:29: Cut to a medium shot, jib up, camera rising up. A warrior woman with a long silver-blonde braid and her orange tabby cat perched on her shoulder are singing together, shoulders squaring.
-1:29-1:47: Cut to a medium close-up, focus shift, rack focus. A warrior woman with a long silver-blonde braid and her orange tabby cat perched on her shoulder are singing together, chin lifting.
-1:47-2:05: Cut to a close-up, dolly in, camera pushing forward. A warrior woman with a long silver-blonde braid and her orange tabby cat perched on her shoulder are singing together, brow tightening.
-2:05-2:23: Cut to a medium shot, dolly left, camera tracking left. A warrior woman with a long silver-blonde braid and her orange tabby cat perched on her shoulder are singing together, head rocking a fraction.
-2:23-2:41: Cut to a close-up, static camera, locked off shot. A warrior woman with a long silver-blonde braid and her orange tabby cat perched on her shoulder are singing together, eyes wide, mouth fully open.
-2:41+: Cut to a medium close-up, jib down, camera lowering down. A warrior woman with a long silver-blonde braid and her orange tabby cat perched on her shoulder are singing together, eyes lowering.
+0:17-0:35: In a medium close-up, static camera, locked off shot. A warrior woman with a long silver-blonde braid and her orange tabby cat perched on her shoulder are singing together, brow furrowing.
+0:35-0:53: In a close-up, dolly in, camera pushing forward. A warrior woman with a long silver-blonde braid and her orange tabby cat perched on her shoulder are singing together, eyes narrowing.
+0:53-1:11: In a close-up, static camera, locked off shot. A warrior woman with a long silver-blonde braid and her orange tabby cat perched on her shoulder are singing together, eyes wide, mouth open.
+1:11-1:29: In a medium shot, jib up, camera rising up. A warrior woman with a long silver-blonde braid and her orange tabby cat perched on her shoulder are singing together, shoulders squaring.
+1:29-1:47: In a medium close-up, focus shift, rack focus. A warrior woman with a long silver-blonde braid and her orange tabby cat perched on her shoulder are singing together, chin lifting.
+1:47-2:05: In a close-up, dolly in, camera pushing forward. A warrior woman with a long silver-blonde braid and her orange tabby cat perched on her shoulder are singing together, brow tightening.
+2:05-2:23: In a medium shot, dolly left, camera tracking left. A warrior woman with a long silver-blonde braid and her orange tabby cat perched on her shoulder are singing together, head rocking a fraction.
+2:23-2:41: In a close-up, static camera, locked off shot. A warrior woman with a long silver-blonde braid and her orange tabby cat perched on her shoulder are singing together, eyes wide, mouth fully open.
+2:41+: In a medium close-up, jib down, camera lowering down. A warrior woman with a long silver-blonde braid and her orange tabby cat perched on her shoulder are singing together, eyes lowering.
 ```
 
 ## Workflow widget values (identical to v2)

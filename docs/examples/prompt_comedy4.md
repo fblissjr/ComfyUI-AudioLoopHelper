@@ -67,9 +67,15 @@ For each iteration, pick:
 5. One crowd beat (what a specific crowd member is doing)
 6. Optional: delivery qualifier (deadpan, rapid, drawn-out)
 
-Cut language at iteration boundaries. For each entry after the first,
-lead with "Cut to a [shot size]..." — this hands off the iteration
-boundary seam as an intentional edit.
+> **Note (2026-04-25):** the original v4 schedule led each non-first
+> entry with `In a [shot size]...` to "hand off the iteration
+> boundary as an intentional edit." That convention has been
+> retracted per `docs/guides/prompt_creation_guide.md` §5.1
+> (Lightricks's official LTX 2.3 system prompt explicitly trains
+> the model to treat scene-cut language as a discontinuation
+> directive — the opposite of what the loop architecture wants).
+> Schedule entries below have been retroactively normalized to
+> `In a [shot size]...` continuation framing.
 
 ## Inputs
 
@@ -90,16 +96,16 @@ node_169_prompt: Style: cinematic. In a medium shot, static camera, locked off s
 
 schedule:
 0:00-0:17: Style: cinematic. In a medium shot, static camera, locked off shot, a male standup comedian in a striped sweater at a stand-up comedy club is pausing for the laugh, mic held close to his chest, slight smile. Warm stage wash. The crowd on the right mid-laugh.
-0:17-0:35: Cut to a medium close-up, static camera, locked off shot. A male standup comedian in a striped sweater at a stand-up comedy club is delivering the setup, raising an eyebrow. The crowd quiet, leaning in.
-0:35-0:53: Cut to a close-up, dolly in, camera pushing forward. A male standup comedian in a striped sweater at a stand-up comedy club is telling a joke, eyes wide with conviction, shaking his head slightly.
-0:53-1:11: Cut to a close-up, static camera, locked off shot. A male standup comedian in a striped sweater at a stand-up comedy club is delivering the punchline, leaning into the mic, mouth open. One person in the crowd on the right slapping the table laughing.
-1:11-1:29: Cut to a medium shot, static camera, locked off shot. A male standup comedian in a striped sweater at a stand-up comedy club is mid-bit, gesturing with his free hand, shifting weight between feet. The crowd watching attentively.
-1:29-1:47: Cut to a medium close-up, focus shift, rack focus. A male standup comedian in a striped sweater at a stand-up comedy club is smiling wryly, looking out into the audience, head tilted. A couple of patrons on the right whispering.
-1:47-2:05: Cut to a medium shot, static camera, locked off shot. A male standup comedian in a striped sweater at a stand-up comedy club is telling a joke, gesturing sharply with his left hand to emphasize a point, mic slightly lowered. Crowd members shifting in their seats.
-2:05-2:23: Cut to a close-up, dolly in, camera pushing forward. A male standup comedian in a striped sweater at a stand-up comedy club is delivering the punchline, leaning back slightly, pointing at a crowd member, eyes narrowed playfully. Someone on the right wiping their eye from laughing.
-2:23-2:41: Cut to a medium close-up, static camera, locked off shot. A male standup comedian in a striped sweater at a stand-up comedy club is leaning into the mic, building the final premise. The crowd leaning in, highly attentive.
-2:41-2:58: Cut to a close-up, dolly in, camera pushing forward. A male standup comedian in a striped sweater at a stand-up comedy club is delivering the final punchline, smiling wide, mic lowered. The crowd fully laughing, shoulders shaking.
-2:58+: Cut to a close-up, static camera, locked off shot. A male standup comedian in a striped sweater at a stand-up comedy club is reacting to the crowd, waving his free hand, slight smile spreading. The crowd animated, some standing, some wiping their eyes.
+0:17-0:35: In a medium close-up, static camera, locked off shot. A male standup comedian in a striped sweater at a stand-up comedy club is delivering the setup, raising an eyebrow. The crowd quiet, leaning in.
+0:35-0:53: In a close-up, dolly in, camera pushing forward. A male standup comedian in a striped sweater at a stand-up comedy club is telling a joke, eyes wide with conviction, shaking his head slightly.
+0:53-1:11: In a close-up, static camera, locked off shot. A male standup comedian in a striped sweater at a stand-up comedy club is delivering the punchline, leaning into the mic, mouth open. One person in the crowd on the right slapping the table laughing.
+1:11-1:29: In a medium shot, static camera, locked off shot. A male standup comedian in a striped sweater at a stand-up comedy club is mid-bit, gesturing with his free hand, shifting weight between feet. The crowd watching attentively.
+1:29-1:47: In a medium close-up, focus shift, rack focus. A male standup comedian in a striped sweater at a stand-up comedy club is smiling wryly, looking out into the audience, head tilted. A couple of patrons on the right whispering.
+1:47-2:05: In a medium shot, static camera, locked off shot. A male standup comedian in a striped sweater at a stand-up comedy club is telling a joke, gesturing sharply with his left hand to emphasize a point, mic slightly lowered. Crowd members shifting in their seats.
+2:05-2:23: In a close-up, dolly in, camera pushing forward. A male standup comedian in a striped sweater at a stand-up comedy club is delivering the punchline, leaning back slightly, pointing at a crowd member, eyes narrowed playfully. Someone on the right wiping their eye from laughing.
+2:23-2:41: In a medium close-up, static camera, locked off shot. A male standup comedian in a striped sweater at a stand-up comedy club is leaning into the mic, building the final premise. The crowd leaning in, highly attentive.
+2:41-2:58: In a close-up, dolly in, camera pushing forward. A male standup comedian in a striped sweater at a stand-up comedy club is delivering the final punchline, smiling wide, mic lowered. The crowd fully laughing, shoulders shaking.
+2:58+: In a close-up, static camera, locked off shot. A male standup comedian in a striped sweater at a stand-up comedy club is reacting to the crowd, waving his free hand, slight smile spreading. The crowd animated, some standing, some wiping their eyes.
 ```
 
 ## What makes v4 different from v3
@@ -108,7 +114,7 @@ schedule:
 |---|---|---|
 | Shot size variety | Medium shot everywhere, one medium close-up | Alternates medium / medium close-up / close-up |
 | Camera motion | Static always (except outro) | Static, slow dolly in, slight handheld, rack focus |
-| Cut language | Not used | Every entry after the first starts `"Cut to..."` |
+| Cut language | Not used | Originally every non-first entry started `"Cut to..."`; **retracted 2026-04-25** per guide §5.1 — schedule above now uses `In a ...` continuation form |
 | Body beats | Minimal variation | Each entry has a distinct body beat |
 | Crowd beats | Repeated "crowd reacting" | Specific per-entry (table-slap, whispering, weight-shifting, eye-wiping, shoulders-shaking) |
 | Per-entry length | ~25 words | ~35-45 words (still short, but richer) |
@@ -136,22 +142,27 @@ outro, no dolly out mid-iteration, no angle changes.
 still image with no motion, subtitles, deformed facial features, extra limbs, disfigured hands, duplicate character, twin, clone
 ```
 
-If you specifically want to prevent the "Cut to" language from
-producing literal hard splices where unwanted, you can ADD
-`"scene cut, jump cut, blurry transition"` to the negative — but
-usually the iteration hand-off already functions as the cut, so this
-isn't needed.
+(Historical: the original v4 negative-prompt note recommended
+adding `"scene cut, jump cut, blurry transition"` if `Cut to`
+language produced literal hard splices. Now that `Cut to` is
+retracted per guide §5.1, this is no longer needed.)
 
 ## Observations
 
-- **Why `"Cut to..."` works for us**: iteration hand-offs in the loop
-  architecture are already visual discontinuities (independent sampler
-  passes with overlap blending). Text saying "cut to" RE-FRAMES that
-  discontinuity as intentional editing — the viewer's brain parses
-  the boundary as a deliberate edit rather than a technical seam.
-  Post-DR1 decoder cleanup means the only remaining seam IS the
-  iteration boundary, so the text-level cut language lands where the
-  actual visual discontinuity lands. Good alignment.
+- **Why we thought `"Cut to..."` worked for us (2026-04-15, RETRACTED 2026-04-25)**:
+  the original argument: iteration hand-offs in the loop architecture
+  are visual discontinuities; text saying "cut to" reframes the
+  discontinuity as intentional editing rather than a technical seam.
+  **What was missed at the time**: (a) the v3→v4 A/B that produced
+  this finding also added per-iter camera variety, so the perceived
+  improvement was confounded; (b) Lightricks's own LTX 2.3 system
+  prompt
+  (`docs/reference/ltx23_prompt_system_prompts.md:44, 56, 93`)
+  explicitly trains the model to treat scene-cut language as a
+  *discontinuation directive*, the opposite of what the latent-side
+  continuity mechanisms (`LTXVAddLatentGuide latent_idx=-1` +
+  `LatentContextExtract` 1s overlap) are doing. The text branch was
+  fighting the latent branch. Retracted; see guide §5.1.
 - **Crowd beats matter more than I expected.** The image has ~2-3
   visible crowd members. Naming specific small actions per entry
   ("table-slap", "whispering", "wiping eyes", "shoulders shaking")

@@ -1,4 +1,4 @@
-Last updated: 2026-04-25 (all schedules retroactively stripped of audio descriptors and init-committed redundancy per `docs/guides/prompt_creation_guide.md`; original discovery diffs preserved inline as historical case studies.)
+Last updated: 2026-04-25 (all schedules retroactively stripped of audio descriptors, init-committed redundancy, AND `Cut to` boundary markers per `docs/guides/prompt_creation_guide.md` §3 + §5.1; original discovery diffs preserved inline as historical case studies.)
 
 # Prompt schedule examples
 
@@ -41,7 +41,7 @@ the specific assets.
 | `prompt_comedy1.md` | Early standup test |
 | `prompt_comedy2.md` | Iteration on v1 |
 | `prompt_comedy3.md` | Post-DR1 with widget trim variants |
-| `prompt_comedy4.md` | Introduced the "Cut to ..." iteration-boundary technique that carries through to all action/music prompts |
+| `prompt_comedy4.md` | Originally introduced the "Cut to ..." iteration-boundary technique; **technique retracted 2026-04-25** per guide §5.1 — schedules retroactively normalized to `In a ...` continuation form |
 | `prompt_comedy5.md` | **Unusual-character adaptation** — how to rewrite v4's subject blocks when the init image is outside LTX's typical training distribution (oversized cranium, loud patterned clothing) |
 
 ## Patterns that transfer
@@ -56,10 +56,12 @@ the original discovery diffs. The arc:
 1. **Subject byte-exact across entries** (rule stabilized in comedy
    series)
 2. **"Cut to ..." language at iteration boundaries** (v4-standup
-   finding — reframes seams as intentional edits; **now flagged as a
-   hypothesis under review** in the guide §5.1, since loop architecture
-   continues prior latents and the boundary marker may be undermining
-   that continuity)
+   finding 2026-04-15 — reframes seams as intentional edits;
+   **RETRACTED 2026-04-25** per guide §5.1 — Lightricks's LTX 2.3
+   system prompt explicitly trains the model to treat scene-cut
+   language as a discontinuation directive, working against the loop
+   architecture's continuity mechanisms. All schedules retroactively
+   normalized to `In a [shot]...` continuation form)
 3. **Canonical LTX 2.3 camera phrasings only** (music series)
 4. **No dolly-out anywhere for face-driven content** (music_prompt2
    onward; generalized to **no wide shots either** for music/comedy

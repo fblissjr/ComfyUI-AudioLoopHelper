@@ -16,7 +16,7 @@ case studies).
 2. [Core principle: schedule entries are a delta layer](#2-core-principle-schedule-entries-are-a-delta-layer)
 3. [What to strip](#3-what-to-strip)
 4. [What MUST stay (carve-outs)](#4-what-must-stay-carve-outs)
-5. [Hypotheses under review](#5-hypotheses-under-review) (`Cut to`, context-frames)
+5. [Boundary-marker convention + open questions](#5-boundary-marker-convention--open-questions) (`Cut to` retracted; context-frames open)
 6. [Shot scale: when wide and dolly-out are unsafe](#6-shot-scale-when-wide-and-dolly-out-are-unsafe)
 7. [Camera motion keywords (canonical list)](#7-camera-motion-keywords-canonical-list)
 8. [Negative prompts](#8-negative-prompts)
@@ -180,46 +180,57 @@ The test: would removing this phrase change what the image should
 look like? If yes, keep it. If it only describes what the audio
 already plays, strip it.
 
-## 5. Hypotheses under review
+## 5. Boundary-marker convention + open questions
 
-These are conventions we currently follow but haven't validated with a
-clean A/B. They may be wrong. Treat as defaults to use, then test.
+### 5.1 Default: omit `Cut to`. Use continuation framing.
 
-### 5.1 `Cut to ...` at iteration boundaries
+**Recommended:** non-first entries should begin with `In a [shot
+size], [camera motion], a [subject] ...` — the same continuation
+form as the first entry / Node 169 prompt. **Do not** prefix entries
+with `Cut to a ...`.
 
-**Current convention** (per `docs/examples/prompt_comedy4.md` v4
-finding, 2026-04-15): every entry after the first leads with
-`Cut to a [shot size], [camera motion]. ...`. Rationale: iteration
-boundaries are inherent visual discontinuities (independent sampler
-passes), and naming them as cuts re-frames the seam as an intentional
-edit rather than as a technical artifact.
+Rationale (architectural + training-data):
 
-**The concern:** the loop architecture continues prior latents
-(`LatentContextExtract` → ~1s of latent overlap; `LTXVAddLatentGuide
-latent_idx=-1` re-anchors the init). Semantically, each iteration IS a
-continuation of the previous one, not a fresh video. Telling LTX
-"Cut to" may be signaling "start a new video," which is the opposite
-of what the wiring is set up for. The boundary marker may be
-*creating* the discontinuity it claims to disguise.
+1. **The loop architecture is built for continuation.** Every
+   iteration receives the init image at `latent_idx=-1` (frame
+   BEFORE the window) via `LTXVAddLatentGuide`, plus ~1s of prior
+   latents via `LatentContextExtract`. These mechanisms exist to
+   minimize the iteration boundary's visibility.
+2. **LTX 2.3 was trained to treat scene-cut language as an explicit
+   directive.** Lightricks's official i2v + t2v system prompts
+   (`docs/reference/ltx23_prompt_system_prompts.md:44, 56, 93`):
+   > "Inaccurate descriptions may cause scene cuts."
+   > "No timestamps or cuts: DO NOT use timestamps or describe scene
+   > cuts unless explicitly requested."
+   So `Cut to ...` doesn't just *describe* the seam, it actively
+   *commands* the model to discontinue — exactly opposite to what
+   the latent-side mechanisms are doing.
 
-**Status:** kept in current case studies because removing it without
-running the A/B would erase the v4 finding. Pulled to a follow-up:
-exp_2026-MM-DD_cut_to_ablation.md will run the same schedule with vs
-without `Cut to ...` prefixes at fixed seed and compare iteration
-coherence.
+**Why we used to use it (historical):** `prompt_comedy4.md` v4
+introduced `Cut to a ...` framing on 2026-04-15 alongside per-iter
+camera-move variety. The v3→v4 A/B felt better, attributed (probably
+incorrectly) to the `Cut to` prefix. Camera variety alone likely
+explained the improvement — the change wasn't isolated.
 
-**If the A/B confirms `Cut to` hurts continuity**, the alternatives
-to test are: omit the boundary marker entirely (just `In a [shot]...`),
-or `Continue: ...` / `Holding on ...` for narrative continuity, or
-`Same scene, [shot] ...` for explicit no-cut.
+**Confidence:** ~85% that omission improves cross-iteration
+coherence. The architectural + training-data argument is strong; the
+remaining 15% is the slim chance that LTX's "render fresh" response
+to `Cut to` happens to look cleaner than its confused-bridging
+response without it.
 
-### 5.2 Context-frames width
+**A/B is now confirmation, not gating** (PLAN.md
+[Cut-to ablation](../../internal/PLAN.md)): same schedule with vs
+without `Cut to` at fixed seed, multi-seed for statistical
+significance. If it shows omission is *worse*, restore `Cut to` and
+revisit.
+
+### 5.2 Context-frames width (open question)
 
 Currently `overlap_latent_frames=4` (~1s at 25fps). Increasing to 8 or
 12 would feed more prior context into each iteration's denoising.
-Plausibly reduces the perceived "fresh start" feeling at boundaries
-that we currently mask with `Cut to`. Pairs cleanly with the §5.1 A/B
-— run as a 2×2 cell matrix.
+Plausibly reduces the residual "fresh start" feeling at boundaries
+that the §5.1 strip alone can't fully erase. Pairs cleanly with the
+§5.1 A/B — run as a 2×2 cell matrix.
 
 ## 6. Shot scale: when wide and dolly-out are unsafe
 
@@ -317,9 +328,10 @@ creatures the model isn't fully committing.
 still image with no motion, subtitles, deformed facial features, extra limbs, disfigured hands, duplicate character, twin, clone
 ```
 
-If your "Cut to" entries are producing literal hard splices where
-unwanted: add `scene cut, jump cut, blurry transition`. Usually
-unnecessary — the iteration hand-off already functions as the cut.
+If you still see literal hard splices at iteration boundaries (e.g.
+inherited from older schedules that prefixed entries with `Cut to`):
+add `scene cut, jump cut, blurry transition` to the negative. Usually
+unnecessary once the schedule omits `Cut to` per §5.1.
 
 ### 8.4 What NOT to add
 
@@ -455,7 +467,7 @@ copy:
 | Vocal music video, illustrated init | `music_prompt2.md` | Same structure as music_prompt3 with `Style: illustrated.` and animated-pool vocabulary. |
 | Instrumental / action, normal pacing | `action_prompt1.md` | 9-iteration narrative arc; full-length window. |
 | Instrumental / action, rapid cuts | `action_prompt6.md` | 20-iteration rapid-cut grid (halved window). The frozen-audio strip rule was established here (v6 vs v5 diff). |
-| Standup comedy / dialogue | `prompt_comedy4.md` | The "Cut to" finding (under review per §5.1), specific crowd-member beats, no-wide-shot rule. |
+| Standup comedy / dialogue | `prompt_comedy4.md` | Specific crowd-member beats, no-wide-shot rule. (Original v4 used `Cut to` boundary markers; retracted per §5.1.) |
 | Unusual-character init (out-of-distribution) | `prompt_comedy5.md` | How to rewrite the subject anchor when the init is visually atypical. |
 
 `docs/examples/README.md` has the full evolution arc (comedy 1→4,
@@ -566,9 +578,10 @@ If results drift across iterations:
 - Verify your camera-motion phrases are from the canonical list (§7).
 - For face-driven content: confirm no wide shots, no dolly-out (§6.1).
 
-If iteration boundaries feel like cuts: that's the §5.1 "Cut to"
-hypothesis at work. Try omitting the `Cut to ...` prefixes as an A/B
-and compare.
+If iteration boundaries still feel like cuts after omitting `Cut to`
+(per §5.1): bump `overlap_latent_frames` (§5.2 open question) — more
+context per iteration plausibly reduces the residual fresh-start
+feel.
 
 ## See also
 
