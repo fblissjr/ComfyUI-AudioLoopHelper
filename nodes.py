@@ -1290,6 +1290,78 @@ def _compute_ltx_resolution(
     return width, height, latent_volume, status
 
 
+def _ltx_clear_keyframe_idxs(positive, negative):
+    """Clear `keyframe_idxs` from both CONDITIONING lists if `positive` has any.
+    Mirrors the CONDITIONING-side behavior of upstream `LTXVCropGuides` without
+    touching a LATENT. Returns (positive, negative). Imports comfy modules
+    lazily so the module is testable outside the ComfyUI runtime."""
+    try:
+        from comfy_extras.nodes_lt import get_keyframe_idxs
+        from comfy import node_helpers
+    except ImportError:
+        # Outside ComfyUI runtime — fall back to a minimal in-process equivalent
+        # that lets our unit tests exercise the keyframe-clearing logic.
+        def get_keyframe_idxs(cond):
+            kf = cond[0][1].get("keyframe_idxs") if cond and len(cond[0]) > 1 else None
+            num = 0 if kf is None or len(kf) == 0 else len(kf)
+            return kf, num
+
+        class _NH:
+            @staticmethod
+            def conditioning_set_values(cond, values):
+                return [(t, {**meta, **values}) for (t, meta) in cond]
+
+        node_helpers = _NH
+
+    _, num_keyframes = get_keyframe_idxs(positive)
+    if num_keyframes == 0:
+        return positive, negative
+    positive = node_helpers.conditioning_set_values(positive, {"keyframe_idxs": []})
+    negative = node_helpers.conditioning_set_values(negative, {"keyframe_idxs": []})
+    return positive, negative
+
+
+class LTXVCropGuidesNoLatent(io.ComfyNode):
+    """CONDITIONING-only equivalent of `LTXVCropGuides`. Strips
+    `keyframe_idxs` from the positive/negative CONDITIONING; takes no
+    LATENT input and produces no LATENT output.
+
+    Used in the loop subgraph's CONDITIONING path (replaces the upstream
+    `LTXVCropGuides(655)` for the F3 wiring) so the post-sampling
+    keyframe-padding crop can run on a sibling LATENT-only `LTXVCropGuides`
+    instance without creating a dependency cycle. Removes the wasted
+    `latent["samples"].clone()` upstream `LTXVCropGuides` does on the
+    CONDITIONING-only role.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="LTXVCropGuidesNoLatent",
+            display_name="LTX Crop Guides (CONDITIONING only)",
+            category="AudioLoopHelper/utility",
+            description=(
+                "Strips keyframe_idxs from positive/negative CONDITIONING. "
+                "CONDITIONING-only variant of LTXVCropGuides — no LATENT in/out, "
+                "so it can sit on the F3 path without creating a sample-output "
+                "dependency cycle in loop subgraphs."
+            ),
+            inputs=[
+                io.Conditioning.Input("positive"),
+                io.Conditioning.Input("negative"),
+            ],
+            outputs=[
+                io.Conditioning.Output(display_name="positive"),
+                io.Conditioning.Output(display_name="negative"),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, positive, negative) -> io.NodeOutput:
+        new_pos, new_neg = _ltx_clear_keyframe_idxs(positive, negative)
+        return io.NodeOutput(new_pos, new_neg)
+
+
 class LTXResolutionFromAspect(io.ComfyNode):
     """Resolve a target aspect ratio to LTX 2.3-valid (width, height) + report
     the latent volume against the doc-authoritative ceiling.
@@ -2660,6 +2732,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             AudioDuration,
             AudioPitchDetect,
             LTXResolutionFromAspect,
+            LTXVCropGuidesNoLatent,
             KeyframeImageSchedule,
             KeyframeLatentScheduleBatchEncode,
             LatentSelectByIteration,

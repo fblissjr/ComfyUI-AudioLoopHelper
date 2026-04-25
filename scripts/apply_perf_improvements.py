@@ -92,70 +92,29 @@ def insert_iteration_cleanup(ed: WorkflowEditor) -> bool:
     output_target_slot = trim_out_link["target_slot"]
     old_link_id = trim_out_link["id"]
 
-    new_node_id = max((n["id"] for n in sg["nodes"]), default=0) + 1
-    link_id_trim_to_cleanup = ed.next_link_id()
-    link_id_cleanup_to_output = ed.next_link_id()
-
     trim_pos = trim_node.get("pos", [0, 0])
-    pos = [trim_pos[0] + 280, trim_pos[1]]
-
-    cleanup_node = ed.make_node(
-        node_id=new_node_id,
+    new_node_id = ed.add_subgraph_node(
         node_type="IterationCleanup",
-        pos=pos,
-        widgets=["always"],
+        pos=[trim_pos[0] + 280, trim_pos[1]],
+        size=[240, 80],
         inputs=[
-            {"name": "latent", "type": "LATENT", "link": link_id_trim_to_cleanup},
-            {"name": "mode", "type": "COMBO", "link": None,
-             "widget": {"name": "mode"}},
+            {"name": "latent", "type": "LATENT", "link": None},
+            {"name": "mode", "type": "COMBO", "link": None, "widget": {"name": "mode"}},
         ],
         outputs=[
-            {"name": "latent", "type": "LATENT", "links": [link_id_cleanup_to_output]},
+            {"name": "latent", "type": "LATENT", "links": []},
         ],
+        properties={
+            "cnr_id": "comfyui-audioloophelper",
+            "Node name for S&R": "IterationCleanup",
+        },
+        widgets_values=["always"],
+        order=trim_node.get("order", 0) + 1,
     )
-    cleanup_node["size"] = [240, 80]
-    cleanup_node["order"] = trim_node.get("order", 0) + 1
-    cleanup_node["properties"] = {
-        "cnr_id": "comfyui-audioloophelper",
-        "Node name for S&R": "IterationCleanup",
-    }
-    sg["nodes"].append(cleanup_node)
 
-    # Remove the old direct link from trim to output.
-    sg["links"] = [l for l in sg["links"] if l["id"] != old_link_id]
-
-    # Node-output slots use "links" (not "linkIds") -- "linkIds" is only for
-    # subgraph boundary entries (sg.inputs / sg.outputs). Update only "links"
-    # on the trim node's output slot.
-    trim_out = trim_node["outputs"][0]
-    trim_out["links"] = [
-        lid for lid in trim_out.get("links", []) if lid != old_link_id
-    ] + [link_id_trim_to_cleanup]
-
-    # Subgraph output entries (the virtual target_id == -20 sink) use "linkIds".
-    sg_output = sg["outputs"][output_target_slot]
-    sg_output["linkIds"] = [
-        lid if lid != old_link_id else link_id_cleanup_to_output
-        for lid in sg_output.get("linkIds", [])
-    ]
-
-    # Add the two new internal links (dict format for subgraph links)
-    sg["links"].append({
-        "id": link_id_trim_to_cleanup,
-        "origin_id": trim_node["id"],
-        "origin_slot": 0,
-        "target_id": new_node_id,
-        "target_slot": 0,
-        "type": "LATENT",
-    })
-    sg["links"].append({
-        "id": link_id_cleanup_to_output,
-        "origin_id": new_node_id,
-        "origin_slot": 0,
-        "target_id": -20,
-        "target_slot": output_target_slot,
-        "type": "LATENT",
-    })
+    ed.remove_subgraph_link(old_link_id)
+    ed.add_subgraph_link(trim_node["id"], 0, new_node_id, 0, "LATENT")
+    ed.add_subgraph_link(new_node_id, 0, -20, output_target_slot, "LATENT")
 
     return True
 

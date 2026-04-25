@@ -7,6 +7,16 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **`LTXVCropGuidesNoLatent` node** — CONDITIONING-only variant of upstream
+  `LTXVCropGuides`. Strips `keyframe_idxs` from positive/negative without
+  taking or producing a LATENT (eliminates the wasted `latent["samples"]
+  .clone()` on the F3 path). `apply_split_cropguides.py` now upgrades
+  `#655` to this type during apply (and reverts cleanly).
+- **`WorkflowEditor.add_subgraph_node`** — subgraph-side counterpart to
+  `add_top_level_node`. `add_subgraph_link` extended to handle the
+  virtual `-10` input distributor and `-20` output collector. Three
+  hand-rolling sites migrated: `apply_split_cropguides.py`,
+  `apply_perf_improvements.py`, `apply_profiling_nodes.py`.
 - **`LTXResolutionFromAspect` node + `_compute_ltx_resolution` helper +
   `scripts/calc_ltx_resolution.py` CLI.** Resolves a target aspect ratio
   + long edge to LTX 2.3-valid (W, H), classifies the latent volume
@@ -29,36 +39,17 @@ This project uses [Semantic Versioning](https://semver.org/).
   Per CLAUDE.md "bake topology constraints into audit": fix and audit
   ship as a pair so a sibling branch can't silently regress the fix.
 
-- **Loop-subgraph dependency cycle through `LTXVCropGuides`.** The
-  canonical wired a single `LTXVCropGuides(655)` such that its
-  CONDITIONING output fed CFGGuider (F3) AND its LATENT input read
-  the post-sampling SeparateAV output — closing the cycle `CFGGuider
-  ← CropGuides ← SeparateAV ← Sampler ← CFGGuider`. ComfyUI's strict
-  cycle detector (recent versions) rejects this at prompt-validation
-  time, blocking `VHS_VideoCombine` output; users got the initial
-  sampler pass (8/8 steps) but no `.mp4`. Cycle existed in canonical
-  for 10+ commits — older ComfyUI tolerated the node-internal
-  CONDITIONING/LATENT independence; newer doesn't.
-
-  **Fix: split CropGuides into two instances of the same upstream
-  `LTXVCropGuides` node.** No new node code needed.
-  - **`CropGuides(655)` — CONDITIONING-only role.** All three inputs
-    from `LTXVAddLatentGuide(1519)` (positive, negative, latent)
-    pre-sampling. Outputs feed CFGGuider (F3 honored). Its LATENT
-    output is a dead end here.
-  - **`CropGuides(2008)` — LATENT-only role (NEW instance).**
-    `positive`/`negative` from `LTXVAddLatentGuide(1519)` (read-only,
-    just to satisfy required inputs and provide `num_keyframes`).
-    `latent` from `SeparateAV(596).video_latent` (post-sampling,
-    video-only — no `NestedTensor` issue). LATENT output feeds
-    `AdainLatent(2006)` → `LatentOverlapTrim` → output. Its CONDITIONING
-    outputs are dead ends here.
-
-  No cycle: each instance only depends on upstream of itself.
-  CONDITIONING flow correct (F3 intact). Post-sampling keyframe
-  cropping preserved (the LATENT-only instance does the same crop).
-  Color correction intact (AdainLatent active). Applied across 5
-  production + 3 experimental workflows.
+- **Loop-subgraph cycle through `LTXVCropGuides` resolved by splitting
+  it into two instances.** Recent ComfyUI's strict cycle detector
+  rejects the canonical `CFGGuider ← CropGuides ← SeparateAV ← Sampler
+  ← CFGGuider` loop at prompt-validation time; users got the sampler
+  pass but no `.mp4`. Fix wires `CropGuides(655)` purely from
+  `LTXVAddLatentGuide(1519)` (CONDITIONING role, F3 honored) and adds
+  a second `LTXVCropGuides` (titled `"CropGuides (LATENT-only —
+  split)"`) reading `SeparateAV(596).video_latent` for the post-
+  sampling crop into AdainLatent. No new node code (uses upstream
+  CropGuides twice). Apply via `scripts/apply_split_cropguides.py`;
+  `audit_workflows.py::cropguides_split_topology` ERRs if reverted.
 - **`exec_logger.py` async-cache wrapper.** Recent ComfyUI made
   `HierarchicalCache.get` a coroutine; the wrapper at line 220 called
   it without `await`, generating an unawaited-coroutine warning at

@@ -81,6 +81,37 @@ def _find_split_node(sg: dict) -> dict | None:
     return None
 
 
+def _swap_cond_node_type(ed: WorkflowEditor, crop_cond: dict) -> bool:
+    """Convert CropGuides(655) from upstream `LTXVCropGuides` (which always
+    clones the LATENT input even on the CONDITIONING-only role) to our
+    `LTXVCropGuidesNoLatent` variant (no LATENT in/out — eliminates the
+    wasted per-iter clone). Idempotent. Returns True if a swap happened."""
+    if crop_cond.get("type") == "LTXVCropGuidesNoLatent":
+        return False
+    crop_cond["type"] = "LTXVCropGuidesNoLatent"
+    crop_cond["properties"] = {
+        "cnr_id": "comfyui-audioloophelper",
+        "Node name for S&R": "LTXVCropGuidesNoLatent",
+    }
+    # The no-latent variant has only positive/negative slots. Drop any
+    # existing LATENT input/output and break links touching them.
+    inbound_latent_link = ed.find_subgraph_link_to_slot(
+        crop_cond["id"], 2, SUBGRAPH_INDEX,
+    )
+    if inbound_latent_link is not None:
+        ed.remove_subgraph_link(inbound_latent_link["id"], SUBGRAPH_INDEX)
+    crop_cond["inputs"] = [i for i in crop_cond.get("inputs", []) if i.get("type") != "LATENT"]
+    out_latent_links = [
+        out.get("linkIds", []) or [] for out in crop_cond.get("outputs", [])
+        if out.get("type") == "LATENT"
+    ]
+    for lid_list in out_latent_links:
+        for lid in list(lid_list):
+            ed.remove_subgraph_link(lid, SUBGRAPH_INDEX)
+    crop_cond["outputs"] = [o for o in crop_cond.get("outputs", []) if o.get("type") != "LATENT"]
+    return True
+
+
 def _apply(ed: WorkflowEditor) -> str:
     sg = ed.get_subgraph(SUBGRAPH_INDEX)
     if sg is None:
@@ -92,8 +123,13 @@ def _apply(ed: WorkflowEditor) -> str:
     if missing:
         return f"skip (missing subgraph nodes {sorted(missing)})"
 
+    crop_cond_existing = ed.find_subgraph_node(CROP_COND_ID, SUBGRAPH_INDEX)
+    assert crop_cond_existing is not None  # by `missing` check above
     if _find_split_node(sg) is not None:
-        return "no change (already split)"
+        # Already split — only thing potentially left to do is upgrade #655 type.
+        if _swap_cond_node_type(ed, crop_cond_existing):
+            return f"upgraded #{CROP_COND_ID} to LTXVCropGuidesNoLatent (split already applied)"
+        return "no change (already split + no-latent)"
 
     crop_cond = ed.find_subgraph_node(CROP_COND_ID, SUBGRAPH_INDEX)
     addguide = ed.find_subgraph_node(ADD_LATENT_GUIDE_ID, SUBGRAPH_INDEX)
@@ -101,38 +137,33 @@ def _apply(ed: WorkflowEditor) -> str:
     adain = ed.find_subgraph_node(ADAIN_ID, SUBGRAPH_INDEX)
     assert crop_cond and addguide and sepav and adain  # by `missing` check above
 
-    # Repoint CropGuides(655).latent input to AddLatentGuide(1519).slot 2
-    # (pre-sampling, video-only). The CONDITIONING-only role no longer needs
-    # the post-sampling latent.
-    ed.rewire_subgraph_input(
-        CROP_COND_ID, 2, ADD_LATENT_GUIDE_ID, 2, "LATENT", SUBGRAPH_INDEX,
-    )
+    # Convert CropGuides(655) to the no-latent variant up-front. This drops
+    # the LATENT input/output entirely (and any link feeding the original
+    # post-sampling LATENT input — that was the cycle source).
+    _swap_cond_node_type(ed, crop_cond)
 
-    new_node_id = ed.next_node_id()
-    sg["nodes"].append({
-        "id": new_node_id,
-        "type": "LTXVCropGuides",
-        "pos": [crop_cond["pos"][0] + 400, crop_cond["pos"][1] + 200],
-        "size": [240, 86],
-        "flags": {},
-        "order": crop_cond.get("order", 70) + 1,
-        "mode": 0,
-        "inputs": [
+    new_node_id = ed.add_subgraph_node(
+        node_type="LTXVCropGuides",
+        pos=[crop_cond["pos"][0] + 400, crop_cond["pos"][1] + 200],
+        size=[240, 86],
+        inputs=[
             {"name": "positive", "type": "CONDITIONING", "link": None},
             {"name": "negative", "type": "CONDITIONING", "link": None},
             {"name": "latent", "type": "LATENT", "link": None},
         ],
-        "outputs": [
+        outputs=[
             {"name": "positive", "type": "CONDITIONING", "linkIds": []},
             {"name": "negative", "type": "CONDITIONING", "linkIds": []},
             {"name": "latent", "type": "LATENT", "linkIds": []},
         ],
-        "properties": {
+        properties={
             "cnr_id": "comfy-core",
             "Node name for S&R": "LTXVCropGuides",
         },
-        "title": SPLIT_NODE_TITLE,
-    })
+        title=SPLIT_NODE_TITLE,
+        order=crop_cond.get("order", 70) + 1,
+        sg_index=SUBGRAPH_INDEX,
+    )
     ed.add_subgraph_link(ADD_LATENT_GUIDE_ID, 0, new_node_id, 0, "CONDITIONING", SUBGRAPH_INDEX)
     ed.add_subgraph_link(ADD_LATENT_GUIDE_ID, 1, new_node_id, 1, "CONDITIONING", SUBGRAPH_INDEX)
     ed.add_subgraph_link(SEPARATE_AV_ID, 0, new_node_id, 2, "LATENT", SUBGRAPH_INDEX)
@@ -143,7 +174,10 @@ def _apply(ed: WorkflowEditor) -> str:
         return f"WARN: AdainLatent({ADAIN_ID}) has no samples input link to rewire"
     ed.rewire_subgraph_input(ADAIN_ID, 0, new_node_id, 2, "LATENT", SUBGRAPH_INDEX)
 
-    return f"split applied — added LTXVCropGuides #{new_node_id} (LATENT-only)"
+    # Final step: upgrade #655 to the no-latent variant (drops the wasted clone).
+    _swap_cond_node_type(ed, crop_cond)
+
+    return f"split applied — added LTXVCropGuides #{new_node_id} (LATENT-only); #{CROP_COND_ID} -> LTXVCropGuidesNoLatent"
 
 
 def _revert(ed: WorkflowEditor) -> str:
@@ -155,6 +189,23 @@ def _revert(ed: WorkflowEditor) -> str:
         return "no change (not split)"
 
     new_node_id = split_node["id"]
+    crop_cond = ed.find_subgraph_node(CROP_COND_ID, SUBGRAPH_INDEX)
+    assert crop_cond is not None
+
+    # If 655 was upgraded to LTXVCropGuidesNoLatent, restore the upstream
+    # type + latent slot so we can rewire the canonical cyclic shape.
+    if crop_cond.get("type") == "LTXVCropGuidesNoLatent":
+        crop_cond["type"] = "LTXVCropGuides"
+        crop_cond["properties"] = {
+            "cnr_id": "comfy-core",
+            "Node name for S&R": "LTXVCropGuides",
+        }
+        crop_cond["inputs"].append(
+            {"name": "latent", "type": "LATENT", "link": None},
+        )
+        crop_cond["outputs"].append(
+            {"name": "latent", "type": "LATENT", "linkIds": []},
+        )
 
     # Restore AdainLatent.samples to read from CropGuides(655).slot 2
     ed.rewire_subgraph_input(ADAIN_ID, 0, CROP_COND_ID, 2, "LATENT", SUBGRAPH_INDEX)
@@ -175,7 +226,8 @@ def _revert(ed: WorkflowEditor) -> str:
 def _process(path: Path, revert: bool, dry_run: bool) -> None:
     ed = WorkflowEditor(path)
     msg = _revert(ed) if revert else _apply(ed)
-    if msg.startswith(("split applied", "reverted")) and not dry_run:
+    is_mutation = msg.startswith(("split applied", "reverted", "upgraded"))
+    if is_mutation and not dry_run:
         ed.save()
     suffix = " (dry-run)" if dry_run else ""
     print(f"  {path.name}: {msg}{suffix}")

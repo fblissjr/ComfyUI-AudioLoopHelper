@@ -113,66 +113,28 @@ def _insert_profile_iter_step(ed: WorkflowEditor) -> bool:
     old_link_id = orig["id"]
     output_target_slot = orig["target_slot"]
 
-    new_node_id = max((n["id"] for n in sg["nodes"]), default=0) + 1
-    link_cleanup_to_step = ed.next_link_id()
-    link_step_to_output = ed.next_link_id()
-
     cleanup_pos = cleanup_node.get("pos", [0, 0])
-    step_pos = [cleanup_pos[0] + 280, cleanup_pos[1]]
-
-    step_node = ed.make_node(
-        node_id=new_node_id,
+    new_node_id = ed.add_subgraph_node(
         node_type="ProfileIterStep_AudioLoop",
-        pos=step_pos,
-        widgets=[],
-        title="Profile Iter Step",
+        pos=[cleanup_pos[0] + 280, cleanup_pos[1]],
+        size=[220, 58],
         inputs=[
-            {"name": "latent", "type": "LATENT", "link": link_cleanup_to_step},
+            {"name": "latent", "type": "LATENT", "link": None},
         ],
         outputs=[
-            {"name": "latent", "type": "LATENT", "links": [link_step_to_output]},
+            {"name": "latent", "type": "LATENT", "links": []},
         ],
+        properties={
+            "cnr_id": "comfyui-audioloophelper",
+            "Node name for S&R": "ProfileIterStep_AudioLoop",
+        },
+        widgets_values=[],
+        title="Profile Iter Step",
     )
-    step_node["size"] = [220, 58]
-    step_node["properties"] = {
-        "cnr_id": "comfyui-audioloophelper",
-        "Node name for S&R": "ProfileIterStep_AudioLoop",
-    }
-    sg["nodes"].append(step_node)
 
-    # Remove old direct link
-    sg["links"] = [l for l in sg["links"] if l["id"] != old_link_id]
-
-    # Rewire cleanup's output slot
-    cleanup_out = cleanup_node["outputs"][0]
-    cleanup_out["links"] = [
-        lid for lid in cleanup_out.get("links", []) if lid != old_link_id
-    ] + [link_cleanup_to_step]
-
-    # Rewire subgraph output entry
-    sg_output = sg["outputs"][output_target_slot]
-    sg_output["linkIds"] = [
-        lid if lid != old_link_id else link_step_to_output
-        for lid in sg_output.get("linkIds", [])
-    ]
-
-    # Add the two new links
-    sg["links"].append({
-        "id": link_cleanup_to_step,
-        "origin_id": cleanup_node["id"],
-        "origin_slot": 0,
-        "target_id": new_node_id,
-        "target_slot": 0,
-        "type": "LATENT",
-    })
-    sg["links"].append({
-        "id": link_step_to_output,
-        "origin_id": new_node_id,
-        "origin_slot": 0,
-        "target_id": -20,
-        "target_slot": output_target_slot,
-        "type": "LATENT",
-    })
+    ed.remove_subgraph_link(old_link_id)
+    ed.add_subgraph_link(cleanup_node["id"], 0, new_node_id, 0, "LATENT")
+    ed.add_subgraph_link(new_node_id, 0, -20, output_target_slot, "LATENT")
 
     return True
 

@@ -301,13 +301,16 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         # The split adds a second LTXVCropGuides instance to break the loop cycle
         # (CFGGuider <- CropGuides <- SeparateAV <- Sampler <- CFGGuider). Required
         # invariants when split is applied:
-        #   - #655 (CONDITIONING-only) reads its LATENT input from #1519 (pre-sampling)
+        #   - #655 is either upstream LTXVCropGuides (with .latent <- #1519 pre-sampling)
+        #     or our no-latent variant LTXVCropGuidesNoLatent (no .latent slot at all)
         #   - the split node (titled SPLIT_NODE_TITLE) reads LATENT from #596 (post-sampling)
         #   - AdainLatent(#2006) reads samples from the split node, not from #655
         # If ALL nodes exist but any of these are damaged, the cycle is back.
         if sgs and {596, 1519, 2006, 655}.issubset({n["id"] for n in sgs[0].get("nodes", [])}):
             sg = sgs[0]
             sg_links = sg.get("links", [])
+            cond_node = next((n for n in sg["nodes"] if n["id"] == 655), None)
+            cond_type = cond_node.get("type") if cond_node else None
             split_node = next(
                 (n for n in sg.get("nodes", [])
                  if n.get("type") == "LTXVCropGuides"
@@ -336,22 +339,33 @@ def _audit_one(wf_path: Path) -> list[Finding]:
                     )
                 # else: another shape (canonical-original-bypassed-elsewhere); skip silently
             else:
-                checks_ok = (
-                    crop_latent_link
-                    and crop_latent_link["origin_id"] == 1519
-                    and adain_samples_link
+                cond_side_ok = (
+                    cond_type == "LTXVCropGuidesNoLatent"
+                    or (
+                        cond_type == "LTXVCropGuides"
+                        and crop_latent_link
+                        and crop_latent_link["origin_id"] == 1519
+                    )
+                )
+                latent_side_ok = (
+                    adain_samples_link
                     and adain_samples_link["origin_id"] == split_node["id"]
                 )
-                if checks_ok:
+                if cond_side_ok and latent_side_ok:
+                    cond_desc = (
+                        "no-latent variant"
+                        if cond_type == "LTXVCropGuidesNoLatent"
+                        else "#655.latent <- #1519"
+                    )
                     record(
                         "OK", "cropguides_split_topology",
-                        f"#655.latent <- #1519 (pre-sample) + #2006 <- #{split_node['id']} (post-sample)",
+                        f"#655={cond_desc} + #2006 <- #{split_node['id']} (post-sample)",
                     )
                 else:
                     record(
                         "ERR", "cropguides_split_topology",
                         f"Split node #{split_node['id']} present but wiring damaged "
-                        f"(#655.latent <- #{crop_latent_link['origin_id'] if crop_latent_link else '?'}, "
+                        f"(#655 type={cond_type}, "
                         f"#2006 <- #{adain_samples_link['origin_id'] if adain_samples_link else '?'}). "
                         "Run scripts/apply_split_cropguides.py --revert and re-apply.",
                     )

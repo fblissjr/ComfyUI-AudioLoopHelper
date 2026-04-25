@@ -399,6 +399,11 @@ class WorkflowEditor:
             if link_id in link_ids:
                 inp["linkIds"] = [l for l in link_ids if l != link_id]
 
+        for out in sg.get("outputs", []):
+            link_ids = out.get("linkIds", [])
+            if link_id in link_ids:
+                out["linkIds"] = [l for l in link_ids if l != link_id]
+
     def add_subgraph_link(
         self, src_node: int, src_slot: int, tgt_node: int, tgt_slot: int,
         dtype: str, sg_index: int = 0,
@@ -406,7 +411,14 @@ class WorkflowEditor:
         """Add an internal link inside a subgraph. Mirrors top-level `add_link`.
         Updates source node output.links and target node input.link. Returns
         new link id (pulled from the top-level `last_link_id` counter, which
-        is shared across top-level and subgraph links in ComfyUI)."""
+        is shared across top-level and subgraph links in ComfyUI).
+
+        Handles virtual collector node ids:
+          - `tgt_node == -20`: updates `sg["outputs"][tgt_slot]["linkIds"]`
+            (output collector — not in `sg["nodes"]`).
+          - `src_node == -10`: updates `sg["inputs"][src_slot]["linkIds"]`
+            (input distributor — not in `sg["nodes"]`).
+        """
         sg = self.get_subgraph(sg_index)
         if not sg:
             raise ValueError(f"Subgraph {sg_index} not found")
@@ -420,24 +432,81 @@ class WorkflowEditor:
             "type": dtype,
         })
 
-        for n in sg.get("nodes", []):
-            if n["id"] == src_node:
-                outs = n.get("outputs", [])
-                if src_slot < len(outs):
-                    existing = outs[src_slot].get("links") or []
-                    if lid not in existing:
-                        existing.append(lid)
-                    outs[src_slot]["links"] = existing
-                break
+        if src_node == -10:
+            ins = sg.get("inputs", [])
+            if src_slot < len(ins):
+                existing = ins[src_slot].get("linkIds") or []
+                if lid not in existing:
+                    existing.append(lid)
+                ins[src_slot]["linkIds"] = existing
+        else:
+            for n in sg.get("nodes", []):
+                if n["id"] == src_node:
+                    outs = n.get("outputs", [])
+                    if src_slot < len(outs):
+                        existing = outs[src_slot].get("links") or []
+                        if lid not in existing:
+                            existing.append(lid)
+                        outs[src_slot]["links"] = existing
+                    break
 
-        for n in sg.get("nodes", []):
-            if n["id"] == tgt_node:
-                ins = n.get("inputs", [])
-                if tgt_slot < len(ins):
-                    ins[tgt_slot]["link"] = lid
-                break
+        if tgt_node == -20:
+            outs = sg.get("outputs", [])
+            if tgt_slot < len(outs):
+                existing = outs[tgt_slot].get("linkIds") or []
+                if lid not in existing:
+                    existing.append(lid)
+                outs[tgt_slot]["linkIds"] = existing
+        else:
+            for n in sg.get("nodes", []):
+                if n["id"] == tgt_node:
+                    ins = n.get("inputs", [])
+                    if tgt_slot < len(ins):
+                        ins[tgt_slot]["link"] = lid
+                    break
 
         return lid
+
+    def add_subgraph_node(
+        self,
+        node_type: str,
+        pos: list,
+        size: list,
+        inputs: list,
+        outputs: list,
+        properties: dict | None = None,
+        widgets_values: list | dict | None = None,
+        title: str | None = None,
+        order: int = 0,
+        mode: int = 0,
+        sg_index: int = 0,
+    ) -> int:
+        """Append a new node into a subgraph. Mirrors `add_top_level_node`.
+        Returns assigned node ID.
+
+        Note: subgraph nodes share the top-level `last_node_id` counter."""
+        sg = self.get_subgraph(sg_index)
+        if not sg:
+            raise ValueError(f"Subgraph {sg_index} not found")
+        nid = self.next_node_id()
+        node = {
+            "id": nid,
+            "type": node_type,
+            "pos": pos,
+            "size": size,
+            "flags": {},
+            "order": order,
+            "mode": mode,
+            "inputs": inputs,
+            "outputs": outputs,
+            "properties": properties or {"Node name for S&R": node_type},
+        }
+        if widgets_values is not None:
+            node["widgets_values"] = widgets_values
+        if title:
+            node["title"] = title
+        sg["nodes"].append(node)
+        return nid
 
     def rewire_subgraph_input(
         self, tgt_node: int, tgt_slot: int,
