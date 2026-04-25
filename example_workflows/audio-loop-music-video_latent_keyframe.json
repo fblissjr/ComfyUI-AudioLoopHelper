@@ -1051,48 +1051,6 @@
       "bgcolor": "#335"
     },
     {
-      "id": 650,
-      "type": "SetNode",
-      "pos": [
-        -1419.6113902800003,
-        5610.443529521741
-      ],
-      "size": [
-        210,
-        60
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 50,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "link": 3053
-        }
-      ],
-      "outputs": [
-        {
-          "name": "*",
-          "type": "*",
-          "links": null
-        }
-      ],
-      "title": "Set_input_image",
-      "properties": {
-        "Node name for S&R": "SetNode",
-        "aux_id": "kijai/ComfyUI-KJNodes",
-        "previousName": "input_image"
-      },
-      "widgets_values": [
-        "input_image"
-      ],
-      "color": "#2a363b",
-      "bgcolor": "#3f5159"
-    },
-    {
       "id": 601,
       "type": "TrimAudioDuration",
       "pos": [
@@ -2082,41 +2040,6 @@
       ],
       "color": "#322",
       "bgcolor": "#533"
-    },
-    {
-      "id": 651,
-      "type": "GetNode",
-      "pos": [
-        2525.635219733824,
-        4649.355894068363
-      ],
-      "size": [
-        210,
-        60
-      ],
-      "flags": {
-        "collapsed": false
-      },
-      "order": 16,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": []
-        }
-      ],
-      "title": "Get_input_image",
-      "properties": {
-        "Node name for S&R": "GetNode",
-        "aux_id": "kijai/ComfyUI-KJNodes"
-      },
-      "widgets_values": [
-        "input_image"
-      ],
-      "color": "#2a363b",
-      "bgcolor": "#3f5159"
     },
     {
       "id": 578,
@@ -3518,8 +3441,7 @@
           "name": "output_image",
           "type": "IMAGE",
           "links": [
-            1435,
-            3053
+            1435
           ]
         }
       ],
@@ -5493,14 +5415,6 @@
       843,
       2,
       "MODEL"
-    ],
-    [
-      3053,
-      446,
-      0,
-      650,
-      0,
-      "IMAGE"
     ],
     [
       3083,

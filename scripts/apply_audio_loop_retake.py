@@ -81,6 +81,18 @@ STRIP_IDS = {
     581, 582, 604,     # Set_orig_audio, Get_orig_audio x2
     640, 641,          # Set_actual_audio, Get_actual_audio
     650, 651,          # Set_input_image, Get_input_image
+    # Orphan Get nodes left behind by upstream Set strips. These are
+    # virtual GetNode references whose Set source got stripped above;
+    # ComfyUI tolerates them at runtime, but they clutter the workflow
+    # and the dead-wire audit (_is_retake) WARNs on them.
+    254, 599,          # Get_audio_vae x2 (audio path stripped)
+    578, 580,          # Get_sampler, Get_sigmas (initial-render Set side stripped)
+    654,               # Get_model
+    648,               # Get_base_cond_neg (loop neg-cond branch)
+    1273,              # Get_first_frame_guide_strength
+    236, 619,          # Get_video_vae x2 (extras; 413 keeps the live one)
+    1529,              # Get_start_seed (Set_start_seed retained)
+    691,               # Get_window_size_seconds
 }
 
 # Production node IDs we wire to / read from.

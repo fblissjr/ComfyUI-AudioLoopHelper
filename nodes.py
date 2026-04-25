@@ -1868,6 +1868,12 @@ class VideoFrameExtract(io.ComfyNode):
 
     Wire the output image to the subgraph's init_image input to ground
     each iteration in the corresponding reference frame.
+
+    Status (2026-04-25): tested via `tests/test_keyframe_nodes.py`; not
+    wired in any shipped workflow. Retained as a discoverable primitive
+    for future V2V workflows (e.g. a reference-video retake variant) —
+    zero runtime cost when unused. Removing it would force re-writing
+    if the V2V use case materializes; see PLAN.md §7 for context.
     """
 
     @classmethod

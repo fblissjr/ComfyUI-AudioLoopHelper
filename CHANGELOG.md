@@ -7,6 +7,24 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- **Hygiene bundle 2026-04-25** — small/low-risk items closing flags from
+  prior sessions. (1) `LTXFrameCalculator` (LTXAVTools) referenced from
+  CLAUDE.md `(L-1)%8==0` constraint and `docs/guides/retake_guide.md` so
+  users can derive valid frame counts without hand-math. (2) Outer-path
+  `CLIPTextEncode(169) → ConditioningZeroOut(420) → LTXVConditioning(164)
+  → CFGGuider(153).negative` chain documented in CLAUDE.md gotchas as
+  wired-correctly but runtime-inert at `cfg=1` (cannot be removed —
+  CFGGuider validates both input slots). Closes the 2026-04-22 "dead
+  code?" flag with no-op outcome. (3) Orphan virtual GetNodes stripped:
+  `_latent_keyframe.json` cleared one (`Set_input_image`/`Get_input_image`
+  pair, vestigial after Phase 1 keyframe-batch-encode migration);
+  `_retake.json` cleared eleven (added to `apply_audio_loop_retake.py`
+  STRIP_IDS — re-running the script produces a workflow with zero
+  orphan GetNodes). (4) `VideoFrameExtract` docstring updated to
+  document its retained-but-unwired status so future sessions don't
+  mistake it for dead code. (5) NAG `object_patches` analysis note
+  audited as already adequately linked (CLAUDE.md + docs/README +
+  architecture_overview); no further follow-up needed.
 - **`scripts/apply_spectrogram_iclora_minimal.py` rewritten as a
   production-fork builder.** Previous scratch-built 25-node workflow
   produced chroma-static output because LTX 2.3 distilled needs the
