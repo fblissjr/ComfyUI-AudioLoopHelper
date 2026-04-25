@@ -277,47 +277,52 @@ def detect_structure_librosa(audio: np.ndarray, sr: int, window_s: float = 2.0) 
 # rewrites these to group form ("are singing together...") when the subject
 # is detected as multi-character.
 #
-# Camera motions from CLAUDE.md prompt guide. Avoid dolly out (breaks limbs
-# and faces) except for OUTRO where it's the expected visual pattern.
+# Action phrases are kept lean: the verb + at most one VISUAL beat (eyes,
+# mouth, shoulders, posture). Vocal-delivery ornaments ("voice rising",
+# "with full power", "with steady delivery") are stripped per
+# `docs/guides/prompt_creation_guide.md` §3.3 — the frozen vocal
+# performance already carries delivery; re-stating fights the audio
+# conditioning.
+#
+# Camera motions from `prompt_creation_guide.md` §7. NEVER dolly out — it
+# shrinks the face over an 18s sampler pass and loses lip-sync
+# cross-attention. OUTRO is a held close-up; let the audio fade close
+# the sequence (guide §6.1 face-driven shot-scale rule).
+#
+# `audio_desc` field removed (was emitting "Soft ambient hum" / "Room tone
+# settles" / "The voice fills the space" — exactly the audio-as-audio
+# descriptors guide §3 strips). The frozen audio carries these; the
+# init image carries scene; the schedule is a delta layer.
 _SECTION_MODIFIERS = {
     "INTRO": {
-        "framing": "In a wide establishing shot, static camera, locked off shot,",
-        "lighting": "Soft lighting, gentle.",
-        "action": "is singing softly, easing into the song",
-        "audio_desc": "Quiet ambient tone, gentle room presence.",
+        "framing": "In a medium shot, static camera, locked off shot,",
+        "lighting": "Soft lighting.",
+        "action": "is singing, easing into the song",
     },
     "VERSE": {
         "framing": "In a medium shot,",
-        "lighting": "Warm lighting, steady energy.",
-        "action": "is singing with a steady voice",
-        "audio_desc": "The voice fills the space. Soft ambient hum.",
+        "lighting": "Warm lighting.",
+        "action": "is singing",
     },
     "CHORUS": {
         "framing": "In a close-up,",
-        "lighting": "Bright, dynamic lighting.",
-        "action": "is singing with full power, voice rising",
-        "audio_desc": "The voice is powerful and resonant.",
+        "lighting": "Bright lighting on her face.",
+        "action": "is singing, eyes wide, mouth open",
     },
     "BRIDGE": {
-        "framing": "In a wide shot,",
+        "framing": "In a medium close-up,",
         "lighting": "Moody, low contrast lighting.",
-        "action": "is singing with quiet emotion",
-        "audio_desc": "Subdued melody, reflective atmosphere.",
+        "action": "is singing",
     },
     "OUTRO": {
-        # Held close-up with no camera move. Dolly-out shrinks the face
-        # over an 18s sampler pass and loses lip-sync signal; let the
-        # audio fade close the sequence instead of the camera.
         "framing": "In a close-up, static camera, locked off shot,",
-        "lighting": "Fading, gentle lighting.",
-        "action": "is singing the final notes, voice trailing off",
-        "audio_desc": "The sound fades quietly. Room tone settles.",
+        "lighting": "Fading lighting.",
+        "action": "is singing, shoulders easing",
     },
     "BREAK": {
         "framing": "In a medium shot, static camera,",
-        "lighting": "Dim lighting, still.",
-        "action": "is singing softly, pausing in place",
-        "audio_desc": "Brief instrumental moment, ambient quiet.",
+        "lighting": "Dim lighting.",
+        "action": "is singing, pausing in place",
     },
 }
 
@@ -325,8 +330,7 @@ _SECTION_MODIFIERS = {
 _DEFAULT_MODIFIER = {
     "framing": "In a medium shot,",
     "lighting": "Natural lighting.",
-    "action": "is singing with steady delivery",
-    "audio_desc": "Music continues.",
+    "action": "is singing",
 }
 
 
@@ -475,11 +479,12 @@ _TIER_POOLS: dict[int, tuple[str, ...]] = {
 # Variant-indexed beat pools: cycled via variant % len(beats). Each list
 # supplies short phrases that ADD detail; the base modifier stays the
 # primary descriptor.
-# All beats here use byte-exact canonical LTX 2.3 phrasings (see README
-# "Camera motion keywords"). LTX does not reliably follow off-list
-# phrasings like "slow dolly in" or "slight handheld sway". Never emit
-# "dolly out, camera pulling back" — see _SECTION_MODIFIERS.OUTRO and
-# R7 in _LLM_SYSTEM_PROMPT for the rationale.
+# All beats here use byte-exact canonical LTX 2.3 phrasings (see
+# `docs/guides/prompt_creation_guide.md` §7). LTX does not reliably
+# follow off-list phrasings like "slow dolly in" or "slight handheld
+# sway". Never emit "dolly out, camera pulling back" — see
+# _SECTION_MODIFIERS.OUTRO and R7 in _LLM_SYSTEM_PROMPT for the
+# rationale.
 _DYNAMIC_CAMERA_BEATS = {
     "INTRO": ["static camera, locked off shot"],
     "VERSE": [
@@ -665,7 +670,7 @@ def _build_prompt_for_section(
 
     return (
         f"{_style_prefix(style)}{mods['framing']} {subject} {action}{extras_text}. "
-        f"{mods['lighting']} {mods['audio_desc']}"
+        f"{mods['lighting']}"
     )
 
 
@@ -955,18 +960,49 @@ R5. Begin each prompt with the style prefix indicated in
     drift toward live-action over loop iterations. When
     `workflow_context.style == "none"` omit the prefix entirely
     (init image alone carries style). After the prefix, move
-    straight to subject + action. "Cut to ..." is permitted on
-    entries AFTER the first to re-frame iteration-boundary seams as
-    intentional edits — but the first entry / Node 169 must NOT use
-    "Cut to" because it's the sequence opener, not a cut.
+    straight to subject + action.
 
-R6. Audio direction:
+    Do NOT prefix non-first entries with "Cut to a [shot] ..." —
+    Lightricks's own LTX 2.3 system prompt
+    (`docs/reference/ltx23_prompt_system_prompts.md:44, 56, 93`)
+    explicitly trains the model to treat scene-cut language as a
+    discontinuation directive. The loop architecture continues prior
+    latents (LTXVAddLatentGuide latent_idx=-1 + 1s overlap); a "Cut
+    to" prefix tells the model to render fresh, fighting what the
+    latent-side mechanisms are trying to bridge. Use continuation
+    framing instead: "In a [shot size], [camera motion], a [subject]
+    is/are singing ..." matching the first entry's grammatical form.
+
+    For face-driven content (vocal music, comedy, dialogue): NO wide
+    shots, NO dolly-out — including outros. Face shrinks → mouth
+    pixels drop → audio-video cross-attention loses lip-sync signal.
+    Held close-up + audio fade is the safer outro. (For
+    instrumental/action with no lip-sync, wide shots and dolly-out
+    are fine when serving the action.)
+
+R6. Audio direction (the audio is FROZEN — strip aggressively):
     - Do NOT describe the song itself ("voice surging", "music
-      swelling") — the model already hears the audio.
-    - DO describe ambient / diegetic sounds that are NOT in the audio
-      track ("soft room tone", "faint hum of fluorescent lights").
-    - Vocal delivery qualifiers are encouraged: "in a low gravelly
-      voice", "with bright clear tone", "brisk rhythmic delivery".
+      swelling", "voice rising / peaking / softening / trailing
+      off", "the chorus hits", "snare firing", "brass downbeat",
+      "staccato strings", "orchestra rebuilding") — the model
+      already hears the audio. Re-describing double-signals what
+      the audio carries and over-cranks visual intensity at music
+      beats.
+    - Do NOT add vocal-delivery qualifiers ("with bright clear
+      tone", "in a low gravelly voice", "with rising intensity",
+      "brisk rhythmic delivery", "voice intimate and intense") —
+      the frozen vocal performance already carries delivery.
+    - Do NOT add audio-as-audio descriptors ("Soft ambient hum",
+      "Room tone settles", "The voice fills the space", "Quiet
+      ambient tone") — they describe the audio, which the model
+      hears.
+    - DO describe ambient / diegetic sounds that are NOT in the
+      audio track ("wind roaring through the beams", "thunder
+      rumble" when present visually) — these anchor visual scene
+      elements the audio doesn't provide.
+    - The test: would removing this phrase change what the IMAGE
+      should look like? If yes, keep it. If it only describes the
+      audio, strip it.
 
 R7. Camera motion — use ONLY the canonical LTX 2.3 phrasings, byte-exact:
     - "static camera, locked off shot" (default)
@@ -985,8 +1021,11 @@ R7. Camera motion — use ONLY the canonical LTX 2.3 phrasings, byte-exact:
     with `static camera, locked off shot`; let the audio fade close
     the sequence, not the camera.
 
-R8. One paragraph per entry, no markdown or bullets, ~200 words max.
-    Use "is singing" in the present progressive tense — not past tense
+R8. One paragraph per entry, no markdown or bullets, **~60-80 words
+    max** — schedules are a *delta layer* over what the init image
+    and frozen audio already commit. Re-stating either wastes tokens
+    and works against the conditioning. Strip aggressively. Use "is
+    singing" in the present progressive tense — not past tense
     ("sang") and not generic nouns ("singer").
 
 R9. Schedule timestamps MUST fall on integer multiples of
@@ -1056,15 +1095,22 @@ scene_diversity: 2a
 
 Output:
 
-node_169_prompt: Style: cinematic. In a wide establishing shot, static camera, locked off shot, a woman in her 30s with dark hair is singing softly, easing into the song, static camera, mouth opening softly, handheld energy, rock-video motion. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
+node_169_prompt: Style: cinematic. In a medium shot, static camera, locked off shot, a woman in her 30s with dark hair is singing, easing into the song, mouth opening softly, handheld energy.
 
 schedule:
-0:00-0:20: Style: cinematic. In a wide establishing shot, static camera, locked off shot, a woman in her 30s with dark hair is singing softly, easing into the song, static camera, mouth opening softly, handheld energy, rock-video motion. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
-0:20-1:00: Style: cinematic. In a medium shot, a woman in her 30s with dark hair is singing with a steady voice, static camera, head bobbing slightly, handheld energy, rock-video motion. Warm lighting, steady energy. The voice fills the space. Soft ambient hum.
-1:00-2:00: Style: cinematic. In a close-up, a woman in her 30s with dark hair is singing with full power, voice rising, static camera, eyes wide, mouth open, handheld energy, rock-video motion. Bright, dynamic lighting. The voice is powerful and resonant.
-2:00+: Style: cinematic. In a close-up, static camera, locked off shot, a woman in her 30s with dark hair is singing the final notes, voice trailing off, held close-up, shoulders easing, handheld energy, rock-video motion. Fading, gentle lighting. The sound fades quietly. Room tone settles.
+0:00-0:20: Style: cinematic. In a medium shot, static camera, locked off shot, a woman in her 30s with dark hair is singing, easing into the song, mouth opening softly, handheld energy.
+0:20-1:00: In a medium close-up, dolly in, camera pushing forward, a woman in her 30s with dark hair is singing, head bobbing slightly. Light shifts warmer.
+1:00-2:00: In a close-up, static camera, locked off shot, a woman in her 30s with dark hair is singing, eyes wide, mouth open. Light intensifies on her face.
+2:00+: In a close-up, static camera, locked off shot, a woman in her 30s with dark hair is singing, shoulders easing. Light fades.
 
-(Note: first schedule line is byte-exact to node_169_prompt — that is R2.)
+(Notes:
+  - First schedule line is byte-exact to node_169_prompt — that is R2.
+  - No `Cut to` prefix on non-first entries — that is R5 (continuation
+    framing).
+  - No wide shot anywhere, no dolly-out on the outro — that is R5
+    (face-driven content).
+  - No audio descriptors ("voice rising", "Soft ambient hum") — that
+    is R6 (frozen audio).)
 
 ==========================================================================
 WORKED EXAMPLE — multi-character, tier 3b (cinematic, natural outdoor)
@@ -1075,16 +1121,20 @@ scene_diversity: 3b
 
 Output:
 
-node_169_prompt: Style: cinematic. In a wide establishing shot, static camera, locked off shot, two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt are singing together softly, easing into the song, static camera, mouth opening softly, the atmosphere quiet and still, natural-light palette, open outdoor feel. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
+node_169_prompt: Style: cinematic. In a medium shot, static camera, locked off shot, two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt are singing together, easing into the song, mouths opening softly.
 
 schedule:
-0:00-0:28: Style: cinematic. In a wide establishing shot, static camera, locked off shot, two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt are singing together softly, easing into the song, static camera, mouth opening softly, the atmosphere quiet and still, natural-light palette, open outdoor feel. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
-0:28-1:15: Style: cinematic. In a medium shot, two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt are singing together with a steady voice, static camera, head bobbing slightly, warm steady ambience, natural-light palette, open outdoor feel. Warm lighting, steady energy. The voice fills the space. Soft ambient hum.
-1:15-2:05: Style: cinematic. In a close-up, two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt are singing together with full power, voice rising, static camera, eyes wide, mouth open, colors intensifying, natural-light palette, open outdoor feel. Bright, dynamic lighting. The voice is powerful and resonant.
-2:05+: Style: cinematic. In a close-up, static camera, locked off shot, two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt are singing together the final notes, voice trailing off, held close-up, shoulders easing, colors fading toward stillness, natural-light palette, open outdoor feel. Fading, gentle lighting. The sound fades quietly. Room tone settles.
+0:00-0:28: Style: cinematic. In a medium shot, static camera, locked off shot, two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt are singing together, easing into the song, mouths opening softly.
+0:28-1:15: In a medium close-up, dolly in, camera pushing forward, two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt are singing together, heads bobbing slightly.
+1:15-2:05: In a close-up, static camera, locked off shot, two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt are singing together, eyes wide, mouths open. Colors intensify.
+2:05+: In a close-up, static camera, locked off shot, two men on a rooftop, the man on the left in a green jacket, the man on the right in a black shirt are singing together, shoulders easing. Colors fade toward stillness.
 
-(Note: "are singing together" in every entry. First line byte-exact to
-node_169_prompt. The subject is identical across all entries.)
+(Notes:
+  - "are singing together" in every entry — that is R1 multi-performer.
+  - First line byte-exact to node_169_prompt — that is R2.
+  - Subject is identical across all entries — that is R3.
+  - No wide shot (face-driven), no `Cut to` prefix, no audio
+    descriptors — R5 + R6.)
 
 ==========================================================================
 WORKED EXAMPLE — montage, tier 4a (narrative + montage pacing)
@@ -1097,18 +1147,23 @@ montage: true
 Each entry must advance an emotional beat, not just describe a scene.
 Dwell times shrink to ~12s so more entries cover the same runtime.
 
-node_169_prompt: Style: cinematic. In a wide establishing shot, static camera, locked off shot, a young woman walking through a snowy alley at dusk is singing softly, easing into the song, static camera, mouth opening softly, the atmosphere quiet and still, standing in place, linear story beat progression, the feeling gathering. Soft lighting, gentle. Quiet ambient tone, gentle room presence.
+node_169_prompt: Style: cinematic. In a medium shot, static camera, locked off shot, a young woman walking through a snowy alley at dusk is singing, easing into the song, mouth opening softly, standing in place, linear story beat progression, the feeling gathering. Soft lighting.
 
 schedule:
 0:00-0:12: <byte-exact copy of node_169_prompt above>
-0:12-0:24: Style: cinematic. In a medium shot, a young woman walking through a snowy alley at dusk is singing with a steady voice, slow dolly in, leaning forward, subtle reflections catching the light, taking a half-step forward, linear story beat progression, tension collecting beat by beat. Warm lighting, steady energy. The voice fills the space. Soft ambient hum.
+0:12-0:24: In a medium close-up, dolly in, camera pushing forward, a young woman walking through a snowy alley at dusk is singing, leaning forward, subtle reflections catching the light, taking a half-step forward, linear story beat progression, tension collecting beat by beat. Warm lighting.
 ... (more short entries as the song progresses) ...
-2:00+: Style: cinematic. In a close-up, static camera, locked off shot, a young woman walking through a snowy alley at dusk is singing the final notes, voice trailing off, held close-up, shoulders easing, colors fading toward stillness, easing back, gaze softening, linear story beat progression, release easing into stillness. Fading, gentle lighting. The sound fades quietly. Room tone settles.
+2:00+: In a close-up, static camera, locked off shot, a young woman walking through a snowy alley at dusk is singing, shoulders easing, colors fading toward stillness, gaze softening, linear story beat progression, release easing into stillness. Fading lighting.
 
-(Note: montage entries layer emotional-arc language — "the feeling
-gathering", "tension collecting", "release easing into stillness" —
-ON TOP of the tier-4 narrative beats. That combination is what gives
-Arcane-style music-driven sequences their emotional density.)
+(Notes:
+  - Montage entries layer emotional-arc language ("the feeling
+    gathering", "tension collecting", "release easing into
+    stillness") ON TOP of the tier-4 narrative beats. That
+    combination is what gives Arcane-style music-driven sequences
+    their emotional density.
+  - No `Cut to` prefix on non-first entries (R5).
+  - No audio descriptors ("voice rising", "Soft ambient hum",
+    "Room tone settles") — R6.)
 
 ==========================================================================
 OUTPUT FORMAT
