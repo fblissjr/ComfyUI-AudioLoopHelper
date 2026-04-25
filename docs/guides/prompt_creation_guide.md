@@ -7,9 +7,6 @@ video loop workflow. Covers frozen-audio architecture, what to strip
 from prompts, what must stay, camera-motion keywords, negative-prompt
 templates, the schedule format, and the seven-step authoring process.
 
-For full documented runs see `docs/examples/` (music, action, comedy
-case studies).
-
 ## Contents
 
 1. [When this guide applies](#1-when-this-guide-applies)
@@ -89,10 +86,9 @@ Strip phrases like:
 - `The sound fades quietly` on outros — let the audio fade do this; don't
   describe it.
 
-Source: `docs/examples/action_prompt6.md` documented the v5→v6 strip
-diff line-by-line on 2026-04-20. That's the canonical evidence.
-`docs/analysis/audio_in_prompt_research.md:10-30` explains the
-mechanism.
+Source: `docs/analysis/audio_in_prompt_research.md:10-30` explains the
+mechanism. The strip rules above are derived from internal A/B runs
+documenting the v5→v6 diff line-by-line on 2026-04-20.
 
 ### 3.2 Init-committed scene words
 
@@ -249,17 +245,16 @@ Held close-up + audio fade is the safer outro. The viewer reads "audio
 fading on a sustained close-up" as the ending; you don't need camera
 motion to signal it.
 
-Source: `docs/examples/prompt_comedy4.md:39-46` ("Wide shots that
-shrink the face: fewer mouth pixels → worse lip sync. Already learned
-in v2/v3."), `docs/examples/music_prompt1.md:34-39` ("CLAUDE.md's R7
-permits dolly out on the final OUTRO entry, but in practice it
-shrinks the face over an 18s sampler pass and LTX's cross-attention
-loses the mouth signal → face morphs.").
+Source: internal v2-v4 standup runs ("wide shots that shrink the face
+mean fewer mouth pixels and worse lip sync") and v1 music runs
+("CLAUDE.md's R7 permits dolly out on the final OUTRO, but in practice
+the 18s sampler pass shrinks the face and LTX's cross-attention loses
+the mouth signal — face morphs").
 
 ### 6.2 Action / instrumental / no-lip-sync
 
 Wide shots and dolly-out are fine — even encouraged when serving the
-action. Examples from `action_prompt6.md`:
+action. Patterns documented in our internal action-prompt runs:
 - 0:48-0:56 wide shot for "slams both daggers home mid-leap"
 - 2:00-2:08 wide shot for "stands braced at the summit"
 - 2:16-2:24 wide shot for "leaps from the edge with a dagger raised"
@@ -455,24 +450,21 @@ voice-to-character. It just ensures mouths move when audio is active.
 Vocal separation (MelBandRoFormer) is less useful for multi-speaker
 dialogue than for singing.
 
-## 12. Worked examples (case study pointers)
+## 12. Worked-example scenarios (pattern overview)
 
-Full documented runs with widget tables, observations, and results
-live in `docs/examples/`. Pick the closest match to your use case and
-copy:
+The rules above were derived from runs across these scenario families.
+Concrete files (with widget tables, per-iteration observations, and
+results) are maintained in our internal prompt archive; the patterns
+below are the load-bearing distillation:
 
-| Scenario | Canonical | Why pick this |
-|---|---|---|
-| Vocal music video, cinematic init | `music_prompt3.md` | Simple structure, canonical camera, cinematic-realism style match. The clean baseline. |
-| Vocal music video, illustrated init | `music_prompt2.md` | Same structure as music_prompt3 with `Style: illustrated.` and animated-pool vocabulary. |
-| Instrumental / action, normal pacing | `action_prompt1.md` | 9-iteration narrative arc; full-length window. |
-| Instrumental / action, rapid cuts | `action_prompt6.md` | 20-iteration rapid-cut grid (halved window). The frozen-audio strip rule was established here (v6 vs v5 diff). |
-| Standup comedy / dialogue | `prompt_comedy4.md` | Specific crowd-member beats, no-wide-shot rule. (Original v4 used `Cut to` boundary markers; retracted per §5.1.) |
-| Unusual-character init (out-of-distribution) | `prompt_comedy5.md` | How to rewrite the subject anchor when the init is visually atypical. |
-
-`docs/examples/README.md` has the full evolution arc (comedy 1→4,
-music 1→3, action 1→6) — useful for understanding why current rules
-exist.
+| Scenario | Pattern |
+|---|---|
+| Vocal music video, cinematic init | One short sentence per entry. `Style: cinematic.` Canonical LTX 2.3 camera phrases (§5). Plural `are singing together` for two-person scenes. |
+| Vocal music video, illustrated init | Same structure as cinematic, but `Style: illustrated.` plus animated-pool vocabulary (impact frames, supersaturation, silhouetted accents). |
+| Instrumental / action, normal pacing | 9-iteration narrative arc on a full-length window. Wide shots and dolly-out are unlocked here (§6.2); mouth pixels aren't load-bearing. |
+| Instrumental / action, rapid cuts | 20-iteration grid on a halved window. The frozen-audio strip rule (§3.1) was established by an A/B between two action-prompt revisions on this configuration. |
+| Standup comedy / dialogue | Specific crowd-member beats, no-wide-shot rule (§6.1). `Cut to` boundary markers retracted per §5.1. |
+| Unusual-character init (out-of-distribution) | Rewrite the subject anchor (§4) so identity descriptors describe what's actually visible, not a generic "woman / man" placeholder. |
 
 ## 13. Process
 
@@ -594,6 +586,5 @@ feel.
   generation walkthrough.
 - `docs/guides/debugging_guide.md` — symptom-first recipes for common
   failure modes.
-- `docs/examples/` — full case studies (music, action, comedy).
 - `docs/reference/ltx23_prompt_system_prompts.md` — Lightricks's
   official LTX 2.3 i2v/t2v system prompts these rules derive from.

@@ -1356,8 +1356,8 @@
         "Node name for S&R": "EmptyLTXVLatentVideo"
       },
       "widgets_values": [
-        704,
-        704,
+        832,
+        448,
         497,
         1
       ]
@@ -5633,10 +5633,9 @@
                 "name": "latent",
                 "type": "LATENT",
                 "links": [
-                  2834,
-                  2959,
-                  2959
-                ]
+                  2834
+                ],
+                "linkIds": []
               }
             ],
             "properties": {
@@ -5789,7 +5788,11 @@
                 "name": "latent",
                 "type": "LATENT",
                 "links": [
-                  1598
+                  1598,
+                  3004
+                ],
+                "linkIds": [
+                  3004
                 ]
               }
             ],
@@ -6227,7 +6230,10 @@
                 "name": "LATENT",
                 "type": "LATENT",
                 "links": [
-                  3004
+                  2959
+                ],
+                "linkIds": [
+                  2959
                 ]
               }
             ],
@@ -6515,8 +6521,8 @@
           },
           {
             "id": 2959,
-            "origin_id": 655,
-            "origin_slot": 2,
+            "origin_id": 2006,
+            "origin_slot": 0,
             "target_id": 2005,
             "target_slot": 0,
             "type": "LATENT"
@@ -6551,14 +6557,6 @@
             "origin_slot": 15,
             "target_id": 2006,
             "target_slot": 1,
-            "type": "LATENT"
-          },
-          {
-            "id": 3004,
-            "origin_id": 2006,
-            "origin_slot": 0,
-            "target_id": 655,
-            "target_slot": 2,
             "type": "LATENT"
           },
           {
@@ -6608,6 +6606,14 @@
             "target_id": 644,
             "target_slot": 2,
             "type": "CONDITIONING"
+          },
+          {
+            "id": 3004,
+            "origin_id": 583,
+            "origin_slot": 0,
+            "target_id": 655,
+            "target_slot": 2,
+            "type": "LATENT"
           }
         ],
         "extra": {

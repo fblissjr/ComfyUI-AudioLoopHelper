@@ -23,7 +23,12 @@ from typing import NamedTuple
 import orjson
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from workflow_utils import EXAMPLE_WORKFLOWS_DIR
+from nodes import (
+    _LTX_LATENT_VOLUME_OK_MAX as _VOLUME_OK_MAX,
+    _LTX_LATENT_VOLUME_EDGE_MAX as _VOLUME_EDGE_MAX,
+)
 
 
 class Finding(NamedTuple):
@@ -159,22 +164,40 @@ def _audit_one(wf_path: Path) -> list[Finding]:
     elif not _is_validator(name):
         record("WARN", "guider", "no CFGGuider")
 
-    # Resolution + length on EmptyLTXVLatentVideo
+    # Resolution + length + latent volume on EmptyLTXVLatentVideo.
+    # Volume thresholds imported from nodes.py to stay in sync.
+    # Validator workflow intentionally exercises edge dims; skip the
+    # volume check there but keep the div-32 / length-mod-8 checks.
     for n in by_type.get("EmptyLTXVLatentVideo", []):
         wv = n.get("widgets_values", [])
         if len(wv) < 3:
             continue
         w, h, L = wv[0], wv[1], wv[2]
-        if isinstance(w, int) and w % 32 != 0:
+        w_ok = isinstance(w, int) and w % 32 == 0
+        h_ok = isinstance(h, int) and h % 32 == 0
+        L_ok = isinstance(L, int) and (L - 1) % 8 == 0
+        if isinstance(w, int) and not w_ok:
             record("ERR", "resolution_div32", f"width {w} not div by 32")
-        elif isinstance(h, int) and h % 32 != 0:
+        elif isinstance(h, int) and not h_ok:
             record("ERR", "resolution_div32", f"height {h} not div by 32")
         else:
             record("OK", "resolution_div32", f"{w}x{h}")
-        if isinstance(L, int) and (L - 1) % 8 != 0:
+        if isinstance(L, int) and not L_ok:
             record("ERR", "length_mod8", f"length={L}, (L-1)%8={(L-1)%8}")
         else:
             record("OK", "length_mod8", f"length={L}")
+        if w_ok and h_ok and L_ok and not _is_validator(name):
+            volume = (w // 32) * (h // 32) * ((L - 1) // 8 + 1)
+            if volume > _VOLUME_EDGE_MAX:
+                record(
+                    "ERR", "latent_volume",
+                    f"{volume} > {_VOLUME_EDGE_MAX:,} (artifact ceiling per ltx23_model_reference.md). "
+                    f"Run scripts/apply_canonical_resolution_fix.py.",
+                )
+            elif volume > _VOLUME_OK_MAX:
+                record("WARN", "latent_volume", f"{volume} > {_VOLUME_OK_MAX:,} (near edge)")
+            else:
+                record("OK", "latent_volume", f"{volume}")
 
     # LTXVPreprocess img_compression (0 triggers frozen-first-frame bug)
     for n in by_type.get("LTXVPreprocess", []):

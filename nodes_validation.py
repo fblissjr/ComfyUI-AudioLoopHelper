@@ -617,7 +617,7 @@ def _seam_boundary_hits(
         out_lines.append(
             f"  {_WARN}{len(hits)} seam(s) within {tolerance:.1f}s of schedule "
             f"boundaries: {preview}{more}. Prompt cut on iter seam is a documented "
-            f"failure mode (see docs/examples/action_prompt6.md). "
+            f"failure mode in rapid-cut configurations. "
             f"Fix: nudge overlap_seconds to shift stride, or move schedule "
             f"boundaries by ~1s."
         )

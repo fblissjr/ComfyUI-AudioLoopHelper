@@ -41,6 +41,7 @@ the workflow still runs.
 
 from __future__ import annotations
 
+import inspect
 import os
 import sys
 import time
@@ -219,6 +220,10 @@ def install() -> bool:
             cache = caches.outputs if hasattr(caches, "outputs") else caches
             if hasattr(cache, "get"):
                 cached = cache.get(node_id)
+                # Recent ComfyUI made HierarchicalCache.get a coroutine;
+                # earlier versions return synchronously. Await iff coroutine.
+                if inspect.iscoroutine(cached):
+                    cached = await cached
                 if cached is not None:
                     output_shapes = _shape_of(cached)
         except Exception:

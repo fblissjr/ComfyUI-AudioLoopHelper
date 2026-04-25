@@ -26,8 +26,8 @@ already carried by the frozen latent, the prompt is better when
   visual intensity at beats.
 
 See `CLAUDE.md` (Critical constraints → "Audio is FROZEN in our
-workflow") and the empirical case study in
-`docs/examples/action_prompt6.md` for the A/B validation.
+workflow"). The strip rules above are derived from internal A/B runs
+that validated the empirical mechanism.
 
 **This doc is preserved** because future workflows (audio-generating
 variants, pure-T2V without a frozen track, dialogue-heavy scenes

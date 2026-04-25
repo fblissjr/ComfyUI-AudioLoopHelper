@@ -769,8 +769,7 @@ for the full workflow.
 See [`docs/guides/prompt_creation_guide.md`](docs/guides/prompt_creation_guide.md)
 for the canonical guide covering frozen-audio + image-init prompting,
 schedule format, camera-motion keywords, negative-prompt templates,
-and the seven-step authoring process. Worked case studies live in
-[`docs/examples/`](docs/examples/) (music, action, comedy variants).
+and the seven-step authoring process.
 
 For action content with more cut density, halve `window_seconds` (and
 `length`) to get ~20 iterations on a 2:30 track. See

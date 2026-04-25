@@ -883,6 +883,3 @@ graph.
 - LTX 2.3 model reference: `docs/reference/ltx23_model_reference.md`
 - Profiling opt-in: `docs/guides/profiling_guide.md`
 - Current plan + post-phase findings: `internal/PLAN.md` (not in repo)
-- Standup example schedules: `docs/examples/prompt_comedy1.md` ...
-  `docs/examples/prompt_comedy5.md` (public); unscrubbed originals
-  at `internal/prompts/` (gitignored)

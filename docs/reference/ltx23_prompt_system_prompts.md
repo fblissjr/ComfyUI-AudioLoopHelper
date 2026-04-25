@@ -17,7 +17,7 @@ Last updated: 2026-04-23 (framing rewrite: why we diverge)
 > audio descriptors, dialogue transcription, or detailed vocal
 > delivery language double-signals what the frozen audio latent
 > already carries and can over-crank visual intensity at music
-> beats (validated in `docs/examples/action_prompt6.md`).
+> beats (validated empirically in our internal action-prompt runs).
 >
 > **How to use this doc.** Read these to understand what LTX 2.3
 > "expects" at the training level — useful when debugging why a

@@ -7,6 +7,76 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **`LTXResolutionFromAspect` node + `_compute_ltx_resolution` helper +
+  `scripts/calc_ltx_resolution.py` CLI.** Resolves a target aspect ratio
+  + long edge to LTX 2.3-valid (W, H), classifies the latent volume
+  against the `docs/reference/ltx23_model_reference.md` ceiling, and
+  short-edge-snaps DOWN to bias toward the safe side of the artifact
+  threshold (matches users' empirical 832x448 vs the volume-bursting
+  true-16:9 832x480). Shared math between node, CLI, and audit. Tests
+  in `tests/test_ltx_resolution.py`.
+- **`scripts/apply_canonical_resolution_fix.py`.** Brings every shipped
+  production workflow's `EmptyLTXVLatentVideo` widget into spec with the
+  reference doc's latent-volume ceiling AND with `ImageResizeKJv2`'s
+  actual target. Pre-fix: `[704, 704, 497]` (volume 30,492 — ~25% over
+  the 24,570 artifact ceiling). Post-fix: `[832, 448, 497]` (22,932 —
+  in NEAR_EDGE territory, which is users' actual operating point).
+  Idempotent + `--revert`. Mismatch had been committed for at least 8
+  prior commits; users were editing dimensions in UI before each render.
+- **`audit_workflows.py` latent-volume check.** ERRs when
+  `(W/32)*(H/32)*((L-1)/8+1)` exceeds 24,570 with a remediation
+  pointer to `apply_canonical_resolution_fix.py`. WARNs above 20,000.
+  Per CLAUDE.md "bake topology constraints into audit": fix and audit
+  ship as a pair so a sibling branch can't silently regress the fix.
+
+- **Loop-subgraph dependency cycle through `LTXVCropGuides`.** The
+  canonical wiring closed a cycle: `CFGGuider ← CropGuides ← AdainLatent
+  ← SeparateAVLatent ← Sampler ← CFGGuider`. ComfyUI's strict cycle
+  detector (recent versions) rejects this at prompt-validation time,
+  blocking `VHS_VideoCombine` output; users got the initial sampler
+  pass (8/8 steps) but no `.mp4`. Cycle existed in canonical for 10+
+  commits — users had been working around it via in-UI graph edits
+  before render. Fix: feed `CropGuides.latent` (slot 2) from a
+  pre-sampling source — `LTXVConcatAVLatent(583)` — and route the
+  sampled-latent output path directly: `Sampler → SeparateAV →
+  AdainLatent → LatentOverlapTrim → IterationCleanup → output`,
+  bypassing CropGuides for the LATENT-side flow. `CropGuides.execute()`
+  derives `num_keyframes` from the positive CONDITIONING (not from the
+  latent contents), so its CONDITIONING outputs remain correct; only
+  its LATENT pass-through output becomes a dead-end (acceptable trade
+  vs. losing F3 or color correction). Applied across 5 production + 3
+  experimental workflows.
+
+  **Known trade-off**: the LATENT-side of CropGuides (which previously
+  cropped keyframe-padding from the sampled output) is now a dead-end
+  output. `LTXVAddLatentGuide(1519)` at `latent_idx=-1` adds a
+  precursor/continuity frame that is no longer auto-stripped. If this
+  shows up as a visible artifact at iteration seams, follow-up work is
+  to either (a) duplicate CropGuides — one pre-sampler for CONDITIONING,
+  one post-sampler for LATENT — or (b) add a dedicated post-AdainLatent
+  LATENT crop step. Recipe TBD.
+- **`exec_logger.py` async-cache wrapper.** Recent ComfyUI made
+  `HierarchicalCache.get` a coroutine; the wrapper at line 220 called
+  it without `await`, generating an unawaited-coroutine warning at
+  every node execution. Now uses `inspect.iscoroutine` to await iff the
+  return is a coroutine (compatible with both pre- and post-async
+  ComfyUI versions).
+
+### Changed
+- **Public-facing prompt case studies retired (`docs/examples/`
+  removed).** The parallel scrubbed-copy convention was a real
+  maintenance burden (every internal prompt edit required mirroring
+  + scrubbing) and a recurring scrub-leak risk vector with no
+  confirmed external readership. Pattern guidance is now distilled
+  inline in `docs/guides/prompt_creation_guide.md` §12 (six scenario
+  families with load-bearing rules, no file pointers); concrete runs
+  remain in `internal/prompts/`. Cleaned up 21 references across 9
+  files (`prompt_creation_guide.md`, `CLAUDE.md`, `debugging_guide.md`,
+  `README.md`, `nodes_validation.py`, `ltx23_prompt_system_prompts.md`,
+  `experimental/README.md`, `audio_in_prompt_research.md`). CLAUDE.md
+  "Case studies in pairs" convention rewritten accordingly.
+
+### Added (continued)
 - **Second TTC1 amplification POC, no IC-LoRA required.**
   `scripts/apply_ttc_init_guide_amplification_poc.py` stages
   `example_workflows/experimental/init_guide_amplification_poc.json` —

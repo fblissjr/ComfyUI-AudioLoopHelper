@@ -47,7 +47,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **LTX2_NAG widgets** `[nag_scale, nag_alpha, nag_tau, inplace]`. KJNodes default `scale=11` is aggressive for distilled — dial to 3-7 if initial render freezes. Always verify schema via `scripts/trace_node_source.py <wf> 508`. Reference: `docs/reference/nag_technical_reference.md`.
 - **Don't copy upstream's 15-step sampling** from `LTX-2.3_T2V_I2V_Single_Stage_Distilled_Full.json`. Authoritative distilled path: 8 fixed sigmas per `coderef/LTX-2/.../distilled.py`.
 - **Resolution div-by-32** (single-stage) or **div-by-64** (two-stage). `scripts/audit_workflows.py` checks.
-- **Audio is FROZEN in our workflow.** Strip music/instrumentation references from schedule prompts; keep diegetic sounds only. Rationale: `docs/analysis/audio_in_prompt_research.md`; case studies: `docs/examples/`.
+- **Audio is FROZEN in our workflow.** Strip music/instrumentation references from schedule prompts; keep diegetic sounds only. Rationale: `docs/analysis/audio_in_prompt_research.md`; case studies in `internal/prompts/` (gitignored).
 - **`EmptyLTXVLatentVideo.length` satisfies `(length - 1) % 8 == 0`.** Match `window_size_seconds = length / fps` exactly. Rapid-cut: `length=249`; default: `length=497`. To derive length + matching `window_size_seconds` from a desired duration without hand-math, use `LTXAVTools.LTXFrameCalculator(seconds, fps) → (frames, latent, actual_seconds)`.
 - **`snap_boundaries=True`** (default) lets `overlap_seconds` change without schedule re-authoring.
 - **CLIP must not enter the loop body.** Pre-encode via `TimestampPromptScheduleBatchEncode`; `object_patches` don't survive the offload/reload → silent NAG disengagement iter 2+. Mechanism: `docs/analysis/nag_object_patches_offload_asymmetry.md`.
@@ -161,7 +161,7 @@ Companion custom nodes (used alongside, not imported):
 
 - **Active planning lives in gitignored `internal/`.** Promote to `docs/` only when feature ships AND stabilizes.
 - **Don't reference `internal/log/` from public-facing docs** — session logs are timestamped/personal. Other `internal/` subdirs (`analysis/`, `design/`, `ic_lora_assessment.md`, `action_items_for_*.md`) are fine to reference from `docs/` if no private prompts/paths leak.
-- **Case studies in pairs**: unscrubbed → `internal/prompts/`; scrubbed → `docs/examples/` or `docs/guides/debugging_guide.md`.
+- **Case studies live in `internal/prompts/` (gitignored, unscrubbed).** Public guides distill patterns inline rather than linking out — the parallel scrubbed-copy convention was retired 2026-04-25 (parallel maintenance burden, scrub-leak risk, no confirmed external readership). Reference internal prompt runs from `docs/` only via paraphrase, never via filename.
 - **Public docs written for GitHub readers, not our local state.** No "already on disk" / "we use X locally" framing; use `<comfyui_models>` / `/path/to/model` placeholders and list file sources (Hugging Face slugs, upstream repos). `internal/` docs can assume our local state.
 - **Breaking changes trigger docs sweep** — add stale phrase to `scripts/validate_docs_consistency.py::STALE_PATTERNS`; `tests/test_docs_consistency.py` fails until fixed.
 - **Last-updated date at top of every doc** (`Last updated: YYYY-MM-DD`).
@@ -170,7 +170,7 @@ Companion custom nodes (used alongside, not imported):
 
 ## Documentation layout
 
-Public docs: `docs/README.md` (task-first nav) → `docs/guides/` (how-to), `docs/reference/` (deep-dive), `docs/analysis/` (research/postmortems on shipped code), `docs/examples/` (scrubbed case studies), `docs/experimental/` (scaffolded-but-not-validated features paired with workflows in `example_workflows/experimental/`), `docs/experiments/` (per-experiment logs: hypothesis → setup → observations → inferences → next; convention in `docs/experiments/README.md`). `docs/architecture_overview.md` is the single-entry-point architecture reference.
+Public docs: `docs/README.md` (task-first nav) → `docs/guides/` (how-to), `docs/reference/` (deep-dive), `docs/analysis/` (research/postmortems on shipped code), `docs/experimental/` (scaffolded-but-not-validated features paired with workflows in `example_workflows/experimental/`), `docs/experiments/` (per-experiment logs: hypothesis → setup → observations → inferences → next; convention in `docs/experiments/README.md`). `docs/architecture_overview.md` is the single-entry-point architecture reference.
 
 Reference codebases (read-only): `coderef/LTX-2/` (LTX-2 native), `coderef/LTX-Desktop/` (Lightricks Desktop), `<comfyui_custom_nodes>/ComfyUI-LTXVideo/` (ComfyUI LTX integration).
 

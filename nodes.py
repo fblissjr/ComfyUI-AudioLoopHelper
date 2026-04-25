@@ -1229,6 +1229,129 @@ class AudioDuration(io.ComfyNode):
         return io.NodeOutput(float(duration), int(audio["sample_rate"]), int(audio["waveform"].shape[-1]))
 
 
+# Latent-volume thresholds. Source: docs/reference/ltx23_model_reference.md
+# §"Resolution and latent volume". 832x480x497=24,570 is "already at the edge".
+_LTX_LATENT_VOLUME_OK_MAX = 20_000
+_LTX_LATENT_VOLUME_EDGE_MAX = 24_570
+
+_LTXOrientation = Literal["landscape", "portrait", "square"]
+
+
+def _compute_ltx_resolution(
+    aspect_ratio: float,
+    target_long_edge: int,
+    frames: int,
+    orientation: _LTXOrientation = "landscape",
+) -> tuple[int, int, int, str]:
+    """Snap an aspect ratio + target long edge to LTX 2.3-valid (W, H), and
+    classify the resulting latent volume against the doc-authoritative
+    ceiling.
+
+    Returns (width, height, latent_volume, status_string).
+
+    width/height are guaranteed div-by-32. frames must satisfy (frames-1)%8==0.
+    Status is one of OK / NEAR_EDGE / OVER_EDGE; the volume value is included
+    in the string so callers can parse it without recomputing.
+    """
+    assert (frames - 1) % 8 == 0, (
+        f"frames {frames} violates LTX video VAE temporal constraint "
+        "(frames - 1) % 8 == 0; valid: 9, 17, 25, ..., 489, 497, ..."
+    )
+
+    long_edge = ((target_long_edge + 31) // 32) * 32
+
+    if orientation == "square":
+        width = height = long_edge
+    elif orientation == "portrait":
+        height = long_edge
+        raw_width = long_edge / aspect_ratio
+        width = max(32, (int(raw_width) // 32) * 32)
+    else:  # landscape (default)
+        width = long_edge
+        raw_height = long_edge / aspect_ratio
+        height = max(32, (int(raw_height) // 32) * 32)
+    # Short-edge snap is DOWN (not up) — biases the resolved volume toward
+    # the safe side of the latent ceiling. Matches users' empirical practice
+    # of running cinema 1.85:1 (832x448 = 22,932) over true 16:9
+    # (832x480 = 24,570 = "at the edge" per ltx23_model_reference.md).
+
+    latent_volume = (width // 32) * (height // 32) * ((frames - 1) // 8 + 1)
+
+    if latent_volume <= _LTX_LATENT_VOLUME_OK_MAX:
+        category = "OK"
+    elif latent_volume <= _LTX_LATENT_VOLUME_EDGE_MAX:
+        category = "NEAR_EDGE"
+    else:
+        category = "OVER_EDGE"
+    status = (
+        f"{category}: latent_volume={latent_volume} "
+        f"(ok<={_LTX_LATENT_VOLUME_OK_MAX}, edge<={_LTX_LATENT_VOLUME_EDGE_MAX})"
+    )
+    return width, height, latent_volume, status
+
+
+class LTXResolutionFromAspect(io.ComfyNode):
+    """Resolve a target aspect ratio to LTX 2.3-valid (width, height) + report
+    the latent volume against the doc-authoritative ceiling.
+
+    Wire `width` / `height` into `EmptyLTXVLatentVideo`. Read `latent_volume`
+    + `status` to confirm the chosen long-edge stays below the artifact
+    threshold (>24,570 produces grid patterns / color loss per
+    `docs/reference/ltx23_model_reference.md`).
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="LTXResolutionFromAspect",
+            display_name="LTX Resolution From Aspect",
+            category="AudioLoopHelper/utility",
+            description=(
+                "Snap an aspect ratio + target long edge to an LTX 2.3-valid "
+                "(W, H) pair (both div-by-32). Computes latent volume and "
+                "warns when crossing the doc ceiling."
+            ),
+            inputs=[
+                io.Float.Input(
+                    "aspect_ratio", default=16 / 9, min=0.25, max=4.0, step=0.001,
+                    tooltip="Width/height ratio. 16:9 = 1.778, 4:3 = 1.333, 1:1 = 1.0.",
+                ),
+                io.Int.Input(
+                    "target_long_edge", default=832, min=128, max=1920, step=32,
+                    tooltip="Long edge in pixels. Snapped UP to nearest div-32 boundary.",
+                ),
+                io.Int.Input(
+                    "frames", default=497, min=9, max=4097, step=8,
+                    tooltip="Total frames. Must satisfy (frames-1)%8==0.",
+                ),
+                io.Combo.Input(
+                    "orientation",
+                    options=["landscape", "portrait", "square"],
+                    default="landscape",
+                ),
+            ],
+            outputs=[
+                io.Int.Output(display_name="width"),
+                io.Int.Output(display_name="height"),
+                io.Int.Output(display_name="latent_volume"),
+                io.String.Output(display_name="status"),
+            ],
+        )
+
+    @classmethod
+    def execute(
+        cls,
+        aspect_ratio: float,
+        target_long_edge: int,
+        frames: int,
+        orientation: str,
+    ) -> io.NodeOutput:
+        w, h, vol, status = _compute_ltx_resolution(
+            aspect_ratio, target_long_edge, frames, orientation
+        )
+        return io.NodeOutput(w, h, vol, status)
+
+
 class ConditioningBlend(io.ComfyNode):
     """Blends two conditionings with a factor. Works with any text encoder
     including LTX 2.3 Gemma 3 (no pooled_output required).
@@ -2536,6 +2659,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LatentTemporalMask,
             AudioDuration,
             AudioPitchDetect,
+            LTXResolutionFromAspect,
             KeyframeImageSchedule,
             KeyframeLatentScheduleBatchEncode,
             LatentSelectByIteration,

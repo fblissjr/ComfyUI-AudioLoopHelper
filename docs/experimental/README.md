@@ -31,7 +31,7 @@ A feature graduates from `docs/experimental/` to the public-facing `docs/` tree 
 
 1. It ships with a validated `example_workflows/*.json` that audits clean (`scripts/audit_workflows.py`).
 2. Its design doc moves from `internal/design/` to `docs/reference/` or `docs/guides/`.
-3. There's at least one case study in `docs/examples/` or a real user validation note.
+3. There's at least one validated case study (internal log entry, in-repo experiment doc under `docs/experiments/`, or a real user validation note).
 4. CLAUDE.md references it without qualifying as "experimental."
 
 Until all four land, keep it here.
