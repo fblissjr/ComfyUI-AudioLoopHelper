@@ -737,6 +737,10 @@ _BATCH_ENCODE_CACHE_MAX = 4  # typically 1 live schedule; 4 covers A/B runs
 _STRIDE_SECONDS_PRECISION = 4
 _AUDIO_DURATION_PRECISION = 2
 
+# Floor on stride for `audio_duration / stride` when computing iteration
+# count. Prevents divide-by-zero / inf when widget defaults to 0.
+_SAFE_STRIDE_EPSILON = 1e-6
+
 
 def _batch_encode_cache_key(
     clip, schedule: str, stride_seconds: float,
@@ -948,7 +952,7 @@ class TimestampPromptScheduleBatchEncode(io.ComfyNode):
         # +1 headroom: if the loop runs one more iteration than the audio
         # length strictly allows, the selector's clamp returns the last
         # encoded prompt rather than crashing.
-        safe_stride = max(stride_seconds, 1e-6)
+        safe_stride = max(stride_seconds, _SAFE_STRIDE_EPSILON)
         iteration_count = max(1, math.ceil(audio_duration / safe_stride) + 1)
 
         prompts_per_iter = [
@@ -1538,6 +1542,12 @@ class KeyframeLatentScheduleBatchEncode(io.ComfyNode):
     or negative) are clamped at runtime to `[0, batch_size-1]`. Mirrors
     legacy `KeyframeImageSchedule` clamp; LoopConfigValidator catches
     the bug pre-render with WARN.
+
+    No `frame_rate` parameter (unlike `TimestampPromptScheduleBatchEncode`):
+    VAE encoding is frame-rate-agnostic; LATENT carries no temporal
+    metadata that would need stamping. The conditioning side stamps
+    `frame_rate` because LTX 2.3's CONDITIONING dict format does carry
+    temporal scaling; LATENT does not.
     """
 
     @classmethod
@@ -1660,7 +1670,7 @@ class KeyframeLatentScheduleBatchEncode(io.ComfyNode):
         if snap_boundaries and entries:
             entries = _snap_schedule_to_iterations(entries, stride_seconds)
 
-        safe_stride = max(stride_seconds, 1e-6)
+        safe_stride = max(stride_seconds, _SAFE_STRIDE_EPSILON)
         iteration_count = max(1, math.ceil(audio_duration / safe_stride) + 1)
 
         # Schedule emits per-iteration image INDICES; clamp to batch range.
