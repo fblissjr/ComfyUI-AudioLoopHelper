@@ -220,16 +220,42 @@ def _gate_verdict(summary: dict) -> str:
     return f"gate verdict: >15% ({pct}%) -- mask kernel work justified"
 
 
+_DEFAULT_RUNS_DIR = Path("internal/analysis/runs")
+
+
+def _latest_jsonl(subdir: str, prefix: str, runs_dir: Path = _DEFAULT_RUNS_DIR) -> Path | None:
+    """Return the most recent <runs_dir>/<subdir>/<prefix>_*.jsonl, or None."""
+    target = runs_dir / subdir
+    if not target.is_dir():
+        return None
+    candidates = sorted(target.glob(f"{prefix}_*.jsonl"))
+    return candidates[-1] if candidates else None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--sage-log", type=Path, required=True, help="Sage tracer JSONL path.")
+    parser.add_argument("--sage-log", type=Path, default=None, help="Sage tracer JSONL path.")
     parser.add_argument("--exec-log", type=Path, default=None, help="Companion exec-log JSONL path.")
+    parser.add_argument("--latest", action="store_true",
+                        help="Auto-find the newest sage + exec JSONL under internal/analysis/runs/ "
+                             "(equivalent to --sage-log internal/analysis/runs/sage/sage_*.jsonl "
+                             "--exec-log internal/analysis/runs/exec_log/exec_*.jsonl, picking the "
+                             "lexically-greatest match in each).")
     parser.add_argument("--total-wall-ms", type=float, default=None, help="Explicit total gen wall time in ms.")
     parser.add_argument("--ksampler-class", action="append", default=None,
                         help="class_type to treat as a sampler when reading --exec-log. Can repeat.")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON instead of a table.")
     args = parser.parse_args(argv)
 
+    if args.latest:
+        if args.sage_log is None:
+            args.sage_log = _latest_jsonl("sage", "sage")
+        if args.exec_log is None:
+            args.exec_log = _latest_jsonl("exec_log", "exec")
+
+    if args.sage_log is None:
+        print("error: provide --sage-log <path> or --latest", file=sys.stderr)
+        return 2
     if not args.sage_log.exists():
         print(f"sage log not found: {args.sage_log}", file=sys.stderr)
         return 2
