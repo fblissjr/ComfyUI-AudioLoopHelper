@@ -41,6 +41,24 @@ This project uses [Semantic Versioning](https://semver.org/).
   audio head limits) to recovery actions.
 
 ### Added
+- **Retake workflow shipped (Phase 3, Option A).** New
+  `example_workflows/audio-loop-music-video_retake.json` regenerates a
+  `[start_time, end_time]` window of a previously-generated video without
+  re-rendering the rest. Built by `scripts/apply_audio_loop_retake.py`
+  (forks production `audio-loop-music-video_latent.json`, strips 34
+  loop/audio/init-image nodes, adds `LoadVideo + GetVideoComponents +
+  VAEEncode + LatentTemporalMask`, rewires sampler/decoder/audio
+  passthrough). Audio passes through unchanged from the source mp4 via
+  `VHS_VideoCombine.audio` (Option A — no AV cross-attention during
+  retake). User guide at `docs/guides/retake_guide.md`. A-vs-B design
+  rationale in `internal/design/retake_workflow_design.md`; Phase 3.5
+  (AV-aware retake) parked pending lip-sync drift signal from real
+  retake renders. `scripts/audit_workflows.py` extended with three
+  retake-specific checks (`retake_temporal_mask_present`,
+  `retake_audio_passthrough`, `retake_no_loop_nodes`) gated on
+  filename match; loop-only checks (`iteration_stamp`,
+  `prompt_schedule`) skipped for retake workflows via new
+  `_is_retake(name)` helper.
 - **`LatentTemporalMask` node (`nodes.py`)** — retake support. Writes a
   `noise_mask` to a video latent so only `[start_time, end_time]`
   regenerates on a re-sample; rest stays fixed as context. Latent-frame

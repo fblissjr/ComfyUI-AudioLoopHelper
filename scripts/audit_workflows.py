@@ -48,6 +48,10 @@ def _is_stg(name: str) -> bool:
     return "stg" in name
 
 
+def _is_retake(name: str) -> bool:
+    return "retake" in name
+
+
 def _audit_one(wf_path: Path) -> list[Finding]:
     findings: list[Finding] = []
     name = wf_path.name
@@ -82,6 +86,8 @@ def _audit_one(wf_path: Path) -> list[Finding]:
     # LoopIterationStamp
     if by_type.get("LoopIterationStamp"):
         record("OK", "iteration_stamp", "present")
+    elif _is_retake(name):
+        record("OK", "iteration_stamp", "n/a (retake workflow, no loop)")
     else:
         record("WARN", "iteration_stamp", "missing (sage tracer iter grouping will be blank)")
 
@@ -100,6 +106,8 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         )
     elif _is_validator(name):
         record("OK", "prompt_schedule", "n/a (validator workflow)")
+    elif _is_retake(name):
+        record("OK", "prompt_schedule", "n/a (retake uses single CLIPTextEncode)")
     else:
         record("WARN", "prompt_schedule", "no prompt schedule node")
 
@@ -229,7 +237,61 @@ def _audit_one(wf_path: Path) -> list[Finding]:
 
     _check_prompt_relay_wiring(wf, by_type, record)
 
+    if _is_retake(name):
+        _check_retake_wiring(wf, by_type, record)
+
     return findings
+
+
+# Retake workflow checks — gated on filename match. The retake workflow
+# regenerates a [start_time, end_time] window of a previously-generated
+# video; LatentTemporalMask is the load-bearing node and audio passes
+# through from the source mp4 (Option A — see
+# internal/design/retake_workflow_design.md).
+def _check_retake_wiring(wf, by_type, record) -> None:
+    # 1. LatentTemporalMask must be present (it's why this workflow exists).
+    mask_nodes = by_type.get("LatentTemporalMask", [])
+    if not mask_nodes:
+        record(
+            "ERR", "retake_temporal_mask_present",
+            "no LatentTemporalMask node. Run scripts/apply_audio_loop_retake.py.",
+        )
+    else:
+        record("OK", "retake_temporal_mask_present", f"LatentTemporalMask present (id={mask_nodes[0]['id']})")
+
+    # 2. VHS_VideoCombine.audio must be wired (Option A passthrough is the
+    # single most likely regression; an unwired audio input ships a silent mp4).
+    vhs_nodes = by_type.get("VHS_VideoCombine", [])
+    if vhs_nodes:
+        vhs = vhs_nodes[0]
+        audio_inp = next(
+            (inp for inp in vhs.get("inputs", []) if inp.get("name") == "audio"),
+            None,
+        )
+        if audio_inp is None:
+            record("WARN", "retake_audio_passthrough", "VHS_VideoCombine has no 'audio' input slot")
+        elif audio_inp.get("link") is None:
+            record(
+                "ERR", "retake_audio_passthrough",
+                "VHS_VideoCombine.audio is unwired (Option A passthrough broken; output will be silent).",
+            )
+        else:
+            record("OK", "retake_audio_passthrough", "VHS_VideoCombine.audio wired")
+
+    # 3. No loop machinery must remain (catches incomplete strips).
+    loop_offenders = [
+        t for t in ("TensorLoopOpen", "TensorLoopClose", "AudioLoopController", "AudioLoopPlanner")
+        if by_type.get(t)
+    ]
+    if _subgraph_invoker_id(wf) is not None:
+        loop_offenders.append("subgraph_invoker")
+    if loop_offenders:
+        record(
+            "WARN", "retake_no_loop_nodes",
+            f"loop machinery still present: {', '.join(loop_offenders)} (incomplete strip?)",
+        )
+    else:
+        record("OK", "retake_no_loop_nodes", "no loop nodes")
 
 
 # PromptRelayEncode installs object_patches on attn2 / audio_attn2 which don't
