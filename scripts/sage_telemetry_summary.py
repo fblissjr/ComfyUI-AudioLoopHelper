@@ -156,38 +156,19 @@ def _percentile(samples: list[float], pct: float) -> float:
 
 
 def infer_kernel(effective_mode: str, *, has_mask: bool, arch: str) -> str:
-    """Map an `effective_mode` recorded by the consumer-side tracer to
-    the actual sage kernel that dispatched, given the GPU arch.
-
-    Concrete kernel names (`fp16_cuda`, `fp16_triton`, `fp8_cuda`,
-    `fp8_cuda++`) pass through unchanged. The consumer's mask-aware
-    routing emits `fp16_triton` for masked calls (correct already),
-    `auto` for unmasked (inside `sageattn()` -- consumer can't see).
-    For `auto` + sm89/CUDA>=12.8, sage's dispatch table resolves to
-    `sageattn_qk_int8_pv_fp8_cuda` with `pv_accum_dtype="fp32+fp16"`,
-    canonical name `fp8_cuda++`.
-
-    This mirrors only the subset of `sageattention/core.py::sageattn`
-    that the consumer's call pattern reaches: no `smooth_k`, no LSE,
-    head_dim in {64,120,128}. Broaden if the call pattern changes.
-
-    Replace with sage-fork's `get_last_dispatched_kernel()` once that
-    ships -- thread-local set during dispatch, exposes the real kernel
-    string. Mirror is a stopgap.
+    """Routing-table mirror for the consumer's call pattern (no smooth_k,
+    no LSE, head_dim in {64,120,128}): masked -> fp16_triton, unmasked
+    on sm89_cuda12_8 -> fp8_cuda++. Fallback for traces lacking
+    `dispatched_kernel`; aggregate() prefers that field when present.
     """
-    # Already a concrete kernel name -> no-op.
     if effective_mode in ("fp16_cuda", "fp16_triton", "fp8_cuda", "fp8_cuda++"):
         return effective_mode
     if effective_mode != "auto":
         return effective_mode
-
-    # auto routing: masked path is fp16_triton on every supported arch,
-    # unmasked path varies by arch.
     if has_mask:
         return "fp16_triton"
     if arch == "sm89_cuda12_8":
         return "fp8_cuda++"
-    # Unknown arch -- leave unchanged so the operator sees the gap.
     return effective_mode
 
 
@@ -216,31 +197,17 @@ def aggregate(
     *,
     arch: str | None = None,
 ) -> dict:
-    """Group per-call samples by (effective_mode, has_mask) and compute
-    median/p90/count/total. If `total_wall_us` is supplied, also compute
-    pct_of_total per group.
-
-    `arch` controls post-hoc kernel inference. Precedence:
-    explicit arg > per-row `arch` field > no inference. Per-row arch lets
-    self-describing traces (tracer stamped arch at init) work without a
-    CLI flag; the explicit arg lets the operator override (e.g. testing
-    'how would this resolve on sm80?').
+    """Group per-call samples by (effective_mode, has_mask).
+    Arch precedence for kernel inference: explicit arg > per-row 'arch' field.
     """
-    # Materialize once so we can iterate twice (arch sniff + group pass).
-    materialized = [r for r in rows if r.get("event") != "summary"]
-
     groups: dict[tuple[str, bool], list[float]] = {}
     fallbacks = 0
     total_calls = 0
-    # Trace freshness signal: how many rows resolved their kernel name
-    # via real sage-fork telemetry vs post-hoc mirror inference vs
-    # neither. Operator scans the counts to gauge "do I trust this
-    # gate verdict" without re-reading the per-row data. Three buckets
-    # always present (zeros included) so consumers don't need defensive
-    # `.get()` everywhere.
     kernel_source_counts = {"sage_telemetry": 0, "mirror_inferred": 0, "unknown": 0}
 
-    for row in materialized:
+    for row in rows:
+        if row.get("event") == "summary":
+            continue
         elapsed = row.get("elapsed_us")
         if elapsed is None:
             continue
@@ -249,14 +216,9 @@ def aggregate(
             fallbacks += 1
         has_mask = bool(row.get("has_mask"))
 
-        # Precedence for the resolved kernel name:
-        #   1. row['dispatched_kernel'] -- real value from sage-fork's
-        #      `get_last_dispatched_kernel()`. Trust this above all.
-        #   2. row['effective_mode'] / row['mode'] + routing-table mirror
-        #      via `arch`. Mirror is the fallback for older traces and
-        #      old sage installs that don't expose the API.
-        # None / empty string in (1) means "thread-local was unset"
-        # (fresh thread or symbol missing); fall through to (2).
+        # Precedence: row['dispatched_kernel'] (real sage-fork telemetry)
+        # > row['effective_mode'] + routing-table mirror via arch.
+        # Empty / None in dispatched_kernel falls through.
         dispatched = row.get("dispatched_kernel")
         if dispatched:
             effective = dispatched
@@ -269,9 +231,6 @@ def aggregate(
                 if inferred != base_effective:
                     kernel_source_counts["mirror_inferred"] += 1
                 else:
-                    # Mirror was a no-op (effective_mode already concrete
-                    # OR arch unknown). The kernel name is whatever the
-                    # consumer recorded; no real telemetry, no inference.
                     kernel_source_counts["unknown"] += 1
                 effective = inferred
             else:

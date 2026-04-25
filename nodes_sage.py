@@ -217,14 +217,8 @@ def resolve_trace_path() -> Path | None:
 
 
 def _detect_arch_tag() -> str | None:
-    """Best-effort arch tag for self-describing traces. Format
-    'sm<MM>_cuda<MAJ>_<MIN>' (e.g. 'sm89_cuda12_8') so the summary
-    script's `infer_kernel()` can match without a CLI flag.
-
-    Returns None if torch.cuda is unavailable, no GPU, or the arch
-    isn't one we have a routing-table mirror for. The summary script's
-    `--arch` flag remains the override; this just makes traces
-    self-describing for the common case.
+    """Return 'sm<MM>_cuda<MAJ>_<MIN>' (e.g. 'sm89_cuda12_8') for the
+    local GPU + CUDA toolkit, or None when torch.cuda is unavailable.
     """
     try:
         if not torch.cuda.is_available():
@@ -253,11 +247,8 @@ class SageTracer:
         self._fallbacks = 0
         self._shapes: set[tuple] = set()
         self._summary_flushed = False
-        # Detect arch ONCE at tracer init -- not per call, not per row.
-        # Stamped into every emit() so the summary script can resolve
-        # 'auto' -> actual kernel without a --arch flag (self-describing
-        # traces > flag-on-the-CLI). Replace with sage-fork's
-        # get_last_dispatched_kernel() once shipped.
+        # Stamped into every emit() so summaries can resolve 'auto' ->
+        # kernel without a --arch flag.
         self._arch_tag = _detect_arch_tag() if log_path is not None else None
         if log_path is not None:
             log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -562,27 +553,15 @@ def make_sage_override(
                 **kwargs,
             )
         if tracer.enabled:
-            # Read sage-fork's thread-local IMMEDIATELY after sage_fn
-            # returns -- before any other call that could overwrite it.
-            # Safe because ComfyUI executes attention layers
-            # sequentially on the worker thread; Python control returns
-            # synchronously even though CUDA work is async on the GPU.
-            # If a future torch.compile / async-graph integration ever
-            # schedules multiple sage calls from the same Python thread
-            # without yielding back between them, switch to contextvars.
-            #
-            # On fallback we skip the read entirely: the thread-local
-            # may hold a stale value from any prior sage call on this
-            # thread (different model layer, different prompt) -- not
-            # necessarily this layer's. Null is the only honest answer
-            # for failed calls; attributing the wrong kernel would
-            # mislead a reader debugging a fallback row.
-            dispatched = None
-            if not fell_back and _GET_DISPATCHED_KERNEL is not None:
-                try:
-                    dispatched = _GET_DISPATCHED_KERNEL()
-                except Exception:
-                    dispatched = None
+            # Thread-local read; safe because ComfyUI runs attention
+            # sequentially on the worker thread. Skipped on fallback --
+            # the thread-local may hold a stale value from a prior
+            # layer's sage call, not this failed one.
+            dispatched = (
+                _GET_DISPATCHED_KERNEL()
+                if not fell_back and _GET_DISPATCHED_KERNEL is not None
+                else None
+            )
             tracer.emit(
                 shape=tuple(q.shape), has_mask=mask is not None, mode=mode,
                 fell_back=fell_back,
