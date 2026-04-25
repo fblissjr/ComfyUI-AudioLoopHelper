@@ -122,6 +122,8 @@ Companion custom nodes (used alongside, not imported):
 - `scripts/analyze_workflow_dag.py <wf> --format <ascii|mermaid|dot|json>` — topo-sorted execution order.
 - `COMFYUI_EXEC_LOG=/tmp/exec.jsonl python <comfyui>/main.py` — runtime per-node JSONL log. Zero overhead unset.
 - `scripts/verify_sage_iteration_trace.sh` — diff per-iter sage kernel counts. `AUDIOLOOPHELPER_SAGE_TRACE=auto` is default in `<comfyui>/start.sh`.
+- `scripts/sage_telemetry_summary.py --sage-log <path> [--exec-log <path>]` — outside-ComfyUI aggregator. Per-(kernel, mask) median/p90/count + Phase 0 gate verdict. Reads only; does not write.
+- **Telemetry / privacy reference**: `docs/reference/telemetry_and_tracing.md` — what the two tracers capture (and don't), where files land, retention, on/off, why prompt text can leak via the exec logger but not via the sage tracer.
 - Debug artifacts land in `internal/analysis/runs/` via `timestamped_run_path()` / `timestamped_run_dir()` (`scripts/workflow_utils.py`).
 - Symptom-first recipes: `docs/guides/debugging_guide.md`.
 - **Iter-over-iter drift** → trace CONDITIONING paths in parallel (initial vs loop). Asymmetries (missing `LTXVConditioning`, `frame_rate` mismatch, CLIP in subgraph) are load-bearing bugs.

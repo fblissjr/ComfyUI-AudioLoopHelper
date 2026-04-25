@@ -98,6 +98,26 @@ To use prompt scheduling:
    hard cuts are visually clean.
 5. Run. The loop auto-stops when it reaches the end of the audio.
 
+## Telemetry and tracing (opt-in, off by default)
+
+This plugin ships two opt-in tracers and one outside-ComfyUI aggregator
+script. All three default to off; no data leaves your machine; output
+files land under the gitignored `internal/` directory.
+
+- `AUDIOLOOPHELPER_SAGE_TRACE` — per-attention-call JSONL (kernel mode,
+  tensor shapes, timing). No prompt text. Set before launching ComfyUI.
+- `COMFYUI_EXEC_LOG` — per-node JSONL (class, shapes, duration). Can
+  capture short prompt strings (≤120 chars) as part of node-input
+  snapshots; see the doc below for the full privacy story. Set before
+  launching ComfyUI.
+- `scripts/sage_telemetry_summary.py` — runs **outside** ComfyUI;
+  reads the JSONL files the tracers wrote and prints a per-(kernel,
+  mask) summary. Read-only.
+
+Full reference (what's captured and what isn't, where files land,
+retention, on/off, end-to-end workflow with order of operations):
+[`docs/reference/telemetry_and_tracing.md`](docs/reference/telemetry_and_tracing.md).
+
 ## Nodes
 
 ### Audio Loop Controller

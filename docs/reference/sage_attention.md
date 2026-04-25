@@ -113,60 +113,31 @@ patch-chain analysis.
 
 ## Telemetry
 
-Set the env var `AUDIOLOOPHELPER_SAGE_TRACE` to enable JSONL tracing:
+Sage-specific notes only here. Full privacy/transparency reference
+(what's captured, where, retention, on/off, the end-to-end workflow with
+order of operations, and the related exec logger):
+[`telemetry_and_tracing.md`](telemetry_and_tracing.md).
 
-```bash
-AUDIOLOOPHELPER_SAGE_TRACE=auto python <comfyui>/main.py
-# or with an explicit file path:
-AUDIOLOOPHELPER_SAGE_TRACE=/tmp/sage.jsonl python <comfyui>/main.py
-```
+In short: set `AUDIOLOOPHELPER_SAGE_TRACE=auto` (or an explicit path)
+**before launching ComfyUI**; per-call records appear under
+`internal/analysis/runs/sage/sage_<timestamp>.jsonl`. The sage tracer
+captures tensor shapes, kernel mode, and timing only — never prompt text.
 
-When set to `auto` / `1` / `true` / `yes`, traces land under
-`internal/analysis/runs/sage/sage_YYYY-MM-DD_HHMMSS.jsonl` (same
-pattern as `COMFYUI_EXEC_LOG=auto`).
-
-### Record schema
-
-Each attention call:
-
-```json
-{
-  "ts": 1713912345.678,
-  "iter": null,
-  "shape": [1, 31776, 2048],
-  "has_mask": false,
-  "mode": "auto_mask_aware",
-  "effective_mode": "auto",
-  "fell_back": false,
-  "elapsed_us": 842.5
-}
-```
-
-`mode` is the configured widget value; `effective_mode` is the kernel
-that actually dispatched. For non-routing modes they're identical. For
-`auto_mask_aware` they diverge: `effective_mode=sageattn_qk_int8_pv_fp16_triton`
-on masked calls, `effective_mode=auto` on unmasked. A trace where
+The `mode` / `effective_mode` distinction is the sage-routing-specific
+detail worth flagging here: `mode` is the configured widget value;
+`effective_mode` is the kernel that actually dispatched. For
+non-routing modes they're identical. For `auto_mask_aware` they
+diverge — `effective_mode=sageattn_qk_int8_pv_fp16_triton` on masked
+calls, `effective_mode=auto` on unmasked. A trace where
 `mode=auto_mask_aware` but `effective_mode` never changes means the
 routing isn't firing — file a bug.
 
-On model cleanup, a summary row:
-
-```json
-{
-  "ts": 1713912999.123,
-  "event": "summary",
-  "total_calls": 8960,
-  "fallback_count": 0,
-  "distinct_shapes": 3
-}
-```
-
 `iter` is pulled from `transformer_options.get("iteration")` with a
 fallback to `.get("step")`. The stamp comes from `LoopIterationStamp`
-(see `nodes.py`), which is auto-inserted into the shipping workflows
-by `scripts/apply_iteration_stamp.py`. For workflows that don't yet
-have the stamp (e.g. a custom build), `iter` falls back to sampler
-step, so traces are still groupable — just by step, not loop pass.
+(see `nodes.py`), auto-inserted into shipping workflows by
+`scripts/apply_iteration_stamp.py`. For workflows without the stamp
+(e.g. a custom build), `iter` falls back to sampler step, so traces are
+still groupable — just by step, not loop pass.
 
 ### When to use it
 
