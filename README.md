@@ -553,6 +553,33 @@ AudioPitchDetect
 Note: requires a Switch/Mux node (from ComfyUI-KJNodes or similar) to
 conditionally select between prompt paths based on the BOOLEAN output.
 
+### LTX Video EasyCache (experimental)
+
+Training-free step-skipping cache for LTX-2.3 denoising. Patches via
+ComfyUI's supported `WrappersMP.DIFFUSION_MODEL` hook (not a monkey
+patch). Wire it between the LTX checkpoint loader and KSampler.
+
+Tunables:
+
+- `easycache_thresh` (default `0.015`, the wan-video reference value).
+  Higher = more aggressive caching, faster gens, lower fidelity. Sweep
+  `{0.015, 0.02, 0.03, 0.05}` on real prompts to find the largest value
+  that holds quality on motion + static + text-heavy scenes.
+- `start_step` (default `10`). Steps before this index always compute
+  (no caching, no state update). Lets the model establish structure
+  before caching kicks in.
+- `end_step` (default `-1` for "no upper bound").
+- `cache_device` (`"main"` / `"cpu"`). `"main"` keeps the retained
+  cache tensors wherever the model runs (typically GPU). `"cpu"`
+  offloads them to host RAM at the cost of a one-time HtoD copy on
+  each cache hit -- pick this if VRAM is tight.
+
+Negative or zero `easycache_thresh` disables caching (strict-never-skip
+sentinel). Ships as experimental until a project-side threshold sweep
+lands a shipping default. Algorithm: arxiv 2507.02860 ("Less is Enough:
+Training-Free Video Diffusion Acceleration via Runtime-Adaptive
+Caching").
+
 ## Tuning guide
 
 ### overlap_seconds (AudioLoopController)

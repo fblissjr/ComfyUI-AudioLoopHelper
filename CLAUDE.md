@@ -17,6 +17,7 @@ Core nodes (per-node role + wiring in each class's docstring; full reference at 
 - **Image path**: `KeyframeImageSchedule`, `ImageBlend`, `VideoFrameExtract`
 - **Conditioning blend**: `ConditioningBlend` (works with Gemma 3 + CLIP)
 - **Attention + profiling**: `AudioLoopHelperSageAttention` (default `auto_mask_aware`), `ProfileBegin`/`IterStep`/`End`
+- **Step-skipping cache**: `LTXVideoEasyCache` (experimental, default off). Patches LTX denoiser via `WrappersMP.DIFFUSION_MODEL`. Single threshold knob; `cache_device` offload to CPU optional. Reference: `nodes_easycache.py`. Telemetry/privacy story: `docs/reference/telemetry_and_tracing.md`.
 
 Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + vocal-fraction; pairs directly with `ConditioningBlend.blend_factor`.
 
@@ -47,7 +48,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **Don't copy upstream's 15-step sampling** from `LTX-2.3_T2V_I2V_Single_Stage_Distilled_Full.json`. Authoritative distilled path: 8 fixed sigmas per `coderef/LTX-2/.../distilled.py`.
 - **Resolution div-by-32** (single-stage) or **div-by-64** (two-stage). `scripts/audit_workflows.py` checks.
 - **Audio is FROZEN in our workflow.** Strip music/instrumentation references from schedule prompts; keep diegetic sounds only. Rationale: `docs/analysis/audio_in_prompt_research.md`; case studies: `docs/examples/`.
-- **`EmptyLTXVLatentVideo.length` satisfies `(length - 1) % 8 == 0`.** Match `window_size_seconds = length / fps` exactly. Rapid-cut: `length=249`; default: `length=497`.
+- **`EmptyLTXVLatentVideo.length` satisfies `(length - 1) % 8 == 0`.** Match `window_size_seconds = length / fps` exactly. Rapid-cut: `length=249`; default: `length=497`. To derive length + matching `window_size_seconds` from a desired duration without hand-math, use `LTXAVTools.LTXFrameCalculator(seconds, fps) → (frames, latent, actual_seconds)`.
 - **`snap_boundaries=True`** (default) lets `overlap_seconds` change without schedule re-authoring.
 - **CLIP must not enter the loop body.** Pre-encode via `TimestampPromptScheduleBatchEncode`; `object_patches` don't survive the offload/reload → silent NAG disengagement iter 2+. Mechanism: `docs/analysis/nag_object_patches_offload_asymmetry.md`.
 - **Loop-body CONDITIONING must carry `frame_rate`** (default 25.0). Batch encoder stamps it; any new CONDITIONING-producing loop-body node must too (via `node_helpers.conditioning_set_values`). Missing → identity drift + hallucinated objects iter-over-iter.
@@ -64,11 +65,15 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **Subgraph schema changes force a UI re-add** (slot indices baked at save time). Same for any `define_schema()` change.
 - Removing a subgraph input shifts higher slot indices — decrement `origin_slot` refs.
 - ComfyUI evaluates downstream conditioning before upstream sampling → extra nodes in conditioning path can corrupt initial render.
+- **`CLIPTextEncode(169) → ConditioningZeroOut(420) → LTXVConditioning(164).negative → CFGGuider(153).negative` chain is wired-correctly but runtime-inert at `CFG=1`** (sampler computes `eps = eps_positive` only). Don't try to remove it — `CFGGuider` validates both `positive` and `negative` input slots; removing 169 or 420 unwires CFGGuider and breaks the workflow. Audit conclusion 2026-04-25 (was flagged as "dead code" 2026-04-22; investigation showed structural requirement).
 - `torchaudio.detect_pitch_frequency` on silence → false positives. Gate with RMS > 0.005.
 - `LTXVPreprocess img_compression=0` SKIPS preprocessing (frozen first frames). Use 18 (Lightricks) or 35 (core).
 - Pyright `reportIncompatibleMethodOverride` on `execute()` is a false positive.
 - **`LTXVConcatAVLatent` isn't buggy.** `output.update(video); output.update(audio)` gets overwritten by a proper `NestedTensor` assignment on the next line. Don't chase.
 - Validate after edits: `python3 -c "import json; json.load(open('file.json'))"`.
+- **New node modules** that need `comfy_api` / `comfy.patcher_extension` imports use `try: from comfy_api.latest import io / except: from _comfy_stubs import io_stub as io` (absolute, NOT relative — pytest imports node modules top-level, not as package members; relative breaks tests).
+- **LTX denoiser-level wrapping** uses `model.add_wrapper_with_key(WrappersMP.DIFFUSION_MODEL, key, fn)`. Supported wrapper API; not a monkey patch. Reference: `nodes_easycache.py`. Cleaner than patching `BasicTransformerBlock.forward` directly.
+- **Always `git status --short` before `git commit`**. Pre-staged files (privacy_guard hook, linter mutations, half-finished prior work) get swept into your commit otherwise; the commit title then misrepresents the content.
 - Scrub workflows before open-sourcing: filenames, paths, UUIDs, previews, creative prompts.
 - **TensorLoop framework-cache invalidation is transitive.** Any node downstream of `current_iteration` re-executes per iter. Memoize via `id()`-keyed LRU + `IS_CHANGED` (see `TimestampPromptScheduleBatchEncode`). Module-level caches (`_BATCH_ENCODE_CACHE`, `_COND_CACHE`) die on ComfyUI restart — they're plain dicts, no persistence.
 - **LTX has no image VAE encode node.** Decode variants exist (`LTXVTiledVAEDecode`, `LTXVSpatioTemporalTiledVAEDecode`); audio has `LTXVAudioVAEEncode`. For image→latent, use core `VAEEncode` — even Lightricks' reference workflows do.
