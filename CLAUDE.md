@@ -88,11 +88,11 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 
 ## Subgraph editing
 
-- ALWAYS use `WorkflowEditor`. Top-level helpers: `find_node`, `has_node`, `require_nodes`, `find_link_to_slot(tgt, slot)`, `add_link`, `remove_link`, `rewire_input(tgt, slot, new_src, new_src_slot, dtype)`, `find_links_to/from`. Subgraph: `find_subgraph_invoker`, `find_subgraph_node`, `find_subgraph_link`, `add_subgraph_link`, `remove_subgraph_link`, `rewire_subgraph_input` (mirrors top-level rewire). `find_input_slot` works on both. **Don't hand-roll link lookups or rewires** — `find_link_to_slot` replaces the `next(lk for lk in ed.wf["links"] if lk[0] == link_id)` pattern; `rewire_input` / `rewire_subgraph_input` replace the `remove_link` + `add_link` splice.
+- ALWAYS use `WorkflowEditor`. Top-level helpers: `find_node`, `has_node`, `require_nodes`, `find_link_to_slot(tgt, slot)`, `add_link`, `remove_link`, `rewire_input(tgt, slot, new_src, new_src_slot, dtype)`, `find_links_to/from`. Subgraph: `find_subgraph_invoker`, `find_subgraph_node`, `find_subgraph_link`, `find_subgraph_link_to_slot(tgt, slot)`, `add_subgraph_link`, `remove_subgraph_link`, `rewire_subgraph_input` (mirrors top-level rewire). `find_input_slot` works on both. **Don't hand-roll link lookups or rewires** — `find_link_to_slot` replaces the `next(lk for lk in ed.wf["links"] if lk[0] == link_id)` pattern; `rewire_input` / `rewire_subgraph_input` replace the `remove_link` + `add_link` splice.
 - **Scaffold new apply scripts from `scripts/templates/`**. Two templates (`apply_script_all_workflows.py` for in-place edits, `apply_script_staged_variant.py` for experimental staging). Both include the canonical `--revert`, `--dry-run`, idempotence, and `require_nodes` guards. HyDE pattern: `apply_X.py --dry-run | audit_workflows.py` verifies a hypothetical state before committing to it.
 - **`remove_link` rebinds the target list** via filter — locals holding `ed.wf["links"]` go stale. Use editor methods or re-fetch.
 - Top-level links are array `[id, src, src_slot, tgt, tgt_slot, type]`; subgraph internal links are dict `{id, origin_id, origin_slot, target_id, target_slot, type}`. Subgraph def at `wf['definitions']['subgraphs'][0]`.
-- Distributor `-10` / output collector `-20` are virtual — not in `sg["nodes"]`.
+- Distributor `-10` / output collector `-20` are virtual — not in `sg["nodes"]`. Their slot indices map 1-to-1 with `sg["inputs"]` / `sg["outputs"]` order — useful when rewiring `CFGGuider` slots to/from the subgraph boundary (e.g. TTC1 init-guide POC: `CFGGuider.negative <- (-10, slot 6)` = "positive" raw, before `LTXVAddLatentGuide`).
 - Output slots use `"links"` (plural list); subgraph boundary entries use `"linkIds"`. Don't conflate.
 - DynamicCombo widgets: `[num, strength_1..N, index_1..N]` — strengths FIRST, not interleaved.
 
@@ -140,7 +140,7 @@ Companion custom nodes (used alongside, not imported):
 ### Apply scripts
 
 - Default: mutate `example_workflows/audio-loop-music-video_latent.json` in place (accept optional path).
-- **Experimental variants stage to `internal/scratch/<base>_<feature>_<phase>.json`** via `--output`. Idempotent; `--revert` deletes the staging file. Canonical: `scripts/apply_iclora_initial_render.py`. Promotion to `example_workflows/` follows "ships AND stabilizes"; criteria in `internal/PLAN.md`.
+- **Three-tier staging**: `internal/scratch/` (exploratory, gitignored) → `example_workflows/experimental/` (cross-machine reviewable; opt-in to audit via `EXPERIMENTAL_AUDITED_FILES` allowlist in `audit_workflows.py`) → `example_workflows/` (production, "ships AND stabilizes" per `internal/PLAN.md`). Apply scripts are idempotent; `--revert` deletes the staged file. POCs that intentionally break a production invariant (e.g. F3 asymmetry) ship a paired audit check that dispatches on a node-title prefix and ERRs only if the rewire is damaged. Canonical TTC1 pair: `apply_ttc_init_guide_amplification_poc.py` + `ttc1_init_guide_amplification` check.
 - **Scratch-build apply scripts** use `WorkflowEditor.from_scratch(output_path)` + `add_top_level_node` + `add_link` — returns an empty-skeleton editor with fresh uuid + reset `last_node_id` / `last_link_id`. No parallel `Builder` class needed. Canonical: `scripts/apply_spectrogram_iclora_minimal.py`.
 - **Shared apply-script helpers live in `scripts/_apply_helpers.py`** (`add_link`, `find_node`, `remove_node_and_links`, `find_link_to_slot`, `next_id`, etc.). Import with aliases to preserve call-site names; don't re-define inline.
 - **Idempotence**: `md5sum` before + after re-run must match. Guard with `if _is_already_built(wf): return` to avoid burning `last_node_id` on strip-then-readd.
@@ -160,6 +160,7 @@ Companion custom nodes (used alongside, not imported):
 ## Documentation conventions
 
 - **Active planning lives in gitignored `internal/`.** Promote to `docs/` only when feature ships AND stabilizes.
+- **Don't reference `internal/log/` from public-facing docs** — session logs are timestamped/personal. Other `internal/` subdirs (`analysis/`, `design/`, `ic_lora_assessment.md`, `action_items_for_*.md`) are fine to reference from `docs/` if no private prompts/paths leak.
 - **Case studies in pairs**: unscrubbed → `internal/prompts/`; scrubbed → `docs/examples/` or `docs/guides/debugging_guide.md`.
 - **Public docs written for GitHub readers, not our local state.** No "already on disk" / "we use X locally" framing; use `<comfyui_models>` / `/path/to/model` placeholders and list file sources (Hugging Face slugs, upstream repos). `internal/` docs can assume our local state.
 - **Breaking changes trigger docs sweep** — add stale phrase to `scripts/validate_docs_consistency.py::STALE_PATTERNS`; `tests/test_docs_consistency.py` fails until fixed.
