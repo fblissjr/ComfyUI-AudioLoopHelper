@@ -145,10 +145,10 @@ still image with no motion, subtitles, deformed facial features, extra limbs, di
 - **The workflow cannot produce true sub-iteration cuts.** Each
   iteration is ~20s of one approximately-continuous framing. "Fast
   paced with tons of cuts" in our architecture is 8 actual cuts
-  (iteration boundaries) labeled aggressively as edits. v3 leans
-  into this by starting every non-init entry with literal "Cut to"
-  language — which per v4-standup precedent makes the iteration-seam
-  visible as intentional editing rather than a blending artifact.
+  (iteration boundaries). The original v3 leaned into this with
+  literal "Cut to" prefixes per v4-standup precedent — **technique
+  retracted 2026-04-25**, see guide §5.1; iteration-boundary cut
+  density now comes from camera-motion variety alone.
 - **Action-verb density matters more than prompt length.** v2
   averaged 40-50 words per entry with environment+action-description.
   v3 averages ~30 words but the verb-to-modifier ratio is higher.

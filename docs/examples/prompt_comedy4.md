@@ -67,15 +67,10 @@ For each iteration, pick:
 5. One crowd beat (what a specific crowd member is doing)
 6. Optional: delivery qualifier (deadpan, rapid, drawn-out)
 
-> **Note (2026-04-25):** the original v4 schedule led each non-first
-> entry with `In a [shot size]...` to "hand off the iteration
-> boundary as an intentional edit." That convention has been
-> retracted per `docs/guides/prompt_creation_guide.md` §5.1
-> (Lightricks's official LTX 2.3 system prompt explicitly trains
-> the model to treat scene-cut language as a discontinuation
-> directive — the opposite of what the loop architecture wants).
-> Schedule entries below have been retroactively normalized to
-> `In a [shot size]...` continuation framing.
+> **Note (2026-04-25):** the original v4 schedule used `Cut to a
+> [shot size]...` boundary markers; **retracted** per
+> `docs/guides/prompt_creation_guide.md` §5.1. Schedule below
+> normalized to `In a [shot size]...` continuation form.
 
 ## Inputs
 
@@ -172,9 +167,11 @@ retracted per guide §5.1, this is no longer needed.)
 - **Close-ups on punchlines, medium-close-ups for setups, medium
   shots for mid-bits**: this is the natural comedy-special rhythm.
   Setup → zoom → punchline → hold → pull back. v4 follows it.
-- **If this feels too busy**: pull back some of the "Cut to"
-  aggression. Let some entries continue the prior shot without a cut
-  language, matching the v3 conservative approach for specific beats.
+- **If this feels too busy** *(originally: "pull back some of the
+  'Cut to' aggression"; superseded 2026-04-25 since `Cut to` is now
+  retracted)*: drop some of the camera-move variety, match the v3
+  conservative approach (more static-camera entries) for specific
+  beats.
   The template is adjustable per iteration.
 - **Future refinement — explicit "master two-shot" or "crowd-side
   angle"**: we're not doing these because they'd fight the init
