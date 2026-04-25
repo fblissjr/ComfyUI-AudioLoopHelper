@@ -5664,7 +5664,7 @@
                 "name": "video_latent",
                 "type": "LATENT",
                 "links": [
-                  1713
+                  3078
                 ]
               },
               {
@@ -5736,9 +5736,7 @@
                 "localized_name": "latent",
                 "name": "latent",
                 "type": "LATENT",
-                "links": [
-                  2834
-                ],
+                "links": [],
                 "linkIds": []
               }
             ],
@@ -5964,7 +5962,8 @@
                 "name": "positive",
                 "type": "CONDITIONING",
                 "links": [
-                  2832
+                  2832,
+                  3076
                 ]
               },
               {
@@ -5972,7 +5971,8 @@
                 "name": "negative",
                 "type": "CONDITIONING",
                 "links": [
-                  2833
+                  2833,
+                  3077
                 ]
               },
               {
@@ -6395,6 +6395,62 @@
             "widgets_values": [
               "always"
             ]
+          },
+          {
+            "id": 2008,
+            "type": "LTXVCropGuides",
+            "pos": [
+              4333.515288845161,
+              5029.627435075243
+            ],
+            "size": [
+              240,
+              86
+            ],
+            "flags": {},
+            "order": 11,
+            "mode": 0,
+            "inputs": [
+              {
+                "name": "positive",
+                "type": "CONDITIONING",
+                "link": 3076
+              },
+              {
+                "name": "negative",
+                "type": "CONDITIONING",
+                "link": 3077
+              },
+              {
+                "name": "latent",
+                "type": "LATENT",
+                "link": 3078
+              }
+            ],
+            "outputs": [
+              {
+                "name": "positive",
+                "type": "CONDITIONING",
+                "linkIds": []
+              },
+              {
+                "name": "negative",
+                "type": "CONDITIONING",
+                "linkIds": []
+              },
+              {
+                "name": "latent",
+                "type": "LATENT",
+                "linkIds": [
+                  3002
+                ]
+              }
+            ],
+            "properties": {
+              "cnr_id": "comfy-core",
+              "Node name for S&R": "LTXVCropGuides"
+            },
+            "title": "CropGuides (LATENT-only — split)"
           }
         ],
         "groups": [],
@@ -6649,8 +6705,8 @@
           },
           {
             "id": 3002,
-            "origin_id": 596,
-            "origin_slot": 0,
+            "origin_id": 2008,
+            "origin_slot": 2,
             "target_id": 2006,
             "target_slot": 0,
             "type": "LATENT"
@@ -6716,6 +6772,30 @@
             "origin_id": 1519,
             "origin_slot": 2,
             "target_id": 655,
+            "target_slot": 2,
+            "type": "LATENT"
+          },
+          {
+            "id": 3076,
+            "origin_id": 1519,
+            "origin_slot": 0,
+            "target_id": 2008,
+            "target_slot": 0,
+            "type": "CONDITIONING"
+          },
+          {
+            "id": 3077,
+            "origin_id": 1519,
+            "origin_slot": 1,
+            "target_id": 2008,
+            "target_slot": 1,
+            "type": "CONDITIONING"
+          },
+          {
+            "id": 3078,
+            "origin_id": 596,
+            "origin_slot": 0,
+            "target_id": 2008,
             "target_slot": 2,
             "type": "LATENT"
           }

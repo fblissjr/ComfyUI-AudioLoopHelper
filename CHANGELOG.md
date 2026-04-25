@@ -30,32 +30,35 @@ This project uses [Semantic Versioning](https://semver.org/).
   ship as a pair so a sibling branch can't silently regress the fix.
 
 - **Loop-subgraph dependency cycle through `LTXVCropGuides`.** The
-  canonical wiring closed a cycle: `CFGGuider ← CropGuides ← AdainLatent
-  ← SeparateAVLatent ← Sampler ← CFGGuider`. ComfyUI's strict cycle
-  detector (recent versions) rejects this at prompt-validation time,
-  blocking `VHS_VideoCombine` output; users got the initial sampler
-  pass (8/8 steps) but no `.mp4`. Cycle existed in canonical for 10+
-  commits — users had been working around it via in-UI graph edits
-  before render. Fix: feed `CropGuides.latent` (slot 2) from
-  `LTXVAddLatentGuide(1519).slot 2` — the pure video LATENT just
-  upstream of `LTXVConcatAVLatent` (which would emit a `NestedTensor`
-  that CropGuides can't `.clone()`). All three CropGuides inputs now
-  come from AddLatentGuide directly: clean linear path, no cycle, no
-  NestedTensor crash. The sampled-latent output path runs in parallel:
-  `Sampler → SeparateAV → AdainLatent → LatentOverlapTrim →
-  IterationCleanup → output`. `CropGuides.execute()` derives
-  `num_keyframes` from the positive CONDITIONING (not from the latent
-  contents), so its CONDITIONING outputs to CFGGuider remain correct
-  (F3 honored). Applied across 5 production + 3 experimental workflows.
+  canonical wired a single `LTXVCropGuides(655)` such that its
+  CONDITIONING output fed CFGGuider (F3) AND its LATENT input read
+  the post-sampling SeparateAV output — closing the cycle `CFGGuider
+  ← CropGuides ← SeparateAV ← Sampler ← CFGGuider`. ComfyUI's strict
+  cycle detector (recent versions) rejects this at prompt-validation
+  time, blocking `VHS_VideoCombine` output; users got the initial
+  sampler pass (8/8 steps) but no `.mp4`. Cycle existed in canonical
+  for 10+ commits — older ComfyUI tolerated the node-internal
+  CONDITIONING/LATENT independence; newer doesn't.
 
-  **Known trade-off**: the LATENT-side of CropGuides (which previously
-  cropped keyframe-padding from the sampled output) is now a dead-end
-  output. `LTXVAddLatentGuide(1519)` at `latent_idx=-1` adds a
-  precursor/continuity frame that is no longer auto-stripped. If this
-  shows up as a visible artifact at iteration seams, follow-up work is
-  to either (a) duplicate CropGuides — one pre-sampler for CONDITIONING,
-  one post-sampler for LATENT — or (b) add a dedicated post-AdainLatent
-  LATENT crop step. Recipe TBD.
+  **Fix: split CropGuides into two instances of the same upstream
+  `LTXVCropGuides` node.** No new node code needed.
+  - **`CropGuides(655)` — CONDITIONING-only role.** All three inputs
+    from `LTXVAddLatentGuide(1519)` (positive, negative, latent)
+    pre-sampling. Outputs feed CFGGuider (F3 honored). Its LATENT
+    output is a dead end here.
+  - **`CropGuides(2008)` — LATENT-only role (NEW instance).**
+    `positive`/`negative` from `LTXVAddLatentGuide(1519)` (read-only,
+    just to satisfy required inputs and provide `num_keyframes`).
+    `latent` from `SeparateAV(596).video_latent` (post-sampling,
+    video-only — no `NestedTensor` issue). LATENT output feeds
+    `AdainLatent(2006)` → `LatentOverlapTrim` → output. Its CONDITIONING
+    outputs are dead ends here.
+
+  No cycle: each instance only depends on upstream of itself.
+  CONDITIONING flow correct (F3 intact). Post-sampling keyframe
+  cropping preserved (the LATENT-only instance does the same crop).
+  Color correction intact (AdainLatent active). Applied across 5
+  production + 3 experimental workflows.
 - **`exec_logger.py` async-cache wrapper.** Recent ComfyUI made
   `HierarchicalCache.get` a coroutine; the wrapper at line 220 called
   it without `await`, generating an unawaited-coroutine warning at
