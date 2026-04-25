@@ -409,11 +409,8 @@ def _build_report(
             f"{g.overlap_latent_frames} latents. Stride collapses, convergence extremely slow."
         )
 
-    # Keyframe checks — gated on batch_size > 0. Schedule format is
-    # identical for `KeyframeLatentScheduleBatchEncode` (current) and
-    # legacy `KeyframeImageSchedule`; this check block runs on either.
-    # Catches the three footguns that turn the keyframe path into a
-    # no-op or an error:
+    # Keyframe checks — gated on batch_size > 0. Catches three footguns
+    # that turn the keyframe path into a no-op or an error:
     #   1. Batch wired but schedule empty (silent index-0 lock).
     #   2. Schedule references an index beyond batch_size (runtime clamp
     #      swallows the user's intent).
