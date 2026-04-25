@@ -1873,7 +1873,7 @@ class VideoFrameExtract(io.ComfyNode):
     wired in any shipped workflow. Retained as a discoverable primitive
     for future V2V workflows (e.g. a reference-video retake variant) —
     zero runtime cost when unused. Removing it would force re-writing
-    if the V2V use case materializes; see PLAN.md §7 for context.
+    if the V2V use case materializes.
     """
 
     @classmethod

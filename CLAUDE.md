@@ -65,7 +65,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **Subgraph schema changes force a UI re-add** (slot indices baked at save time). Same for any `define_schema()` change.
 - Removing a subgraph input shifts higher slot indices — decrement `origin_slot` refs.
 - ComfyUI evaluates downstream conditioning before upstream sampling → extra nodes in conditioning path can corrupt initial render.
-- **`CLIPTextEncode(169) → ConditioningZeroOut(420) → LTXVConditioning(164).negative → CFGGuider(153).negative` chain is wired-correctly but runtime-inert at `CFG=1`** (sampler computes `eps = eps_positive` only). Don't try to remove it — `CFGGuider` validates both `positive` and `negative` input slots; removing 169 or 420 unwires CFGGuider and breaks the workflow. Audit conclusion 2026-04-25 (was flagged as "dead code" 2026-04-22; investigation showed structural requirement).
+- **`CLIPTextEncode(169) → ConditioningZeroOut(420) → LTXVConditioning(164).negative → CFGGuider(153).negative` chain is wired-correctly but runtime-inert at `CFG=1`** (sampler computes `eps = eps_positive` only). Don't try to remove it — `CFGGuider` validates both `positive` and `negative` input slots; removing 169 or 420 unwires CFGGuider and breaks the workflow.
 - `torchaudio.detect_pitch_frequency` on silence → false positives. Gate with RMS > 0.005.
 - `LTXVPreprocess img_compression=0` SKIPS preprocessing (frozen first frames). Use 18 (Lightricks) or 35 (core).
 - Pyright `reportIncompatibleMethodOverride` on `execute()` is a false positive.
