@@ -1,4 +1,4 @@
-Last updated: 2026-04-23 (docs cleanup round 2)
+Last updated: 2026-04-25 (added retake guide nav entry)
 
 # docs/ — ComfyUI-AudioLoopHelper documentation
 
@@ -45,6 +45,7 @@ docs/
 - The LATENT-loop workflow, node by node: [`reference/pipeline_flow_latent.md`](reference/pipeline_flow_latent.md)
 - The IMAGE-loop workflow, node by node (reference-only now): [`reference/pipeline_flow_image.md`](reference/pipeline_flow_image.md)
 - LTXVLoopingSampler structural reference (video-only; NOT for music video): [`reference/ltxv_looping_sampler_reference.md`](reference/ltxv_looping_sampler_reference.md)
+- Fix one section of a previously generated video (retake): [`guides/retake_guide.md`](guides/retake_guide.md)
 - Upscale workflow: not yet shipped; design doc at `internal/design/upscale_workflow_design.md`
 
 ### "I want to write a prompt schedule"

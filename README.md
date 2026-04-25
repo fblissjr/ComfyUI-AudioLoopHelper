@@ -1,6 +1,6 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-04-24
+Last updated: 2026-04-25
 
 **TLDR**: Custom ComfyUI nodes for generating full-length music videos with LTX 2.3.
 Handles loop timing, auto-stopping at the audio boundary, per-iteration seed
@@ -8,7 +8,7 @@ variation, timestamp-based prompt scheduling, smooth conditioning blending,
 latent-space overlap conversion, and per-iteration keyframe image scheduling
 for scene changes. No manual iteration counting or fragile constants.
 
-Five workflow variants included:
+Six workflow variants included:
 - **Latent workflow** (`audio-loop-music-video_latent.json`) -- **primary
   baseline.** Operates in latent space via LatentContextExtract and
   LatentOverlapTrim. No per-iteration VAE round-trip. Uses
@@ -32,6 +32,13 @@ Five workflow variants included:
 - **Image + per-step AdaIN** (`audio-loop-music-video_image_adain_perstep.json`) --
   experimental. Same as image workflow plus LTXVPerStepAdainPatcher on
   the model chain — applies AdaIN at every denoising step.
+- **Retake** (`audio-loop-music-video_retake.json`) --
+  regenerate a `[start_time, end_time]` window of a previously generated
+  video without re-rendering the rest. Loads a prior mp4, encodes it,
+  applies `LatentTemporalMask`, samples only the masked range, decodes,
+  passes audio through unchanged. Built by
+  `scripts/apply_audio_loop_retake.py`. See
+  [`docs/guides/retake_guide.md`](docs/guides/retake_guide.md).
 
 Workflow adapted from [kijai's LTX 2.3 long loop extension test](https://github.com/kijai/ComfyUI-NativeLooping_testing/blob/main/ltx23_long_loop_extension_test.json).
 
