@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1626,
-  "last_link_id": 3089,
+  "last_node_id": 1628,
+  "last_link_id": 3105,
   "nodes": [
     {
       "id": 252,
@@ -2973,7 +2973,7 @@
           "type": "VAE",
           "links": [
             2037,
-            3083
+            3099
           ]
         }
       ],
@@ -3190,7 +3190,7 @@
           "label": "init_image",
           "name": "guide_latent",
           "type": "LATENT",
-          "link": 3089
+          "link": 3105
         },
         {
           "label": "Audio VAE",
@@ -3356,7 +3356,7 @@
             2936,
             3027,
             3045,
-            3088
+            3104
           ]
         }
       ],
@@ -3568,7 +3568,7 @@
           "type": "FLOAT",
           "links": [
             3025,
-            3086
+            3102
           ]
         },
         {
@@ -3584,7 +3584,7 @@
           "links": [
             2946,
             3024,
-            3085
+            3101
           ]
         },
         {
@@ -4246,7 +4246,7 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            3084
+            3100
           ]
         }
       ],
@@ -4387,7 +4387,7 @@
       "title": "Loop Iteration Stamp"
     },
     {
-      "id": 1625,
+      "id": 1627,
       "type": "KeyframeLatentScheduleBatchEncode",
       "pos": [
         -1100,
@@ -4404,22 +4404,22 @@
         {
           "name": "vae",
           "type": "VAE",
-          "link": 3083
+          "link": 3099
         },
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 3084
+          "link": 3100
         },
         {
           "name": "stride_seconds",
           "type": "FLOAT",
-          "link": 3085
+          "link": 3101
         },
         {
           "name": "audio_duration",
           "type": "FLOAT",
-          "link": 3086
+          "link": 3102
         },
         {
           "name": "schedule",
@@ -4443,7 +4443,7 @@
           "name": "latent_list",
           "type": "*",
           "links": [
-            3087
+            3103
           ]
         },
         {
@@ -4456,13 +4456,13 @@
         "Node name for S&R": "KeyframeLatentScheduleBatchEncode"
       },
       "widgets_values": [
-        "0:00+: 0",
+        "0:00-0:42: 0\n0:42-1:28: 1\n1:28+: 2",
         true
       ],
       "title": "Keyframe Latent Schedule (Batch Encode)"
     },
     {
-      "id": 1626,
+      "id": 1628,
       "type": "LatentSelectByIteration",
       "pos": [
         -650,
@@ -4479,12 +4479,12 @@
         {
           "name": "latent_list",
           "type": "*",
-          "link": 3087
+          "link": 3103
         },
         {
           "name": "current_iteration",
           "type": "INT",
-          "link": 3088
+          "link": 3104
         }
       ],
       "outputs": [
@@ -4492,7 +4492,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            3089
+            3105
           ]
         }
       ],
@@ -5417,56 +5417,56 @@
       "MODEL"
     ],
     [
-      3083,
+      3099,
       619,
       0,
-      1625,
+      1627,
       0,
       "VAE"
     ],
     [
-      3084,
+      3100,
       1617,
       0,
-      1625,
+      1627,
       1,
       "IMAGE"
     ],
     [
-      3085,
+      3101,
       1582,
       4,
-      1625,
+      1627,
       2,
       "FLOAT"
     ],
     [
-      3086,
+      3102,
       1582,
       2,
-      1625,
+      1627,
       3,
       "FLOAT"
     ],
     [
-      3087,
-      1625,
+      3103,
+      1627,
       0,
-      1626,
+      1628,
       0,
       "*"
     ],
     [
-      3088,
+      3104,
       1539,
       3,
-      1626,
+      1628,
       1,
       "INT"
     ],
     [
-      3089,
-      1626,
+      3105,
+      1628,
       0,
       843,
       8,

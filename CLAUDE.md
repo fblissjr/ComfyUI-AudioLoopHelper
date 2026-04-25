@@ -142,6 +142,9 @@ Companion custom nodes (used alongside, not imported):
 - Default: mutate `example_workflows/audio-loop-music-video_latent.json` in place (accept optional path).
 - **Experimental variants stage to `internal/scratch/<base>_<feature>_<phase>.json`** via `--output`. Idempotent; `--revert` deletes the staging file. Canonical: `scripts/apply_iclora_initial_render.py`. Promotion to `example_workflows/` follows "ships AND stabilizes"; criteria in `internal/PLAN.md`.
 - **Scratch-build apply scripts** use `WorkflowEditor.from_scratch(output_path)` + `add_top_level_node` + `add_link` — returns an empty-skeleton editor with fresh uuid + reset `last_node_id` / `last_link_id`. No parallel `Builder` class needed. Canonical: `scripts/apply_spectrogram_iclora_minimal.py`.
+- **Apply scripts share `scripts/_apply_helpers.py`** — 10 raw-orjson workflow-mutation helpers (`add_link`, `find_node`, `remove_node_and_links`, `find_link_to_slot`, `next_id`, etc.) extracted at the 3rd call site (2026-04-25). Import via `from _apply_helpers import add_link as _add_link, ...` — alias preserves call-site names for minimal diff. Don't re-define inline.
+- **Verify true idempotence**: `md5sum <output>` before + after re-run must match. Common bug: strip-then-readd burns `last_node_id` across runs. Fix: `if _is_already_built(wf): return` short-circuit on re-apply.
+- **Sweep orphan virtual GetNodes** after fork-and-strip. A GetNode whose `widgets_values[0]` matches no live SetNode is orphaned; ComfyUI tolerates it at runtime but it clutters the graph and the dead-wire audit will WARN. Add the ID to `STRIP_IDS` with a categorical comment. Detect via: `[n["id"] for n in wf["nodes"] if n["type"]=="GetNode" and not (n.get("outputs",[{}])[0].get("links") or [])]`.
 
 ## Working with Claude across sessions
 
@@ -152,6 +155,7 @@ Companion custom nodes (used alongside, not imported):
 - **Decisions-index pattern**: DECISION / WHY / CONTEXT triples, grouped by feature. Template at `internal/ic_lora_assessment.md §6.5`. Roll up any feature >3 commits to avoid re-deriving rationale from git log.
 - **LTX 2.3 audio-feature seed variance is ~±20 BPM** for equivalent electronic-genre conditioning. Single-seed comparisons between configs are noise; multi-seed (3-5 per config) needed to detect audio-effect changes. Ref: `docs/experiments/exp_2026-04-24_spectrogram_iclora_v2a.md` §Inferences.
 - **Bulk `replace_all` AFTER adding prose to the same file is dangerous.** A retraction note or callout that *quotes* the pattern being replaced (e.g. a note saying "used to use `Cut to a [shot]...`" followed by `replace_all "Cut to a " → "In a "`) sweeps your own freshly-added prose, corrupting the annotation. Add prose annotations AFTER bulk pattern edits, or scope the pattern (only schedule-line matches, only inside fenced blocks). Caught 2026-04-25 in Cut-to retraction; only `/simplify` review caught it.
+- **Sibling-session commit race**: when multiple Claude sessions run concurrently, one's `git add` + `git commit` can sweep another's staged changes into its commit with the wrong message. Verify your own commits via `git log -- <file>` (not `git log -1`); the CHANGELOG entry inside the commit is the durable record if the message lies.
 
 ## Documentation conventions
 

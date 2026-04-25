@@ -196,8 +196,9 @@ class LoopConfigValidator(io.ComfyNode):
                     default="",
                     multiline=True,
                     tooltip=(
-                        "KeyframeImageSchedule schedule string (same format as the "
-                        "`schedule` widget). Empty = skip keyframe checks.\n"
+                        "Schedule string from `KeyframeLatentScheduleBatchEncode` "
+                        "(current) or legacy `KeyframeImageSchedule`. Empty = "
+                        "skip keyframe checks.\n"
                         "Example:\n"
                         "  0:00-0:42: 0\n"
                         "  0:42-1:28: 1\n"
@@ -210,8 +211,9 @@ class LoopConfigValidator(io.ComfyNode):
                     min=0,
                     tooltip=(
                         "Number of images in the batch wired to "
-                        "KeyframeImageSchedule.images. 0 = skip keyframe checks. "
-                        "Enables: index-out-of-bounds detection, "
+                        "`KeyframeLatentScheduleBatchEncode.images` (current) or "
+                        "`KeyframeImageSchedule.images` (legacy). 0 = skip "
+                        "keyframe checks. Enables: index-out-of-bounds detection, "
                         "schedule-collapses-to-single-index detection, "
                         "empty-schedule-with-batch detection."
                     ),
@@ -407,8 +409,11 @@ def _build_report(
             f"{g.overlap_latent_frames} latents. Stride collapses, convergence extremely slow."
         )
 
-    # Keyframe checks — gated on batch_size > 0. Catches the three
-    # footguns that make KeyframeImageSchedule a no-op or an error:
+    # Keyframe checks — gated on batch_size > 0. Schedule format is
+    # identical for `KeyframeLatentScheduleBatchEncode` (current) and
+    # legacy `KeyframeImageSchedule`; this check block runs on either.
+    # Catches the three footguns that turn the keyframe path into a
+    # no-op or an error:
     #   1. Batch wired but schedule empty (silent index-0 lock).
     #   2. Schedule references an index beyond batch_size (runtime clamp
     #      swallows the user's intent).

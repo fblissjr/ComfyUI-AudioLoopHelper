@@ -120,7 +120,7 @@ def build(output_path: Path, dry_run: bool = False) -> None:
             _out("iteration_count", "INT"),
         ],
         "properties": {"Node name for S&R": "KeyframeLatentScheduleBatchEncode"},
-        "widgets_values": ["0:00+: 0", True],
+        "widgets_values": ["0:00-0:42: 0\n0:42-1:28: 1\n1:28+: 2", True],
         "title": "Keyframe Latent Schedule (Batch Encode)",
     })
 
