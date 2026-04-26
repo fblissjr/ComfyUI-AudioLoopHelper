@@ -16,7 +16,7 @@ helper.
 | `COMFYUI_EXEC_LOG` | unset → exec logger inactive | `start_experiment.sh` | `exec_logger.py::_resolve_log_target` |
 | `COMFYUI_EXEC_LOG_SHAPE_LIMIT` | unset → 8 items per list/dict shape snapshot | manual | `exec_logger.py::_shape_of` |
 | `AUDIOLOOPHELPER_SAGE_TRACE` | unset → sage tracer inactive | `start_experiment.sh` | `nodes_sage.py::resolve_trace_path` |
-| `COMFYUI_API_URL` | unset → `http://127.0.0.1:8188` | manual / Phase-2 harness | `internal/autoresearch/harness.py::_api_url` |
+| `COMFYUI_API_URL` | unset → `http://<local_comfyui_host>:<port>` (ComfyUI's loopback default, e.g. `localhost` on port `8188` for a stock install) | manual / Phase-2 harness | `internal/autoresearch/harness.py::_api_url` |
 
 `<comfyui>` = your ComfyUI install root (the directory that contains
 `main.py` and `custom_nodes/`).
@@ -113,7 +113,7 @@ does not install.
 
 ### `COMFYUI_API_URL` (planned, Phase 2)
 
-**Values**: full URL string. Default `http://127.0.0.1:8188` when
+**Values**: full URL string. Default `http://<local_comfyui_host>:<port>` (ComfyUI's loopback default, e.g. `localhost` on port `8188` for a stock install) when
 unset.
 
 **Will be read by**: the experiment harness (`internal/autoresearch/harness.py`)
