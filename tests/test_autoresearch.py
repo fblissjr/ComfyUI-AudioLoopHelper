@@ -352,3 +352,105 @@ class TestMutateVhsFilename:
         wf_path.write_bytes(orjson.dumps(_empty_workflow_with(_alc_node())))
         ed = WorkflowEditor(wf_path)
         _mutate_vhs_filename(ed, "test_xyz")  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# Metric: sage_summary
+#
+# First non-placeholder Phase 2.1 metric extractor. Reads sage.jsonl from
+# run_dir, aggregates kernel distribution + fallback count + total
+# attention time. Surfaces value sage-fork's bench would otherwise re-derive.
+# ---------------------------------------------------------------------------
+
+def _write_sage_jsonl(path, rows):
+    """Helper: serialize a list of dicts as JSONL bytes."""
+    lines = [orjson.dumps(r).decode() for r in rows]
+    path.write_text("\n".join(lines) + "\n")
+
+
+class TestSageSummary:
+    def test_returns_trace_missing_when_file_absent(self, tmp_path):
+        from internal.autoresearch.metrics import sage_summary
+        out = sage_summary.extract(tmp_path, fixture=None)
+        assert out == {"sage_status": "trace_missing"}
+
+    def test_returns_trace_empty_when_no_per_call_rows(self, tmp_path):
+        from internal.autoresearch.metrics import sage_summary
+        sage_log = tmp_path / "sage.jsonl"
+        # Header + summary only — no per-call rows.
+        _write_sage_jsonl(sage_log, [
+            {"event": "header", "arch": "sm89_cuda12_8"},
+            {"event": "summary", "total_calls": 0, "fallback_count": 0, "distinct_shapes": 0},
+        ])
+        out = sage_summary.extract(tmp_path, fixture=None)
+        assert out == {"sage_status": "trace_empty"}
+
+    def test_aggregates_per_call_rows_into_summary(self, tmp_path):
+        from internal.autoresearch.metrics import sage_summary
+        sage_log = tmp_path / "sage.jsonl"
+        _write_sage_jsonl(sage_log, [
+            {"event": "header", "arch": "sm89_cuda12_8"},
+            {"shape": [1, 22932, 4096], "has_mask": False, "mode": "auto_mask_aware",
+             "effective_mode": "auto", "fell_back": False, "elapsed_us": 100.0,
+             "dispatched_kernel": "fp8_cuda++"},
+            {"shape": [1, 22932, 4096], "has_mask": False, "mode": "auto_mask_aware",
+             "effective_mode": "auto", "fell_back": False, "elapsed_us": 200.0,
+             "dispatched_kernel": "fp8_cuda++"},
+            {"shape": [1, 498, 2048], "has_mask": True, "mode": "auto_mask_aware",
+             "effective_mode": "fp16_triton", "fell_back": False, "elapsed_us": 50.0,
+             "dispatched_kernel": "fp16_triton"},
+            {"shape": [1, 498, 2048], "has_mask": True, "mode": "auto_mask_aware",
+             "effective_mode": "fp16_triton", "fell_back": True, "elapsed_us": 80.0},
+        ])
+        out = sage_summary.extract(tmp_path, fixture=None)
+        assert out["sage_status"] == "ok"
+        assert out["sage_total_calls"] == 4
+        assert out["sage_fallback_count"] == 1
+        assert out["sage_distinct_shapes"] == 2
+        assert out["sage_total_attention_us"] == 430.0
+        assert out["sage_arch"] == "sm89_cuda12_8"
+        # fp8_cuda++: 2 calls × 100+200 µs = 300 µs
+        # fp16_triton: 1 call × 50 µs (the fallback row falls back to effective_mode)
+        # = total 350; the fallback row uses effective_mode "fp16_triton" since
+        # dispatched_kernel was absent.
+        assert out["sage_kernel_distribution"]["fp8_cuda++"]["n"] == 2
+        assert out["sage_kernel_distribution"]["fp8_cuda++"]["total_us"] == 300.0
+        assert out["sage_kernel_distribution"]["fp16_triton"]["n"] == 2  # one dispatched + one fallback
+        assert out["sage_kernel_distribution"]["fp16_triton"]["total_us"] == 130.0
+        # Fractions sum to 1.0 (within rounding)
+        total_frac = sum(
+            d["fraction"] for d in out["sage_kernel_distribution"].values()
+        )
+        assert abs(total_frac - 1.0) < 0.001
+
+    def test_falls_back_to_effective_mode_when_dispatched_kernel_absent(self, tmp_path):
+        """Older traces (pre-`6a3be19`) may not have dispatched_kernel
+        on every row. The aggregator must fall back to effective_mode
+        rather than skipping the row."""
+        from internal.autoresearch.metrics import sage_summary
+        sage_log = tmp_path / "sage.jsonl"
+        _write_sage_jsonl(sage_log, [
+            {"shape": [1, 100, 64], "has_mask": False, "mode": "auto_mask_aware",
+             "effective_mode": "auto", "fell_back": False, "elapsed_us": 10.0},
+        ])
+        out = sage_summary.extract(tmp_path, fixture=None)
+        assert out["sage_total_calls"] == 1
+        assert "auto" in out["sage_kernel_distribution"]
+        assert out["sage_kernel_distribution"]["auto"]["n"] == 1
+
+    def test_skips_blank_lines_and_decode_errors(self, tmp_path):
+        """Tracer JSONL can contain blank lines (line buffering near
+        crash) or partial last lines (mid-write truncation). Aggregator
+        must keep going."""
+        from internal.autoresearch.metrics import sage_summary
+        sage_log = tmp_path / "sage.jsonl"
+        sage_log.write_text(
+            '{"shape":[1,10,10],"has_mask":false,"mode":"auto","effective_mode":"auto","fell_back":false,"elapsed_us":5.0}\n'
+            "\n"
+            "{not valid json\n"
+            '{"shape":[1,20,20],"has_mask":false,"mode":"auto","effective_mode":"auto","fell_back":false,"elapsed_us":7.0}\n'
+        )
+        out = sage_summary.extract(tmp_path, fixture=None)
+        assert out["sage_status"] == "ok"
+        assert out["sage_total_calls"] == 2
+        assert out["sage_distinct_shapes"] == 2

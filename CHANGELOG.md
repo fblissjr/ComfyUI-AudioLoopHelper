@@ -7,6 +7,19 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **First non-placeholder Phase 2.1 metric extractor:
+  `sage_summary`** — reads `data/runs/${RUN_ID}/sage.jsonl` per
+  render, aggregates kernel distribution + fallback count + total
+  attention time + distinct shapes + arch tag, lands in the tracker's
+  `metrics` JSON column and on disk at
+  `data/runs/${RUN_ID}/metrics.json`. Validates the metric-extractor
+  contract for non-trivial extractors (the previous `wall_time` was a
+  placeholder). Cross-pollinates with `scripts/sage_telemetry_summary.py`'s
+  aggregation logic; per-run instead of per-CLI-invocation.
+  Public-facing test contract: `tests/test_autoresearch.py::TestSageSummary`
+  (5 cases — trace-missing, trace-empty, ok-aggregation,
+  fallback-to-effective-mode, blank-lines-and-decode-errors).
+  Implementation gitignored in `internal/autoresearch/metrics/sage_summary.py`.
 - **Public env-var registry** at `docs/reference/environment.md`. Lists
   every env var the codebase reads (`RUN_ID`, `COMFYUI_EXEC_LOG`,
   `COMFYUI_EXEC_LOG_SHAPE_LIMIT`, `AUDIOLOOPHELPER_SAGE_TRACE`,
