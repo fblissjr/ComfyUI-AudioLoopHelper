@@ -75,8 +75,13 @@ def _audit_one(wf_path: Path) -> list[Finding]:
     name = wf_path.name
     wf = orjson.loads(wf_path.read_bytes())
     by_type: dict[str, list[dict]] = {}
+    by_id: dict[int, dict] = {}
     for n in wf["nodes"]:
         by_type.setdefault(n["type"], []).append(n)
+        by_id[n["id"]] = n
+    links_by_id: dict[int, list] = {
+        l[0]: l for l in wf.get("links") or [] if isinstance(l, list)
+    }
 
     def record(status: str, check: str, msg: str = "") -> None:
         findings.append(Finding(status, name, check, msg))
@@ -123,6 +128,47 @@ def _audit_one(wf_path: Path) -> list[Finding]:
                    f"Run scripts/apply_alc_seed_rename.py")
         else:
             record("OK", "alc_seed_legacy_name", "uses 'base_seed' (post-rename)")
+
+    # TensorLoopOpen.iterations_in (post-2026-04-26 autowire to AudioLoopPlanner)
+    # Wired iterations_in lets the loop count auto-match the input audio
+    # length without a hard-coded widget value, and gives the experiment
+    # harness a stable target for short-tier overrides. Skip the check for
+    # workflow variants that legitimately have no TensorLoopOpen (retake,
+    # ICLoRA POCs).
+    tlo_nodes = by_type.get("TensorLoopOpen", [])
+    if tlo_nodes:
+        all_wired = True
+        for n in tlo_nodes:
+            inp = next(
+                (i for i in n.get("inputs") or [] if i.get("name") == "iterations_in"),
+                None,
+            )
+            if inp is None or inp.get("link") is None:
+                record("ERR", "iterations_autowired",
+                       f"TensorLoopOpen({n['id']}).iterations_in unwired. "
+                       f"Run scripts/apply_iterations_autowire.py")
+                all_wired = False
+                continue
+            # Verify the link source is AudioLoopPlanner.total_iterations
+            link_id = inp["link"]
+            link = links_by_id.get(link_id)
+            if link is None:
+                record("WARN", "iterations_autowired",
+                       f"TensorLoopOpen({n['id']}).iterations_in link {link_id} dangling")
+                all_wired = False
+                continue
+            src_id, src_slot = link[1], link[2]
+            src_node = by_id.get(src_id)
+            if src_node and src_node.get("type") == "AudioLoopPlanner" and src_slot == 1:
+                continue  # canonical wiring
+            src_type = src_node.get("type") if src_node else "?"
+            record("WARN", "iterations_autowired",
+                   f"TensorLoopOpen({n['id']}).iterations_in wired from "
+                   f"{src_type}({src_id}).out[{src_slot}] (expected AudioLoopPlanner.total_iterations). "
+                   f"OK if intentional (e.g. experiment-tier override).")
+            all_wired = False
+        if all_wired:
+            record("OK", "iterations_autowired", "wired from AudioLoopPlanner.total_iterations")
 
     # LoopIterationStamp
     if by_type.get("LoopIterationStamp"):

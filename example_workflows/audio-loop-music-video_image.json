@@ -2,7 +2,7 @@
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
   "last_node_id": 1608,
-  "last_link_id": 3022,
+  "last_link_id": 3023,
   "nodes": [
     {
       "id": 252,
@@ -3011,7 +3011,9 @@
         {
           "name": "total_iterations",
           "type": "INT",
-          "links": null
+          "links": [
+            3023
+          ]
         }
       ],
       "properties": {
@@ -3498,6 +3500,12 @@
           "shape": 7,
           "type": "IMAGE,MASK,LATENT",
           "link": 2875
+        },
+        {
+          "name": "iterations_in",
+          "type": "INT",
+          "shape": 7,
+          "link": 3023
         }
       ],
       "outputs": [
@@ -5243,6 +5251,14 @@
       650,
       0,
       "IMAGE"
+    ],
+    [
+      3023,
+      1560,
+      1,
+      1539,
+      1,
+      "INT"
     ]
   ],
   "groups": [

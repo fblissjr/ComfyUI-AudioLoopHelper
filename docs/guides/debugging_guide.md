@@ -1,4 +1,4 @@
-Last updated: 2026-04-24 (added F2 preprocess-symmetry and F3 loop-cropguides-symmetry recipes)
+Last updated: 2026-04-26 (added manual-short-iteration recipe after Phase 1c iterations autowire)
 
 # Debugging Guide: Quality Problems in the Audio-Loop Pipeline
 
@@ -582,6 +582,46 @@ should show `stride_seconds = 17.92` at `window=19.88, overlap=2`
 **If you still see drift post-fix**: check that your ComfyUI
 instance has reloaded the updated `nodes.py`. ComfyUI caches custom
 node code; restart ComfyUI entirely if you just pulled.
+
+### Manually short-circuit iterations for a quick smoke test
+
+**Symptom**: you want a fast 1-iteration or 3-iteration render to
+verify a workflow change without waiting for the full audio length.
+
+**Background**: as of 2026-04-26 every shipped workflow auto-wires
+`AudioLoopPlanner.total_iterations → TensorLoopOpen.iterations_in`,
+so by default the loop runs exactly long enough to cover the input
+audio. To cap it shorter, override the wire with a constant.
+
+**Recipe** (in the ComfyUI canvas):
+
+1. Drag in an `INTConstant` (KJNodes) and set its widget to the cap
+   you want (e.g. `1` or `3`).
+2. On the `TensorLoopOpen` node, find the `iterations_in` input
+   (rendered as an optional cyan slot near the bottom of the inputs
+   list).
+3. Right-click the existing wire feeding `iterations_in` (it's coming
+   from `AudioLoopPlanner.total_iterations`) and disconnect it.
+4. Wire your `INTConstant.value` → `TensorLoopOpen.iterations_in`.
+5. Render. The loop now caps at your constant regardless of audio
+   length.
+
+**Restore**: reconnect `AudioLoopPlanner.total_iterations` →
+`TensorLoopOpen.iterations_in` and delete the constant. Or run
+`scripts/apply_iterations_autowire.py` against the workflow file to
+restore the canonical wiring.
+
+**Audit**: `scripts/audit_workflows.py` will WARN (not ERR) when
+`iterations_in` is wired from a non-AudioLoopPlanner source — this is
+intentional, the WARN message says "OK if intentional (e.g.
+experiment-tier override)."
+
+For programmatic short tests, use the experiment harness — it copies
+the workflow JSON to a temp path and rewires `iterations_in` to an
+`INTConstant` of the desired tier (1 / 3 / N) without touching the
+canonical workflow file.
+
+---
 
 ### Resolution alignment
 
