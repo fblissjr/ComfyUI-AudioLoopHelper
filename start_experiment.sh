@@ -1,13 +1,15 @@
 #!/bin/bash
-# start_experiment.sh — thin wrapper that generates a single RUN_ID and exec's
-# the ComfyUI start.sh. Every telemetry artifact (exec_log, sage trace,
-# profiler outputs) and the workflow harness pick up RUN_ID from the env so
-# all artifacts for one render share a directory key — making cross-system
-# correlation trivial.
+# start_experiment.sh — telemetry-enabled wrapper around ComfyUI's start.sh.
 #
-# Without this wrapper, the three loggers stamp their own filenames from
-# time.time() at startup and drift apart by seconds, so files from the same
-# conceptual render look unrelated. Single env var fixes it.
+# Owns three env-var exports that make this plugin's instrumentation work:
+#   - RUN_ID                       (single correlation key for one render)
+#   - AUDIOLOOPHELPER_SAGE_TRACE   (per-attention-call sage tracer)
+#   - COMFYUI_EXEC_LOG             (per-node ComfyUI execution logger)
+#
+# All three default to "auto" (or auto-generated, for RUN_ID) when unset,
+# so just running `./start_experiment.sh [mode]` gets you a fully-traced
+# render. Plain `<comfyui>/start.sh [mode]` runs ComfyUI without any of
+# this plugin's telemetry — that's the design split as of 2026-04-26.
 #
 # RUN_ID format: ${ISO8601_UTC}_${rand4}   e.g. 20260426T134522Z_a3f1
 #   - lexicographically sortable (sort by mtime ≡ sort by RUN_ID)
@@ -19,19 +21,48 @@
 #   RUN_ID=my_test ./start_experiment.sh      # override RUN_ID for a known run
 #
 # Artifacts land at (relative to this plugin):
-#   data/runs/${RUN_ID}/exec.jsonl
-#   data/runs/${RUN_ID}/sage.jsonl
-#   data/runs/${RUN_ID}/profiler/
+#   data/runs/${RUN_ID}/exec.jsonl       (per-node ComfyUI events)
+#   data/runs/${RUN_ID}/sage.jsonl       (per-attention-call sage telemetry)
+#   data/runs/${RUN_ID}/profiler/        (torch.profiler outputs, if wired)
 # and at ComfyUI's configured output directory:
 #   <comfyui_output>/LTX-2_${RUN_ID}_*.{mp4,png}    (when harness mutates filename_prefix)
 #
-# Set RUN_ID empty to opt out of correlation:
-#   RUN_ID= ./start_experiment.sh    # falls back to legacy timestamped paths
+# Disable for one launch (no edits): set the var empty in the calling shell.
+#   RUN_ID= AUDIOLOOPHELPER_SAGE_TRACE= COMFYUI_EXEC_LOG= ./start_experiment.sh
+# All three treat empty/unset as "disabled". The `${VAR-auto}` form
+# (no colon) substitutes "auto" only when the var is unset; if you set
+# it to "" explicitly, it stays empty and the tracer skips.
+#
+# What each tracer captures:
+#   AUDIOLOOPHELPER_SAGE_TRACE  (per-attention-call sage tracer)
+#     One JSONL row per attention call: tensor shape, has_mask, mode,
+#     effective_mode, fell_back, elapsed_us, iter, prompt_id,
+#     dispatched_kernel. NO prompt text, NO tensor values, NO model
+#     weights. Forensic-grade -- ~22k syscalls per 5-iter LTX render.
+#     Unset before a perf-sensitive production gen if the syscall
+#     overhead shows up.
+#
+#   COMFYUI_EXEC_LOG  (per-node ComfyUI execution logger)
+#     One JSONL row per node start + per node end: prompt_id, node_id,
+#     class_type, duration_s, input/output shape snapshots. The input
+#     snapshot CAN capture short string node-inputs up to 120 chars,
+#     which includes prompt text. If your prompts are sensitive, either
+#     keep this off or redact traces before sharing them.
+#
+# Retention: NO auto-cleanup. Files accumulate until you `rm` them.
+# Manual cleanup: rm -rf data/runs/<glob>/  (or
+#   rm -rf internal/analysis/runs/{sage,exec_log}/  for legacy runs).
+#
+# Full reference: docs/reference/environment.md and
+# docs/reference/telemetry_and_tracing.md.
 
 set -e
 
 export RUN_ID=${RUN_ID-$(date -u +%Y%m%dT%H%M%SZ)_$(openssl rand -hex 2)}
-echo "[start_experiment.sh] RUN_ID=$RUN_ID"
+export AUDIOLOOPHELPER_SAGE_TRACE=${AUDIOLOOPHELPER_SAGE_TRACE-auto}
+export COMFYUI_EXEC_LOG=${COMFYUI_EXEC_LOG-auto}
+
+echo "[start_experiment.sh] RUN_ID=$RUN_ID  SAGE_TRACE=$AUDIOLOOPHELPER_SAGE_TRACE  EXEC_LOG=$COMFYUI_EXEC_LOG"
 
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # ComfyUI plugin layout: <comfyui>/custom_nodes/<this-plugin>/
@@ -43,6 +74,10 @@ if [[ ! -f "$START_SH" ]]; then
     echo "  Expected ComfyUI start script two levels up from this plugin." >&2
     exit 1
 fi
+
+# `cd` so start.sh's relative paths (`./temp`, `python main.py`) resolve.
+# Lets users invoke this wrapper from any working directory.
+cd "$COMFYUI_DIR"
 
 # Use bash explicitly — start.sh may not have +x.
 exec bash "$START_SH" "$@"

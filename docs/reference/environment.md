@@ -13,10 +13,10 @@ helper.
 | Var | Default behavior | Set by | Read by |
 |---|---|---|---|
 | `RUN_ID` | unset → loggers use legacy timestamped paths | `start_experiment.sh` (this repo, root) | `scripts/workflow_utils.py::_current_run_id` |
-| `COMFYUI_EXEC_LOG` | unset → exec logger inactive | `<comfyui>/start.sh` | `exec_logger.py::_resolve_log_target` |
+| `COMFYUI_EXEC_LOG` | unset → exec logger inactive | `start_experiment.sh` | `exec_logger.py::_resolve_log_target` |
 | `COMFYUI_EXEC_LOG_SHAPE_LIMIT` | unset → 8 items per list/dict shape snapshot | manual | `exec_logger.py::_shape_of` |
-| `AUDIOLOOPHELPER_SAGE_TRACE` | unset → sage tracer inactive | `<comfyui>/start.sh` | `nodes_sage.py::resolve_trace_path` |
-| `COMFYUI_API_URL` | unset → `http://127.0.0.1:8188` | manual / Phase-2 harness | (Phase 2 — TBD) |
+| `AUDIOLOOPHELPER_SAGE_TRACE` | unset → sage tracer inactive | `start_experiment.sh` | `nodes_sage.py::resolve_trace_path` |
+| `COMFYUI_API_URL` | unset → `http://127.0.0.1:8188` | manual / Phase-2 harness | `internal/autoresearch/harness.py::_api_url` |
 
 `<comfyui>` = your ComfyUI install root (the directory that contains
 `main.py` and `custom_nodes/`).
@@ -71,8 +71,11 @@ unset (zero overhead). Both reads are intentional; the import-time
 check decides whether to install the patch, the install-time read
 decides where to write.
 
-**Set by**: `<comfyui>/start.sh` exports `COMFYUI_EXEC_LOG=auto` when
-unset.
+**Set by**: `start_experiment.sh` (this repo, root) exports
+`COMFYUI_EXEC_LOG=auto` when unset. As of 2026-04-26, plain
+`<comfyui>/start.sh` does NOT export this — that script is back to
+being a vanilla ComfyUI launcher with no plugin-specific telemetry.
+Run via `start_experiment.sh` to get the auto-trace behavior.
 
 **Auto path**: routes through `run_artifact_path("exec", "jsonl")` →
 `data/runs/${RUN_ID}/exec.jsonl` when `RUN_ID` is set, else
@@ -99,8 +102,10 @@ does not install.
 
 **Read by**: `nodes_sage.py:213 resolve_trace_path()`.
 
-**Set by**: `<comfyui>/start.sh` exports
-`AUDIOLOOPHELPER_SAGE_TRACE=auto` when unset.
+**Set by**: `start_experiment.sh` (this repo, root) exports
+`AUDIOLOOPHELPER_SAGE_TRACE=auto` when unset. Plain
+`<comfyui>/start.sh` does NOT — same minimization rationale as
+`COMFYUI_EXEC_LOG` above.
 
 **Auto path**: routes through `run_artifact_path("sage", "jsonl")` →
 `data/runs/${RUN_ID}/sage.jsonl` when `RUN_ID` is set, else
@@ -127,8 +132,8 @@ gitignored `data/experiment.local.toml` that the harness reads.
 
 | File | Exports | Notes |
 |---|---|---|
-| `<comfyui>/start.sh` | `AUDIOLOOPHELPER_SAGE_TRACE`, `COMFYUI_EXEC_LOG` | Default ComfyUI launcher; both default to `auto`. Phase 1c follow-up (task #12) audits whether these belong here vs in `start_experiment.sh`. |
-| `start_experiment.sh` (this repo, root) | `RUN_ID` | Wrapper that adds RUN_ID generation, then execs `<comfyui>/start.sh`. |
+| `start_experiment.sh` (this repo, root) | `RUN_ID`, `AUDIOLOOPHELPER_SAGE_TRACE`, `COMFYUI_EXEC_LOG` | Telemetry-enabled wrapper. Generates `RUN_ID`, sets the two tracer vars to `auto` when unset, then execs `<comfyui>/start.sh`. **Canonical entry point for experiment-mode launches.** |
+| `<comfyui>/start.sh` | (nothing AudioLoopHelper-specific) | Vanilla ComfyUI launcher. As of 2026-04-26 carries no plugin-specific telemetry knowledge; use `start_experiment.sh` to layer that on top. |
 
 ## Adding a new env var
 
