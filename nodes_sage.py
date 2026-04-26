@@ -282,6 +282,7 @@ class SageTracer:
         iter_idx: int | None = None,
         effective_mode: str | None = None,
         dispatched_kernel: str | None = None,
+        prompt_id: str | None = None,
     ) -> None:
         if self._fh is None:
             return
@@ -314,6 +315,13 @@ class SageTracer:
         # this thread. The mirror handles both equivalently.
         if dispatched_kernel is not None:
             record["dispatched_kernel"] = dispatched_kernel
+        # `prompt_id` is ComfyUI's per-render UUID, lifted from
+        # transformer_options at override time. Lets sage-fork's e2e bench
+        # filter trace rows by run identity rather than guessing from
+        # timestamp windows. Same "absent means unknown" contract as
+        # dispatched_kernel.
+        if prompt_id is not None:
+            record["prompt_id"] = prompt_id
         self._fh.write(orjson.dumps(record).decode() + "\n")
 
     def flush_summary(self) -> None:
@@ -530,6 +538,14 @@ def make_sage_override(
         step = opts.get("step")
         return int(step) if step is not None else None
 
+    def _prompt_id_from_kwargs(kwargs: dict) -> str | None:
+        # ComfyUI plants `prompt_id` on transformer_options at the start
+        # of each render. Forward it to the trace so sage-fork's bench can
+        # filter rows by run identity rather than a timestamp window.
+        opts = kwargs.get("transformer_options") or {}
+        pid = opts.get("prompt_id")
+        return str(pid) if pid is not None else None
+
     def override(
         func,
         q, k, v, heads,
@@ -571,6 +587,7 @@ def make_sage_override(
                 iter_idx=_iter_from_kwargs(kwargs),
                 effective_mode=_effective_mode(mode, mask),
                 dispatched_kernel=dispatched,
+                prompt_id=_prompt_id_from_kwargs(kwargs),
             )
         return out
 

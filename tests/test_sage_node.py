@@ -563,3 +563,111 @@ def test_default_mode_is_mask_aware():
     around this while keeping fp8++ speed on self-attn."""
     m = _mod()
     assert m._DEFAULT_MODE == "auto_mask_aware"
+
+
+# ---------------------------------------------------------------------------
+# 8. prompt_id stamping
+#
+# sage-fork's e2e bench correlates sage attention-time to a specific render
+# via prompt_id. ComfyUI plants prompt_id on `transformer_options` per render;
+# our override reads it and emit() stamps it into the per-call row. With this
+# field, sage-fork drops timestamp-windowing for prompt boundaries entirely.
+# Brief: internal/scratch/20260426_message_brief_from_sage_fork_claude.md.
+# ---------------------------------------------------------------------------
+
+def test_tracer_emit_stamps_prompt_id_when_given(tmp_path: Path, monkeypatch):
+    """When `prompt_id` is passed, tracer stamps it into the per-call row."""
+    m = _mod()
+    monkeypatch.setattr(m, "_detect_arch_tag", lambda: None)
+    log = tmp_path / "sage_pid.jsonl"
+    tracer = m.SageTracer(log_path=log)
+    tracer.emit(shape=(1, 64, 64), has_mask=False, mode="auto",
+                fell_back=False, elapsed_us=10.0,
+                prompt_id="bc45cbbe-6835-4d6a-96d6-c67b79a5a1d1")
+    tracer.flush_summary()
+
+    rows = [orjson.loads(line) for line in log.read_text().splitlines()]
+    assert rows[0]["prompt_id"] == "bc45cbbe-6835-4d6a-96d6-c67b79a5a1d1"
+
+
+def test_tracer_emit_omits_prompt_id_when_none(tmp_path: Path, monkeypatch):
+    """No prompt_id available -> field absent. Same contract as
+    dispatched_kernel: present means trustworthy, absent means
+    'no info, fall back to ts windowing.'"""
+    m = _mod()
+    monkeypatch.setattr(m, "_detect_arch_tag", lambda: None)
+    log = tmp_path / "sage_no_pid.jsonl"
+    tracer = m.SageTracer(log_path=log)
+    tracer.emit(shape=(1, 64, 64), has_mask=False, mode="auto",
+                fell_back=False, elapsed_us=10.0, prompt_id=None)
+    tracer.flush_summary()
+
+    rows = [orjson.loads(line) for line in log.read_text().splitlines()]
+    assert "prompt_id" not in rows[0]
+
+
+def test_override_reads_prompt_id_from_transformer_options(tmp_path: Path, monkeypatch):
+    """ComfyUI plants `transformer_options.prompt_id` at the start of each
+    render. The override reads it from kwargs and forwards to tracer.emit
+    so sage-fork's bench can correlate attention-time to a specific render
+    without timestamp-windowing."""
+    m = _mod()
+    monkeypatch.setattr(m, "_detect_arch_tag", lambda: None)
+    monkeypatch.setattr(m, "_GET_DISPATCHED_KERNEL", None)
+
+    q = _fake_q()
+    k, v = _fake_kv(q)
+
+    def sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape):
+        return torch.zeros_like(q)
+
+    log = tmp_path / "sage_override_pid.jsonl"
+    tracer = m.SageTracer(log_path=log)
+    override = m.make_sage_override(
+        sage_fn=sage_fn,
+        pytorch_fn=lambda *a, **kw: torch.ones_like(q),
+        mode="auto_mask_aware",
+        fallback_on_error=True,
+        tracer=tracer,
+        logger=m.SageFallbackLogger(emit=lambda _: None),
+    )
+    override(None, q, k, v, heads=4, mask=None,
+             transformer_options={"prompt_id": "abc-123"})
+    tracer.flush_summary()
+
+    rows = [orjson.loads(line) for line in log.read_text().splitlines()]
+    per_call = next(r for r in rows if r.get("event") != "summary" and r.get("event") != "header")
+    assert per_call["prompt_id"] == "abc-123"
+
+
+def test_override_omits_prompt_id_when_transformer_options_missing(tmp_path: Path, monkeypatch):
+    """Defensive: if ComfyUI didn't plant prompt_id (older versions, or a
+    direct `_patch_impl` test), the override must not crash and must omit
+    the field rather than stamping null."""
+    m = _mod()
+    monkeypatch.setattr(m, "_detect_arch_tag", lambda: None)
+    monkeypatch.setattr(m, "_GET_DISPATCHED_KERNEL", None)
+
+    q = _fake_q()
+    k, v = _fake_kv(q)
+
+    def sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape):
+        return torch.zeros_like(q)
+
+    log = tmp_path / "sage_override_no_pid.jsonl"
+    tracer = m.SageTracer(log_path=log)
+    override = m.make_sage_override(
+        sage_fn=sage_fn,
+        pytorch_fn=lambda *a, **kw: torch.ones_like(q),
+        mode="auto_mask_aware",
+        fallback_on_error=True,
+        tracer=tracer,
+        logger=m.SageFallbackLogger(emit=lambda _: None),
+    )
+    # No transformer_options at all (older ComfyUI / direct test invocation).
+    override(None, q, k, v, heads=4, mask=None)
+    tracer.flush_summary()
+
+    rows = [orjson.loads(line) for line in log.read_text().splitlines()]
+    per_call = next(r for r in rows if r.get("event") != "summary" and r.get("event") != "header")
+    assert "prompt_id" not in per_call
