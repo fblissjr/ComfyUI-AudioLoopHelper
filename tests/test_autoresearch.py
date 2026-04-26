@@ -619,6 +619,107 @@ class TestSubjectConsistency:
 
 
 # ---------------------------------------------------------------------------
+# Metric: av_consistency
+#
+# PE-AV-16-frame joint audio-video-text embedding. v0 reports a single
+# cosine sim — AV emb vs the fixture's init_positive text — measuring
+# how well the rendered video+audio matches its target prompt.
+# Apache-2.0 model (ungated).
+# ---------------------------------------------------------------------------
+
+class _FixtureStub:
+    """Minimal duck-typed Fixture for tests that need .init_positive."""
+    def __init__(self, init_positive: str = "a singing test"):
+        self.init_positive = init_positive
+
+
+class TestAvConsistency:
+    def test_returns_video_missing_when_mp4_absent(self, tmp_path):
+        from internal.autoresearch.metrics import av_consistency
+        out = av_consistency.extract(tmp_path, fixture=_FixtureStub())
+        assert out == {"av_consistency_status": "video_missing"}
+
+    def test_returns_no_text_when_fixture_is_none(self, tmp_path):
+        from internal.autoresearch.metrics import av_consistency
+        (tmp_path / "output.mp4").write_bytes(b"\x00")
+        out = av_consistency.extract(tmp_path, fixture=None)
+        assert out == {"av_consistency_status": "no_text"}
+
+    def test_returns_no_text_when_init_positive_empty(self, tmp_path):
+        from internal.autoresearch.metrics import av_consistency
+        (tmp_path / "output.mp4").write_bytes(b"\x00")
+        out = av_consistency.extract(tmp_path, fixture=_FixtureStub(""))
+        assert out == {"av_consistency_status": "no_text"}
+
+    def test_returns_model_unavailable_when_load_returns_none(
+        self, tmp_path, monkeypatch
+    ):
+        """Public-clone path: PE-AV not installed → _load_model None
+        → extract reports model_unavailable instead of crashing."""
+        from internal.autoresearch.metrics import av_consistency
+        (tmp_path / "output.mp4").write_bytes(b"\x00")
+        monkeypatch.setattr(av_consistency, "_load_model", lambda: None)
+        out = av_consistency.extract(tmp_path, fixture=_FixtureStub())
+        assert out == {"av_consistency_status": "model_unavailable"}
+
+    def test_returns_decode_failed_when_embed_returns_none(
+        self, tmp_path, monkeypatch
+    ):
+        from internal.autoresearch.metrics import av_consistency
+        (tmp_path / "output.mp4").write_bytes(b"\x00")
+        monkeypatch.setattr(
+            av_consistency, "_load_model", lambda: ("model", "transform")
+        )
+        monkeypatch.setattr(
+            av_consistency,
+            "_embed_av_and_text",
+            lambda v, t, m, tf: None,
+        )
+        out = av_consistency.extract(tmp_path, fixture=_FixtureStub())
+        assert out == {"av_consistency_status": "decode_failed"}
+
+    def test_aggregates_with_synthetic_embeddings(self, tmp_path, monkeypatch):
+        """End-to-end with mocked model + embed. Synthetic L2-normalized
+        embeddings → known cosine similarity. The backend tag falls
+        through to "unknown" since _load_model is mocked."""
+        np = pytest.importorskip("numpy")
+        from internal.autoresearch.metrics import av_consistency
+
+        (tmp_path / "output.mp4").write_bytes(b"\x00")
+
+        # AV emb angled 0; AV-text emb angled ~30° → cos_sim ≈ 0.866
+        av = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+        av_text = np.array([0.866, 0.5, 0.0], dtype=np.float32)
+        av = av / np.linalg.norm(av)
+        av_text = av_text / np.linalg.norm(av_text)
+
+        monkeypatch.setattr(
+            av_consistency, "_load_model", lambda: ("m", "t")
+        )
+        monkeypatch.setattr(
+            av_consistency,
+            "_embed_av_and_text",
+            lambda v, t, m, tf: (av, av_text),
+        )
+
+        out = av_consistency.extract(tmp_path, fixture=_FixtureStub("singer"))
+        assert out["av_consistency_status"] == "ok"
+        assert out["av_consistency_model"] == "facebook/pe-av-large-16-frame"
+        assert abs(out["av_consistency_av_text_sim"] - 0.866) < 0.01
+
+    def test_cosine_helper_with_normalized_inputs(self):
+        np = pytest.importorskip("numpy")
+        from internal.autoresearch.metrics import av_consistency
+
+        a = np.array([1.0, 0.0], dtype=np.float32)
+        b = np.array([0.0, 1.0], dtype=np.float32)
+        # Orthogonal → 0
+        assert av_consistency._cosine(a, b) == 0.0
+        # Identical → 1
+        assert av_consistency._cosine(a, a) == 1.0
+
+
+# ---------------------------------------------------------------------------
 # Output mp4 discovery
 #
 # After ComfyUI completes a render, VHS_VideoCombine writes the mp4 to

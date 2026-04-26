@@ -7,6 +7,22 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Phase 2.1 perceptual metric: `av_consistency`** — Perception
+  Encoder PE-AV-16-frame (`facebook/pe-av-large-16-frame`,
+  arxiv:2512.19687, **Apache-2.0**) joint audio-video-text embedding.
+  v0 reports a single cosine similarity: AV embedding vs the
+  fixture's `init_positive` text — measuring how well the rendered
+  video+audio matches its target prompt. Replaces the
+  originally-planned lip_sync (AV-HuBERT) + seam_continuity (STREAM)
+  pair with a unified A/V-aware extractor; Apache license is a
+  meaningful upgrade over those gated/restrictive options. 16
+  evenly-spaced frames per video + audio extracted from the same
+  mp4. Two-tier model loading: tries `transformers` first
+  (`pe_audio_video` model_type, needs ≥4.51), falls back to
+  `perception_models` package; reports `model_unavailable` if
+  neither resolves. 7 new test cases under
+  `tests/test_autoresearch.py::TestAvConsistency`. V1 (deferred):
+  per-iteration AV embeddings + drift trajectory.
 - **Output mp4 discovery in harness**:
   `_locate_and_link_output_mp4(run_id, run_dir, source_dir=None)`
   scans `COMFYUI_OUTPUT_DIR` for `LTX-2_${run_id}_*.mp4` and symlinks
