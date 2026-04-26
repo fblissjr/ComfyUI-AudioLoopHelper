@@ -1,4 +1,4 @@
-last updated: 2026-04-25
+last updated: 2026-04-26
 
 # Telemetry and tracing
 
@@ -72,6 +72,25 @@ python main.py [your usual flags]
 If you use a `start.sh` or systemd unit, set the env vars there. Both
 tracers re-check the env var on every fresh ComfyUI process; there's no
 persistent on-disk toggle.
+
+**Recommended**: launch via `start_experiment.sh` at this plugin's
+repo root rather than setting the env vars by hand. That wrapper
+exports `RUN_ID` (a fresh `${ISO8601_UTC}_${rand4}` per launch) plus
+the two tracer vars defaulted to `auto`, then exec's the underlying
+ComfyUI launcher. With `RUN_ID` set, every artifact for one render
+correlates via a single directory key — see the path layout below.
+Plain `<comfyui>/start.sh` (post-2026-04-26 minimization) is back to a
+vanilla ComfyUI launcher with no plugin-specific telemetry; nothing is
+wired unless you set the env vars yourself or use `start_experiment.sh`.
+
+**Path layout** (post-RUN_ID propagation):
+- With `RUN_ID` set: `data/runs/${RUN_ID}/{exec.jsonl, sage.jsonl, profiler/}`.
+- Without `RUN_ID` (legacy fallback): `internal/analysis/runs/<subdir>/<prefix>_<TS>.jsonl`.
+
+The summarizer scripts (`scripts/sage_telemetry_summary.py`,
+`scripts/verify_sage_iteration_trace.sh`) search both layouts and pick
+the most recent by mtime. Full env-var registry at
+`docs/reference/environment.md`.
 
 ### 2. Run your workflow as normal
 

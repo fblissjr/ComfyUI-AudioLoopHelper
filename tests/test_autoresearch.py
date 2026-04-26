@@ -171,8 +171,9 @@ class TestTracker:
 
     def test_latest_baseline_returns_most_recent(self, tmp_path):
         db = tmp_path / "test.duckdb"
+        statuses: list[tracker_mod.RunStatus] = ["baseline", "keep", "baseline"]
         with tracker_mod.connect(db) as conn:
-            for i, status in enumerate(["baseline", "keep", "baseline"]):
+            for i, status in enumerate(statuses):
                 tracker_mod.insert(conn, tracker_mod.RunRecord(
                     run_id=f"r{i}", fixture_id="fix_a", tier=1,
                     status=status, primary_metric_value=float(i),

@@ -105,6 +105,10 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 uv run --group dev --group analysis python -m pytest tests/ -v --rootdir=.
 ```
 
+Add `--group experiments` if running the autoresearch contract tests
+locally (`tests/test_autoresearch.py`); they gracefully skip without it
+on fresh public clones that don't have duckdb installed.
+
 - CI runs on push/PR to main (`.github/workflows/ci.yml`): pytest + `scripts/audit_workflows.py` + docs-consistency tests.
 - `__init__.py` guards ComfyUI imports for pytest; `nodes.py` has `_IOStub`/`_Passthrough` fallback.
 - `tests/conftest.py` adds `scripts/` + `tests/` to `sys.path`. Shared fakes: `tests/_fakes.py` (`FakeModelPatcher`, `FakeModelWithCallbacks`). Root `./conftest.py` has `collect_ignore` — shadows `tests/conftest.py` for `from conftest import X`.
@@ -116,6 +120,7 @@ uv run --group dev --group analysis python -m pytest tests/ -v --rootdir=.
 
 - **Runtime nodes** (`nodes*.py`): torchaudio only. All outputs FLOAT or INT.
 - **Offline scripts** (`scripts/`): `analysis` optional group (librosa, scipy, Pillow).
+- **Experiment runner** (`internal/autoresearch/`): `experiments` optional group (`duckdb`, `httpx`). Heavier ML metrics (DINO-v2, SigLIP-2, AV-HuBERT, STREAM, VideoScore) will land in a future `metrics` group rather than bloating `experiments`.
 
 Companion custom nodes (used alongside, not imported):
 - `<sage_fork_repo>/` — our SageAttention fork. Cross-repo state: `internal/design/sage_backlog.md`.
@@ -174,7 +179,7 @@ Companion custom nodes (used alongside, not imported):
 
 ## Documentation layout
 
-Public docs: `docs/README.md` (task-first nav) → `docs/guides/` (how-to), `docs/reference/` (deep-dive), `docs/analysis/` (research/postmortems on shipped code), `docs/experimental/` (scaffolded-but-not-validated features paired with workflows in `example_workflows/experimental/`), `docs/experiments/` (per-experiment logs: hypothesis → setup → observations → inferences → next; convention in `docs/experiments/README.md`). `docs/architecture_overview.md` is the single-entry-point architecture reference.
+Public docs: `docs/README.md` (task-first nav) → `docs/guides/` (how-to), `docs/reference/` (deep-dive — incl. `docs/reference/environment.md`, the env-var registry), `docs/analysis/` (research/postmortems on shipped code), `docs/experimental/` (scaffolded-but-not-validated features paired with workflows in `example_workflows/experimental/`), `docs/experiments/` (per-experiment logs: hypothesis → setup → observations → inferences → next; convention in `docs/experiments/README.md`). `docs/architecture_overview.md` is the single-entry-point architecture reference.
 
 Reference codebases (read-only): `coderef/LTX-2/` (LTX-2 native), `coderef/LTX-Desktop/` (Lightricks Desktop), `<comfyui_custom_nodes>/ComfyUI-LTXVideo/` (ComfyUI LTX integration).
 
@@ -182,6 +187,9 @@ Example workflows (`example_workflows/`): seven shipped — `_image.json`, `_ima
 
 Internal (gitignored):
 - `internal/PLAN.md` — active roadmap.
+- `internal/TODO.md` — step-by-step "what to do next" with checkbox sections, when present. Updated by Claude on demand.
 - `internal/ic_lora_assessment.md` — IC-LoRA phases + decisions index (D1–D18).
 - `internal/design/*.md` — long-term designs (`spectrogram_reference_design`, `sage_backlog`, `upscale_workflow_design`).
+- `internal/autoresearch/` — Karpathy-autoresearch-style experiment-runner framework adapted for LTX video. Agent edits `apply.py`; harness orchestrates; tracker is DuckDB; metric extractors live under `metrics/`. Brief: `internal/autoresearch/program.md`. Public-facing test contract: `tests/test_autoresearch.py`.
+- `internal/scripts/` — canonical sources for files that deploy out-of-repo (`start.sh` → `<comfyui>/start.sh`; `sage_fork_build.sh` → `<sage-fork>/build.sh`). Edit here, push via `internal/scripts/sync_to_deployed.sh`. README at `internal/scripts/README.md`.
 - `internal/postmortem_*.md`, `internal/prompts/`, `internal/analysis/` — debugging history, unscrubbed case studies, deep dives.

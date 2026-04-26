@@ -7,6 +7,39 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Public env-var registry** at `docs/reference/environment.md`. Lists
+  every env var the codebase reads (`RUN_ID`, `COMFYUI_EXEC_LOG`,
+  `COMFYUI_EXEC_LOG_SHAPE_LIMIT`, `AUDIOLOOPHELPER_SAGE_TRACE`,
+  `COMFYUI_API_URL`) with default behavior, set/read responsibility,
+  and an audit command. **DRY rule** documented + enforced: each var is
+  read at exactly one helper call site. `RUN_ID` reads now centralized
+  through `scripts/workflow_utils.py::_current_run_id` after a
+  Phase 1b follow-up refactor of `ProfileBegin.execute` that previously
+  read `RUN_ID` inline.
+- **`scripts/workflow_utils.py::run_artifact_dir(subdir="")`** —
+  companion to `run_artifact_path` for multi-file artifacts (profiler
+  trace.json + summary.txt + memory_timeline.html, frame sequences).
+- **Sage tracer stamps `prompt_id`** on every per-call JSONL row.
+  `nodes_sage.py::SageTracer.emit` accepts `prompt_id: str | None = None`;
+  `make_sage_override` reads it from `kwargs["transformer_options"]`
+  via a new `_prompt_id_from_kwargs()` helper. Same "absent means
+  unknown" contract as `dispatched_kernel`. Closes the cross-repo ask
+  from the sage-fork bench harness — direct prompt-id-keyed filtering
+  replaces fence-post-prone timestamp windowing. Tests:
+  `tests/test_sage_node.py` "8. prompt_id stamping" (4 cases).
+- **Experiment-runner framework scaffold** at `internal/autoresearch/`
+  (gitignored; promotes to top-level when stabilized). DuckDB tracker
+  (`tracker.py`), one-cycle harness (`harness.py`), agent-edit stub
+  (`apply.py`), placeholder wall-time metric (`metrics/wall_time.py`),
+  fixture format, agent brief (`program.md`), one-shot wrapper
+  (`run.sh`). Public surface: new `experiments` dep group
+  (`duckdb`, `httpx`) + `tests/test_autoresearch.py` (19 cases;
+  gracefully skips on fresh public clones where `internal/` isn't
+  present). Real perceptual metric modules (DINO-v2, SigLIP-2,
+  AV-HuBERT, STREAM, VideoScore, palette EMD) arrive in Phase 2.1.
+- Foundation pieces below ship together because all three remove a
+  correlation/reproducibility gap the experiment runner needs.
+
 - **Foundation for an experiment-runner framework: seed rename, RUN_ID
   propagation, iterations auto-wiring.** Three pieces shipped together;
   each removes a correlation/reproducibility gap surfaced by the eight-
@@ -49,6 +82,18 @@ This project uses [Semantic Versioning](https://semver.org/).
   ComfyUI's embedded `workflow` and `prompt` tEXt chunks. Single-file or
   batch (`-d <dir>`); pretty-printed via orjson. Used to recover the
   eight ablation workflow JSONs from their PNG previews.
+
+### Changed
+- **`start_experiment.sh` (this repo's root) now owns all three
+  telemetry env-var exports** (`RUN_ID`, `AUDIOLOOPHELPER_SAGE_TRACE`,
+  `COMFYUI_EXEC_LOG`). The companion ComfyUI launcher
+  (`<comfyui>/start.sh`) is back to a vanilla launcher with no
+  plugin-specific knowledge — anything experiment-related layers on
+  top via `start_experiment.sh`. Backward-compatible at the env-var
+  level (all three vars still honored if exported anywhere). Migration
+  impact: a user who previously ran plain `./start.sh` and implicitly
+  got telemetry will now get vanilla ComfyUI; restore via
+  `start_experiment.sh`.
 - **Sage tracer reads `sageattention.get_last_dispatched_kernel()`.**
   Sage-fork ships a thread-local that records the resolved kernel name
   (one of `KNOWN_KERNEL_NAMES`: `fp16_triton`, `fp16_cuda`,
