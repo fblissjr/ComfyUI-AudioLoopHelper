@@ -101,6 +101,29 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         if all_good:
             record("OK", "sage", "AudioLoopHelperSageAttention auto_mask_aware active")
 
+    # AudioLoopController seed input name (post-2026-04-26 rename)
+    # ComfyUI auto-attaches control_after_generate to any INT widget literally
+    # named "seed" or "noise_seed", which silently mutates the saved widget
+    # value across runs even when the input is wired (the link supersedes the
+    # widget at execute time, but the mutated widget still gets serialized).
+    # Diagnosed in internal/analysis/id_lora_ablation_and_seed_widget_audit.md.
+    alc_nodes = by_type.get("AudioLoopController", [])
+    if alc_nodes:
+        leaks = []
+        for n in alc_nodes:
+            for inp in n.get("inputs") or []:
+                if inp.get("name") == "seed":
+                    leaks.append(f"node {n.get('id')} input.name='seed'")
+                widget = inp.get("widget")
+                if isinstance(widget, dict) and widget.get("name") == "seed":
+                    leaks.append(f"node {n.get('id')} widget.name='seed'")
+        if leaks:
+            record("ERR", "alc_seed_legacy_name",
+                   f"legacy 'seed' name found: {', '.join(leaks)}. "
+                   f"Run scripts/apply_alc_seed_rename.py")
+        else:
+            record("OK", "alc_seed_legacy_name", "uses 'base_seed' (post-rename)")
+
     # LoopIterationStamp
     if by_type.get("LoopIterationStamp"):
         record("OK", "iteration_stamp", "present")

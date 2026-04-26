@@ -17,17 +17,27 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RUNS_DIR="$REPO_ROOT/internal/analysis/runs/sage"
+LEGACY_DIR="$REPO_ROOT/internal/analysis/runs/sage"
+DATA_DIR="$REPO_ROOT/data/runs"
 
 if [[ $# -ge 1 ]]; then
     TRACE="$1"
 else
-    # Lexicographic sort on filename, not mtime: timestamped_run_path()
-    # bakes YYYYMMDD-HHMMSS into the filename, so sort+tail is deterministic
-    # across parallel runs and file-touch edge cases.
-    TRACE=$(ls -1 "$RUNS_DIR"/sage_*.jsonl 2>/dev/null | sort | tail -1 || true)
+    # Search both layouts and pick the most recent by mtime:
+    #   Legacy: internal/analysis/runs/sage/sage_<TS>.jsonl   (pre-2026-04-26)
+    #   RUN_ID: data/runs/<RUN_ID>/sage.jsonl                  (post-RUN_ID propagation)
+    # Use mtime since RUN_ID format and legacy timestamp format don't sort
+    # lexicographically against each other.
+    TRACE=$( {
+        ls -1 "$LEGACY_DIR"/sage_*.jsonl 2>/dev/null || true
+        ls -1 "$DATA_DIR"/*/sage.jsonl 2>/dev/null || true
+    } | while read -r f; do
+        [[ -n "$f" ]] && echo "$(stat -c '%Y' "$f") $f"
+    done | sort -n | tail -1 | cut -d' ' -f2- || true)
     if [[ -z "$TRACE" ]]; then
-        echo "No trace files found in $RUNS_DIR/"
+        echo "No trace files found in:"
+        echo "  $LEGACY_DIR/"
+        echo "  $DATA_DIR/*/"
         echo "Run ComfyUI with AUDIOLOOPHELPER_SAGE_TRACE=auto and a 3+ iteration workflow first."
         exit 1
     fi

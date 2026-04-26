@@ -38,7 +38,7 @@ def _run(
         window_seconds=window_seconds,
         overlap_seconds=overlap_seconds,
         audio=audio,
-        seed=seed,
+        base_seed=seed,
         fps=fps,
     )
     # io.NodeOutput packs positional values; unpack via the result attribute.

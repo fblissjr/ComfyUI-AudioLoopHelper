@@ -3618,10 +3618,10 @@
           "link": 2937
         },
         {
-          "name": "seed",
+          "name": "base_seed",
           "type": "INT",
           "widget": {
-            "name": "seed"
+            "name": "base_seed"
           },
           "link": 2938
         }

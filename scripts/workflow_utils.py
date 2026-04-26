@@ -15,6 +15,7 @@ Handles the three link representations that must stay in sync:
   3. Subgraph internal links (dict format) with linkIds on inputs
 """
 
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -24,6 +25,7 @@ import orjson
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_WORKFLOWS_DIR = REPO_ROOT / "example_workflows"
 RUNS_DIR = REPO_ROOT / "internal" / "analysis" / "runs"
+DATA_RUNS_DIR = REPO_ROOT / "data" / "runs"
 
 
 _RUN_TIMESTAMP_FMT = "%Y-%m-%d_%H%M%S"  # lexicographic-sortable; verify_sage_iteration_trace.sh depends on this shape
@@ -35,11 +37,40 @@ def timestamped_run_path(subdir: str, prefix: str, ext: str) -> Path:
     Shared helper for debug tools that dump timestamped artifacts
     (DAG dumps, exec logs, profiler traces). Creates the parent dir if
     missing. Gitignored by the project's internal/ rule.
+
+    Legacy path. New per-run artifacts should use `run_artifact_path` so
+    they correlate via a shared `RUN_ID` env var.
     """
     out_dir = RUNS_DIR / subdir if subdir else RUNS_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime(_RUN_TIMESTAMP_FMT)
     return out_dir / f"{prefix}_{ts}.{ext}"
+
+
+def run_artifact_path(category: str, ext: str) -> Path:
+    """Path for a per-render artifact, honoring the `RUN_ID` env var.
+
+    With `RUN_ID` set: `data/runs/${RUN_ID}/<category>.<ext>`. Every
+    logger called during the same render lands artifacts under the same
+    directory, making cross-system correlation (exec_log + sage trace +
+    profiler + output mp4) trivial.
+
+    Without `RUN_ID`: falls back to the legacy
+    `timestamped_run_path(category, category, ext)` shape so existing
+    tooling that runs without the experiment harness keeps working.
+    `RUN_ID` is intentionally read at call time (not module load) so a
+    test or wrapper script can set it before triggering loggers.
+
+    Diagnosed 2026-04-26 — three loggers stamping `time.time()` at
+    different startup moments produced filenames that looked unrelated
+    despite coming from the same render. Single env var fixes it.
+    """
+    run_id = os.environ.get("RUN_ID", "").strip()
+    if run_id:
+        out_dir = DATA_RUNS_DIR / run_id
+        out_dir.mkdir(parents=True, exist_ok=True)
+        return out_dir / f"{category}.{ext}"
+    return timestamped_run_path(category, category, ext)
 
 
 def timestamped_run_dir(base: Path) -> Path:

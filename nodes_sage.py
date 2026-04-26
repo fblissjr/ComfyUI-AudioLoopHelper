@@ -73,11 +73,11 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent / "scripts"
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 try:
-    from workflow_utils import timestamped_run_path  # type: ignore
+    from workflow_utils import run_artifact_path  # type: ignore
 except ImportError:
-    def timestamped_run_path(subdir: str, prefix: str, ext: str) -> Path:
+    def run_artifact_path(category: str, ext: str) -> Path:
         # Unreachable in a normal ComfyUI install; defensive fallback.
-        return Path.cwd() / f"{prefix}.{ext}"
+        return Path.cwd() / f"{category}.{ext}"
 
 
 _TRACE_ENV = "AUDIOLOOPHELPER_SAGE_TRACE"
@@ -205,14 +205,16 @@ def resolve_trace_path() -> Path | None:
 
     Follows the same semantics as `exec_logger._resolve_log_target`:
     - unset / empty -> None (disabled)
-    - "auto"/"1"/"true"/"yes" -> timestamped path under internal/analysis/runs/sage/
+    - "auto"/"1"/"true"/"yes" -> RUN_ID-keyed path under data/runs/${RUN_ID}/sage.jsonl
+      if RUN_ID is set, else legacy timestamped path under
+      internal/analysis/runs/sage/. See workflow_utils.run_artifact_path.
     - any other value -> treated as an explicit file path
     """
     raw = os.environ.get(_TRACE_ENV, "").strip()
     if not raw:
         return None
     if raw.lower() in _AUTO_TOKENS:
-        return timestamped_run_path("sage", "sage", "jsonl")
+        return run_artifact_path("sage", "jsonl")
     return Path(raw)
 
 

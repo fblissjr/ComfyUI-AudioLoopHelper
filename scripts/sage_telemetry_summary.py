@@ -421,15 +421,30 @@ def _gate_verdict(summary: dict) -> str:
 
 
 _DEFAULT_RUNS_DIR = Path("internal/analysis/runs")
+_DATA_RUNS_DIR = Path("data/runs")
 
 
 def _latest_jsonl(subdir: str, prefix: str, runs_dir: Path = _DEFAULT_RUNS_DIR) -> Path | None:
-    """Return the most recent <runs_dir>/<subdir>/<prefix>_*.jsonl, or None."""
-    target = runs_dir / subdir
-    if not target.is_dir():
+    """Return the most recent JSONL across both layouts, or None.
+
+    Searches:
+      - Legacy: <runs_dir>/<subdir>/<prefix>_*.jsonl   (timestamped filenames)
+      - RUN_ID: data/runs/*/<{subdir|prefix}>.jsonl    (per-run dirs, filename
+        = `<prefix>.jsonl`; subdir name was 'exec_log' but stored as 'exec.jsonl').
+
+    Returns the most recent by mtime across both. New data/runs/ layout
+    came online 2026-04-26 with RUN_ID propagation.
+    """
+    candidates: list[Path] = []
+    legacy_target = runs_dir / subdir
+    if legacy_target.is_dir():
+        candidates.extend(legacy_target.glob(f"{prefix}_*.jsonl"))
+    if _DATA_RUNS_DIR.is_dir():
+        # data/runs/<RUN_ID>/<prefix>.jsonl   (e.g. exec.jsonl, sage.jsonl)
+        candidates.extend(_DATA_RUNS_DIR.glob(f"*/{prefix}.jsonl"))
+    if not candidates:
         return None
-    candidates = sorted(target.glob(f"{prefix}_*.jsonl"))
-    return candidates[-1] if candidates else None
+    return max(candidates, key=lambda p: p.stat().st_mtime)
 
 
 def _summary_to_jsonable(summary: dict) -> dict:

@@ -54,7 +54,7 @@ import orjson
 _SCRIPTS_DIR = Path(__file__).resolve().parent / "scripts"
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
-from workflow_utils import timestamped_run_path  # noqa: E402
+from workflow_utils import run_artifact_path  # noqa: E402
 
 
 _LOG_PATH_ENV = "COMFYUI_EXEC_LOG"
@@ -70,11 +70,16 @@ _AUTO_TOKENS = {"auto", "1", "true", "yes"}
 
 
 def _resolve_log_target(value: str) -> str:
-    """Map the env var value to a concrete sink: `"stderr"` or a path."""
+    """Map the env var value to a concrete sink: `"stderr"` or a path.
+
+    The auto path honors `RUN_ID` (lands at `data/runs/${RUN_ID}/exec.jsonl`)
+    or falls back to the legacy timestamped path under
+    `internal/analysis/runs/exec/`. See workflow_utils.run_artifact_path.
+    """
     if value == "stderr":
         return value
     if value.lower() in _AUTO_TOKENS:
-        return str(timestamped_run_path("exec_log", "exec", "jsonl"))
+        return str(run_artifact_path("exec", "jsonl"))
     return value
 
 

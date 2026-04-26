@@ -479,11 +479,17 @@ class AudioLoopController(io.ComfyNode):
                 ),
                 io.Audio.Input("audio", tooltip="The audio track being used for generation."),
                 io.Int.Input(
-                    "seed",
+                    "base_seed",
                     default=0,
                     min=0,
                     max=0xFFFFFFFFFFFFFFFF,
-                    tooltip="Base seed. Output iteration_seed = seed + current_iteration.",
+                    tooltip=(
+                        "Base seed. Output iteration_seed = base_seed + "
+                        "current_iteration. Renamed from 'seed' on 2026-04-26 "
+                        "to suppress ComfyUI's auto-attached "
+                        "control_after_generate dropdown — see "
+                        "internal/analysis/id_lora_ablation_and_seed_widget_audit.md."
+                    ),
                 ),
                 io.Int.Input(
                     "fps",
@@ -510,7 +516,7 @@ class AudioLoopController(io.ComfyNode):
                 ),
                 io.Int.Output(
                     "iteration_seed",
-                    tooltip="seed + current_iteration. Wire to extension's noise_seed.",
+                    tooltip="base_seed + current_iteration. Wire to extension's noise_seed.",
                 ),
                 io.Float.Output(
                     "stride_seconds",
@@ -559,7 +565,7 @@ class AudioLoopController(io.ComfyNode):
         window_seconds: float,
         overlap_seconds: float,
         audio: dict,
-        seed: int,
+        base_seed: int,
         fps: int,
     ) -> io.NodeOutput:
         audio_duration = _audio_duration(audio)
@@ -582,7 +588,7 @@ class AudioLoopController(io.ComfyNode):
             start_index,
             should_stop,
             float(audio_duration),
-            seed + current_iteration,
+            base_seed + current_iteration,
             g.stride_seconds,
             g.effective_overlap_pixel_frames,
             g.overlap_latent_frames,
@@ -2536,19 +2542,30 @@ class ProfileBegin(io.ComfyNode):
             return io.NodeOutput(trigger)
 
         import datetime
+        import os as _os
         from pathlib import Path
 
-        # Resolve relative output_dir against the plugin folder so profile
-        # data lands alongside our code (and is covered by our .gitignore)
-        # rather than wherever ComfyUI happened to be launched from.
-        out_root = Path(output_dir)
-        if not out_root.is_absolute():
+        # If RUN_ID env var is set, the profiler artifacts join the rest of
+        # this render's telemetry under data/runs/${RUN_ID}/profiler/. Single
+        # correlation key across exec_log + sage + profiler + output mp4.
+        # See workflow_utils.run_artifact_path.
+        run_id = _os.environ.get("RUN_ID", "").strip()
+        if run_id:
             plugin_dir = Path(__file__).resolve().parent
-            out_root = plugin_dir / out_root
+            run_dir = plugin_dir / "data" / "runs" / run_id / "profiler"
+            run_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            # Resolve relative output_dir against the plugin folder so profile
+            # data lands alongside our code (and is covered by our .gitignore)
+            # rather than wherever ComfyUI happened to be launched from.
+            out_root = Path(output_dir)
+            if not out_root.is_absolute():
+                plugin_dir = Path(__file__).resolve().parent
+                out_root = plugin_dir / out_root
 
-        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        run_dir = out_root / ts
-        run_dir.mkdir(parents=True, exist_ok=True)
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            run_dir = out_root / ts
+            run_dir.mkdir(parents=True, exist_ok=True)
 
         activities = [torch.profiler.ProfilerActivity.CUDA]
         if include_cpu:
