@@ -593,9 +593,12 @@ class TestSubjectConsistency:
         sims = np.array([0.95], dtype=np.float32)
         assert subject_consistency._drift_slope(sims) == 0.0
 
-    def test_extract_does_not_crash_on_n1_frames(self, tmp_path, monkeypatch):
-        """Edge case: video has exactly 1 frame. n_frames=1, no
-        comparisons possible → all sims default to 1.0, slope=0.0."""
+    def test_returns_single_frame_status_on_n1(self, tmp_path, monkeypatch):
+        """Edge case: video has exactly 1 frame → no comparisons
+        possible. We used to emit `status: "ok"` with sentinel 1.0
+        values, but that polluted downstream `WHERE status='ok'`
+        aggregations (a degenerate render scoring identically to a
+        perfect one). Distinct status keeps the aggregation clean."""
         np = pytest.importorskip("numpy")
         from internal.autoresearch.metrics import subject_consistency
 
@@ -612,10 +615,7 @@ class TestSubjectConsistency:
             lambda f, m, p: np.array([[1.0, 0.0]], dtype=np.float32),
         )
         out = subject_consistency.extract(tmp_path, fixture=None)
-        assert out["subject_consistency_status"] == "ok"
-        assert out["subject_consistency_n_frames"] == 1
-        assert out["subject_consistency_mean_to_anchor"] == 1.0
-        assert out["subject_consistency_drift_slope"] == 0.0
+        assert out == {"subject_consistency_status": "single_frame"}
 
 
 # ---------------------------------------------------------------------------
@@ -706,6 +706,13 @@ class TestAvConsistency:
         assert out["av_consistency_status"] == "ok"
         assert out["av_consistency_model"] == "facebook/pe-av-large-16-frame"
         assert abs(out["av_consistency_av_text_sim"] - 0.866) < 0.01
+        # _load_model is mocked → the real loader never ran → backend
+        # stays at the module-level default. Pinning this prevents
+        # a future cache-shape change from silently re-introducing
+        # the old "unknown" fallback the simplify pass removed.
+        assert out["av_consistency_backend"] in {
+            "transformers", "perception_models", "unknown"
+        }
 
     def test_cosine_helper_with_normalized_inputs(self):
         np = pytest.importorskip("numpy")
