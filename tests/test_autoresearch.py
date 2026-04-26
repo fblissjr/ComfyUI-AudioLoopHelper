@@ -127,6 +127,151 @@ class TestFixture:
         assert Fixture.load(a).hash() == Fixture.load(b).hash()
 
 
+class TestFixtureValidate:
+    """Pre-render validation. Catches the classic foot-gun where the
+    fixture file still has TODO placeholders or paths that don't exist
+    on this machine — fail fast with a useful message rather than
+    error mid-render with an opaque ffmpeg / VAE crash."""
+
+    def _make_fixture(self, tmp_path, **overrides):
+        audio = tmp_path / "audio.wav"
+        audio.write_bytes(b"\x00")
+        init = tmp_path / "init.png"
+        init.write_bytes(b"\x00")
+        defaults = {"audio_path": str(audio), "init_image_path": str(init)}
+        defaults.update(overrides)  # caller's keys win
+        data = _fixture_dict(**defaults)
+        path = tmp_path / "fixture.json"
+        path.write_bytes(orjson.dumps(data))
+        return Fixture.load(path)
+
+    def test_validate_passes_when_paths_exist(self, tmp_path):
+        f = self._make_fixture(tmp_path)
+        f.validate()  # no raise
+
+    def test_validate_rejects_todo_placeholder_audio(self, tmp_path):
+        f = self._make_fixture(
+            tmp_path, audio_path="<TODO: absolute path to a .wav file>"
+        )
+        with pytest.raises(ValueError, match="audio_path.*TODO"):
+            f.validate()
+
+    def test_validate_rejects_todo_placeholder_init_image(self, tmp_path):
+        f = self._make_fixture(
+            tmp_path, init_image_path="<TODO: absolute path to a .png>"
+        )
+        with pytest.raises(ValueError, match="init_image_path.*TODO"):
+            f.validate()
+
+    def test_validate_rejects_missing_audio_file(self, tmp_path):
+        f = self._make_fixture(tmp_path, audio_path="/nope/missing.wav")
+        with pytest.raises(ValueError, match="audio_path.*not found"):
+            f.validate()
+
+    def test_validate_rejects_missing_init_image_file(self, tmp_path):
+        f = self._make_fixture(tmp_path, init_image_path="/nope/missing.png")
+        with pytest.raises(ValueError, match="init_image_path.*not found"):
+            f.validate()
+
+    def test_validate_rejects_empty_init_positive(self, tmp_path):
+        f = self._make_fixture(tmp_path, init_positive="")
+        with pytest.raises(ValueError, match="init_positive"):
+            f.validate()
+
+    def test_validate_rejects_empty_schedule(self, tmp_path):
+        f = self._make_fixture(tmp_path, schedule=[])
+        with pytest.raises(ValueError, match="schedule"):
+            f.validate()
+
+
+class TestPreflight:
+    """`harness.preflight()` — pre-render check that fails fast with
+    a useful message if the environment isn't ready. Catches: TODO
+    placeholder fixture, missing audio/init files, RUN_ID unset,
+    COMFYUI_OUTPUT_DIR unset / missing dir, ComfyUI unreachable."""
+
+    def _good_fixture_path(self, tmp_path):
+        audio = tmp_path / "audio.wav"
+        audio.write_bytes(b"\x00")
+        init = tmp_path / "init.png"
+        init.write_bytes(b"\x00")
+        data = _fixture_dict(
+            audio_path=str(audio),
+            init_image_path=str(init),
+        )
+        path = tmp_path / "fixture.json"
+        path.write_bytes(orjson.dumps(data))
+        return path
+
+    def test_preflight_returns_empty_list_when_all_pass(
+        self, tmp_path, monkeypatch
+    ):
+        from internal.autoresearch.harness import preflight
+        output = tmp_path / "comfyui_output"
+        output.mkdir()
+        monkeypatch.setenv("RUN_ID", "preflight_test_20260427T000000Z_abcd")
+        monkeypatch.setenv("COMFYUI_OUTPUT_DIR", str(output))
+        # Skip the ComfyUI HTTP probe with a None probe_url.
+        issues = preflight(
+            fixture_path=self._good_fixture_path(tmp_path),
+            probe=False,
+        )
+        assert issues == []
+
+    def test_preflight_reports_missing_run_id(self, tmp_path, monkeypatch):
+        from internal.autoresearch.harness import preflight
+        output = tmp_path / "comfyui_output"
+        output.mkdir()
+        monkeypatch.delenv("RUN_ID", raising=False)
+        monkeypatch.setenv("COMFYUI_OUTPUT_DIR", str(output))
+        issues = preflight(
+            fixture_path=self._good_fixture_path(tmp_path),
+            probe=False,
+        )
+        assert any("RUN_ID" in i for i in issues)
+
+    def test_preflight_reports_missing_output_dir_env(
+        self, tmp_path, monkeypatch
+    ):
+        from internal.autoresearch.harness import preflight
+        monkeypatch.setenv("RUN_ID", "x")
+        monkeypatch.delenv("COMFYUI_OUTPUT_DIR", raising=False)
+        issues = preflight(
+            fixture_path=self._good_fixture_path(tmp_path),
+            probe=False,
+        )
+        assert any("COMFYUI_OUTPUT_DIR" in i for i in issues)
+
+    def test_preflight_reports_missing_output_dir_path(
+        self, tmp_path, monkeypatch
+    ):
+        from internal.autoresearch.harness import preflight
+        monkeypatch.setenv("RUN_ID", "x")
+        monkeypatch.setenv("COMFYUI_OUTPUT_DIR", str(tmp_path / "nope"))
+        issues = preflight(
+            fixture_path=self._good_fixture_path(tmp_path),
+            probe=False,
+        )
+        assert any(
+            "COMFYUI_OUTPUT_DIR" in i and "not" in i.lower() for i in issues
+        )
+
+    def test_preflight_reports_fixture_validation_failures(
+        self, tmp_path, monkeypatch
+    ):
+        from internal.autoresearch.harness import preflight
+        output = tmp_path / "comfyui_output"
+        output.mkdir()
+        monkeypatch.setenv("RUN_ID", "x")
+        monkeypatch.setenv("COMFYUI_OUTPUT_DIR", str(output))
+        # Fixture with TODO placeholder
+        data = _fixture_dict(audio_path="<TODO: real path>")
+        bad = tmp_path / "bad.json"
+        bad.write_bytes(orjson.dumps(data))
+        issues = preflight(fixture_path=bad, probe_url=None)
+        assert any("audio_path" in i and "TODO" in i for i in issues)
+
+
 # ---------------------------------------------------------------------------
 # Tracker
 # ---------------------------------------------------------------------------

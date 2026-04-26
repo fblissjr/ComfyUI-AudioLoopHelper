@@ -1,4 +1,4 @@
-Last updated: 2026-04-26 (added manual-short-iteration recipe after Phase 1c iterations autowire)
+Last updated: 2026-04-26 (added Phase 2.1 tier-1 smoke-test recipe)
 
 # Debugging Guide: Quality Problems in the Audio-Loop Pipeline
 
@@ -681,6 +681,92 @@ iteration-boundary seams (at t ≈ 18, 36, 54, ...) become visibly
 smoother, overlap was the dominant factor at those timestamps.
 
 ---
+
+## Tier-1 smoke test for the experiment harness
+
+End-to-end verification that the autoresearch framework actually
+populates the tracker with real numbers. Run this once per
+environment after install + when DINOv3 / PE-AV deps land.
+
+**Pre-conditions** (one-time setup):
+
+1. Install the experiments + metrics dep groups:
+   ```
+   uv sync --group experiments --group metrics
+   ```
+2. Hugging Face auth for DINOv3 (gated):
+   ```
+   huggingface-cli login   # or: export HF_TOKEN=hf_...
+   ```
+3. Pick a fixture and fill in real paths. Open
+   `internal/autoresearch/fixtures/fixture_man_girl_guitar.json`
+   and replace the `<TODO: ...>` strings with absolute paths to a
+   real `.wav` and a real `.png` ComfyUI can see.
+4. (Optional) harvest an API-format workflow JSON via
+   `python3 scripts/extract_workflow_from_png.py <recent-VHS-png>
+   --prompt` — required when `--dry-run` is OFF.
+
+**Per-launch setup** (every shell session):
+
+```bash
+# Start ComfyUI with telemetry-enabled wrapper (auto-generates RUN_ID,
+# enables sage tracer + exec logger).
+./start_experiment.sh &
+
+# Tell the harness where ComfyUI writes its mp4s.
+export COMFYUI_OUTPUT_DIR=/path/to/your/comfyui/output
+```
+
+**Verify wiring before rendering** (cheap; ~1 sec):
+
+```bash
+uv run --group experiments --group metrics python -m \
+    internal.autoresearch.harness \
+    --fixture internal/autoresearch/fixtures/fixture_man_girl_guitar.json \
+    --preflight
+```
+
+Exits 0 ("Preflight OK.") when fixture validates, env vars set, and
+ComfyUI is reachable. Exits 1 with a list of issues otherwise — fix
+each before continuing.
+
+**Run the actual smoke test** (one render, ~1-2 min for tier 1):
+
+```bash
+uv run --group experiments --group metrics python -m \
+    internal.autoresearch.harness \
+    --fixture internal/autoresearch/fixtures/fixture_man_girl_guitar.json \
+    --tier 1 \
+    --api-workflow path/to/api_workflow.json \
+    --description "tier-1 smoke test"
+```
+
+**Verify outputs**:
+
+```bash
+# Tracker row should show status='complete' with metrics populated.
+uv run --group experiments python -c \
+    "import duckdb; conn = duckdb.connect('internal/autoresearch/runs.duckdb', read_only=True); \
+     print(conn.execute('SELECT run_id, status, primary_metric, primary_metric_value, metrics FROM runs ORDER BY ts DESC LIMIT 1').fetchall())"
+
+# Run dir should contain the workflow snapshot, exec/sage jsonl, metrics.json,
+# and a symlink to the rendered mp4. (Use the most-recent run dir if you
+# opened a fresh shell — `RUN_ID` is per-launch.)
+ls "data/runs/$(ls -t data/runs/ | head -1)/"
+```
+
+Look for:
+- `subject_consistency_status: "ok"` with `mean_to_anchor` near 1.0
+  (high = identity preserved against the init image).
+- `av_consistency_status: "ok"` with `av_text_sim` somewhere in
+  [0.2, 0.5] (depends on prompt; just verify it's not 0 or NaN).
+- `sage_summary_status: "ok"` with the kernel distribution dict
+  showing the kernels you expect (fp8_cuda, fp16_triton, etc.).
+
+If any metric reports `model_unavailable`, the corresponding dep
+group isn't synced or HF auth failed — fix and re-run preflight.
+If `video_missing`, `COMFYUI_OUTPUT_DIR` is wrong or the mp4
+filename pattern doesn't match `LTX-2_${RUN_ID}_*.mp4`.
 
 ## Known-good baselines
 
