@@ -74,6 +74,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - Pyright `reportIncompatibleMethodOverride` on `execute()` is a false positive.
 - **`LTXVConcatAVLatent` isn't buggy.** `output.update(video); output.update(audio)` gets overwritten by a proper `NestedTensor` assignment on the next line. Don't chase.
 - Validate after edits: `python3 -c "import json; json.load(open('file.json'))"`.
+- **`Path.glob()` returns `[]` cleanly on a missing directory.** Drop the `if not source_dir.is_dir(): return False` pre-check before `source_dir.glob(...)` — the empty-result guard a few lines down already covers both "dir absent" and "dir present, no match." TOCTOU + extra stat for nothing. Caught 2026-04-26 in `harness.py::_locate_and_link_output_mp4`.
 - **New node modules** that need `comfy_api` / `comfy.patcher_extension` imports define inline `_Passthrough` / `_IOStub` / `override` fallbacks under a `try: from comfy_api.latest import io / except ImportError:` block. See `nodes_sage.py` and `nodes_easycache.py`. Two consumers is the minimum threshold for extracting to a shared helper; factor out only if a third node needs the same stubs.
 - **LTX denoiser-level wrapping** uses `model.add_wrapper_with_key(WrappersMP.DIFFUSION_MODEL, key, fn)`. Supported wrapper API; not a monkey patch. Reference: `nodes_easycache.py`. Cleaner than patching `BasicTransformerBlock.forward` directly.
 - **Always `git status --short` before `git commit`**. Pre-staged files (privacy_guard hook, linter mutations, half-finished prior work) get swept into your commit otherwise; the commit title then misrepresents the content.
@@ -163,6 +164,7 @@ Companion custom nodes (used alongside, not imported):
 
 - **Check sibling-session backlogs (`internal/design/*_backlog.md`) before executing stale PLAN items** that touch defaults. Stale items can silently regress decisions another session has since made.
 - **Run `/simplify` after non-trivial code changes.** Three-agent review (reuse / quality / efficiency) catches data-flow correctness bugs that shape-only tests miss.
+- **Verify a new model via its paper, not its name.** SAM-Audio reads as "audio-conditioned visual segmentation" but is actually audio source separation (arxiv:2512.18099). Run `paper_search` or fetch the README before designing a metric/feature around it. Cost ~30s; saves an entire session of building against the wrong assumption. Caught 2026-04-26 during Phase 2.1 SAM-Audio evaluation.
 - **Promote helpers at the 3rd call site, not the 2nd.** Reviewer consensus across multiple `/simplify` passes. Prevents premature extraction: two sites can share a short inline pattern without paying the abstraction cost; by the third, the pattern is load-bearing and the name-plus-tests earn their keep.
 - **`PLAN.md` (or feature design doc) is the spec.** When red TDD tests disagree with the spec formula, fix the test — the spec wins unless you explicitly update PLAN first.
 - **Decisions-index pattern**: DECISION / WHY / CONTEXT triples, grouped by feature. Template at `internal/ic_lora_assessment.md §6.5`. Roll up any feature >3 commits to avoid re-deriving rationale from git log.
