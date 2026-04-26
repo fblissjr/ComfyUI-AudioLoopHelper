@@ -47,6 +47,19 @@ def timestamped_run_path(subdir: str, prefix: str, ext: str) -> Path:
     return out_dir / f"{prefix}_{ts}.{ext}"
 
 
+def _current_run_id() -> str | None:
+    """Single source of truth for reading the RUN_ID env var.
+
+    Strips whitespace; returns None for unset/empty rather than ""
+    so callers can branch with `if run_id is None`. Read at call time
+    (not module load) so wrapper scripts and tests can mutate the env
+    before triggering loggers. Documented in
+    `docs/reference/environment.md`.
+    """
+    raw = os.environ.get("RUN_ID", "").strip()
+    return raw or None
+
+
 def run_artifact_path(category: str, ext: str) -> Path:
     """Path for a per-render artifact, honoring the `RUN_ID` env var.
 
@@ -58,19 +71,39 @@ def run_artifact_path(category: str, ext: str) -> Path:
     Without `RUN_ID`: falls back to the legacy
     `timestamped_run_path(category, category, ext)` shape so existing
     tooling that runs without the experiment harness keeps working.
-    `RUN_ID` is intentionally read at call time (not module load) so a
-    test or wrapper script can set it before triggering loggers.
 
     Diagnosed 2026-04-26 — three loggers stamping `time.time()` at
     different startup moments produced filenames that looked unrelated
     despite coming from the same render. Single env var fixes it.
     """
-    run_id = os.environ.get("RUN_ID", "").strip()
-    if run_id:
+    run_id = _current_run_id()
+    if run_id is not None:
         out_dir = DATA_RUNS_DIR / run_id
         out_dir.mkdir(parents=True, exist_ok=True)
         return out_dir / f"{category}.{ext}"
     return timestamped_run_path(category, category, ext)
+
+
+def run_artifact_dir(subdir: str = "") -> Path:
+    """Directory under the per-render artifact root, honoring `RUN_ID`.
+
+    Companion to `run_artifact_path` for tools that produce a directory
+    of files (profiler traces with trace.json + summary.txt +
+    memory_timeline.html, frame sequences, etc.).
+
+    With `RUN_ID` set: `data/runs/${RUN_ID}/<subdir>/` (or
+    `data/runs/${RUN_ID}/` when subdir is empty). Without RUN_ID, falls
+    back to a legacy timestamped dir under `internal/analysis/runs/`.
+    Creates the directory if missing.
+    """
+    run_id = _current_run_id()
+    if run_id is not None:
+        target = DATA_RUNS_DIR / run_id
+        if subdir:
+            target = target / subdir
+        target.mkdir(parents=True, exist_ok=True)
+        return target
+    return timestamped_run_dir(RUNS_DIR / subdir if subdir else RUNS_DIR)
 
 
 def timestamped_run_dir(base: Path) -> Path:

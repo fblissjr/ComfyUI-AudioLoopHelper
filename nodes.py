@@ -2542,25 +2542,30 @@ class ProfileBegin(io.ComfyNode):
             return io.NodeOutput(trigger)
 
         import datetime
-        import os as _os
+        import sys
         from pathlib import Path
 
-        # If RUN_ID env var is set, the profiler artifacts join the rest of
-        # this render's telemetry under data/runs/${RUN_ID}/profiler/. Single
-        # correlation key across exec_log + sage + profiler + output mp4.
-        # See workflow_utils.run_artifact_path.
-        run_id = _os.environ.get("RUN_ID", "").strip()
-        if run_id:
-            plugin_dir = Path(__file__).resolve().parent
-            run_dir = plugin_dir / "data" / "runs" / run_id / "profiler"
-            run_dir.mkdir(parents=True, exist_ok=True)
+        # When RUN_ID is set the profiler artifacts join the rest of this
+        # render's telemetry under data/runs/${RUN_ID}/profiler/, sharing
+        # the correlation key with exec_log + sage. Otherwise fall back to
+        # the legacy `output_dir` widget value with a fresh timestamped
+        # subdir per run. Single source of truth for the RUN_ID read lives
+        # in scripts/workflow_utils.py::_current_run_id.
+        plugin_dir = Path(__file__).resolve().parent
+        scripts_dir = plugin_dir / "scripts"
+        if str(scripts_dir) not in sys.path:
+            sys.path.insert(0, str(scripts_dir))
+        from workflow_utils import _current_run_id  # noqa: E402
+
+        if _current_run_id() is not None:
+            from workflow_utils import run_artifact_dir  # noqa: E402
+            run_dir = run_artifact_dir("profiler")
         else:
             # Resolve relative output_dir against the plugin folder so profile
             # data lands alongside our code (and is covered by our .gitignore)
             # rather than wherever ComfyUI happened to be launched from.
             out_root = Path(output_dir)
             if not out_root.is_absolute():
-                plugin_dir = Path(__file__).resolve().parent
                 out_root = plugin_dir / out_root
 
             ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
