@@ -7,23 +7,28 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- **Phase 2.1 perceptual metric: `subject_consistency`** — DINO-v2
+- **Phase 2.1 perceptual metric: `subject_consistency`** — DINOv3
+  (`facebook/dinov3-vitb16-pretrain-lvd1689m`, arxiv:2508.10104)
   cosine similarity of per-frame embeddings against the first frame
   (the init-image anchor). Reports `mean/min/max_to_anchor` and a
   linear `drift_slope`. Answers the ID-LoRA "is it doing anything?"
   question that started the experiment-runner arc — a mean-cos-sim
   delta between LoRA-on and LoRA-off renders of the same fixture.
   First metric in the heavy-dep tier; introduces a new `metrics`
-  optional dep group (`torchvision`, `transformers`,
-  `opencv-python-headless`, `numpy`, `scipy`). Heavy imports are gated
-  so the module loads cleanly on a public clone without the group
-  installed (returns `subject_consistency_status: "model_unavailable"`).
+  optional dep group (`torchvision`, `transformers>=4.46`,
+  `opencv-python-headless`, `numpy`, `scipy`). DINOv3 is **gated** on
+  Hugging Face — a clone needs `huggingface-cli login` or `HF_TOKEN`
+  in the environment. Heavy imports are gated so the module loads
+  cleanly on a public clone without the group installed (returns
+  `subject_consistency_status: "model_unavailable"`).
   Public-facing test contract:
   `tests/test_autoresearch.py::TestSubjectConsistency` (10 cases — all
   status branches + helper-function unit tests with synthetic
   embeddings; no model download required). Sets the import-gating +
   module-cache pattern that SigLIP-2 (style) and AV-HuBERT (lip-sync)
-  will follow.
+  will follow. Future v1 (queued): SAM 3.1 (`facebook/sam3.1`,
+  arxiv:2511.16719) to mask the subject across frames before
+  embedding — strips background noise from the metric.
 - **First non-placeholder Phase 2.1 metric extractor:
   `sage_summary`** — reads `data/runs/${RUN_ID}/sage.jsonl` per
   render, aggregates kernel distribution + fallback count + total

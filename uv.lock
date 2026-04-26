@@ -336,7 +336,7 @@ metrics = [
     { name = "opencv-python-headless", specifier = ">=4.10" },
     { name = "scipy", specifier = ">=1.13" },
     { name = "torchvision", specifier = ">=0.18" },
-    { name = "transformers", specifier = ">=4.40" },
+    { name = "transformers", specifier = ">=4.46" },
 ]
 
 [[package]]
