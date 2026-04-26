@@ -1,6 +1,6 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-04-25
+Last updated: 2026-04-26
 
 ComfyUI nodes that automate loop timing + audio analysis for full-length music video generation with LTX 2.3. Core pattern: `AudioLoopController` drives stride from integer latent counts, audio is frozen via `noise_mask=0`, prompts pre-encoded once outside the loop (CLIP must never enter the loop body). **Start here:** `docs/architecture_overview.md`; task-first nav at `docs/README.md`.
 
@@ -52,13 +52,16 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **`snap_boundaries=True`** (default) lets `overlap_seconds` change without schedule re-authoring.
 - **CLIP must not enter the loop body.** Pre-encode via `TimestampPromptScheduleBatchEncode`; `object_patches` don't survive the offload/reload → silent NAG disengagement iter 2+. Mechanism: `docs/analysis/nag_object_patches_offload_asymmetry.md`.
 - **Loop-body CONDITIONING must carry `frame_rate`** (default 25.0). Batch encoder stamps it; any new CONDITIONING-producing loop-body node must too (via `node_helpers.conditioning_set_values`). Missing → identity drift + hallucinated objects iter-over-iter.
-- **Bake new topology constraints into `scripts/audit_workflows.py`.** Every fix that ships an apply script should ship a matching audit check (ERR status with a `Run scripts/apply_X.py` remediation pointer). Canonical pairs: F2 (`preprocess_symmetry`) and F3 (`loop_cropguides_symmetry`). Prevents silent regression of fixes a sibling branch might revert.
+- **Bake new topology constraints into `scripts/audit_workflows.py`.** Every fix that ships an apply script should ship a matching audit check (ERR status with a `Run scripts/apply_X.py` remediation pointer). Canonical pairs: F2 (`preprocess_symmetry`), F3 (`loop_cropguides_symmetry`), F4 (`alc_seed_legacy_name`), F5 (`iterations_autowired`). Prevents silent regression of fixes a sibling branch might revert.
 - **Authoritative LTX 2.3 prompting evidence**: `docs/reference/ltx23_prompt_system_prompts.md:44, 56, 93` (Lightricks's own i2v + t2v system prompts: "DO NOT describe scene cuts", "Inaccurate descriptions may cause scene cuts"). What retracted our `Cut to` convention 2026-04-25. Check before relitigating any prompt-rule debate.
+- **Never name an INT widget exactly `"seed"` or `"noise_seed"`.** ComfyUI's frontend auto-attaches a `control_after_generate` dropdown to those literal names, which silently mutates the saved widget value across runs even when the input is wired (link supersedes widget at execute time, but the mutated widget still gets serialized — saved JSONs drift across renders despite reproducible runtime seeds). Use `base_seed`, `seed_in`, etc. Guard: `tests/test_node_schemas.py::test_no_seed_or_noise_seed_named_inputs` AST-walks every `io.*.Input(...)` call. Diagnosed 2026-04-26 in `internal/analysis/id_lora_ablation_and_seed_widget_audit.md`.
+- **Iterations auto-track audio length.** `AudioLoopPlanner.total_iterations → TensorLoopOpen.iterations_in` is wired in every shipped workflow (added 2026-04-26 via `scripts/apply_iterations_autowire.py` + an upstream `ComfyUI-NativeLooping_testing` schema patch that made `iterations_in` a wireable optional input). User puts in any audio, loop runs exactly the iterations needed. For short tests, drag in an `INTConstant` and rewire — recipe in `docs/guides/debugging_guide.md`. Audit: `audit_workflows.py::iterations_autowired` (ERR if unwired in shipped workflows).
 
 ## ComfyUI gotchas
 
 - Workflow JSON has two link representations: node-body `"link"` fields AND top-level `"links"` array. Both must sync.
 - Link array: `[link_id, src, src_slot, tgt, tgt_slot, type]`.
+- **Workflow JSON references inputs by NAME, not slot index.** Each node's `inputs[]` entry stores `{"name": ..., "type": ..., "widget": {"name": ...}, "link": ...}`; ComfyUI matches the saved name to the schema's input list when reattaching wires. So a bare schema rename (e.g. `"seed"` → `"base_seed"`) without a paired migration script that rewrites `inputs[].name` and `widget.name` in every saved JSON will dangle every existing wire on the renamed input. Canonical migration: `scripts/apply_alc_seed_rename.py`.
 - `"mode": 0` = active, `"mode": 4` = bypassed. **Bypass passes inputs to outputs of same TYPE only**; inputs with no matching-type output dead-end silently. E.g., bypassing `LTXAddVideoICLoRAGuide` leaves its `image` input unconsumed. Verify truly-inert bypass by swapping the upstream input and byte-diffing outputs (`md5sum` on sampled frames, `wave` on decoded audio).
 - `PrimitiveNode` can't feed `DynamicCombo` sub-inputs — set on the widget directly.
 - `TensorLoopClose` checks `should_stop` AFTER the body; handle edge inputs.
@@ -133,7 +136,7 @@ Companion custom nodes (used alongside, not imported):
 - `scripts/verify_sage_iteration_trace.sh` — diff per-iter sage kernel counts. `AUDIOLOOPHELPER_SAGE_TRACE=auto` is default in `<comfyui>/start.sh`.
 - `scripts/sage_telemetry_summary.py --sage-log <path> [--exec-log <path>]` — outside-ComfyUI aggregator. Per-(kernel, mask) median/p90/count + Phase 0 gate verdict. Reads only; does not write.
 - **Telemetry / privacy reference**: `docs/reference/telemetry_and_tracing.md` — what the two tracers capture (and don't), where files land, retention, on/off, why prompt text can leak via the exec logger but not via the sage tracer.
-- Debug artifacts land in `internal/analysis/runs/` via `timestamped_run_path()` / `timestamped_run_dir()` (`scripts/workflow_utils.py`).
+- Debug artifacts land in `internal/analysis/runs/` via `timestamped_run_path()` / `timestamped_run_dir()` (`scripts/workflow_utils.py`) by default. With `RUN_ID` env var set (auto-generated by `start_experiment.sh` at the repo root), every logger writes to `data/runs/${RUN_ID}/<category>.jsonl` instead — single shared correlation key across `exec.jsonl`, `sage.jsonl`, `profiler/`, and the VHS output mp4 (when the experiment harness mutates `filename_prefix` to embed the run id). Without RUN_ID, each logger stamps its own filename from `time.time()` at startup and the three drift apart by seconds. Helper: `scripts/workflow_utils.py::run_artifact_path`.
 - Symptom-first recipes: `docs/guides/debugging_guide.md`.
 - **Iter-over-iter drift** → trace CONDITIONING paths in parallel (initial vs loop). Asymmetries (missing `LTXVConditioning`, `frame_rate` mismatch, CLIP in subgraph) are load-bearing bugs.
 
