@@ -454,3 +454,165 @@ class TestSageSummary:
         assert out["sage_status"] == "ok"
         assert out["sage_total_calls"] == 2
         assert out["sage_distinct_shapes"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Metric: subject_consistency
+#
+# DINO-v2 cosine sim of per-frame embeddings vs the anchor (frame 0).
+# Tests cover the status-only paths + the helper functions that don't
+# require a model. The model-loading + frame-decoding paths are
+# integration territory (require the `metrics` dep group + a real mp4)
+# and are deferred to the live tier-1 smoke test.
+# ---------------------------------------------------------------------------
+
+class TestSubjectConsistency:
+    def test_returns_video_missing_when_mp4_absent(self, tmp_path):
+        from internal.autoresearch.metrics import subject_consistency
+        out = subject_consistency.extract(tmp_path, fixture=None)
+        assert out == {"subject_consistency_status": "video_missing"}
+
+    def test_returns_model_unavailable_when_load_returns_none(
+        self, tmp_path, monkeypatch
+    ):
+        """Public-clone path: heavy deps (transformers/torch/cv2) absent
+        → _load_model returns None → extract reports model_unavailable
+        instead of crashing the harness.
+        """
+        from internal.autoresearch.metrics import subject_consistency
+        (tmp_path / "output.mp4").write_bytes(b"\x00")
+        monkeypatch.setattr(subject_consistency, "_load_model", lambda: None)
+        out = subject_consistency.extract(tmp_path, fixture=None)
+        assert out == {"subject_consistency_status": "model_unavailable"}
+
+    def test_returns_decode_failed_when_sample_frames_returns_none(
+        self, tmp_path, monkeypatch
+    ):
+        from internal.autoresearch.metrics import subject_consistency
+        (tmp_path / "output.mp4").write_bytes(b"\x00")
+        monkeypatch.setattr(
+            subject_consistency, "_load_model", lambda: ("model", "processor")
+        )
+        monkeypatch.setattr(
+            subject_consistency, "_sample_frames", lambda p, n: None
+        )
+        out = subject_consistency.extract(tmp_path, fixture=None)
+        assert out == {"subject_consistency_status": "decode_failed"}
+
+    def test_returns_no_frames_when_sample_frames_returns_empty(
+        self, tmp_path, monkeypatch
+    ):
+        from internal.autoresearch.metrics import subject_consistency
+        (tmp_path / "output.mp4").write_bytes(b"\x00")
+        monkeypatch.setattr(
+            subject_consistency, "_load_model", lambda: ("model", "processor")
+        )
+        monkeypatch.setattr(
+            subject_consistency, "_sample_frames", lambda p, n: []
+        )
+        out = subject_consistency.extract(tmp_path, fixture=None)
+        assert out == {"subject_consistency_status": "no_frames"}
+
+    def test_aggregates_with_synthetic_embeddings(self, tmp_path, monkeypatch):
+        """End-to-end extract path with mocked model + frame sampler.
+        Synthetic embeddings: anchor at angle 0, frames 1..3 drift
+        progressively away. Mean cos-sim < 1, drift slope < 0."""
+        np = pytest.importorskip("numpy")
+        from internal.autoresearch.metrics import subject_consistency
+
+        (tmp_path / "output.mp4").write_bytes(b"\x00")
+
+        # 4 frames; embeddings drift along a known direction
+        synth_embs = np.array([
+            [1.0, 0.0, 0.0, 0.0],
+            [0.95, 0.31, 0.0, 0.0],
+            [0.87, 0.50, 0.0, 0.0],
+            [0.71, 0.71, 0.0, 0.0],
+        ], dtype=np.float32)
+        # L2-normalize
+        synth_embs = synth_embs / np.linalg.norm(
+            synth_embs, axis=1, keepdims=True
+        )
+
+        monkeypatch.setattr(
+            subject_consistency, "_load_model", lambda: ("m", "p")
+        )
+        monkeypatch.setattr(
+            subject_consistency,
+            "_sample_frames",
+            lambda p, n: ["f0", "f1", "f2", "f3"],
+        )
+        monkeypatch.setattr(
+            subject_consistency, "_embed_frames", lambda f, m, p: synth_embs
+        )
+
+        out = subject_consistency.extract(tmp_path, fixture=None)
+        assert out["subject_consistency_status"] == "ok"
+        assert out["subject_consistency_n_frames"] == 4
+        # Frames 1..3 vs anchor: 0.95, 0.87, 0.71
+        assert abs(out["subject_consistency_mean_to_anchor"] - 0.8433) < 0.01
+        assert abs(out["subject_consistency_max_to_anchor"] - 0.95) < 0.01
+        assert abs(out["subject_consistency_min_to_anchor"] - 0.71) < 0.01
+        # Drift is monotonically decreasing → negative slope
+        assert out["subject_consistency_drift_slope"] < 0
+
+    def test_cosine_to_anchor_excludes_self(self):
+        np = pytest.importorskip("numpy")
+        from internal.autoresearch.metrics import subject_consistency
+
+        embs = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 0.0]], dtype=np.float32)
+        sims = subject_consistency._cosine_to_anchor(embs)
+        # Output length = N-1 (anchor itself excluded)
+        assert sims.shape == (2,)
+        # Frame 1 orthogonal to anchor → 0; frame 2 == anchor → 1
+        assert abs(float(sims[0]) - 0.0) < 1e-6
+        assert abs(float(sims[1]) - 1.0) < 1e-6
+
+    def test_cosine_to_anchor_handles_short_input(self):
+        np = pytest.importorskip("numpy")
+        from internal.autoresearch.metrics import subject_consistency
+
+        # Single embedding → no comparisons possible
+        sims = subject_consistency._cosine_to_anchor(
+            np.array([[1.0, 0.0]], dtype=np.float32)
+        )
+        assert sims.shape == (0,)
+
+    def test_drift_slope_is_negative_for_decreasing_sims(self):
+        np = pytest.importorskip("numpy")
+        from internal.autoresearch.metrics import subject_consistency
+
+        sims = np.array([0.95, 0.87, 0.71], dtype=np.float32)
+        slope = subject_consistency._drift_slope(sims)
+        assert slope < 0
+
+    def test_drift_slope_zero_for_short_input(self):
+        np = pytest.importorskip("numpy")
+        from internal.autoresearch.metrics import subject_consistency
+
+        sims = np.array([0.95], dtype=np.float32)
+        assert subject_consistency._drift_slope(sims) == 0.0
+
+    def test_extract_does_not_crash_on_n1_frames(self, tmp_path, monkeypatch):
+        """Edge case: video has exactly 1 frame. n_frames=1, no
+        comparisons possible → all sims default to 1.0, slope=0.0."""
+        np = pytest.importorskip("numpy")
+        from internal.autoresearch.metrics import subject_consistency
+
+        (tmp_path / "output.mp4").write_bytes(b"\x00")
+        monkeypatch.setattr(
+            subject_consistency, "_load_model", lambda: ("m", "p")
+        )
+        monkeypatch.setattr(
+            subject_consistency, "_sample_frames", lambda p, n: ["f0"]
+        )
+        monkeypatch.setattr(
+            subject_consistency,
+            "_embed_frames",
+            lambda f, m, p: np.array([[1.0, 0.0]], dtype=np.float32),
+        )
+        out = subject_consistency.extract(tmp_path, fixture=None)
+        assert out["subject_consistency_status"] == "ok"
+        assert out["subject_consistency_n_frames"] == 1
+        assert out["subject_consistency_mean_to_anchor"] == 1.0
+        assert out["subject_consistency_drift_slope"] == 0.0
