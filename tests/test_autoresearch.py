@@ -616,3 +616,109 @@ class TestSubjectConsistency:
         assert out["subject_consistency_n_frames"] == 1
         assert out["subject_consistency_mean_to_anchor"] == 1.0
         assert out["subject_consistency_drift_slope"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Output mp4 discovery
+#
+# After ComfyUI completes a render, VHS_VideoCombine writes the mp4 to
+# its output dir (NOT to data/runs/${RUN_ID}/). Phase 2.1 metrics that
+# read the rendered video (subject_consistency, eventually style /
+# lip_sync / aesthetic) need the mp4 inside run_dir. Harness symlinks
+# it after poll_until_done returns.
+# ---------------------------------------------------------------------------
+
+class TestLocateAndLinkOutputMp4:
+    def test_returns_false_when_source_dir_is_none(self, tmp_path):
+        from internal.autoresearch.harness import _locate_and_link_output_mp4
+        ok = _locate_and_link_output_mp4(
+            run_id="abc", run_dir=tmp_path, source_dir=None
+        )
+        assert ok is False
+        assert not (tmp_path / "output.mp4").exists()
+
+    def test_returns_false_when_source_dir_does_not_exist(self, tmp_path):
+        from internal.autoresearch.harness import _locate_and_link_output_mp4
+        ok = _locate_and_link_output_mp4(
+            run_id="abc", run_dir=tmp_path, source_dir=tmp_path / "missing"
+        )
+        assert ok is False
+        assert not (tmp_path / "output.mp4").exists()
+
+    def test_returns_false_when_no_matching_mp4(self, tmp_path):
+        from internal.autoresearch.harness import _locate_and_link_output_mp4
+        source = tmp_path / "src"
+        source.mkdir()
+        (source / "LTX-2_other_run_001.mp4").write_bytes(b"\x00")
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        ok = _locate_and_link_output_mp4(
+            run_id="abc", run_dir=run_dir, source_dir=source
+        )
+        assert ok is False
+        assert not (run_dir / "output.mp4").exists()
+
+    def test_symlinks_first_matching_mp4(self, tmp_path):
+        from internal.autoresearch.harness import _locate_and_link_output_mp4
+        source = tmp_path / "src"
+        source.mkdir()
+        target_mp4 = source / "LTX-2_abc_00001.mp4"
+        target_mp4.write_bytes(b"video-bytes")
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        ok = _locate_and_link_output_mp4(
+            run_id="abc", run_dir=run_dir, source_dir=source
+        )
+        assert ok is True
+        link = run_dir / "output.mp4"
+        assert link.exists()
+        assert link.is_symlink()
+        assert link.resolve() == target_mp4.resolve()
+
+    def test_idempotent_when_called_twice(self, tmp_path):
+        """Second call should not raise FileExistsError; the symlink
+        target may have been swept and re-created during a retry."""
+        from internal.autoresearch.harness import _locate_and_link_output_mp4
+        source = tmp_path / "src"
+        source.mkdir()
+        target_mp4 = source / "LTX-2_abc_00001.mp4"
+        target_mp4.write_bytes(b"video-bytes")
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        assert _locate_and_link_output_mp4(
+            run_id="abc", run_dir=run_dir, source_dir=source
+        ) is True
+        assert _locate_and_link_output_mp4(
+            run_id="abc", run_dir=run_dir, source_dir=source
+        ) is True
+
+    def test_picks_first_match_when_multiple_match(self, tmp_path):
+        """VHS_VideoCombine appends counters — when retried, multiple
+        matches may exist. Take the lexicographically first (=earliest
+        counter) for determinism."""
+        from internal.autoresearch.harness import _locate_and_link_output_mp4
+        source = tmp_path / "src"
+        source.mkdir()
+        first = source / "LTX-2_abc_00001.mp4"
+        second = source / "LTX-2_abc_00002.mp4"
+        first.write_bytes(b"first")
+        second.write_bytes(b"second")
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        ok = _locate_and_link_output_mp4(
+            run_id="abc", run_dir=run_dir, source_dir=source
+        )
+        assert ok is True
+        assert (run_dir / "output.mp4").resolve() == first.resolve()
+
+    def test_reads_env_var_when_source_dir_omitted(self, tmp_path, monkeypatch):
+        from internal.autoresearch.harness import _locate_and_link_output_mp4
+        source = tmp_path / "src"
+        source.mkdir()
+        (source / "LTX-2_abc_00001.mp4").write_bytes(b"\x00")
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        monkeypatch.setenv("COMFYUI_OUTPUT_DIR", str(source))
+        ok = _locate_and_link_output_mp4(run_id="abc", run_dir=run_dir)
+        assert ok is True
+        assert (run_dir / "output.mp4").exists()

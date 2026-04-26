@@ -1,4 +1,4 @@
-Last updated: 2026-04-26
+Last updated: 2026-04-27
 
 # Environment variables reference
 
@@ -17,6 +17,7 @@ helper.
 | `COMFYUI_EXEC_LOG_SHAPE_LIMIT` | unset → 8 items per list/dict shape snapshot | manual | `exec_logger.py::_shape_of` |
 | `AUDIOLOOPHELPER_SAGE_TRACE` | unset → sage tracer inactive | `start_experiment.sh` | `nodes_sage.py::resolve_trace_path` |
 | `COMFYUI_API_URL` | unset → `http://<local_comfyui_host>:<port>` (ComfyUI's loopback default, e.g. `localhost` on port `8188` for a stock install) | manual / Phase-2 harness | `internal/autoresearch/harness.py::_api_url` |
+| `COMFYUI_OUTPUT_DIR` | unset → harness skips mp4 symlinking; video-content metrics report `*_status: video_missing` | manual (point at ComfyUI's VHS output dir) | `internal/autoresearch/harness.py::_locate_and_link_output_mp4` |
 
 `<comfyui>` = your ComfyUI install root (the directory that contains
 `main.py` and `custom_nodes/`).
@@ -127,6 +128,33 @@ invocation without editing files (`COMFYUI_API_URL=http://other-box:8188
 For a single local box, just rely on the default. For a remote or
 shared box, export the var in your shell profile (gitignored) or in a
 gitignored `data/experiment.local.toml` that the harness reads.
+
+### `COMFYUI_OUTPUT_DIR` (Phase 2.1)
+
+**Values**: absolute path to ComfyUI's VHS_VideoCombine output
+directory (where `LTX-2_${RUN_ID}_*.mp4` lands after a render).
+
+**Read by**:
+`internal/autoresearch/harness.py::_locate_and_link_output_mp4` once
+per run, after `poll_until_done` returns. Globs the matching mp4 and
+symlinks it into `data/runs/${RUN_ID}/output.mp4`.
+
+**Soft failure**: when unset or the directory doesn't exist, the
+harness skips the symlink step. Video-content metrics
+(`subject_consistency`, eventually `style_consistency`,
+`lip_sync`, `aesthetic`, `palette`) report
+`*_status: video_missing` and the tracker row still records a
+non-video baseline (wall-time + sage stats remain valid).
+
+**Why a separate env var instead of inferring from ComfyUI config**:
+ComfyUI's output dir is per-install + per-launch (`--output-directory`
+override), not discoverable from outside. Asking the user to point at
+it once is cheaper than spelunking into a running server.
+
+**Privacy**: this var typically points outside the repo (ComfyUI
+installs are usually elsewhere), so don't commit a default value into
+the repo or shell scripts that ship in the repo. Set it once in your
+gitignored shell profile or pass per-launch.
 
 ## Where exports live
 

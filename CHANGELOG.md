@@ -7,6 +7,19 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Output mp4 discovery in harness**:
+  `_locate_and_link_output_mp4(run_id, run_dir, source_dir=None)`
+  scans `COMFYUI_OUTPUT_DIR` for `LTX-2_${run_id}_*.mp4` and symlinks
+  the first lexicographic match into `data/runs/${run_id}/output.mp4`
+  so video-content metrics (`subject_consistency`, future style /
+  lip_sync / aesthetic) can read a stable per-run path. Soft failure
+  when env unset or no mp4 matches: caller still records the row,
+  metric reports `*_status: video_missing`. Idempotent re-link. New
+  `COMFYUI_OUTPUT_DIR` env var documented in
+  `docs/reference/environment.md` with privacy note (typically points
+  outside the repo). 7 new tests under
+  `tests/test_autoresearch.py::TestLocateAndLinkOutputMp4` covering
+  None/missing/unmatched/single-match/multi-match/idempotence/env-fallback.
 - **Phase 2.1 perceptual metric: `subject_consistency`** — DINOv3
   (`facebook/dinov3-vitb16-pretrain-lvd1689m`, arxiv:2508.10104)
   cosine similarity of per-frame embeddings against the first frame
