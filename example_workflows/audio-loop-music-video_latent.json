@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1618,
-  "last_link_id": 3069,
+  "last_node_id": 1624,
+  "last_link_id": 3078,
   "nodes": [
     {
       "id": 252,
@@ -84,8 +84,8 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            1571,
-            2794
+            2794,
+            3075
           ]
         }
       ],
@@ -1026,7 +1026,7 @@
         {
           "name": "MODEL",
           "type": "MODEL",
-          "link": 1571
+          "link": 3078
         }
       ],
       "outputs": [
@@ -4275,6 +4275,128 @@
         0
       ],
       "title": "Loop Iteration Stamp"
+    },
+    {
+      "id": 1622,
+      "type": "LoraLoaderModelOnly",
+      "pos": [
+        -300,
+        5500
+      ],
+      "size": [
+        360,
+        90
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 3075
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            3076
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoraLoaderModelOnly"
+      },
+      "widgets_values": [
+        "LTX-2.3-ID-LoRA-CelebVHQ-3K/lora_weights.safetensors",
+        1.0
+      ],
+      "title": "ID-LoRA File (audio-conditioned identity)"
+    },
+    {
+      "id": 1623,
+      "type": "LTXICLoRALoaderModelOnly",
+      "pos": [
+        -300,
+        5630
+      ],
+      "size": [
+        360,
+        90
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 3076
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            3077
+          ]
+        },
+        {
+          "name": "latent_downscale_factor",
+          "type": "FLOAT",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LTXICLoRALoaderModelOnly"
+      },
+      "widgets_values": [
+        "MergeGreen_IC-lora_ltx2.3.safetensors",
+        1.0
+      ],
+      "title": "IC-LoRA File (visual reference adapter)"
+    },
+    {
+      "id": 1624,
+      "type": "LoraLoaderModelOnly",
+      "pos": [
+        -300,
+        5760
+      ],
+      "size": [
+        360,
+        90
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 3077
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            3078
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoraLoaderModelOnly"
+      },
+      "widgets_values": [
+        "your_style_lora.safetensors",
+        1.0
+      ],
+      "title": "Style/Generic LoRA"
     }
   ],
   "links": [
@@ -4525,14 +4647,6 @@
       570,
       1,
       "MASK"
-    ],
-    [
-      1571,
-      503,
-      0,
-      572,
-      0,
-      "MODEL"
     ],
     [
       1572,
@@ -5173,6 +5287,38 @@
       1539,
       1,
       "INT"
+    ],
+    [
+      3075,
+      503,
+      0,
+      1622,
+      0,
+      "MODEL"
+    ],
+    [
+      3076,
+      1622,
+      0,
+      1623,
+      0,
+      "MODEL"
+    ],
+    [
+      3077,
+      1623,
+      0,
+      1624,
+      0,
+      "MODEL"
+    ],
+    [
+      3078,
+      1624,
+      0,
+      572,
+      0,
+      "MODEL"
     ]
   ],
   "groups": [

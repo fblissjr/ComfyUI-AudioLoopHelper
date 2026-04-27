@@ -168,6 +168,35 @@ staging, runtime telemetry paths, RUN_ID artifact correlation.
 Symptom-first quality troubleshooting (when output looks wrong but the
 workflow ran): [`docs/guides/debugging_guide.md`](docs/guides/debugging_guide.md).
 
+## Using LoRAs
+
+The latent workflow ships with three bypassed-by-default LoRA loaders
+inserted between `LTX2SamplingPreviewOverride(503)` and `SetNode("model")(572)`.
+When all three are bypassed (`mode: 4`), the model passes through unchanged.
+Un-bypass any one of them in the ComfyUI UI to enable that LoRA.
+
+| Loader | Node type | Use for |
+|---|---|---|
+| **ID-LoRA File** | `LoraLoaderModelOnly` | Audio-conditioned identity transfer (e.g. [`AviadDahan/LTX-2.3-ID-LoRA-CelebVHQ-3K`](https://huggingface.co/AviadDahan/LTX-2.3-ID-LoRA-CelebVHQ-3K), paper [arxiv:2603.10256](https://arxiv.org/abs/2603.10256)). LoRA weights only — for the full reference-audio runtime pipeline you also need an `LTXVReferenceAudio` node wired in (see follow-up work). |
+| **IC-LoRA File** | `LTXICLoRALoaderModelOnly` | Visual reference adapters (MergeGreen, Outpaint, Cameraman, Motion-Track, etc.). For the full effect, also run [`scripts/apply_iclora_initial_render.py`](scripts/apply_iclora_initial_render.py) to add the `LTXAddVideoICLoRAGuide` on the conditioning side. |
+| **Style/Generic LoRA** | `LoraLoaderModelOnly` | Any standard LTX 2.3-compatible LoRA. |
+
+To enable a single LoRA:
+1. Open the workflow in ComfyUI.
+2. Right-click the loader node → "Bypass" (toggle off).
+3. Set `lora_name` to the `.safetensors` filename under `ComfyUI/models/loras/`.
+4. Set `strength_model` (default 1.0).
+
+Multiple LoRAs stack — un-bypass several loaders and they apply in chain
+order (ID-LoRA → IC-LoRA → Style). Order matters when LoRAs touch
+overlapping weight blocks; experiment per LoRA pair.
+
+To rebuild from scratch (e.g. on a new workflow variant):
+```bash
+uv run --group dev python scripts/apply_lora_chain_bypassed.py
+# --revert to remove, --dry-run to preview
+```
+
 ## Nodes
 
 ### Audio Loop Controller
