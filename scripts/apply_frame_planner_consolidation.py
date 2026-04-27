@@ -256,6 +256,7 @@ def _apply(ed: WorkflowEditor) -> tuple[bool, str]:
 
 
 def apply(dry_run: bool, wf_path: Path) -> int:
+    wf_path = wf_path.resolve()
     try:
         ed = WorkflowEditor(wf_path)
     except Exception as e:  # noqa: BLE001
@@ -264,7 +265,11 @@ def apply(dry_run: bool, wf_path: Path) -> int:
 
     changed, message = _apply(ed)
     prefix = "would " if dry_run and changed else ""
-    print(f"  {wf_path.relative_to(REPO_ROOT)}:")
+    try:
+        rel = wf_path.relative_to(REPO_ROOT)
+    except ValueError:
+        rel = wf_path
+    print(f"  {rel}:")
     for line in message.split("; "):
         print(f"    {prefix}{line}")
     if changed and not dry_run:

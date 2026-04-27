@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1628,
-  "last_link_id": 3106,
+  "last_node_id": 1629,
+  "last_link_id": 3117,
   "nodes": [
     {
       "id": 252,
@@ -437,48 +437,6 @@
       ]
     },
     {
-      "id": 689,
-      "type": "SetNode",
-      "pos": [
-        -379.54385812271636,
-        6488.8277229036685
-      ],
-      "size": [
-        280.35804441467417,
-        58
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 35,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "FLOAT",
-          "type": "FLOAT",
-          "link": 1780
-        }
-      ],
-      "outputs": [
-        {
-          "name": "*",
-          "type": "*",
-          "links": null
-        }
-      ],
-      "title": "Set_window_size_seconds",
-      "properties": {
-        "Node name for S&R": "SetNode",
-        "aux_id": "kijai/ComfyUI-KJNodes",
-        "previousName": "window_size_seconds"
-      },
-      "widgets_values": [
-        "window_size_seconds"
-      ],
-      "color": "#232",
-      "bgcolor": "#353"
-    },
-    {
       "id": 164,
       "type": "LTXVConditioning",
       "pos": [
@@ -502,6 +460,14 @@
           "name": "negative",
           "type": "CONDITIONING",
           "link": 1202
+        },
+        {
+          "name": "frame_rate",
+          "type": "FLOAT",
+          "widget": {
+            "name": "frame_rate"
+          },
+          "link": 3112
         }
       ],
       "outputs": [
@@ -1068,7 +1034,7 @@
           "widget": {
             "name": "duration"
           },
-          "link": 1779
+          "link": null
         }
       ],
       "outputs": [
@@ -1270,7 +1236,7 @@
           "widget": {
             "name": "width"
           },
-          "link": 1233
+          "link": 3107
         },
         {
           "name": "height",
@@ -1278,7 +1244,7 @@
           "widget": {
             "name": "height"
           },
-          "link": 1234
+          "link": 3108
         },
         {
           "name": "length",
@@ -1286,7 +1252,7 @@
           "widget": {
             "name": "length"
           },
-          "link": 1408
+          "link": 3109
         }
       ],
       "outputs": [
@@ -1441,43 +1407,6 @@
         "Node name for S&R": "LTXVConcatAVLatent"
       },
       "widgets_values": []
-    },
-    {
-      "id": 688,
-      "type": "FloatConstant",
-      "pos": [
-        -726.7214908616771,
-        6473.665934283578
-      ],
-      "size": [
-        279.27666209612244,
-        58
-      ],
-      "flags": {},
-      "order": 7,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "value",
-          "type": "FLOAT",
-          "links": [
-            1779,
-            1780
-          ]
-        }
-      ],
-      "title": "window_size_seconds",
-      "properties": {
-        "cnr_id": "comfyui-kjnodes",
-        "ver": "c8e7f48a7f68b7a31ee336bc0be54bedbca05ffa",
-        "Node name for S&R": "FloatConstant"
-      },
-      "widgets_values": [
-        19.88
-      ],
-      "color": "#232",
-      "bgcolor": "#353"
     },
     {
       "id": 1533,
@@ -1830,6 +1759,22 @@
           "shape": 7,
           "type": "MASK",
           "link": 1384
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          },
+          "link": 3110
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          },
+          "link": 3111
         }
       ],
       "outputs": [
@@ -1843,16 +1788,12 @@
         {
           "name": "width",
           "type": "INT",
-          "links": [
-            1233
-          ]
+          "links": []
         },
         {
           "name": "height",
           "type": "INT",
-          "links": [
-            1234
-          ]
+          "links": []
         },
         {
           "name": "mask",
@@ -1921,42 +1862,6 @@
       "widgets_values": [
         0,
         -1
-      ]
-    },
-    {
-      "id": 526,
-      "type": "PrimitiveNode",
-      "pos": [
-        -1437.7076401290158,
-        5957.807500210869
-      ],
-      "size": [
-        210,
-        82
-      ],
-      "flags": {},
-      "order": 13,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "INT",
-          "type": "INT",
-          "widget": {
-            "name": "length"
-          },
-          "links": [
-            1408
-          ]
-        }
-      ],
-      "title": "length",
-      "properties": {
-        "Run widget replace on values": false
-      },
-      "widgets_values": [
-        497,
-        "fixed"
       ]
     },
     {
@@ -2830,7 +2735,7 @@
           "widget": {
             "name": "window_seconds"
           },
-          "link": 2929
+          "link": 3115
         },
         {
           "name": "overlap_seconds",
@@ -2846,7 +2751,7 @@
           "widget": {
             "name": "fps"
           },
-          "link": null
+          "link": 3116
         }
       ],
       "outputs": [
@@ -2988,45 +2893,6 @@
       ],
       "color": "#322",
       "bgcolor": "#533"
-    },
-    {
-      "id": 691,
-      "type": "GetNode",
-      "pos": [
-        2442.844389602398,
-        4991.611641752692
-      ],
-      "size": [
-        217.15,
-        58
-      ],
-      "flags": {
-        "collapsed": false
-      },
-      "order": 30,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "FLOAT",
-          "type": "FLOAT",
-          "links": [
-            2039,
-            2929,
-            2937
-          ]
-        }
-      ],
-      "title": "Get_window_size_seconds",
-      "properties": {
-        "Node name for S&R": "GetNode",
-        "aux_id": "kijai/ComfyUI-KJNodes"
-      },
-      "widgets_values": [
-        "window_size_seconds"
-      ],
-      "color": "#232",
-      "bgcolor": "#353"
     },
     {
       "id": 567,
@@ -3175,7 +3041,7 @@
           "widget": {
             "name": "video_end_time"
           },
-          "link": 2039
+          "link": 3117
         },
         {
           "name": "positive",
@@ -3544,7 +3410,7 @@
           "widget": {
             "name": "window_seconds"
           },
-          "link": 2937
+          "link": 3113
         },
         {
           "name": "base_seed",
@@ -3553,6 +3419,14 @@
             "name": "base_seed"
           },
           "link": 2938
+        },
+        {
+          "name": "fps",
+          "type": "INT",
+          "widget": {
+            "name": "fps"
+          },
+          "link": 3114
         }
       ],
       "outputs": [
@@ -4506,6 +4380,129 @@
       },
       "widgets_values": [],
       "title": "Latent Select (by Iteration)"
+    },
+    {
+      "id": 1629,
+      "type": "LTXFramePlanner",
+      "pos": [
+        -2300,
+        4500
+      ],
+      "size": [
+        420,
+        220
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "target_width",
+          "type": "INT",
+          "widget": {
+            "name": "target_width"
+          },
+          "link": null
+        },
+        {
+          "name": "target_height",
+          "type": "INT",
+          "widget": {
+            "name": "target_height"
+          },
+          "link": null
+        },
+        {
+          "name": "target_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "target_seconds"
+          },
+          "link": null
+        },
+        {
+          "name": "fps",
+          "type": "INT",
+          "widget": {
+            "name": "fps"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "width",
+          "type": "INT",
+          "links": [
+            3107,
+            3110
+          ]
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "links": [
+            3108,
+            3111
+          ]
+        },
+        {
+          "name": "frames",
+          "type": "INT",
+          "links": [
+            3109
+          ]
+        },
+        {
+          "name": "actual_seconds",
+          "type": "FLOAT",
+          "links": [
+            3113,
+            3115,
+            3117
+          ]
+        },
+        {
+          "name": "fps_int",
+          "type": "INT",
+          "links": [
+            3114,
+            3116
+          ]
+        },
+        {
+          "name": "fps_float",
+          "type": "FLOAT",
+          "links": [
+            3112
+          ]
+        },
+        {
+          "name": "latent_volume",
+          "type": "INT",
+          "links": []
+        },
+        {
+          "name": "status",
+          "type": "STRING",
+          "links": []
+        },
+        {
+          "name": "summary",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LTXFramePlanner"
+      },
+      "widgets_values": [
+        832,
+        448,
+        20.0,
+        25
+      ],
+      "title": "LTX Frame Planner (single source for dimension config)"
     }
   ],
   "links": [
@@ -4582,22 +4579,6 @@
       "IMAGE"
     ],
     [
-      1233,
-      445,
-      1,
-      344,
-      0,
-      "INT"
-    ],
-    [
-      1234,
-      445,
-      2,
-      344,
-      1,
-      "INT"
-    ],
-    [
       1252,
       350,
       0,
@@ -4644,14 +4625,6 @@
       445,
       1,
       "MASK"
-    ],
-    [
-      1408,
-      526,
-      0,
-      344,
-      2,
-      "INT"
     ],
     [
       1433,
@@ -4822,22 +4795,6 @@
       "CONDITIONING"
     ],
     [
-      1779,
-      688,
-      0,
-      601,
-      1,
-      "FLOAT"
-    ],
-    [
-      1780,
-      688,
-      0,
-      689,
-      0,
-      "FLOAT"
-    ],
-    [
       2034,
       578,
       0,
@@ -4860,14 +4817,6 @@
       843,
       3,
       "VAE"
-    ],
-    [
-      2039,
-      691,
-      0,
-      843,
-      5,
-      "FLOAT"
     ],
     [
       2044,
@@ -5102,14 +5051,6 @@
       "STRING"
     ],
     [
-      2929,
-      691,
-      0,
-      1560,
-      2,
-      "FLOAT"
-    ],
-    [
       2935,
       567,
       0,
@@ -5124,14 +5065,6 @@
       1582,
       1,
       "INT"
-    ],
-    [
-      2937,
-      691,
-      0,
-      1582,
-      2,
-      "FLOAT"
     ],
     [
       2938,
@@ -5468,6 +5401,94 @@
       1539,
       1,
       "INT"
+    ],
+    [
+      3107,
+      1629,
+      0,
+      344,
+      0,
+      "INT"
+    ],
+    [
+      3108,
+      1629,
+      1,
+      344,
+      1,
+      "INT"
+    ],
+    [
+      3109,
+      1629,
+      2,
+      344,
+      2,
+      "INT"
+    ],
+    [
+      3110,
+      1629,
+      0,
+      445,
+      2,
+      "INT"
+    ],
+    [
+      3111,
+      1629,
+      1,
+      445,
+      3,
+      "INT"
+    ],
+    [
+      3112,
+      1629,
+      5,
+      164,
+      2,
+      "FLOAT"
+    ],
+    [
+      3113,
+      1629,
+      3,
+      1582,
+      2,
+      "FLOAT"
+    ],
+    [
+      3114,
+      1629,
+      4,
+      1582,
+      4,
+      "INT"
+    ],
+    [
+      3115,
+      1629,
+      3,
+      1560,
+      1,
+      "FLOAT"
+    ],
+    [
+      3116,
+      1629,
+      4,
+      1560,
+      3,
+      "INT"
+    ],
+    [
+      3117,
+      1629,
+      3,
+      843,
+      5,
+      "FLOAT"
     ]
   ],
   "groups": [
