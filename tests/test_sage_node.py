@@ -640,6 +640,58 @@ def test_override_reads_prompt_id_from_transformer_options(tmp_path: Path, monke
     assert per_call["prompt_id"] == "abc-123"
 
 
+def test_override_reads_prompt_id_from_executing_context(tmp_path: Path, monkeypatch):
+    """ComfyUI exposes the active prompt's id via a contextvar in
+    `comfy_execution.utils.get_executing_context()`. That's where ComfyUI
+    actually plants it during /prompt execution — NOT on
+    transformer_options. Real renders work via this path; the
+    transformer_options branch is only a fallback for any caller that
+    explicitly threads it. Diagnosed mid-bench 2026-04-27 when the
+    sage-fork v0.4.1 bench reported zero prompt_id-tagged rows in the
+    live trace."""
+    m = _mod()
+    monkeypatch.setattr(m, "_detect_arch_tag", lambda: None)
+    monkeypatch.setattr(m, "_GET_DISPATCHED_KERNEL", None)
+
+    q = _fake_q()
+    k, v = _fake_kv(q)
+
+    def sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape):
+        return torch.zeros_like(q)
+
+    # Inject a fake comfy_execution.utils.get_executing_context that
+    # returns a stub ExecutionContext with the prompt_id we want to see.
+    import sys
+    import types
+    from collections import namedtuple
+    fake_ctx = namedtuple("ExecutionContext", ["prompt_id", "node_id", "list_index"])(
+        prompt_id="ctxvar-prompt-id-789", node_id="42", list_index=None,
+    )
+    fake_module = types.ModuleType("comfy_execution.utils")
+    fake_module.get_executing_context = lambda: fake_ctx
+    fake_pkg = types.ModuleType("comfy_execution")
+    monkeypatch.setitem(sys.modules, "comfy_execution", fake_pkg)
+    monkeypatch.setitem(sys.modules, "comfy_execution.utils", fake_module)
+
+    log = tmp_path / "sage_override_ctxvar_pid.jsonl"
+    tracer = m.SageTracer(log_path=log)
+    override = m.make_sage_override(
+        sage_fn=sage_fn,
+        pytorch_fn=lambda *a, **kw: torch.ones_like(q),
+        mode="auto_mask_aware",
+        fallback_on_error=True,
+        tracer=tracer,
+        logger=m.SageFallbackLogger(emit=lambda _: None),
+    )
+    # No transformer_options.prompt_id — must come from the contextvar.
+    override(None, q, k, v, heads=4, mask=None)
+    tracer.flush_summary()
+
+    rows = [orjson.loads(line) for line in log.read_text().splitlines()]
+    per_call = next(r for r in rows if r.get("event") != "summary" and r.get("event") != "header")
+    assert per_call["prompt_id"] == "ctxvar-prompt-id-789"
+
+
 def test_override_omits_prompt_id_when_transformer_options_missing(tmp_path: Path, monkeypatch):
     """Defensive: if ComfyUI didn't plant prompt_id (older versions, or a
     direct `_patch_impl` test), the override must not crash and must omit
@@ -671,3 +723,189 @@ def test_override_omits_prompt_id_when_transformer_options_missing(tmp_path: Pat
     rows = [orjson.loads(line) for line in log.read_text().splitlines()]
     per_call = next(r for r in rows if r.get("event") != "summary" and r.get("event") != "header")
     assert "prompt_id" not in per_call
+
+
+# ---------------------------------------------------------------------------
+# 9. skip_under_seq_len — short-Q dispatch policy
+#
+# sage's int8 quant + kernel-launch overhead dominates on short sequences;
+# at q.shape[1] in [497, 498] sage runs at ~0.45× torch_flash per the
+# v0.4.1 sage-fork bench. Threshold-based shortcut routes those calls
+# directly to pytorch_fn without invoking sage. Default 0 = current
+# behavior (no shortcut). Trace rows on the skip path emit
+# `skipped: true` + `skip_reason: "under_seq_len"` so workload-profile
+# tools can aggregate the policy at a glance.
+# ---------------------------------------------------------------------------
+
+def test_override_skips_sage_when_seq_under_threshold():
+    """q.shape[1]=497 + threshold=1024 → call goes to pytorch_fn, not sage_fn."""
+    m = _mod()
+    q = _fake_q(seq=497)
+    k, v = _fake_kv(q)
+    calls = {"sage": 0, "pt": 0}
+
+    def sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape):
+        calls["sage"] += 1
+        return torch.zeros_like(q)
+
+    def pytorch_fn(*args, **kwargs):
+        calls["pt"] += 1
+        return torch.ones_like(q)
+
+    override = m.make_sage_override(
+        sage_fn=sage_fn,
+        pytorch_fn=pytorch_fn,
+        mode="auto",
+        fallback_on_error=True,
+        tracer=m.SageTracer(log_path=None),
+        logger=m.SageFallbackLogger(emit=lambda _: None),
+        skip_under_seq_len=1024,
+    )
+    out = override(None, q, k, v, heads=4, mask=None)
+    assert calls == {"sage": 0, "pt": 1}
+    assert torch.equal(out, torch.ones_like(q))
+
+
+def test_override_runs_sage_when_seq_at_or_above_threshold():
+    """q.shape[1]=22932 + threshold=1024 → call goes to sage_fn (production path)."""
+    m = _mod()
+    q = _fake_q(seq=22932)
+    k, v = _fake_kv(q)
+    calls = {"sage": 0, "pt": 0}
+
+    def sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape):
+        calls["sage"] += 1
+        return torch.zeros_like(q)
+
+    def pytorch_fn(*args, **kwargs):
+        calls["pt"] += 1
+        return torch.ones_like(q)
+
+    override = m.make_sage_override(
+        sage_fn=sage_fn,
+        pytorch_fn=pytorch_fn,
+        mode="auto",
+        fallback_on_error=True,
+        tracer=m.SageTracer(log_path=None),
+        logger=m.SageFallbackLogger(emit=lambda _: None),
+        skip_under_seq_len=1024,
+    )
+    override(None, q, k, v, heads=4, mask=None)
+    assert calls == {"sage": 1, "pt": 0}
+
+
+def test_override_threshold_zero_disables_skip(tmp_path: Path):
+    """skip_under_seq_len=0 (default) → no shortcut; short-Q goes to sage_fn."""
+    m = _mod()
+    q = _fake_q(seq=497)
+    k, v = _fake_kv(q)
+    calls = {"sage": 0, "pt": 0}
+
+    def sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape):
+        calls["sage"] += 1
+        return torch.zeros_like(q)
+
+    override = m.make_sage_override(
+        sage_fn=sage_fn,
+        pytorch_fn=lambda *a, **kw: (calls.update(pt=calls["pt"] + 1), torch.ones_like(q))[1],
+        mode="auto",
+        fallback_on_error=True,
+        tracer=m.SageTracer(log_path=None),
+        logger=m.SageFallbackLogger(emit=lambda _: None),
+        skip_under_seq_len=0,
+    )
+    override(None, q, k, v, heads=4, mask=None)
+    assert calls == {"sage": 1, "pt": 0}
+
+
+def test_override_skip_emits_trace_row_with_skipped_flag(tmp_path: Path, monkeypatch):
+    """Skip path emits a trace row carrying `skipped: true` and
+    `skip_reason: "under_seq_len"` so workload-profile aggregations
+    can distinguish consumer-side policy skips from sage's own
+    dispatch decisions."""
+    m = _mod()
+    monkeypatch.setattr(m, "_detect_arch_tag", lambda: None)
+    monkeypatch.setattr(m, "_GET_DISPATCHED_KERNEL", None)
+
+    q = _fake_q(seq=498)
+    k, v = _fake_kv(q)
+
+    def sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape):
+        raise AssertionError("sage_fn must NOT be called when skip fires")
+
+    log = tmp_path / "sage_skip.jsonl"
+    tracer = m.SageTracer(log_path=log)
+    override = m.make_sage_override(
+        sage_fn=sage_fn,
+        pytorch_fn=lambda *a, **kw: torch.ones_like(q),
+        mode="auto_mask_aware",
+        fallback_on_error=True,
+        tracer=tracer,
+        logger=m.SageFallbackLogger(emit=lambda _: None),
+        skip_under_seq_len=1024,
+    )
+    override(None, q, k, v, heads=4, mask=None)
+    tracer.flush_summary()
+
+    rows = [orjson.loads(line) for line in log.read_text().splitlines()]
+    per_call = next(r for r in rows if r.get("event") not in ("summary", "header"))
+    assert per_call["skipped"] is True
+    assert per_call["skip_reason"] == "under_seq_len"
+    # Normal fields still present
+    assert per_call["shape"] == [1, 498, 4 * 16]  # batch=1, seq=498, heads*dim_head=64
+    assert per_call["fell_back"] is False  # skip path is not "fall back"
+
+
+def test_override_normal_path_omits_skipped_field(tmp_path: Path, monkeypatch):
+    """Non-skip calls must not stamp `skipped: false` everywhere — the
+    field should be absent unless skip fired (matches `prompt_id` /
+    `dispatched_kernel` "absent means N/A" contract)."""
+    m = _mod()
+    monkeypatch.setattr(m, "_detect_arch_tag", lambda: None)
+    monkeypatch.setattr(m, "_GET_DISPATCHED_KERNEL", None)
+
+    q = _fake_q(seq=22932)  # well above any reasonable threshold
+    k, v = _fake_kv(q)
+
+    def sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape):
+        return torch.zeros_like(q)
+
+    log = tmp_path / "sage_no_skip.jsonl"
+    tracer = m.SageTracer(log_path=log)
+    override = m.make_sage_override(
+        sage_fn=sage_fn,
+        pytorch_fn=lambda *a, **kw: torch.ones_like(q),
+        mode="auto_mask_aware",
+        fallback_on_error=True,
+        tracer=tracer,
+        logger=m.SageFallbackLogger(emit=lambda _: None),
+        skip_under_seq_len=1024,
+    )
+    override(None, q, k, v, heads=4, mask=None)
+    tracer.flush_summary()
+
+    rows = [orjson.loads(line) for line in log.read_text().splitlines()]
+    per_call = next(r for r in rows if r.get("event") not in ("summary", "header"))
+    assert "skipped" not in per_call
+    assert "skip_reason" not in per_call
+
+
+def test_node_schema_exposes_skip_under_seq_len_widget():
+    """The AudioLoopHelperSageAttention node defines a `skip_under_seq_len`
+    INT input (default 0). Catches schema regression."""
+    import ast
+    src = (Path(__file__).resolve().parent.parent / "nodes_sage.py").read_text()
+    tree = ast.parse(src)
+    found = False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            attr = node.func.attr
+            if attr != "Input":
+                continue
+            # First positional arg is the input name (string literal).
+            if not node.args or not isinstance(node.args[0], ast.Constant):
+                continue
+            if node.args[0].value == "skip_under_seq_len":
+                found = True
+                break
+    assert found, "AudioLoopHelperSageAttention must define a skip_under_seq_len Input"

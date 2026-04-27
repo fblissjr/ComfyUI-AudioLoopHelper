@@ -283,6 +283,8 @@ class SageTracer:
         effective_mode: str | None = None,
         dispatched_kernel: str | None = None,
         prompt_id: str | None = None,
+        skipped: bool = False,
+        skip_reason: str | None = None,
     ) -> None:
         if self._fh is None:
             return
@@ -322,6 +324,14 @@ class SageTracer:
         # dispatched_kernel.
         if prompt_id is not None:
             record["prompt_id"] = prompt_id
+        # `skipped` + `skip_reason` are present only when the consumer-
+        # side short-circuit fired (skip_under_seq_len). Absence on the
+        # normal path keeps trace files compact and matches the
+        # `dispatched_kernel` / `prompt_id` "absent means N/A" contract.
+        if skipped:
+            record["skipped"] = True
+            if skip_reason is not None:
+                record["skip_reason"] = skip_reason
         self._fh.write(orjson.dumps(record).decode() + "\n")
 
     def flush_summary(self) -> None:
@@ -512,6 +522,7 @@ def make_sage_override(
     fallback_on_error: bool,
     tracer: SageTracer,
     logger: SageFallbackLogger,
+    skip_under_seq_len: int = 0,
 ) -> Callable:
     """Return the callable that ComfyUI invokes via
     `transformer_options["optimized_attention_override"](func, *args, **kwargs)`.
@@ -520,6 +531,12 @@ def make_sage_override(
     discard it and call `sage_fn` directly. On exception, optionally fall
     back to `pytorch_fn`. `pytorch_fn` should be the unwrapped version
     (e.g. `attention_pytorch.__wrapped__`) to avoid re-entering `wrap_attn`.
+
+    `skip_under_seq_len`: when > 0, route calls with `q.shape[1] < threshold`
+    directly to `pytorch_fn` instead of `sage_fn`. Sage's int8 quant +
+    kernel-launch overhead dominates on short sequences (sage-fork v0.4.1
+    bench: ~0.45× torch_flash at seq=497/498). Trace rows on the skip
+    path carry `skipped: true` + `skip_reason: "under_seq_len"`.
     """
     if pytorch_fn is None:
         # Fall back to the real one if available. Tests inject their own.
@@ -539,9 +556,21 @@ def make_sage_override(
         return int(step) if step is not None else None
 
     def _prompt_id_from_kwargs(kwargs: dict) -> str | None:
-        # ComfyUI plants `prompt_id` on transformer_options at the start
-        # of each render. Forward it to the trace so sage-fork's bench can
-        # filter rows by run identity rather than a timestamp window.
+        # ComfyUI exposes the currently-executing prompt's id via a
+        # contextvar in `comfy_execution.utils.get_executing_context()`.
+        # Earlier code looked for it on transformer_options — that's not
+        # where ComfyUI plants it. Forward the contextvar value so
+        # sage-fork's bench can filter rows by run identity rather than
+        # a timestamp window. Fallback to transformer_options for any
+        # callers that explicitly thread it (none in the current path,
+        # but cheap insurance).
+        try:
+            from comfy_execution.utils import get_executing_context
+            ctx = get_executing_context()
+            if ctx is not None and ctx.prompt_id is not None:
+                return str(ctx.prompt_id)
+        except ImportError:
+            pass
         opts = kwargs.get("transformer_options") or {}
         pid = opts.get("prompt_id")
         return str(pid) if pid is not None else None
@@ -557,27 +586,45 @@ def make_sage_override(
     ):
         t0 = time.perf_counter() if tracer.enabled else 0.0
         fell_back = False
-        try:
-            out = sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape)
-        except Exception as err:
-            if not fallback_on_error or pytorch_fn is None:
-                raise
-            logger.log_once(tuple(q.shape), mode, err)
-            fell_back = True
+        skipped = False
+        # Consumer-side policy short-circuit: route short-Q calls to
+        # pytorch directly. Distinct from `fell_back` (which is sage's
+        # error path) — `skipped` is "we never tried sage at this shape."
+        if (
+            skip_under_seq_len > 0
+            and pytorch_fn is not None
+            and q.shape[1] < skip_under_seq_len
+        ):
+            skipped = True
             out = pytorch_fn(
                 q, k, v, heads,
                 mask=mask, attn_precision=attn_precision,
                 skip_reshape=skip_reshape, skip_output_reshape=skip_output_reshape,
                 **kwargs,
             )
+        else:
+            try:
+                out = sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape)
+            except Exception as err:
+                if not fallback_on_error or pytorch_fn is None:
+                    raise
+                logger.log_once(tuple(q.shape), mode, err)
+                fell_back = True
+                out = pytorch_fn(
+                    q, k, v, heads,
+                    mask=mask, attn_precision=attn_precision,
+                    skip_reshape=skip_reshape, skip_output_reshape=skip_output_reshape,
+                    **kwargs,
+                )
         if tracer.enabled:
             # Thread-local read; safe because ComfyUI runs attention
             # sequentially on the worker thread. Skipped on fallback --
             # the thread-local may hold a stale value from a prior
-            # layer's sage call, not this failed one.
+            # layer's sage call, not this failed one. Also skipped on
+            # the consumer-side shortcut (no sage call → no dispatch).
             dispatched = (
                 _GET_DISPATCHED_KERNEL()
-                if not fell_back and _GET_DISPATCHED_KERNEL is not None
+                if not fell_back and not skipped and _GET_DISPATCHED_KERNEL is not None
                 else None
             )
             tracer.emit(
@@ -588,6 +635,8 @@ def make_sage_override(
                 effective_mode=_effective_mode(mode, mask),
                 dispatched_kernel=dispatched,
                 prompt_id=_prompt_id_from_kwargs(kwargs),
+                skipped=skipped,
+                skip_reason="under_seq_len" if skipped else None,
             )
         return out
 
@@ -645,18 +694,42 @@ class AudioLoopHelperSageAttention(io.ComfyNode):
                         "is emitted per distinct (shape, mode, error)."
                     ),
                 ),
+                io.Int.Input(
+                    "skip_under_seq_len",
+                    default=0,
+                    min=0,
+                    max=8192,
+                    tooltip=(
+                        "Route attention calls with q.shape[1] < this "
+                        "threshold to pytorch instead of sage. 0 = "
+                        "disabled (current behavior). Recommended: 1024 "
+                        "— sage's int8 quant + kernel-launch overhead "
+                        "dominates on short sequences (sage-fork v0.4.1: "
+                        "~0.45× torch_flash at seq=497/498). Trace rows "
+                        "on the skip path carry skipped=true + "
+                        "skip_reason='under_seq_len'."
+                    ),
+                ),
             ],
             outputs=[io.Model.Output(display_name="model")],
         )
 
     @classmethod
     @override
-    def execute(cls, model, mode, fallback_on_error) -> io.NodeOutput:  # type: ignore[override]
-        (patched,) = cls._patch_impl(model, mode=mode, fallback_on_error=fallback_on_error)
+    def execute(cls, model, mode, fallback_on_error, skip_under_seq_len=0) -> io.NodeOutput:  # type: ignore[override]
+        (patched,) = cls._patch_impl(
+            model,
+            mode=mode,
+            fallback_on_error=fallback_on_error,
+            skip_under_seq_len=skip_under_seq_len,
+        )
         return io.NodeOutput(patched)
 
     @classmethod
-    def _patch_impl(cls, model, *, mode: str, fallback_on_error: bool):
+    def _patch_impl(
+        cls, model, *, mode: str, fallback_on_error: bool,
+        skip_under_seq_len: int = 0,
+    ):
         """Testable seam. Returns (patched_model,) regardless of mode.
 
         Kept separate from execute() so tests can pass a FakeModel without
@@ -681,6 +754,7 @@ class AudioLoopHelperSageAttention(io.ComfyNode):
             fallback_on_error=fallback_on_error,
             tracer=tracer,
             logger=logger,
+            skip_under_seq_len=skip_under_seq_len,
         )
 
         transformer_options = model_clone.model_options.setdefault("transformer_options", {})

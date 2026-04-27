@@ -1817,7 +1817,8 @@
       },
       "widgets_values": [
         "auto_mask_aware",
-        true
+        true,
+        1024
       ]
     },
     {
