@@ -1,10 +1,33 @@
-Last updated: 2026-04-20
+Last updated: 2026-04-27
 
 # Sampler reference — `euler` vs `euler_ancestral` vs `euler_ancestral_cfg_pp`
 
 Grounded walkthrough of how the three Euler-family samplers behave in
 ComfyUI, why they produce different results on LTX 2.3 distilled-1.1's
 sigma schedule, and which to use for each of our workflows.
+
+## TL;DR (2026-04-27 update)
+
+**Sampler**: `euler` (plain). Confirmed against Lightricks's own
+distilled inference in `coderef/LTX-Desktop/.../ltx_pipeline_common.py`
+(uses `SimpleDenoiser` + `euler_denoising_loop`) and
+`coderef/ID-LoRA-2.3/.../diffusion_steps.py::EulerDiffusionStep`
+(first-order Euler). NOT `euler_ancestral_cfg_pp` — that's a community
+variant in some ComfyUI workflows; the 4-step plateau near σ≈0.99 in
+the canonical sigma curve amplifies ancestral re-noise enough to bleed
+across our TensorLoop iteration boundaries.
+
+**Sigmas**: `ManualSigmas "1.0, 0.99375, 0.9875, 0.98125, 0.975,
+0.909375, 0.725, 0.421875, 0.0"`. These are Lightricks's hand-tuned
+`DISTILLED_SIGMA_VALUES` from
+`coderef/ID-LoRA-2.3/packages/ltx-pipelines/utils/constants.py` — what
+their distilled checkpoint was trained to denoise. Pre-2026-04-27 we
+used `BasicScheduler linear_quadratic 8 1` which approximated this
+curve parametrically; the canonical hand-tuned values are the spec.
+Migration: `scripts/apply_canonical_sigmas.py`.
+
+**Other settings**: `ModelSamplingSD3 shift=13`, `CFGGuider cfg=1`,
+decoder `LTXVTiledVAEDecode [2,2,1,true,"auto","auto"]`. Unchanged.
 
 All code references are to `ComfyUI/comfy/k_diffusion/sampling.py`
 (comfy-core) and `ComfyUI-LTXVideo/guiders/multimodal_guider.py`

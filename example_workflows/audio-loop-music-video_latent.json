@@ -389,9 +389,7 @@
         {
           "name": "MODEL",
           "type": "MODEL",
-          "links": [
-            2795
-          ]
+          "links": []
         }
       ],
       "properties": {
@@ -592,7 +590,7 @@
     },
     {
       "id": 1421,
-      "type": "BasicScheduler",
+      "type": "ManualSigmas",
       "pos": [
         55.82988745479996,
         5300.041515062131
@@ -604,13 +602,7 @@
       "flags": {},
       "order": 66,
       "mode": 0,
-      "inputs": [
-        {
-          "name": "model",
-          "type": "MODEL",
-          "link": 2795
-        }
-      ],
+      "inputs": [],
       "outputs": [
         {
           "name": "SIGMAS",
@@ -623,12 +615,10 @@
       "properties": {
         "cnr_id": "comfy-core",
         "ver": "0.16.4",
-        "Node name for S&R": "BasicScheduler"
+        "Node name for S&R": "ManualSigmas"
       },
       "widgets_values": [
-        "linear_quadratic",
-        8,
-        1
+        "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"
       ]
     },
     {
@@ -5105,14 +5095,6 @@
       503,
       0,
       1513,
-      0,
-      "MODEL"
-    ],
-    [
-      2795,
-      1513,
-      0,
-      1421,
       0,
       "MODEL"
     ],

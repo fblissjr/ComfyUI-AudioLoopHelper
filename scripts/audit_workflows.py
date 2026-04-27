@@ -39,7 +39,15 @@ class Finding(NamedTuple):
 
 
 EXPECTED_CHAIN = {
-    "BasicScheduler": (["linear_quadratic", 8, 1], "basic_scheduler"),
+    # ManualSigmas with Lightricks's canonical hand-tuned distilled
+    # values (DISTILLED_SIGMA_VALUES from
+    # coderef/ID-LoRA-2.3/.../ltx_pipelines/utils/constants.py).
+    # Replaces BasicScheduler linear_quadratic 8 1 (which approximated
+    # this curve parametrically). Migration: apply_canonical_sigmas.py.
+    "ManualSigmas": (
+        ["1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"],
+        "manual_sigmas",
+    ),
     "ModelSamplingSD3": ([13], "model_sampling_shift"),
     "KSamplerSelect": (["euler"], "sampler_type"),
 }
