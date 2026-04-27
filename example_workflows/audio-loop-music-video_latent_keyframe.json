@@ -2285,9 +2285,7 @@
         {
           "name": "AUDIO",
           "type": "AUDIO",
-          "links": [
-            1581
-          ]
+          "links": []
         }
       ],
       "title": "Get_orig_audio",
@@ -2320,9 +2318,7 @@
         {
           "name": "VAE",
           "type": "VAE",
-          "links": [
-            2507
-          ]
+          "links": []
         }
       ],
       "title": "Get_video_vae",
@@ -2335,55 +2331,6 @@
       ],
       "color": "#322",
       "bgcolor": "#533"
-    },
-    {
-      "id": 1318,
-      "type": "LTXVTiledVAEDecode",
-      "pos": [
-        1678.3910857117328,
-        4130.358701678818
-      ],
-      "size": [
-        140,
-        46
-      ],
-      "flags": {},
-      "order": 75,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "vae",
-          "type": "VAE",
-          "link": 2507
-        },
-        {
-          "name": "latents",
-          "type": "LATENT",
-          "link": 2505
-        }
-      ],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": [
-            2506
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfyui-ltxvideo",
-        "ver": "0.16.4",
-        "Node name for S&R": "LTXVTiledVAEDecode"
-      },
-      "widgets_values": [
-        1,
-        1,
-        1,
-        true,
-        "auto",
-        "auto"
-      ]
     },
     {
       "id": 245,
@@ -2412,7 +2359,6 @@
           "type": "LATENT",
           "links": [
             956,
-            2505,
             3000,
             3005
           ]
@@ -2488,83 +2434,6 @@
         "Node name for S&R": "LTXVCropGuides"
       },
       "widgets_values": []
-    },
-    {
-      "id": 560,
-      "type": "VHS_VideoCombine",
-      "pos": [
-        609.6338673079686,
-        5015.977158220021
-      ],
-      "size": [
-        273.5417350774094,
-        494.27407792927465
-      ],
-      "flags": {},
-      "order": 76,
-      "mode": 4,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 2506
-        },
-        {
-          "name": "audio",
-          "shape": 7,
-          "type": "AUDIO",
-          "link": 1581
-        },
-        {
-          "name": "meta_batch",
-          "shape": 7,
-          "type": "VHS_BatchManager",
-          "link": null
-        },
-        {
-          "name": "vae",
-          "shape": 7,
-          "type": "VAE",
-          "link": null
-        }
-      ],
-      "outputs": [
-        {
-          "name": "Filenames",
-          "type": "VHS_FILENAMES",
-          "links": null
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfyui-videohelpersuite",
-        "ver": "3234937ff5f3ca19068aaba5042771514de2429d",
-        "Node name for S&R": "VHS_VideoCombine"
-      },
-      "widgets_values": {
-        "frame_rate": 25,
-        "loop_count": 0,
-        "filename_prefix": "LTX-2",
-        "format": "video/h264-mp4",
-        "pix_fmt": "yuv420p",
-        "crf": 19,
-        "save_metadata": true,
-        "trim_to_audio": false,
-        "pingpong": false,
-        "save_output": false,
-        "videopreview": {
-          "hidden": false,
-          "paused": false,
-          "params": {
-            "filename": "output_video.mp4",
-            "subfolder": "",
-            "type": "temp",
-            "format": "video/h264-mp4",
-            "frame_rate": 25,
-            "workflow": "workflow.png",
-            "fullpath": "./temp/output_video.mp4"
-          }
-        }
-      }
     },
     {
       "id": 161,
@@ -4764,14 +4633,6 @@
       "AUDIO"
     ],
     [
-      1581,
-      582,
-      0,
-      560,
-      1,
-      "AUDIO"
-    ],
-    [
       1606,
       601,
       0,
@@ -4858,30 +4719,6 @@
       843,
       12,
       "FLOAT"
-    ],
-    [
-      2505,
-      245,
-      0,
-      1318,
-      0,
-      "LATENT"
-    ],
-    [
-      2506,
-      1318,
-      0,
-      560,
-      0,
-      "IMAGE"
-    ],
-    [
-      2507,
-      236,
-      0,
-      1318,
-      1,
-      "VAE"
     ],
     [
       2514,

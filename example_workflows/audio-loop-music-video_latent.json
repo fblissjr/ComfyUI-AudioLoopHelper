@@ -2046,9 +2046,7 @@
         {
           "name": "VAE",
           "type": "VAE",
-          "links": [
-            2507
-          ]
+          "links": []
         }
       ],
       "title": "Get_video_vae",
@@ -2061,53 +2059,6 @@
       ],
       "color": "#322",
       "bgcolor": "#533"
-    },
-    {
-      "id": 1318,
-      "type": "LTXVTiledVAEDecode",
-      "pos": [
-        1678.3910857117328,
-        4130.358701678818
-      ],
-      "size": [
-        140,
-        46
-      ],
-      "flags": {},
-      "order": 75,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "vae",
-          "type": "VAE",
-          "link": 2507
-        },
-        {
-          "name": "latents",
-          "type": "LATENT",
-          "link": 2505
-        }
-      ],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": []
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfyui-ltxvideo",
-        "ver": "0.16.4",
-        "Node name for S&R": "LTXVTiledVAEDecode"
-      },
-      "widgets_values": [
-        2,
-        2,
-        1,
-        true,
-        "auto",
-        "auto"
-      ]
     },
     {
       "id": 245,
@@ -2136,7 +2087,6 @@
           "type": "LATENT",
           "links": [
             956,
-            2505,
             3005,
             3124
           ]
@@ -4448,22 +4398,6 @@
       570,
       0,
       "LATENT"
-    ],
-    [
-      2505,
-      245,
-      0,
-      1318,
-      0,
-      "LATENT"
-    ],
-    [
-      2507,
-      236,
-      0,
-      1318,
-      1,
-      "VAE"
     ],
     [
       2514,
