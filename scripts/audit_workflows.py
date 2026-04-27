@@ -57,6 +57,7 @@ EXPECTED_CHAIN = {
 # spectrogram_iclora_minimal.json, iclora_amplification_poc.json) is
 # intentionally NOT audited — those are forks with non-standard topology
 # that pre-date the audit and would just generate noise.
+EXPERIMENTAL_DIR_NAME = "experimental"
 EXPERIMENTAL_AUDITED_FILES = {"init_guide_amplification_poc.json"}
 
 # Title prefix the init-guide POC stamps onto CFGGuider(644). Narrow
@@ -256,16 +257,11 @@ def _audit_one(wf_path: Path) -> list[Finding]:
     else:
         record("WARN", "iteration_stamp", "missing (sage tracer iter grouping will be blank)")
 
-    # LTXFramePlanner is the single source of truth for dimension config
-    # (width/height/length/fps/window_seconds/frame_rate). Without it,
-    # widget values for those scatter across EmptyLTXVLatentVideo,
-    # ImageResizeKJv2, AudioLoopController, AudioLoopPlanner, and the
-    # subgraph — drift between them was the historical footgun. Retake
-    # lacks the audio-loop spine and is exempt. Experimental forks
-    # (under example_workflows/experimental/) predate the consolidation
-    # and downgrade to WARN — they're staging variants, not production.
-    # See scripts/apply_frame_planner_consolidation.py.
-    is_experimental = wf_path.parent.name == "experimental"
+    # LTXFramePlanner is the SSoT for dim/fps config; without it widget
+    # values scatter across EmptyLTXVLatentVideo, ImageResizeKJv2,
+    # AudioLoopController, AudioLoopPlanner, and the subgraph. Retake is
+    # exempt (no loop spine); experimental forks downgrade to WARN.
+    is_experimental = wf_path.parent.name == EXPERIMENTAL_DIR_NAME
     if not _is_retake(name):
         if not by_type.get("LTXFramePlanner"):
             status = "WARN" if is_experimental else "ERR"
@@ -892,8 +888,7 @@ def _check_ltx2_nag_reaches_loop(wf, by_type, record) -> None:
 
     invoker_id = _subgraph_invoker_id(wf)
     if invoker_id is None:
-        # No subgraph (e.g. retake) — nothing to verify.
-        return
+        return  # no subgraph (e.g. retake)
 
     if len(nag_nodes) > 1:
         record(
@@ -903,36 +898,29 @@ def _check_ltx2_nag_reaches_loop(wf, by_type, record) -> None:
 
     nag_id = nag_nodes[0]["id"]
 
-    # Walk MODEL chain forward from LTX2_NAG. Stop when we hit the
-    # subgraph invoker's MODEL input (any slot — invokers expose model
-    # via a typed slot whose index varies by workflow). MODEL chain
-    # passes through chain-pure nodes (LoraLoaderModelOnly,
-    # SetNode/GetNode, LTXVReferenceAudio, LTX2SamplingPreviewOverride,
-    # LTXICLoRALoaderModelOnly), so a forward MODEL-link BFS suffices
-    # without per-node-type knowledge.
+    # Forward MODEL-link BFS. The chain passes through chain-pure nodes
+    # (LoraLoaderModelOnly, SetNode/GetNode, LTXVReferenceAudio,
+    # LTX2SamplingPreviewOverride, LTXICLoRALoaderModelOnly), so we don't
+    # need per-node-type knowledge — only the MODEL-typed link edges.
     edges_by_src: dict[int, list] = {}
-    for lk in wf.get("links") or []:
-        if not isinstance(lk, list) or len(lk) < 6:
-            continue
-        if lk[5] == "MODEL":
+    for lk in wf["links"]:
+        if isinstance(lk, list) and len(lk) >= 6 and lk[5] == "MODEL":
             edges_by_src.setdefault(lk[1], []).append(lk)
 
-    # SetNode/GetNode are virtual broadcasts — link source is a SetNode,
-    # link target is the GetNode reference's downstream consumer. Walk
-    # them by widget_values name match.
-    setnodes_by_var: dict[str, list[dict]] = {}
+    # SetNode/GetNode are virtual broadcasts (no MODEL-typed link from Set
+    # to Get — they're matched by widgets_values[0] var name).
+    setnode_var_by_id: dict[int, str] = {}
     getnodes_by_var: dict[str, list[dict]] = {}
-    for n in wf.get("nodes") or []:
+    for n in wf["nodes"]:
         if n.get("type") not in ("SetNode", "GetNode"):
             continue
         wv = n.get("widgets_values")
         if not isinstance(wv, list) or not wv or not isinstance(wv[0], str):
             continue
-        var = wv[0]
         if n["type"] == "SetNode":
-            setnodes_by_var.setdefault(var, []).append(n)
+            setnode_var_by_id[n["id"]] = wv[0]
         else:
-            getnodes_by_var.setdefault(var, []).append(n)
+            getnodes_by_var.setdefault(wv[0], []).append(n)
 
     visited: set[int] = set()
     queue: list[int] = [nag_id]
@@ -950,15 +938,9 @@ def _check_ltx2_nag_reaches_loop(wf, by_type, record) -> None:
             queue.append(tgt)
         if reached_invoker:
             break
-        # If the current node is a SetNode, queue all matching GetNodes
-        # (virtual broadcast). GetNodes have no incoming MODEL link in
-        # `links` — the connection is by-name.
-        cur_node = next((n for n in wf["nodes"] if n["id"] == cur), None)
-        if cur_node and cur_node.get("type") == "SetNode":
-            wv = cur_node.get("widgets_values")
-            if isinstance(wv, list) and wv and isinstance(wv[0], str):
-                for getn in getnodes_by_var.get(wv[0], []):
-                    queue.append(getn["id"])
+        var = setnode_var_by_id.get(cur)
+        if var is not None:
+            queue.extend(g["id"] for g in getnodes_by_var.get(var, []))
 
     if reached_invoker:
         record("OK", "ltx2_nag_reaches_loop",
@@ -980,7 +962,7 @@ def main() -> int:
 
     all_findings: list[Finding] = []
     paths = list(EXAMPLE_WORKFLOWS_DIR.glob("*.json"))
-    exp_dir = EXAMPLE_WORKFLOWS_DIR / "experimental"
+    exp_dir = EXAMPLE_WORKFLOWS_DIR / EXPERIMENTAL_DIR_NAME
     for fn in EXPERIMENTAL_AUDITED_FILES:
         p = exp_dir / fn
         if p.exists():

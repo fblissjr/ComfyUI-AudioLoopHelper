@@ -48,18 +48,10 @@ LTXV_PREPROCESS_ID = 446              # produces the preprocessed init image
 GET_VIDEO_VAE_ID = 413                # GetNode 'video_vae' (already wired to KJ 531)
 
 # Reference-image source for LTXAddVideoICLoRAGuide.image (slot 4).
-# IC-LoRA's image input is conceptually a REFERENCE image — what the
-# LoRA conditions on. Phase 0a deliberately points it at the SAME
-# preprocessed init image (#446) that already writes into frame 0 via
-# LTXVImgToVideoInplaceKJ (#531). Reinforces the init commitment;
-# avoids introducing a second image source for the A/B baseline.
-#
-# To decouple (e.g. style-transfer reference, "before" image for IC-LoRA
-# transformation experiments): set GUIDE_REFERENCE_IMAGE_NODE_ID to any
-# upstream node whose output[0] is IMAGE — typically a separate
-# LoadImage + ImageResizeKJv2 + LTXVPreprocess chain. A `--reference-
-# image-node-id` CLI flag wires this for one-shot overrides without
-# editing the script.
+# Phase 0a points it at the same preprocessed init image (#446) that
+# anchors frame 0 via #531 — IC-LoRA reinforces the init commitment.
+# Override via --reference-image-node-id for style-transfer or "before"
+# references.
 GUIDE_REFERENCE_IMAGE_NODE_ID = LTXV_PREPROCESS_ID
 
 # IC-LoRA defaults
@@ -90,12 +82,7 @@ def _already_migrated(ed: WorkflowEditor) -> bool:
 
 
 def _assert_required_nodes_present(ed: WorkflowEditor) -> None:
-    missing = []
-    for nid in REQUIRED_SOURCE_NODES:
-        try:
-            ed.find_node(nid)
-        except ValueError:
-            missing.append(nid)
+    missing = ed.require_nodes(REQUIRED_SOURCE_NODES)
     if missing:
         raise SystemExit(
             f"Refusing to migrate: required source node(s) missing: {missing}. "
@@ -204,11 +191,6 @@ def _wire_guide_inputs(
     ed.add_link(LTXVCONDITIONING_ID, 1, guide_id, 1, "CONDITIONING")
     ed.add_link(GET_VIDEO_VAE_ID, 0, guide_id, 2, "VAE")
     ed.add_link(LTXV_IMG_TO_VID_INPLACE_KJ_ID, 0, guide_id, 3, "LATENT")
-    # Reference-image source for IC-LoRA conditioning. Defaults to the
-    # preprocessed init image (#446) — same image that anchors frame 0,
-    # so IC-LoRA reinforces the init commitment. Override via
-    # GUIDE_REFERENCE_IMAGE_NODE_ID or --reference-image-node-id to
-    # decouple (style transfer, IC-LoRA "before" reference, etc.).
     ed.add_link(reference_image_node_id, 0, guide_id, 4, "IMAGE")
     # latent_downscale_factor auto-extracts from safetensors metadata
     # (defaults to 1.0 if missing); wire as input so the loader drives it.
@@ -262,15 +244,13 @@ def _migrate(
         return
 
     _assert_required_nodes_present(ed)
-    try:
-        ed.find_node(reference_image_node_id)
-    except ValueError:
+    if not ed.has_node(reference_image_node_id):
         raise SystemExit(
             f"Refusing to migrate: reference_image_node_id={reference_image_node_id} "
             f"not present in the workflow. Edit GUIDE_REFERENCE_IMAGE_NODE_ID at the "
             f"top of this script, or pass --reference-image-node-id with a valid "
             f"upstream IMAGE-producing node id."
-        ) from None
+        )
 
     print(f"{output_path.name}: applying Phase 0a IC-LoRA wiring...")
     loader_id = _add_iclora_loader(ed)
