@@ -3,6 +3,13 @@ LTXVCropGuides. Replicates the upstream node's CONDITIONING-side behavior
 (`keyframe_idxs` clearing) without taking or producing a LATENT, eliminating
 the unnecessary `latent["samples"].clone()` per loop iteration.
 
+Critical invariant: cleared `keyframe_idxs` must be `None`, not `[]`.
+KJNodes' `OuterSampleCallbackWrapper` (`ltxv_nodes.py:867`) gates with
+`if keyframe_idxs is not None:`, then indexes as a 4D tensor (`[0, 0, :, 0]`).
+An empty list slips past the gate and crashes with `TypeError: list indices
+must be integers or slices, not tuple`. Upstream `LTXVCropGuides`
+(`comfy_extras/nodes_lt.py:404`) sets None — we must match.
+
 These tests don't require a ComfyUI runtime — they exercise the static
 behavior on the conditioning structure directly.
 """
@@ -41,13 +48,18 @@ class TestLTXVCropGuidesNoLatent:
         assert _get_keyframe_idxs(new_pos) == [] or _get_keyframe_idxs(new_pos) is None
         assert _get_keyframe_idxs(new_neg) == [] or _get_keyframe_idxs(new_neg) is None
 
-    def test_keyframes_cleared(self):
-        """When num_keyframes > 0, keyframe_idxs is cleared on both."""
-        positive = _make_cond(keyframe_idxs=[[1, 2, 3]])  # any non-empty marker
+    def test_keyframes_cleared_to_none_not_empty_list(self):
+        """When num_keyframes > 0, keyframe_idxs is cleared to None on both.
+
+        Must be None — KJNodes' OuterSampleCallbackWrapper gates
+        `if keyframe_idxs is not None:` then indexes as a 4D tensor.
+        An empty list slips through the gate and TypeErrors on tuple-indexing.
+        """
+        positive = _make_cond(keyframe_idxs=[[1, 2, 3]])
         negative = _make_cond(keyframe_idxs=[[1, 2, 3]])
         new_pos, new_neg = LTXVCropGuidesNoLatent.execute(positive, negative)
-        assert _get_keyframe_idxs(new_pos) == []
-        assert _get_keyframe_idxs(new_neg) == []
+        assert _get_keyframe_idxs(new_pos) is None
+        assert _get_keyframe_idxs(new_neg) is None
 
     def test_no_latent_input_signature(self):
         """API contract: execute takes only positive + negative, no latent.

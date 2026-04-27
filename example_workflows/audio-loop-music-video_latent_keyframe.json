@@ -2835,20 +2835,28 @@
           "link": 2907
         },
         {
-          "name": "stride_seconds",
-          "type": "FLOAT",
-          "widget": {
-            "name": "stride_seconds"
-          },
-          "link": 2946
-        },
-        {
           "name": "window_seconds",
           "type": "FLOAT",
           "widget": {
             "name": "window_seconds"
           },
           "link": 2929
+        },
+        {
+          "name": "overlap_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "overlap_seconds"
+          },
+          "link": null
+        },
+        {
+          "name": "fps",
+          "type": "INT",
+          "widget": {
+            "name": "fps"
+          },
+          "link": null
         }
       ],
       "outputs": [
@@ -2873,8 +2881,9 @@
         "Node name for S&R": "AudioLoopPlanner"
       },
       "widgets_values": [
-        17.92,
-        19.88
+        19.88,
+        2.0,
+        25
       ],
       "color": "#233",
       "bgcolor": "#355"
@@ -3590,7 +3599,6 @@
           "name": "stride_seconds",
           "type": "FLOAT",
           "links": [
-            2946,
             3024,
             3101
           ]
@@ -3631,7 +3639,6 @@
         19.88,
         2.0,
         344096342624943,
-        "randomize",
         25
       ],
       "color": "#233",
@@ -5174,14 +5181,6 @@
       0,
       843,
       11,
-      "FLOAT"
-    ],
-    [
-      2946,
-      1582,
-      4,
-      1560,
-      1,
       "FLOAT"
     ],
     [

@@ -14,7 +14,7 @@ Usage:
     uv run --group dev python scripts/analyze_workflow_dag.py \
       example_workflows/audio-loop-music-video_latent.json \
       --format mermaid \
-      --output internal/analysis/dag_latent.md
+      --output data/runs/dag/dag_latent.md
 
 Formats:
   mermaid  -- markdown-embeddable flowchart, color-coded by type
@@ -27,6 +27,11 @@ Flags:
   --include-bypassed   show mode=4 nodes (default hidden from renderings)
   --collapse-setget    treat Set_X / Get_X pairs as implicit edges
   --filter-types T1,T2 only include nodes of these types + their neighbors
+
+Save targets (--save-run):
+  With RUN_ID env var:  data/runs/${RUN_ID}/dag_<slug>.<ext>  (correlates
+    with exec.jsonl, sage.jsonl, output.mp4, profiler/ from the same render)
+  Without RUN_ID:       data/runs/dag/dag_<slug>_<YYYY-MM-DD_HHMMSS>.<ext>
 """
 
 from __future__ import annotations
@@ -41,7 +46,14 @@ import orjson
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from workflow_utils import RUNS_DIR, WorkflowEditor, timestamped_run_path  # noqa: E402
+from datetime import datetime  # noqa: E402
+
+from workflow_utils import (  # noqa: E402
+    DATA_RUNS_DIR,
+    WorkflowEditor,
+    _RUN_TIMESTAMP_FMT,
+    _current_run_id,
+)
 
 
 # ComfyUI "mode" field: 0=active, 2=mute, 4=bypass.
@@ -359,7 +371,8 @@ def main() -> None:
                     default="mermaid")
     ap.add_argument("--output", help="Write to explicit file path instead of stdout")
     ap.add_argument("--save-run", action="store_true",
-                    help=f"Save to timestamped file under {RUNS_DIR} (gitignored)")
+                    help="Save under data/runs/${RUN_ID}/dag_<slug>.<ext> if "
+                         "RUN_ID is set; else data/runs/dag/dag_<slug>_<ts>.<ext>")
     ap.add_argument("--include-bypassed", action="store_true",
                     help="Include mode=4 (bypassed) nodes in rendering")
     ap.add_argument("--no-collapse-setget", action="store_true",
@@ -382,14 +395,22 @@ def main() -> None:
     )
 
     ext_by_format = {"mermaid": "md", "dot": "dot", "ascii": "txt", "json": "json"}
+    ext = ext_by_format[args.format]
     output_path: Path | None = None
     if args.output:
         output_path = Path(args.output)
     elif args.save_run:
         slug = workflow_path.stem.replace(".", "_")
-        output_path = timestamped_run_path(
-            "", f"dag_{slug}", ext_by_format[args.format],
-        )
+        run_id = _current_run_id()
+        if run_id is not None:
+            out_dir = DATA_RUNS_DIR / run_id
+            out_dir.mkdir(parents=True, exist_ok=True)
+            output_path = out_dir / f"dag_{slug}.{ext}"
+        else:
+            out_dir = DATA_RUNS_DIR / "dag"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime(_RUN_TIMESTAMP_FMT)
+            output_path = out_dir / f"dag_{slug}_{ts}.{ext}"
 
     if output_path is not None:
         output_path.write_text(out)

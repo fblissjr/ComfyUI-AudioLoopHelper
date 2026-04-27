@@ -1060,9 +1060,15 @@ class ConditioningSelectByIteration(io.ComfyNode):
 class AudioLoopPlanner(io.ComfyNode):
     """Shows the iteration timeline for planning prompt schedules.
 
-    Connect the same audio/stride/window as AudioLoopController and this
-    node outputs a text summary of all iteration boundaries with timestamps.
-    Leave it in the workflow -- it auto-updates when inputs change.
+    Takes the same primitives as AudioLoopController (window_seconds,
+    overlap_seconds, fps) and applies the same `_compute_loop_geometry`
+    formula to derive stride. Both nodes therefore agree on stride without
+    needing a wire between them — which is what previously closed a
+    dependency cycle:
+        AudioLoopController -> AudioLoopPlanner -> TensorLoopOpen
+            -> AudioLoopController
+    once `AudioLoopPlanner.total_iterations -> TensorLoopOpen.iterations_in`
+    was auto-wired (2026-04-26).
     """
 
     @classmethod
@@ -1073,23 +1079,34 @@ class AudioLoopPlanner(io.ComfyNode):
             category="looping/audio",
             description=(
                 "Shows iteration timeline with timestamps. "
-                "Helps you write prompt schedules by showing what time each iteration covers."
+                "Helps you write prompt schedules by showing what time each iteration covers. "
+                "Computes stride internally from window/overlap/fps — no stride wire needed."
             ),
             inputs=[
                 io.Audio.Input("audio", tooltip="The audio track."),
-                io.Float.Input(
-                    "stride_seconds",
-                    default=18.88,
-                    min=0.01,
-                    step=0.01,
-                    tooltip="Audio stride per iteration.",
-                ),
                 io.Float.Input(
                     "window_seconds",
                     default=19.88,
                     min=0.01,
                     step=0.01,
                     tooltip="Video generation window per iteration.",
+                ),
+                io.Float.Input(
+                    "overlap_seconds",
+                    default=2.0,
+                    min=0.0,
+                    step=0.01,
+                    tooltip=(
+                        "Target overlap between consecutive windows in seconds. "
+                        "Quantized to integer latents — same formula as "
+                        "AudioLoopController so total_iterations matches the loop."
+                    ),
+                ),
+                io.Int.Input(
+                    "fps",
+                    default=25,
+                    min=1,
+                    tooltip="Video frame rate. Same value as AudioLoopController.fps.",
                 ),
             ],
             outputs=[
@@ -1102,17 +1119,22 @@ class AudioLoopPlanner(io.ComfyNode):
     def execute(
         cls,
         audio: dict,
-        stride_seconds: float,
         window_seconds: float,
+        overlap_seconds: float,
+        fps: int,
     ) -> io.NodeOutput:
         audio_duration = _audio_duration(audio)
+        geometry = _compute_loop_geometry(window_seconds, overlap_seconds, fps)
+        stride_seconds = geometry.stride_seconds
 
         iterations = _compute_tile_count(audio_duration, stride_seconds)
 
         lines = [
             f"Audio: {audio_duration:.1f}s ({_format_timestamp(audio_duration)})",
             f"Stride: {stride_seconds:.2f}s | Window: {window_seconds:.2f}s",
-            f"Overlap: {window_seconds - stride_seconds:.2f}s",
+            f"Overlap: {geometry.effective_overlap_seconds:.2f}s "
+            f"(target {overlap_seconds:.2f}s, quantized to "
+            f"{geometry.overlap_latent_frames} latents)",
             f"Estimated {iterations} iterations:",
             "",
             f"  Initial:  {_format_timestamp(0)} - {_format_timestamp(window_seconds)}"
@@ -1322,8 +1344,12 @@ def _ltx_clear_keyframe_idxs(positive, negative):
     _, num_keyframes = get_keyframe_idxs(positive)
     if num_keyframes == 0:
         return positive, negative
-    positive = node_helpers.conditioning_set_values(positive, {"keyframe_idxs": []})
-    negative = node_helpers.conditioning_set_values(negative, {"keyframe_idxs": []})
+    # Must be None, not []. KJNodes' OuterSampleCallbackWrapper
+    # (ltxv_nodes.py:867) gates `if keyframe_idxs is not None:` then indexes as
+    # a 4D tensor; [] slips through and raises TypeError on tuple-indexing.
+    # Upstream LTXVCropGuides (comfy_extras/nodes_lt.py:404) sets None — match.
+    positive = node_helpers.conditioning_set_values(positive, {"keyframe_idxs": None})
+    negative = node_helpers.conditioning_set_values(negative, {"keyframe_idxs": None})
     return positive, negative
 
 

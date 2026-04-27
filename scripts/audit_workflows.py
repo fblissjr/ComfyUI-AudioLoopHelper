@@ -129,6 +129,25 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         else:
             record("OK", "alc_seed_legacy_name", "uses 'base_seed' (post-rename)")
 
+        # Check 2: schema has 5 widget slots
+        # [current_iteration, window_seconds, overlap_seconds, base_seed, fps].
+        # Pre-rename `seed` had a control_after_generate dropdown that
+        # serialized as a 6th `'randomize'` / `'fixed'` entry at index 4.
+        # Post-rename, the dropdown isn't re-attached but the leftover string
+        # remained in saved JSONs — backend pops 5 widgets positionally so
+        # `'randomize'` lands in the `fps` slot and explodes INT parsing.
+        drift = []
+        for n in alc_nodes:
+            wv = n.get("widgets_values") or []
+            if len(wv) != 5:
+                drift.append(f"#{n.get('id')} widgets_values len={len(wv)} (expected 5)")
+        if drift:
+            record("ERR", "alc_widget_drift",
+                   f"{', '.join(drift)}. "
+                   f"Run scripts/apply_strip_alc_control_after_generate.py")
+        else:
+            record("OK", "alc_widget_drift", "widgets_values has 5 entries (no control_after_generate leak)")
+
     # TensorLoopOpen.iterations_in (post-2026-04-26 autowire to AudioLoopPlanner)
     # Wired iterations_in lets the loop count auto-match the input audio
     # length without a hard-coded widget value, and gives the experiment
@@ -169,6 +188,28 @@ def _audit_one(wf_path: Path) -> list[Finding]:
             all_wired = False
         if all_wired:
             record("OK", "iterations_autowired", "wired from AudioLoopPlanner.total_iterations")
+
+    # AudioLoopPlanner schema must NOT have a stride_seconds input — that
+    # closed the controller -> planner -> tensorloop -> controller cycle
+    # once iterations_in was auto-wired. Post-2026-04-27 schema:
+    # (audio, window_seconds, overlap_seconds, fps).
+    planner_nodes = by_type.get("AudioLoopPlanner", [])
+    if planner_nodes:
+        violations = []
+        for p in planner_nodes:
+            names = [i.get("name") for i in (p.get("inputs") or [])]
+            if "stride_seconds" in names:
+                violations.append(
+                    f"#{p.get('id')} has legacy stride_seconds input (closes a cycle "
+                    f"with TensorLoopOpen.iterations_in)"
+                )
+        if violations:
+            record("ERR", "planner_no_stride_input",
+                   f"{'; '.join(violations)}. "
+                   f"Run scripts/apply_planner_break_stride_cycle.py")
+        else:
+            record("OK", "planner_no_stride_input",
+                   "computes stride internally (cycle-free)")
 
     # LoopIterationStamp
     if by_type.get("LoopIterationStamp"):
@@ -440,11 +481,224 @@ def _audit_one(wf_path: Path) -> list[Finding]:
                     )
 
     _check_prompt_relay_wiring(wf, by_type, record)
+    _check_graph_acyclic(wf, by_id, record)
+    _check_link_integrity(wf, by_id, links_by_id, record)
+    _check_widget_shape(wf, record)
 
     if _is_retake(name):
         _check_retake_wiring(wf, by_type, record)
 
     return findings
+
+
+# Generic structural invariants. These catch CLASSES of drift rather than
+# specific named patterns — they fire on ANY future bug of the same shape
+# without needing a hand-written check per fix.
+
+# Strings the ComfyUI frontend serializes as `control_after_generate` widget
+# values. Their presence in widgets_values is fine on nodes that
+# legitimately have a control_after_generate dropdown (e.g. RandomNoise);
+# our concern is when one leaks into the wrong slot of an unrelated node
+# (Bug B from the 2026-04-27 cycle/widget/keyframe trio).
+_CTRL_AFTER_GEN = frozenset({"randomize", "fixed", "increment", "decrement"})
+
+# Node types that legitimately serialize control_after_generate strings as
+# part of their widgets_values (e.g. RandomNoise's noise_seed dropdown).
+# Outside this allowlist, any _CTRL_AFTER_GEN string is a partial-rename leak.
+_CTRL_AFTER_GEN_LEGIT_NODE_TYPES = frozenset({
+    "RandomNoise", "PrimitiveNode", "PrimitiveInt", "KSampler",
+    "KSamplerAdvanced", "SamplerCustom", "SamplerCustomAdvanced",
+    "Seed (rgthree)", "Seed Everywhere",
+})
+
+
+def _check_graph_acyclic(wf, by_id, record) -> None:
+    """Walk the top-level directed graph (link.src -> link.tgt) for back-edges.
+    A cycle here means ComfyUI's prompt validator rejects the workflow with
+    "Dependency cycle detected" before any node executes.
+    Catches Bug A (Controller -> TensorLoopOpen -> Planner -> Controller).
+
+    Top-level only: subgraph internals share the global node ID space with
+    top-level, so merging both into one graph yields false positives when
+    IDs collide. The tensor-loop framework handles subgraph-internal
+    feedback patterns separately — they're legal there by design.
+
+    Implementation: iterative DFS with WHITE/GRAY/BLACK coloring. GRAY edge
+    target means we've found a back-edge — record the path."""
+    edges: dict[int, list[tuple[int, int]]] = {}  # src_id -> [(tgt_id, link_id)]
+
+    for link in wf.get("links") or []:
+        if not isinstance(link, list) or len(link) < 6:
+            continue
+        edges.setdefault(link[1], []).append((link[3], link[0]))
+
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = {nid: WHITE for nid in edges}
+    for tgts in edges.values():
+        for t, _ in tgts:
+            color.setdefault(t, WHITE)
+
+    cycle: list[int] | None = None
+
+    # `color` is fully populated above and not mutated during the DFS — only
+    # individual values change WHITE -> GRAY -> BLACK, never the keyset.
+    for start in color:
+        if cycle:
+            break
+        if color[start] != WHITE:
+            continue
+        stack: list[tuple[int, int]] = [(start, 0)]
+        path: list[int] = [start]
+        color[start] = GRAY
+        while stack:
+            node, i = stack[-1]
+            outs = edges.get(node, [])
+            if i >= len(outs):
+                color[node] = BLACK
+                stack.pop()
+                path.pop()
+                continue
+            stack[-1] = (node, i + 1)
+            nxt, _ = outs[i]
+            c = color.get(nxt, WHITE)
+            if c == GRAY:
+                idx = path.index(nxt)
+                cycle = path[idx:] + [nxt]
+                break
+            if c == WHITE:
+                color[nxt] = GRAY
+                path.append(nxt)
+                stack.append((nxt, 0))
+
+    if cycle:
+        labeled = " -> ".join(
+            f"{nid}({by_id.get(nid, {}).get('type', '?')})" for nid in cycle
+        )
+        record(
+            "ERR", "graph_acyclic",
+            f"dependency cycle: {labeled}. ComfyUI rejects this at prompt-validate time. "
+            f"Walk the cycle for the load-bearing back-edge — typically the most recent "
+            f"auto-wire between two nodes that already had a forward path between them.",
+        )
+    else:
+        record("OK", "graph_acyclic", "no cycles in top-level + subgraph link graphs")
+
+
+def _check_link_integrity(wf, by_id, links_by_id, record) -> None:
+    """For every top-level link [id, src, src_slot, tgt, tgt_slot, type]:
+    src/tgt nodes exist, slots in range, source's outputs[slot].links lists
+    the link id, target's inputs[slot].link == id, types match. Catches
+    desync between link records and node-level link references (Bug D —
+    1519.out[2].linkIds=[3004] but no link 3004 exists)."""
+    issues: list[str] = []
+
+    for link in wf.get("links") or []:
+        if not isinstance(link, list) or len(link) < 6:
+            issues.append(f"malformed top-level link {link}")
+            continue
+        lid, src, src_slot, tgt = link[0], link[1], link[2], link[3]
+        src_node = by_id.get(src)
+        tgt_node = by_id.get(tgt)
+        if src_node is None:
+            issues.append(f"link {lid} src node {src} missing")
+            continue
+        if tgt_node is None:
+            issues.append(f"link {lid} tgt node {tgt} missing")
+            continue
+        outs = src_node.get("outputs") or []
+        if not (0 <= src_slot < len(outs)):
+            issues.append(
+                f"link {lid} src={src}({src_node['type']}).slot[{src_slot}] out of range "
+                f"(have {len(outs)})"
+            )
+            continue
+        listed = outs[src_slot].get("links") or []
+        if lid not in listed:
+            issues.append(
+                f"link {lid} ; {src}({src_node['type']}).out[{src_slot}].links={listed} "
+                f"missing link id"
+            )
+
+    # Source-side dangling: outputs claim links that don't exist
+    for nid, node in by_id.items():
+        for i, out in enumerate(node.get("outputs") or []):
+            for ref_lid in out.get("links") or []:
+                if ref_lid not in links_by_id:
+                    issues.append(
+                        f"node {nid}({node['type']}).out[{i}] claims link {ref_lid} "
+                        f"but no link record exists"
+                    )
+
+    # Subgraph linkIds desync (most common drift — WorkflowEditor mutations
+    # update one side and forget the other)
+    for sg in (wf.get("definitions") or {}).get("subgraphs") or []:
+        sg_lid_set = {l.get("id") for l in (sg.get("links") or [])}
+        for node in sg.get("nodes") or []:
+            for i, out in enumerate(node.get("outputs") or []):
+                for ref_lid in (out.get("linkIds") or []):
+                    if ref_lid not in sg_lid_set:
+                        issues.append(
+                            f"subgraph node {node.get('id')}({node.get('type')})."
+                            f"out[{i}].linkIds claims {ref_lid} but no subgraph link record exists"
+                        )
+
+    if issues:
+        # Limit noise — show top 5, summarize rest
+        head = issues[:5]
+        more = f" ... {len(issues) - 5} more" if len(issues) > 5 else ""
+        # Cosmetic linkIds desyncs are common after WorkflowEditor runs and
+        # don't affect runtime — downgrade them to WARN.
+        cosmetic_only = all("linkIds claims" in i for i in issues)
+        status = "WARN" if cosmetic_only else "ERR"
+        record(
+            status, "link_integrity",
+            f"{len(issues)} link inconsistenc{'y' if len(issues) == 1 else 'ies'}: "
+            f"{'; '.join(head)}{more}",
+        )
+    else:
+        record("OK", "link_integrity", "top-level + subgraph links bidirectionally consistent")
+
+
+def _check_widget_shape(wf, record) -> None:
+    """Stale `control_after_generate` strings in widgets_values.
+
+    Their canonical home is on nodes that legitimately expose a
+    control_after_generate dropdown (RandomNoise's `noise_seed`,
+    PrimitiveNode's `value`, etc.). Allowlist those by node type. ANY other
+    occurrence is a leak from a partial schema migration (Bug B) — the
+    dropdown was attached when the input was named `seed`, the rename
+    detached the dropdown, the leftover string sits in widgets_values and
+    shifts later widget values into wrong slots.
+
+    For nodes outside the allowlist, just flag any control_after_generate
+    string in widgets_values. Cheap and high-signal."""
+    leaks: list[str] = []
+    for node in wf.get("nodes") or []:
+        ntype = node.get("type", "")
+        if ntype in _CTRL_AFTER_GEN_LEGIT_NODE_TYPES:
+            continue
+        wv = node.get("widgets_values") or []
+        if not isinstance(wv, list):
+            continue
+        for i, val in enumerate(wv):
+            if isinstance(val, str) and val in _CTRL_AFTER_GEN:
+                leaks.append(
+                    f"node {node.get('id')}({ntype}).widgets_values[{i}]={val!r} "
+                    f"(control_after_generate string in non-seed-bearing node)"
+                )
+
+    if leaks:
+        head = leaks[:3]
+        more = f" ... {len(leaks) - 3} more" if len(leaks) > 3 else ""
+        record(
+            "ERR", "widget_shape",
+            f"{len(leaks)} stray control_after_generate value(s): {'; '.join(head)}{more}. "
+            f"Likely a schema rename that didn't strip the leftover widget value. "
+            f"Run scripts/apply_strip_alc_control_after_generate.py if AudioLoopController; "
+            f"otherwise write a similar strip migration for the affected node type.",
+        )
+    else:
+        record("OK", "widget_shape", "no stray control_after_generate strings in widgets_values")
 
 
 # Retake workflow checks — gated on filename match. The retake workflow

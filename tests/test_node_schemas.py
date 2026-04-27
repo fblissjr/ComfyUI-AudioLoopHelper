@@ -55,6 +55,76 @@ def _scan_io_input_names(path: Path):
             yield (node.lineno, name_value)
 
 
+def _scan_conditioning_set_values(path: Path):
+    """Yield (lineno, key, value_node) for every literal key in any
+    `node_helpers.conditioning_set_values(cond, {KEY: VAL, ...})` or
+    `conditioning_set_values(cond, {KEY: VAL, ...})` call.
+
+    The frame's second arg must be a Dict literal — that's the only shape
+    we care about. Computed dicts (`**kwargs`-style) are rare here and
+    would warrant a manual review anyway.
+    """
+    src = path.read_text()
+    tree = ast.parse(src, filename=str(path))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        f = node.func
+        is_csv = (
+            (isinstance(f, ast.Attribute) and f.attr == "conditioning_set_values")
+            or (isinstance(f, ast.Name) and f.id == "conditioning_set_values")
+        )
+        if not is_csv or len(node.args) < 2:
+            continue
+        values = node.args[1]
+        if not isinstance(values, ast.Dict):
+            continue
+        for k, v in zip(values.keys, values.values):
+            if isinstance(k, ast.Constant) and isinstance(k.value, str):
+                yield (node.lineno, k.value, v)
+
+
+def test_keyframe_idxs_cleared_to_none_not_empty_list():
+    """LTXVCropGuides-equivalents must clear `keyframe_idxs` to `None`,
+    never to `[]`. KJNodes' `OuterSampleCallbackWrapper` (`ltxv_nodes.py:867`)
+    gates `if keyframe_idxs is not None:` then indexes as a 4D tensor;
+    `[]` slips through and crashes the loop-body sampler with
+    `TypeError: list indices must be integers or slices, not tuple`.
+
+    Diagnosed 2026-04-27 — initial render OK because it used upstream
+    `LTXVCropGuides` (sets None); loop body crashed because it used our
+    `LTXVCropGuidesNoLatent` (was setting `[]`). Same shape applies to
+    `guide_attention_entries`, which upstream also clears to None.
+    """
+    leaks: list[str] = []
+    forbidden_keys = {"keyframe_idxs", "guide_attention_entries"}
+    for module in _NODE_FILES:
+        path = REPO_ROOT / module
+        if not path.exists():
+            continue
+        for lineno, key, value in _scan_conditioning_set_values(path):
+            if key not in forbidden_keys:
+                continue
+            # Variable references and function calls are fine — those are
+            # computed values that may legitimately be tensors at runtime.
+            # We only flag literal list expressions like `[]` or `[a, b]`.
+            if isinstance(value, ast.List):
+                leaks.append(
+                    f"{module}:{lineno} -> conditioning_set_values(..., "
+                    f"{{'{key}': {ast.unparse(value)}}})"
+                )
+    assert not leaks, (
+        "Literal list assignment to keyframe_idxs / guide_attention_entries "
+        "detected:\n  "
+        + "\n  ".join(leaks)
+        + "\n\nKJNodes' OuterSampleCallbackWrapper (ltxv_nodes.py:867) gates "
+        "`if keyframe_idxs is not None:` then indexes as a 4D tensor. An "
+        "empty list slips through the gate and TypeErrors on tuple-indexing. "
+        "Use `None` (matches upstream LTXVCropGuides at "
+        "comfy_extras/nodes_lt.py:404,408)."
+    )
+
+
 def test_no_seed_or_noise_seed_named_inputs():
     """ComfyUI's frontend auto-attaches a `control_after_generate` dropdown
     to any INT widget literally named `"seed"` or `"noise_seed"`. After every

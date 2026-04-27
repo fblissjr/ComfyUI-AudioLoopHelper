@@ -662,7 +662,7 @@ Output Assembly:
   | should_stop | BOOLEAN | #1540 TensorLoopClose stop (slot 2) |
   | audio_duration | FLOAT | unwired -- informational |
   | iteration_seed | INT | #843 Extension noise_seed (slot 13) |
-  | stride_seconds | FLOAT | #1558 TimestampPromptSchedule (slot 1), #1560 AudioLoopPlanner (slot 1) |
+  | stride_seconds | FLOAT | #1558 TimestampPromptSchedule (slot 1) -- AudioLoopPlanner now derives stride internally (post-2026-04-27 cycle break) |
   | overlap_frames | INT | #1586 PreviewAny (display only) |
   | overlap_latent_frames | INT | #843 Extension num_frames/overlap (slot 14) |
 
