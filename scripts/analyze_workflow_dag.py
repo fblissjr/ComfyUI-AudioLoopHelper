@@ -275,7 +275,14 @@ def render_ascii(
         for src, dtype in incoming[nid]:
             src_n = nodes_by_id.get(src)
             src_label = src_n["type"] if src_n else "?"
-            lines.append(f"         <- {src:5d} {src_label}  ({dtype})")
+            # Bypassed source nodes are filtered from the listing — annotate
+            # so the reader can resolve the missing # N entry instead of
+            # searching for it.
+            bypass_tag = ""
+            if (src_n and src_n.get("mode") == MODE_BYPASS
+                    and not include_bypassed):
+                bypass_tag = " [bypassed]"
+            lines.append(f"         <- {src:5d} {src_label}  ({dtype}){bypass_tag}")
     if cycle:
         lines.append("")
         lines.append(f"# WARNING: cycle detected, {len(cycle)} nodes:")
