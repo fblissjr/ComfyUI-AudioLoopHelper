@@ -306,28 +306,18 @@ class SageTracer:
             "fell_back": fell_back,
             "elapsed_us": round(elapsed_us, 2),
         }
+        # Optional fields use the "absent means N/A" contract — keeps
+        # trace files compact and lets summary tooling distinguish
+        # "unknown" from "no". `dispatched_kernel`-None covers two
+        # observationally-identical cases (old sage symbol missing OR
+        # no dispatch on this thread yet); the routing-table mirror
+        # handles both equivalently.
         if self._arch_tag is not None:
             record["arch"] = self._arch_tag
-        # `dispatched_kernel` is the resolved kernel name from sage-fork's
-        # `get_last_dispatched_kernel()`. Stamped only when present
-        # (omitted = "no dispatch info available, summary script should
-        # fall back to its routing-table mirror"). Note: None covers two
-        # observationally-identical cases at the consumer -- either the
-        # symbol is missing (old sage) OR no dispatch has happened yet on
-        # this thread. The mirror handles both equivalently.
         if dispatched_kernel is not None:
             record["dispatched_kernel"] = dispatched_kernel
-        # `prompt_id` is ComfyUI's per-render UUID, lifted from
-        # transformer_options at override time. Lets sage-fork's e2e bench
-        # filter trace rows by run identity rather than guessing from
-        # timestamp windows. Same "absent means unknown" contract as
-        # dispatched_kernel.
         if prompt_id is not None:
             record["prompt_id"] = prompt_id
-        # `skipped` + `skip_reason` are present only when the consumer-
-        # side short-circuit fired (skip_under_seq_len). Absence on the
-        # normal path keeps trace files compact and matches the
-        # `dispatched_kernel` / `prompt_id` "absent means N/A" contract.
         if skipped:
             record["skipped"] = True
             if skip_reason is not None:
@@ -587,21 +577,25 @@ def make_sage_override(
         t0 = time.perf_counter() if tracer.enabled else 0.0
         fell_back = False
         skipped = False
+
+        def _call_pytorch():
+            return pytorch_fn(
+                q, k, v, heads,
+                mask=mask, attn_precision=attn_precision,
+                skip_reshape=skip_reshape, skip_output_reshape=skip_output_reshape,
+                **kwargs,
+            )
+
         # Consumer-side policy short-circuit: route short-Q calls to
-        # pytorch directly. Distinct from `fell_back` (which is sage's
-        # error path) — `skipped` is "we never tried sage at this shape."
+        # pytorch directly. Distinct from `fell_back` (sage's error path) —
+        # `skipped` is "we never tried sage at this shape."
         if (
             skip_under_seq_len > 0
             and pytorch_fn is not None
             and q.shape[1] < skip_under_seq_len
         ):
             skipped = True
-            out = pytorch_fn(
-                q, k, v, heads,
-                mask=mask, attn_precision=attn_precision,
-                skip_reshape=skip_reshape, skip_output_reshape=skip_output_reshape,
-                **kwargs,
-            )
+            out = _call_pytorch()
         else:
             try:
                 out = sage_fn(q, k, v, heads, mask, skip_reshape, skip_output_reshape)
@@ -610,12 +604,7 @@ def make_sage_override(
                     raise
                 logger.log_once(tuple(q.shape), mode, err)
                 fell_back = True
-                out = pytorch_fn(
-                    q, k, v, heads,
-                    mask=mask, attn_precision=attn_precision,
-                    skip_reshape=skip_reshape, skip_output_reshape=skip_output_reshape,
-                    **kwargs,
-                )
+                out = _call_pytorch()
         if tracer.enabled:
             # Thread-local read; safe because ComfyUI runs attention
             # sequentially on the worker thread. Skipped on fallback --
