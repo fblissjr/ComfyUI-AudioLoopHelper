@@ -1,4 +1,4 @@
-Last updated: 2026-04-24 (loop guide now feeds from #446 LTXVPreprocess, not raw #445 ImageResizeKJv2, so initial render and loop share the same preprocessed init image)
+Last updated: 2026-04-27 (AudioLoopPlanner derives stride internally — 2026-04-24 baseline: loop guide feeds from #446 LTXVPreprocess, not raw #445 ImageResizeKJv2)
 
 # Pipeline Flow: LATENT-Based Music Video Workflow
 

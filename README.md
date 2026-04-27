@@ -1,6 +1,6 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-04-25
+Last updated: 2026-04-27
 
 **TLDR**: Custom ComfyUI nodes for generating full-length music videos with LTX 2.3.
 Handles loop timing, auto-stopping at the audio boundary, per-iteration seed
@@ -127,6 +127,48 @@ Full reference (what's captured and what isn't, where files land,
 retention, on/off, end-to-end workflow with order of operations):
 [`docs/reference/telemetry_and_tracing.md`](docs/reference/telemetry_and_tracing.md).
 
+## Workflow validation and debugging
+
+When a workflow fails to validate (e.g. "Dependency cycle detected"),
+fails to convert an INT input, or crashes mid-sample with an unexpected
+TypeError, run the canonical first-pass before going inline-orjson:
+
+```bash
+# 1. Tail ComfyUI's log (validation errors fire before any node runs)
+tail -200 <comfyui>/user/comfyui_<port>.log
+
+# 2. Audit (8 named pattern checks + 3 generic invariants)
+uv run --group dev python scripts/audit_workflows.py
+
+# 3. Topo-sort the workflow if step 2 is clean but it still fails
+uv run --group dev python scripts/analyze_workflow_dag.py \
+  example_workflows/audio-loop-music-video_latent.json \
+  --format ascii --save-run
+```
+
+Output for `--save-run` lands at `data/runs/${RUN_ID}/dag_<slug>.<ext>`
+(correlating with sibling exec/sage logs from the same render) or
+`data/runs/dag/dag_<slug>_<ts>.<ext>` if `RUN_ID` is unset.
+
+Audit invariants:
+
+- **Named pattern checks** — F2 (preprocess symmetry), F3 (loop cropguides
+  symmetry), F4 (`base_seed` rename), F5 (iterations auto-wired), F6
+  (no leftover `randomize` widget on AudioLoopController), F7
+  (AudioLoopPlanner derives stride internally — no edge from controller).
+  Each ERR has a remediation pointer to a `scripts/apply_*.py` migration.
+- **Generic invariants** — `graph_acyclic` (top-level cycle detection),
+  `widget_shape` (stray `control_after_generate` strings on nodes that
+  don't have the dropdown), `link_integrity` (link records vs node-level
+  references). Plus a fourth check at AST level
+  (`tests/test_node_schemas.py::test_keyframe_idxs_cleared_to_none_not_empty_list`).
+
+Full reference: [`docs/reference/debug_tools.md`](docs/reference/debug_tools.md)
+— inspection scripts, audit invariant table, apply-script three-tier
+staging, runtime telemetry paths, RUN_ID artifact correlation.
+Symptom-first quality troubleshooting (when output looks wrong but the
+workflow ran): [`docs/guides/debugging_guide.md`](docs/guides/debugging_guide.md).
+
 ## Nodes
 
 ### Audio Loop Controller
@@ -142,7 +184,7 @@ just the audio tensor + window/overlap settings.
 | window_seconds | FLOAT | Video generation window duration (default 19.88) |
 | overlap_seconds | FLOAT | Overlap between consecutive windows (default 1.0). Stride = window - overlap. Match to overlap_frames/fps in the extension component. |
 | audio | AUDIO | The audio track |
-| seed | INT | Base seed. Output = seed + current_iteration |
+| base_seed | INT | Base seed. Output `iteration_seed = base_seed + current_iteration`. Renamed from `seed` 2026-04-26 to suppress ComfyUI's auto-attached `control_after_generate` dropdown that would silently mutate the saved widget value across runs. |
 | fps | INT | Video frame rate (default 25). Used to compute overlap_frames output. |
 
 **Outputs:**
@@ -153,7 +195,7 @@ just the audio tensor + window/overlap settings.
 | should_stop | BOOLEAN | TensorLoopClose's stop input |
 | audio_duration | FLOAT | Informational (total audio length) |
 | iteration_seed | INT | Extension component's noise_seed input |
-| stride_seconds | FLOAT | TimestampPromptSchedule and AudioLoopPlanner |
+| stride_seconds | FLOAT | TimestampPromptSchedule (AudioLoopPlanner derives stride internally post-2026-04-27 cycle break — no longer takes this wire) |
 | overlap_frames | INT | Extension component's overlap_frames input (pixel space) |
 | overlap_latent_frames | INT | LatentContextExtract / LatentOverlapTrim in latent-space subgraph |
 | overlap_seconds | FLOAT | Extension subgraph's LTXVAudioVideoMask video_start_time |
@@ -260,8 +302,17 @@ change audio or overlap settings.
 | Input | Type | Description |
 |-------|------|-------------|
 | audio | AUDIO | The audio track |
-| stride_seconds | FLOAT | From AudioLoopController |
 | window_seconds | FLOAT | Same as AudioLoopController |
+| overlap_seconds | FLOAT | Same as AudioLoopController. Quantized to integer latents internally. |
+| fps | INT | Same as AudioLoopController. |
+
+Stride is derived internally from `(window_seconds, overlap_seconds, fps)`
+via the same `_compute_loop_geometry` formula AudioLoopController uses, so
+both nodes always agree on stride without an edge between them. Earlier
+versions took `stride_seconds` directly from AudioLoopController; that
+edge plus the auto-wire `total_iterations -> TensorLoopOpen.iterations_in`
+plus the existing `current_iteration -> AudioLoopController` closed a
+3-node cycle that the prompt validator rejected.
 
 **Outputs:**
 
@@ -629,9 +680,12 @@ The `start_index` on the global audio trim is song-dependent. It skips
 instrumental intro that doesn't contribute to lip sync. Set to 0 for songs
 that start with vocals, or skip a few seconds for instrumental intros.
 
-### seed
+### base_seed
 
-Base seed for generation. Each iteration gets `seed + iteration_number`.
+Base seed for generation. Each iteration gets `base_seed + iteration_number`.
+
+(Renamed from `seed` 2026-04-26 — see the Audio Loop Controller node entry
+for why.)
 
 | Approach | Effect |
 |----------|--------|
