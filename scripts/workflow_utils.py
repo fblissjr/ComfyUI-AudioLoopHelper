@@ -183,6 +183,14 @@ def timestamped_run_dir(base: Path) -> Path:
     return run_dir
 
 
+def is_active(node: dict) -> bool:
+    """True iff the node will execute at runtime. ComfyUI uses
+    `mode=4` to mark a node as bypassed; bypass passes inputs through
+    to outputs of matching type (and dead-ends inputs with no
+    matching output type). All other modes (0, 2) are active."""
+    return node.get("mode", 0) != 4
+
+
 _EMPTY_WORKFLOW_SKELETON = {
     "revision": 0,
     "last_node_id": 0,

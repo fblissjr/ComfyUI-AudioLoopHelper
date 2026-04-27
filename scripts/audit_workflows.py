@@ -24,7 +24,7 @@ import orjson
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from workflow_utils import EXAMPLE_WORKFLOWS_DIR
+from workflow_utils import EXAMPLE_WORKFLOWS_DIR, is_active
 from nodes import (
     _LTX_LATENT_VOLUME_OK_MAX as _VOLUME_OK_MAX,
     _LTX_LATENT_VOLUME_EDGE_MAX as _VOLUME_EDGE_MAX,
@@ -212,8 +212,8 @@ def _audit_one(wf_path: Path) -> list[Finding]:
                  if (n.get("title") or "").startswith(
                      "LTXV Reference Audio (ID-LoRA loop")), None)
     if initial and loop:
-        i_active = initial.get("mode", 0) != 4
-        l_active = loop.get("mode", 0) != 4
+        i_active = is_active(initial)
+        l_active = is_active(loop)
         if i_active != l_active:
             which = "initial" if i_active else "loop"
             other = "loop" if i_active else "initial"
@@ -283,14 +283,13 @@ def _audit_one(wf_path: Path) -> list[Finding]:
     decoders = by_type.get("LTXVTiledVAEDecode", [])
     tile_violations = []
     for d in decoders:
-        if d.get("mode", 0) == 4:
+        if not is_active(d):
             continue  # bypassed; user choice
-        wv = d.get("widgets_values") or []
-        # Only flag nodes with downstream consumers; dead nodes are
-        # ComfyUI-skipped at runtime.
-        outs = d.get("outputs") or []
-        if not any(o.get("links") for o in outs):
+        # Dead nodes (no downstream consumers) are ComfyUI-skipped.
+        if not any(o.get("links") for o in d.get("outputs") or []):
             continue
+        # widgets_values[0] = horizontal_tiles, [1] = vertical_tiles
+        wv = d.get("widgets_values") or []
         if len(wv) >= 3 and (wv[0] != 1 or wv[1] != 1):
             tile_violations.append(f"#{d.get('id')} {wv[0]}x{wv[1]}")
     if tile_violations:

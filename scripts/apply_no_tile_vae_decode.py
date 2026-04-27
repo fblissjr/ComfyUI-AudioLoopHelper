@@ -55,7 +55,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from workflow_utils import WorkflowEditor
+from workflow_utils import WorkflowEditor, is_active
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS_DIR = REPO_ROOT / "example_workflows"
@@ -64,23 +64,6 @@ WORKFLOWS_DIR = REPO_ROOT / "example_workflows"
 #   [horizontal_tiles, vertical_tiles, overlap, last_frame_fix, working_device, working_dtype]
 NO_TILE = [1, 1, 1, True, "auto", "auto"]
 CANONICAL = [2, 2, 1, True, "auto", "auto"]
-
-
-def _is_active(node: dict) -> bool:
-    return node.get("mode", 0) != 4
-
-
-def _has_downstream_consumers(wf: dict, node_id: int) -> bool:
-    """An active LTXVTiledVAEDecode node is a write target only if
-    something consumes its IMAGE output. Dead nodes (no consumers)
-    are ComfyUI-skipped at runtime and not worth touching."""
-    node = next((n for n in wf["nodes"] if n["id"] == node_id), None)
-    if node is None:
-        return False
-    for out in node.get("outputs") or []:
-        if out.get("links"):
-            return True
-    return False
 
 
 def _apply_one(wf_path: Path, revert: bool, dry_run: bool) -> str:
@@ -97,26 +80,45 @@ def _apply_one(wf_path: Path, revert: bool, dry_run: bool) -> str:
     other  = CANONICAL if not revert else NO_TILE
 
     changes = []
+    skipped = []
     for n in decoders:
-        if not _is_active(n):
+        if not is_active(n):
             continue  # bypassed; leave widgets as user configured
-        if not _has_downstream_consumers(ed.wf, n["id"]):
-            continue  # dead node; ComfyUI skips at runtime
+        # Dead nodes (no downstream consumers) are ComfyUI-skipped at
+        # runtime; skip in-place, no need to mutate widgets.
+        if not any(o.get("links") for o in n.get("outputs") or []):
+            continue
         wv = n.get("widgets_values") or []
         if list(wv) == list(target):
             continue  # already at target
         if list(wv) != list(other):
-            return f"skip (#{n.get('id')} widgets_values={wv} doesn't match canonical or no-tile)"
+            # Widget drift from a third config (manual edit, partial
+            # apply). Don't mutate; let the user reconcile. Use
+            # `continue` not `return` so other decoders in this
+            # workflow still get processed.
+            skipped.append(
+                f"#{n.get('id')} unexpected widgets_values={wv} "
+                f"(expected {other} or {target}; reconcile manually)"
+            )
+            continue
         n["widgets_values"] = list(target)
         verb = "reverted to [2,2,1]" if revert else "set [1,1,1]"
         changes.append(f"#{n.get('id')} {verb}")
 
-    if not changes:
+    if not changes and not skipped:
         return "already reverted" if revert else "no change (already at [1,1,1])"
+    if not changes and skipped:
+        return "; ".join(f"skip ({s})" for s in skipped)
     if dry_run:
-        return "would " + "; ".join(changes)
+        msg = "would " + "; ".join(changes)
+        if skipped:
+            msg += "; " + "; ".join(f"skip ({s})" for s in skipped)
+        return msg
     ed.save(wf_path)
-    return "; ".join(changes)
+    msg = "; ".join(changes)
+    if skipped:
+        msg += "; " + "; ".join(f"skip ({s})" for s in skipped)
+    return msg
 
 
 def apply(revert: bool, dry_run: bool) -> int:

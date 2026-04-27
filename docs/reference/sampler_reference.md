@@ -27,7 +27,9 @@ curve parametrically; the canonical hand-tuned values are the spec.
 Migration: `scripts/apply_canonical_sigmas.py`.
 
 **Other settings**: `ModelSamplingSD3 shift=13`, `CFGGuider cfg=1`,
-decoder `LTXVTiledVAEDecode [2,2,1,true,"auto","auto"]`. Unchanged.
+decoder `LTXVTiledVAEDecode [1,1,1,true,"auto","auto"]` on 24GB+
+(single-tile, ~3× faster cold-pass than [2,2,1]); fall back to
+[2,2,1] on ≤16GB. Migration: `scripts/apply_no_tile_vae_decode.py`.
 
 All code references are to `ComfyUI/comfy/k_diffusion/sampling.py`
 (comfy-core) and `ComfyUI-LTXVideo/guiders/multimodal_guider.py`

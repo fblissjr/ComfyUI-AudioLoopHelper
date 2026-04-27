@@ -29,7 +29,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from workflow_utils import WorkflowEditor
+from workflow_utils import WorkflowEditor, is_active
 
 
 BYPASS_TYPES = ("MelBandRoFormerModelLoader", "MelBandRoFormerSampler")
@@ -45,7 +45,7 @@ def _bypass_melband_nodes(ed: WorkflowEditor, path: Path) -> bool:
     changed = False
     for node_type in BYPASS_TYPES:
         for node in ed.find_nodes_by_type(node_type):
-            if node.get("mode", 0) != 4:
+            if is_active(node):
                 node["mode"] = 4
                 print(f"  {path.name}: {node_type}(id={node['id']}) -> bypassed")
                 changed = True
