@@ -189,6 +189,35 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         if all_wired:
             record("OK", "iterations_autowired", "wired from AudioLoopPlanner.total_iterations")
 
+    # ID-LoRA runtime pair-check: when both LTXVReferenceAudio instances
+    # exist, they should both be in the same bypass state. Mixed state
+    # (one un-bypassed, one bypassed) is the iter-0-vs-loop drift footgun
+    # we explicitly architected against — initial render gets identity,
+    # loop iterations don't (or vice-versa). WARN not ERR because the user
+    # might intentionally want to A/B test one branch.
+    refaudios = by_type.get("LTXVReferenceAudio", [])
+    initial = next((n for n in refaudios
+                    if (n.get("title") or "").startswith(
+                        "LTXV Reference Audio (ID-LoRA initial")), None)
+    loop = next((n for n in refaudios
+                 if (n.get("title") or "").startswith(
+                     "LTXV Reference Audio (ID-LoRA loop")), None)
+    if initial and loop:
+        i_active = initial.get("mode", 0) != 4
+        l_active = loop.get("mode", 0) != 4
+        if i_active != l_active:
+            which = "initial" if i_active else "loop"
+            other = "loop" if i_active else "initial"
+            record("WARN", "id_lora_runtime_consistent",
+                   f"only the {which}-render LTXVReferenceAudio is active; "
+                   f"{other} branch is bypassed -> identity will be "
+                   f"inconsistent across iter 0 vs loop body. "
+                   f"Un-bypass both, or bypass both, for consistent identity.")
+        else:
+            state = "active" if i_active else "bypassed"
+            record("OK", "id_lora_runtime_consistent",
+                   f"both LTXVReferenceAudio instances {state}")
+
     # AudioLoopPlanner schema must NOT have a stride_seconds input — that
     # closed the controller -> planner -> tensorloop -> controller cycle
     # once iterations_in was auto-wired. Post-2026-04-27 schema:

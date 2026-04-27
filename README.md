@@ -177,7 +177,7 @@ Un-bypass any one of them in the ComfyUI UI to enable that LoRA.
 
 | Loader              | Node type                   | Use for |
 |---------------------|-----------------------------|---------|
-| **ID-LoRA File**    | `LoraLoaderModelOnly`       | Audio-conditioned identity transfer (e.g. [`AviadDahan/LTX-2.3-ID-LoRA-CelebVHQ-3K`](https://huggingface.co/AviadDahan/LTX-2.3-ID-LoRA-CelebVHQ-3K), paper [arxiv:2603.10256](https://arxiv.org/abs/2603.10256)). LoRA weights only; the full reference-audio runtime requires `LTXVReferenceAudio` wires not surfaced here. |
+| **ID-LoRA File**    | `LoraLoaderModelOnly`       | Audio-conditioned identity transfer (e.g. [`AviadDahan/LTX-2.3-ID-LoRA-CelebVHQ-3K`](https://huggingface.co/AviadDahan/LTX-2.3-ID-LoRA-CelebVHQ-3K), paper [arxiv:2603.10256](https://arxiv.org/abs/2603.10256)). LoRA weights only — pair with the runtime nodes added by `scripts/apply_id_lora_runtime.py` (see "ID-LoRA full pipeline" below) for the complete identity-guidance mechanism. |
 | **IC-LoRA File**    | `LTXICLoRALoaderModelOnly`  | Visual reference adapters (MergeGreen, Outpaint, Cameraman, Motion-Track). For the full effect, also run [`scripts/apply_iclora_initial_render.py`](scripts/apply_iclora_initial_render.py) to add `LTXAddVideoICLoRAGuide` on the conditioning side. |
 | **Style/Generic**   | `LoraLoaderModelOnly`       | Any standard LTX 2.3-compatible LoRA. |
 
@@ -196,6 +196,32 @@ To rebuild from scratch (e.g. on a new workflow variant):
 uv run --group dev python scripts/apply_lora_chain_bypassed.py
 # --revert to remove, --dry-run to preview
 ```
+
+### ID-LoRA full pipeline (LoRA weights + runtime reference audio)
+
+ID-LoRA needs both the LoRA-weights file AND a runtime mechanism that
+injects a 5-second reference-audio clip + identity-guidance forward pass
+per sampling step. The LoRA chain above provides the weights side; the
+runtime side is shipped via a separate apply script:
+
+```bash
+uv run --group dev python scripts/apply_id_lora_runtime.py
+```
+
+This adds three more bypassed-by-default nodes to the latent workflow:
+
+| Node | Type | Role |
+|------|------|------|
+| **ID-LoRA Reference Slice** | `TrimAudioDuration` | Slices a 5-second reference window from `Get_orig_audio` (default: start_index=30s, duration=5s — adjust to land in a vocal-rich section of the song). |
+| **LTXV Reference Audio (ID-LoRA initial render)** | `LTXVReferenceAudio` | Splices on the initial render's model + conditioning paths. Adds `ref_audio` tokens + identity-guidance post_cfg_function that fires per sampling step. |
+| **LTXV Reference Audio (ID-LoRA loop body)** | `LTXVReferenceAudio` | Parallel splice on the loop body's per-iter conditioning + model branch. Required because initial-render-only ID-LoRA produces identity drift after iter 0. |
+
+To enable the full ID-LoRA pipeline:
+1. Un-bypass the **ID-LoRA File** loader (from the LoRA chain above) and set its `lora_name` to your `.safetensors` (e.g. `LTX-2.3-ID-LoRA-CelebVHQ-3K/lora_weights.safetensors`).
+2. Un-bypass **ID-LoRA Reference Slice**. Adjust `start_index` and `duration` if your song's first vocals start later than 30s.
+3. Un-bypass **both** LTXVReferenceAudio nodes (initial AND loop). Audit warns if only one is active — the other half causes inconsistent identity across iter 0 vs the loop body.
+
+Cost when enabled: 2× sampling forward passes per step (the identity-guidance "without-reference" pass), comparable to a regular CFG=3 run. Bypassed = zero overhead.
 
 ## Nodes
 
