@@ -148,10 +148,12 @@ Prompt creation guide: `docs/guides/prompt_creation_guide.md`
   then creates a fresh all-zeros mask. This is the correct behavior.
 - **LTXVSelectLatents PRESERVES the existing noise_mask** from its input.
   Inherited stale masks corrupt the sampler's mask semantics and break sync.
-- **StripLatentNoiseMask** (our node) removes noise_mask so downstream nodes
-  create fresh masks. REQUIRED between LTXVSelectLatents and LTXVAudioVideoMask.
-- Use LatentContextExtract and LatentOverlapTrim instead of raw LTXVSelectLatents
-  in the latent-space subgraph -- they strip noise_mask automatically.
+- **LatentContextExtract / LatentOverlapTrim** (our nodes) strip noise_mask
+  automatically between LTXVSelectLatents and LTXVAudioVideoMask. Use these
+  in the latent-space subgraph rather than raw LTXVSelectLatents.
+  (StripLatentNoiseMask was a standalone helper for the same purpose;
+  removed 2026-04-27 in favor of the auto-stripping LatentContextExtract /
+  LatentOverlapTrim path.)
 
 ## Dual workflow support (IMAGE vs LATENT)
 

@@ -698,6 +698,12 @@ class TimestampPromptSchedule(io.ComfyNode):
         blend_seconds: float,
         snap_boundaries: bool = True,
     ) -> io.NodeOutput:
+        _warn_legacy_use(
+            "TimestampPromptSchedule",
+            "TimestampPromptScheduleBatchEncode + ConditioningSelectByIteration "
+            "(pre-encodes all prompts once outside the loop, avoids per-iter "
+            "CLIP eviction; F5 invariant in CLAUDE.md)",
+        )
         current_time = current_iteration * stride_seconds
         entries = _parse_schedule(schedule)
 
@@ -1234,110 +1240,38 @@ class AudioLoopPlanner(io.ComfyNode):
         return io.NodeOutput("\n".join(lines), iterations)
 
 
-class ScheduleToMultiPrompt(io.ComfyNode):
-    """Converts a timestamp-based schedule into a pipe-separated prompt list
-    for LTXVLoopingSampler's MultiPromptProvider.
-
-    Computes how many temporal tiles the audio needs, then maps each tile's
-    midpoint to the matching schedule entry. Outputs a single string with
-    prompts separated by | (one per tile).
-    """
-
-    @classmethod
-    def define_schema(cls) -> io.Schema:
-        return io.Schema(
-            node_id="ScheduleToMultiPrompt",
-            display_name="Schedule to Multi-Prompt",
-            category="looping/audio",
-            description=(
-                "Converts a timestamp schedule into pipe-separated prompts "
-                "for LTXVLoopingSampler via MultiPromptProvider. One prompt per temporal tile."
-            ),
-            inputs=[
-                io.Audio.Input("audio", tooltip="The audio track (for duration)."),
-                io.Float.Input(
-                    "stride_seconds",
-                    default=18.88,
-                    min=0.01,
-                    step=0.01,
-                    tooltip="Audio stride per tile. Wire from AudioLoopController.",
-                ),
-                io.Float.Input(
-                    "window_seconds",
-                    default=19.88,
-                    min=0.01,
-                    step=0.01,
-                    tooltip="Temporal tile size in seconds.",
-                ),
-                io.String.Input(
-                    "schedule",
-                    default="0:00+: default prompt",
-                    multiline=True,
-                    tooltip="Timestamp-based schedule (same format as TimestampPromptSchedule).",
-                ),
-            ],
-            outputs=[
-                io.String.Output("prompts", tooltip="Pipe-separated prompts, one per tile. Wire to MultiPromptProvider."),
-                io.Int.Output("tile_count", tooltip="Number of temporal tiles."),
-                io.String.Output("tile_map", tooltip="Debug: shows which prompt maps to which tile."),
-            ],
-        )
-
-    @classmethod
-    def execute(
-        cls,
-        audio: dict,
-        stride_seconds: float,
-        window_seconds: float,
-        schedule: str,
-    ) -> io.NodeOutput:
-        audio_duration = _audio_duration(audio)
-        tile_count = _compute_tile_count(audio_duration, stride_seconds)
-        entries = _parse_schedule(schedule)
-
-        # Tiles are 1-based (matching AudioLoopPlanner/Controller)
-        prompts = []
-        tile_map_lines = []
-        for i in range(1, tile_count + 1):
-            tile_start = i * stride_seconds
-            tile_mid = tile_start + window_seconds / 2
-            prompt = _match_schedule(entries, tile_mid)
-            prompts.append(prompt)
-            label = (prompt[:60] + "...") if len(prompt) > 60 else prompt
-            tile_map_lines.append(
-                f"Tile {i}: {_format_timestamp(tile_start)}-{_format_timestamp(tile_start + window_seconds)} -> {label}"
-            )
-
-        prompt_string = " | ".join(prompts)
-        tile_map = "\n".join(tile_map_lines)
-
-        return io.NodeOutput(prompt_string, tile_count, tile_map)
+# `ScheduleToMultiPrompt` removed 2026-04-27 — zero workflow + only-doc-mention
+# external usage. Targeted upstream `LTXVLoopingSampler.MultiPromptProvider`
+# which we don't ship workflows for. Our canonical multi-prompt path is
+# TimestampPromptScheduleBatchEncode + ConditioningSelectByIteration.
 
 
-class AudioDuration(io.ComfyNode):
-    """Returns the duration of an audio tensor in seconds."""
+# `AudioDuration` removed 2026-04-27 — zero workflow + zero external usage.
+# AudioLoopController already exposes `audio_duration` as an output;
+# AudioLoopPlanner already prints duration in its summary. The standalone
+# 5-line getter was dead weight. If you need duration outside ComfyUI
+# in script form: `audio["waveform"].shape[-1] / audio["sample_rate"]`.
 
-    @classmethod
-    def define_schema(cls) -> io.Schema:
-        return io.Schema(
-            node_id="AudioDuration",
-            display_name="Audio Duration",
-            category="audio",
-            description="Returns the duration of an audio tensor in seconds.",
-            inputs=[
-                io.Audio.Input("audio"),
-            ],
-            outputs=[
-                io.Float.Output("duration_seconds"),
-                io.Int.Output("sample_rate"),
-                io.Int.Output("total_samples"),
-            ],
-        )
 
-    @classmethod
-    def execute(cls, audio: dict) -> io.NodeOutput:
-        duration = _audio_duration(audio)
-        return io.NodeOutput(float(duration), int(audio["sample_rate"]), int(audio["waveform"].shape[-1]))
+# Deprecation warning helper for legacy node classes.
+# `_warned` set is module-level so each (class, message) pair only warns
+# once per process — re-running the legacy node N times in a session
+# doesn't spam.
+_DEPRECATION_WARNED: set[str] = set()
+
+
+def _warn_legacy_use(class_name: str, replacement: str) -> None:
+    key = f"{class_name}->{replacement}"
+    if key in _DEPRECATION_WARNED:
+        return
+    _DEPRECATION_WARNED.add(key)
+    import sys
+    print(
+        f"[ComfyUI-AudioLoopHelper] DEPRECATED: {class_name} is legacy. "
+        f"Migrate to {replacement}. Class will be removed in a future "
+        f"release.",
+        file=sys.stderr,
+    )
 
 
 # Latent-volume thresholds. Source: docs/reference/ltx23_model_reference.md
@@ -1907,29 +1841,11 @@ class LatentOverlapTrim(io.ComfyNode):
         return io.NodeOutput(s)
 
 
-class StripLatentNoiseMask(io.ComfyNode):
-    """Removes noise_mask from a latent dict so downstream nodes create fresh masks.
-
-    Low-level utility. Prefer LatentContextExtract or LatentOverlapTrim which
-    handle this automatically.
-    """
-
-    @classmethod
-    def define_schema(cls) -> io.Schema:
-        return io.Schema(
-            node_id="StripLatentNoiseMask",
-            display_name="Strip Latent Noise Mask",
-            category="latent",
-            description="Removes noise_mask from latent so downstream nodes create fresh masks.",
-            inputs=[io.Latent.Input("latent")],
-            outputs=[io.Latent.Output()],
-        )
-
-    @classmethod
-    def execute(cls, latent: dict) -> io.NodeOutput:
-        out = latent.copy()
-        out.pop("noise_mask", None)
-        return io.NodeOutput(out)
+# `StripLatentNoiseMask` removed 2026-04-27 — zero workflow + only-doc-mention
+# external usage. Its own docstring redirected users to LatentContextExtract /
+# LatentOverlapTrim which auto-strip noise_mask. The standalone 4-line helper
+# was dead weight. If you genuinely need the bare strip:
+#   out = latent.copy(); out.pop("noise_mask", None)
 
 
 class LatentTemporalMask(io.ComfyNode):
@@ -2323,6 +2239,11 @@ class KeyframeImageSchedule(io.ComfyNode):
         schedule: str,
         blend_seconds: float,
     ) -> io.NodeOutput:
+        _warn_legacy_use(
+            "KeyframeImageSchedule",
+            "KeyframeLatentScheduleBatchEncode + LatentSelectByIteration "
+            "(VAE-encodes once outside the loop instead of per-iter)",
+        )
         current_time = current_iteration * stride_seconds
         entries = _parse_image_schedule(schedule)
         batch_size = images.shape[0]
@@ -2460,6 +2381,11 @@ class ImageBlend(io.ComfyNode):
         image_b: torch.Tensor,
         blend_factor: float,
     ) -> io.NodeOutput:
+        _warn_legacy_use(
+            "ImageBlend (node_id=ImageBlend_AudioLoop)",
+            "KeyframeLatentScheduleBatchEncode + LatentSelectByIteration "
+            "(latent-space keyframe path, no per-iter VAE)",
+        )
         if blend_factor <= 0.0:
             return io.NodeOutput(image_a)
         if blend_factor >= 1.0:
@@ -2526,6 +2452,12 @@ class CachedTextEncode(io.ComfyNode):
 
     @classmethod
     def execute(cls, clip, text: str) -> io.NodeOutput:
+        _warn_legacy_use(
+            "CachedTextEncode (node_id=CachedTextEncode_AudioLoop)",
+            "TimestampPromptScheduleBatchEncode (pre-encodes ALL schedule "
+            "prompts once outside the loop; F5 invariant — keeps CLIP out "
+            "of loop body)",
+        )
         key = (id(clip), type(clip).__name__, text)
         cached = _COND_CACHE.get(key)
         if cached is not None:
@@ -3025,12 +2957,9 @@ class AudioLoopHelperExtension(ComfyExtension):
             ConditioningBlend,
             AudioLoopPlanner,
             LoopConfigValidator,
-            ScheduleToMultiPrompt,
             LatentContextExtract,
             LatentOverlapTrim,
-            StripLatentNoiseMask,
             LatentTemporalMask,
-            AudioDuration,
             AudioPitchDetect,
             LTXResolutionFromAspect,
             LTXFramePlanner,

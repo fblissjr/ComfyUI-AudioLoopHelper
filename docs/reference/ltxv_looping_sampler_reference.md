@@ -31,7 +31,8 @@ the sampler for **video-only** generation (no frozen audio track).
 [Model loading + patches] → [NAG] → patched model
 [Init image] → [Resize] → [LTXVPreprocess] → [ImgToVideoInplace] → initial latent
 [Text encode + conditioning] → [Guider]
-[ScheduleToMultiPrompt] → [MultiPromptProvider] → per-tile conditioning
+[ScheduleToMultiPrompt — REMOVED 2026-04-27] → [MultiPromptProvider] → per-tile conditioning
+(Class deleted; use TimestampPromptScheduleBatchEncode + ConditioningSelectByIteration instead.)
                                                         ↓
                        LTXVLoopingSampler ←─────────────┘
                               ↓
