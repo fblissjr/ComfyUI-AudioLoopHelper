@@ -256,6 +256,28 @@ def _audit_one(wf_path: Path) -> list[Finding]:
     else:
         record("WARN", "iteration_stamp", "missing (sage tracer iter grouping will be blank)")
 
+    # LTXFramePlanner is the single source of truth for dimension config
+    # (width/height/length/fps/window_seconds/frame_rate). Without it,
+    # widget values for those scatter across EmptyLTXVLatentVideo,
+    # ImageResizeKJv2, AudioLoopController, AudioLoopPlanner, and the
+    # subgraph — drift between them was the historical footgun. Retake
+    # lacks the audio-loop spine and is exempt. Experimental forks
+    # (under example_workflows/experimental/) predate the consolidation
+    # and downgrade to WARN — they're staging variants, not production.
+    # See scripts/apply_frame_planner_consolidation.py.
+    is_experimental = wf_path.parent.name == "experimental"
+    if not _is_retake(name):
+        if not by_type.get("LTXFramePlanner"):
+            status = "WARN" if is_experimental else "ERR"
+            record(
+                status, "frame_planner_present",
+                "no LTXFramePlanner node — dimension widgets will scatter and drift. "
+                "Run scripts/apply_frame_planner_consolidation.py.",
+            )
+        else:
+            record("OK", "frame_planner_present",
+                   "LTXFramePlanner is the single source for dim/fps config")
+
     # Prompt schedule
     batch = by_type.get("TimestampPromptScheduleBatchEncode", [])
     legacy_cache = by_type.get("CachedTextEncode_AudioLoop", [])
