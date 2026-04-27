@@ -20,7 +20,6 @@ from workflow_utils import WorkflowEditor
 
 WORKFLOW_DIR = Path(__file__).parent.parent / "example_workflows"
 WORKFLOWS = [
-    "audio-loop-music-video_image.json",
     "audio-loop-music-video_latent.json",
     "audio-loop-music-video_image_adain_perstep.json",
 ]

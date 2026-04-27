@@ -6,7 +6,7 @@ Catches bugs like:
 - Subgraph link/linkIds desync
 - Missing nodes referenced by links
 
-Run: python scripts/test_workflow_integrity.py example_workflows/audio-loop-music-video_image.json
+Run: python scripts/test_workflow_integrity.py example_workflows/audio-loop-music-video_latent.json
 """
 
 import ast

@@ -26,12 +26,11 @@ Six workflow variants included:
   subgraph init_image input. Different reference images per song
   section (verse/chorus/bridge) for actual scene changes, not just
   lighting shifts.
-- **Image workflow** (`audio-loop-music-video_image.json`) --
-  per-iteration VAE decode/encode. Per-iteration AdaIN for color drift
-  prevention (factor=0.2, bypassable).
 - **Image + per-step AdaIN** (`audio-loop-music-video_image_adain_perstep.json`) --
-  experimental. Same as image workflow plus LTXVPerStepAdainPatcher on
-  the model chain — applies AdaIN at every denoising step.
+  per-iteration VAE decode/encode plus LTXVPerStepAdainPatcher on the model
+  chain — applies AdaIN at every denoising step for color drift prevention.
+  The plain image workflow was retired 2026-04-27 (use latent for normal
+  generation; image-AdaIN only when you specifically need per-iteration AdaIN).
 - **Retake** (`audio-loop-music-video_retake.json`) --
   regenerate a `[start_time, end_time]` window of a previously generated
   video without re-rendering the rest. Loads a prior mp4, encodes it,

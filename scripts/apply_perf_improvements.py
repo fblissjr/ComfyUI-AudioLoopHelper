@@ -24,7 +24,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS = [
     REPO_ROOT / "example_workflows" / "audio-loop-music-video_latent.json",
     REPO_ROOT / "example_workflows" / "audio-loop-music-video_latent_keyframe.json",
-    REPO_ROOT / "example_workflows" / "audio-loop-music-video_image.json",
 ]
 
 IN_LOOP_ENCODE_TITLES = {"Loop Prompt Encode", "Next Prompt Encode"}

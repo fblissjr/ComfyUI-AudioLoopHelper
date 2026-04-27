@@ -155,8 +155,11 @@ Prompt creation guide: `docs/guides/prompt_creation_guide.md`
 
 ## Dual workflow support (IMAGE vs LATENT)
 
-- **IMAGE workflow** (`audio-loop-music-video_image.json`): Subgraph uses
-  GetImageRangeFromBatch + VAEEncode/Decode. ImageBatch prepends initial render.
+- **IMAGE-AdaIN workflow** (`audio-loop-music-video_image_adain_perstep.json`):
+  Subgraph uses GetImageRangeFromBatch + VAEEncode/Decode plus
+  LTXVPerStepAdainPatcher on the model chain. ImageBatch prepends initial
+  render. Use only when you specifically need per-iteration AdaIN; latent
+  is the production default. (The plain image workflow was retired 2026-04-27.)
 - **LATENT workflow** (`audio-loop-music-video_latent.json`): Subgraph uses
   LatentContextExtract + LatentOverlapTrim. LatentConcat prepends initial render.
   No per-iteration VAE round-trip.
