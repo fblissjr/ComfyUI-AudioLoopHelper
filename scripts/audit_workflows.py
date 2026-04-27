@@ -540,6 +540,7 @@ def _audit_one(wf_path: Path) -> list[Finding]:
                     )
 
     _check_prompt_relay_wiring(wf, by_type, record)
+    _check_ltx2_nag_reaches_loop(wf, by_type, record)
     _check_graph_acyclic(wf, by_id, record)
     _check_link_integrity(wf, by_id, links_by_id, record)
     _check_widget_shape(wf, record)
@@ -872,6 +873,104 @@ def _subgraph_invoker_id(wf) -> int | None:
         if n.get("type") == sg_id:
             return n["id"]
     return None
+
+
+# LTX2_NAG (KJNodes) installs `object_patches` capturing the negative
+# conditioning tensor. Unlike PromptRelay (CLIP-driven, evicted on
+# offload), NAG patches survive the loop offload/reload because DiT stays
+# resident — but ONLY IF the patched MODEL reaches the loop subgraph at
+# all. If a future edit forks the chain so NAG only feeds the initial
+# CFGGuider, the loop body sees an unpatched MODEL and the NAG negative
+# prompt silently disengages from iter 1+. Mirror failure mode of
+# pre-2026-04-22 batch-encode bug, but rooted in topology rather than
+# CLIP placement. Reference:
+# docs/analysis/nag_object_patches_offload_asymmetry.md.
+def _check_ltx2_nag_reaches_loop(wf, by_type, record) -> None:
+    nag_nodes = by_type.get("LTX2_NAG", [])
+    if not nag_nodes:
+        return
+
+    invoker_id = _subgraph_invoker_id(wf)
+    if invoker_id is None:
+        # No subgraph (e.g. retake) — nothing to verify.
+        return
+
+    if len(nag_nodes) > 1:
+        record(
+            "WARN", "ltx2_nag_reaches_loop",
+            f"{len(nag_nodes)} LTX2_NAG nodes found; audit only checks the first.",
+        )
+
+    nag_id = nag_nodes[0]["id"]
+
+    # Walk MODEL chain forward from LTX2_NAG. Stop when we hit the
+    # subgraph invoker's MODEL input (any slot — invokers expose model
+    # via a typed slot whose index varies by workflow). MODEL chain
+    # passes through chain-pure nodes (LoraLoaderModelOnly,
+    # SetNode/GetNode, LTXVReferenceAudio, LTX2SamplingPreviewOverride,
+    # LTXICLoRALoaderModelOnly), so a forward MODEL-link BFS suffices
+    # without per-node-type knowledge.
+    edges_by_src: dict[int, list] = {}
+    for lk in wf.get("links") or []:
+        if not isinstance(lk, list) or len(lk) < 6:
+            continue
+        if lk[5] == "MODEL":
+            edges_by_src.setdefault(lk[1], []).append(lk)
+
+    # SetNode/GetNode are virtual broadcasts — link source is a SetNode,
+    # link target is the GetNode reference's downstream consumer. Walk
+    # them by widget_values name match.
+    setnodes_by_var: dict[str, list[dict]] = {}
+    getnodes_by_var: dict[str, list[dict]] = {}
+    for n in wf.get("nodes") or []:
+        if n.get("type") not in ("SetNode", "GetNode"):
+            continue
+        wv = n.get("widgets_values")
+        if not isinstance(wv, list) or not wv or not isinstance(wv[0], str):
+            continue
+        var = wv[0]
+        if n["type"] == "SetNode":
+            setnodes_by_var.setdefault(var, []).append(n)
+        else:
+            getnodes_by_var.setdefault(var, []).append(n)
+
+    visited: set[int] = set()
+    queue: list[int] = [nag_id]
+    reached_invoker = False
+    while queue:
+        cur = queue.pop()
+        if cur in visited:
+            continue
+        visited.add(cur)
+        for lk in edges_by_src.get(cur, []):
+            tgt = lk[3]
+            if tgt == invoker_id:
+                reached_invoker = True
+                break
+            queue.append(tgt)
+        if reached_invoker:
+            break
+        # If the current node is a SetNode, queue all matching GetNodes
+        # (virtual broadcast). GetNodes have no incoming MODEL link in
+        # `links` — the connection is by-name.
+        cur_node = next((n for n in wf["nodes"] if n["id"] == cur), None)
+        if cur_node and cur_node.get("type") == "SetNode":
+            wv = cur_node.get("widgets_values")
+            if isinstance(wv, list) and wv and isinstance(wv[0], str):
+                for getn in getnodes_by_var.get(wv[0], []):
+                    queue.append(getn["id"])
+
+    if reached_invoker:
+        record("OK", "ltx2_nag_reaches_loop",
+               f"LTX2_NAG({nag_id}) MODEL reaches subgraph invoker({invoker_id})")
+    else:
+        record(
+            "ERR", "ltx2_nag_reaches_loop",
+            f"LTX2_NAG({nag_id}) MODEL does not reach loop subgraph invoker "
+            f"({invoker_id}). NAG object_patches will silently disengage in "
+            "loop iterations — every class NAG was suppressing returns iter 1+. "
+            "Verify the SetNode/GetNode model-broadcast chain is intact.",
+        )
 
 
 def main() -> int:

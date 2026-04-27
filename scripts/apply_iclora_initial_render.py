@@ -47,6 +47,28 @@ LTXV_CONCAT_AV_LATENT_ID = 350        # joins video latent + audio latent for sa
 LTXV_PREPROCESS_ID = 446              # produces the preprocessed init image
 GET_VIDEO_VAE_ID = 413                # GetNode 'video_vae' (already wired to KJ 531)
 
+# Reference-image source for LTXAddVideoICLoRAGuide.image (slot 4).
+# IC-LoRA's image input is conceptually a REFERENCE image — what the
+# LoRA conditions on. Phase 0a deliberately points it at the SAME
+# preprocessed init image (#446) that already writes into frame 0 via
+# LTXVImgToVideoInplaceKJ (#531). Reinforces the init commitment;
+# avoids introducing a second image source for the A/B baseline.
+#
+# To decouple (e.g. style-transfer reference, "before" image for IC-LoRA
+# transformation experiments): set GUIDE_REFERENCE_IMAGE_NODE_ID to any
+# upstream node whose output[0] is IMAGE — typically a separate
+# LoadImage + ImageResizeKJv2 + LTXVPreprocess chain. A `--reference-
+# image-node-id` CLI flag wires this for one-shot overrides without
+# editing the script.
+GUIDE_REFERENCE_IMAGE_NODE_ID = LTXV_PREPROCESS_ID
+
+# IC-LoRA defaults
+IC_LORA_FILE = "MergeGreen_IC-lora_ltx2.3.safetensors"
+IC_LORA_STRENGTH = 0.9
+IC_LORA_GUIDE_FRAME_IDX = 0           # condition on frame 0 (init-image position)
+IC_LORA_GUIDE_STRENGTH = 1.0          # full strength (matches reference workflow)
+IC_LORA_LATENT_DOWNSCALE = 1.0        # default; overridden by loader's metadata via wired input
+
 REQUIRED_SOURCE_NODES = (
     LTX2_PREVIEW_OVERRIDE_ID,
     SETNODE_MODEL_ID,
@@ -58,13 +80,6 @@ REQUIRED_SOURCE_NODES = (
     LTXV_PREPROCESS_ID,
     GET_VIDEO_VAE_ID,
 )
-
-# IC-LoRA defaults
-IC_LORA_FILE = "MergeGreen_IC-lora_ltx2.3.safetensors"
-IC_LORA_STRENGTH = 0.9
-IC_LORA_GUIDE_FRAME_IDX = 0           # condition on frame 0 (init-image position)
-IC_LORA_GUIDE_STRENGTH = 1.0          # full strength (matches reference workflow)
-IC_LORA_LATENT_DOWNSCALE = 1.0        # default; overridden by loader's metadata via wired input
 
 DEFAULT_INPUT = "example_workflows/audio-loop-music-video_latent.json"
 DEFAULT_OUTPUT = "internal/scratch/audio-loop-music-video_latent_iclora_phase0a.json"
@@ -181,14 +196,20 @@ def _add_guide_node(ed: WorkflowEditor) -> int:
     )
 
 
-def _wire_guide_inputs(ed: WorkflowEditor, guide_id: int, loader_id: int) -> None:
+def _wire_guide_inputs(
+    ed: WorkflowEditor, guide_id: int, loader_id: int,
+    reference_image_node_id: int,
+) -> None:
     ed.add_link(LTXVCONDITIONING_ID, 0, guide_id, 0, "CONDITIONING")
     ed.add_link(LTXVCONDITIONING_ID, 1, guide_id, 1, "CONDITIONING")
     ed.add_link(GET_VIDEO_VAE_ID, 0, guide_id, 2, "VAE")
     ed.add_link(LTXV_IMG_TO_VID_INPLACE_KJ_ID, 0, guide_id, 3, "LATENT")
-    # Same preprocessed init image that already writes to frame 0 via
-    # ImgToVideoInplaceKJ -- means IC-LoRA reinforces the init commitment.
-    ed.add_link(LTXV_PREPROCESS_ID, 0, guide_id, 4, "IMAGE")
+    # Reference-image source for IC-LoRA conditioning. Defaults to the
+    # preprocessed init image (#446) — same image that anchors frame 0,
+    # so IC-LoRA reinforces the init commitment. Override via
+    # GUIDE_REFERENCE_IMAGE_NODE_ID or --reference-image-node-id to
+    # decouple (style transfer, IC-LoRA "before" reference, etc.).
+    ed.add_link(reference_image_node_id, 0, guide_id, 4, "IMAGE")
     # latent_downscale_factor auto-extracts from safetensors metadata
     # (defaults to 1.0 if missing); wire as input so the loader drives it.
     ed.add_link(loader_id, 1, guide_id, 5, "FLOAT")
@@ -206,18 +227,23 @@ def _reroute_consumers_through_guide(ed: WorkflowEditor, guide_id: int) -> None:
         ed.rewire_input(tgt_id, tgt_slot, guide_id, guide_out_slot, dtype)
 
 
-def _reroute_through_iclora_guide(ed: WorkflowEditor, *, loader_id: int) -> int:
+def _reroute_through_iclora_guide(
+    ed: WorkflowEditor, *, loader_id: int, reference_image_node_id: int,
+) -> int:
     """Insert LTXAddVideoICLoRAGuide between the initial-render conditioning
     + latent sources and their consumers. Loop-body `base_cond_neg` Set
     link is intentionally untouched so loop iterations see the unmodified
     baseline."""
     guide_id = _add_guide_node(ed)
-    _wire_guide_inputs(ed, guide_id, loader_id)
+    _wire_guide_inputs(ed, guide_id, loader_id, reference_image_node_id)
     _reroute_consumers_through_guide(ed, guide_id)
     return guide_id
 
 
-def _migrate(input_path: Path, output_path: Path) -> None:
+def _migrate(
+    input_path: Path, output_path: Path,
+    reference_image_node_id: int = GUIDE_REFERENCE_IMAGE_NODE_ID,
+) -> None:
     # Preserve user edits: if the staging file is already migrated, bail
     # before overwriting. --revert deletes it for a fresh start.
     if output_path.exists() and input_path != output_path and _already_migrated(WorkflowEditor(output_path)):
@@ -236,15 +262,27 @@ def _migrate(input_path: Path, output_path: Path) -> None:
         return
 
     _assert_required_nodes_present(ed)
+    try:
+        ed.find_node(reference_image_node_id)
+    except ValueError:
+        raise SystemExit(
+            f"Refusing to migrate: reference_image_node_id={reference_image_node_id} "
+            f"not present in the workflow. Edit GUIDE_REFERENCE_IMAGE_NODE_ID at the "
+            f"top of this script, or pass --reference-image-node-id with a valid "
+            f"upstream IMAGE-producing node id."
+        ) from None
 
     print(f"{output_path.name}: applying Phase 0a IC-LoRA wiring...")
     loader_id = _add_iclora_loader(ed)
     print(f"  added LTXICLoRALoaderModelOnly as node {loader_id} "
           f"(model: {IC_LORA_FILE}, strength: {IC_LORA_STRENGTH})")
 
-    guide_id = _reroute_through_iclora_guide(ed, loader_id=loader_id)
+    guide_id = _reroute_through_iclora_guide(
+        ed, loader_id=loader_id, reference_image_node_id=reference_image_node_id,
+    )
     print(f"  added LTXAddVideoICLoRAGuide as node {guide_id} "
-          f"(frame_idx={IC_LORA_GUIDE_FRAME_IDX}, strength={IC_LORA_GUIDE_STRENGTH})")
+          f"(frame_idx={IC_LORA_GUIDE_FRAME_IDX}, strength={IC_LORA_GUIDE_STRENGTH}, "
+          f"reference_image=#{reference_image_node_id})")
 
     ed.save()
     print(f"  wrote {output_path}")
@@ -282,6 +320,16 @@ def main() -> None:
         "--revert", action="store_true",
         help="Delete the output staging file (does not touch --input).",
     )
+    ap.add_argument(
+        "--reference-image-node-id", type=int, default=GUIDE_REFERENCE_IMAGE_NODE_ID,
+        help=(
+            "Node id whose output[0] is the IMAGE wired into "
+            "LTXAddVideoICLoRAGuide.image (slot 4). Default is "
+            f"#{GUIDE_REFERENCE_IMAGE_NODE_ID} (preprocessed init image — "
+            "reinforces init commitment). Override for style-transfer or "
+            "IC-LoRA 'before' references."
+        ),
+    )
     args = ap.parse_args()
 
     output_path = Path(args.output)
@@ -289,7 +337,10 @@ def main() -> None:
         _revert(output_path)
         return
 
-    _migrate(Path(args.input), output_path)
+    _migrate(
+        Path(args.input), output_path,
+        reference_image_node_id=args.reference_image_node_id,
+    )
 
 
 if __name__ == "__main__":
