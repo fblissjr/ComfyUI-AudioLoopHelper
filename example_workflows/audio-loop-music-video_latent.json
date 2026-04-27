@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1624,
-  "last_link_id": 3078,
+  "last_node_id": 1627,
+  "last_link_id": 3083,
   "nodes": [
     {
       "id": 252,
@@ -85,7 +85,7 @@
           "type": "MODEL",
           "links": [
             2794,
-            3075
+            3080
           ]
         }
       ],
@@ -1026,7 +1026,7 @@
         {
           "name": "MODEL",
           "type": "MODEL",
-          "link": 3078
+          "link": 3083
         }
       ],
       "outputs": [
@@ -4277,7 +4277,7 @@
       "title": "Loop Iteration Stamp"
     },
     {
-      "id": 1622,
+      "id": 1625,
       "type": "LoraLoaderModelOnly",
       "pos": [
         -300,
@@ -4294,7 +4294,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 3075
+          "link": 3080
         }
       ],
       "outputs": [
@@ -4302,7 +4302,7 @@
           "name": "model",
           "type": "MODEL",
           "links": [
-            3076
+            3081
           ]
         }
       ],
@@ -4316,7 +4316,7 @@
       "title": "ID-LoRA File (audio-conditioned identity)"
     },
     {
-      "id": 1623,
+      "id": 1626,
       "type": "LTXICLoRALoaderModelOnly",
       "pos": [
         -300,
@@ -4333,7 +4333,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 3076
+          "link": 3081
         }
       ],
       "outputs": [
@@ -4341,7 +4341,7 @@
           "name": "model",
           "type": "MODEL",
           "links": [
-            3077
+            3082
           ]
         },
         {
@@ -4360,7 +4360,7 @@
       "title": "IC-LoRA File (visual reference adapter)"
     },
     {
-      "id": 1624,
+      "id": 1627,
       "type": "LoraLoaderModelOnly",
       "pos": [
         -300,
@@ -4377,7 +4377,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 3077
+          "link": 3082
         }
       ],
       "outputs": [
@@ -4385,7 +4385,7 @@
           "name": "model",
           "type": "MODEL",
           "links": [
-            3078
+            3083
           ]
         }
       ],
@@ -5289,32 +5289,32 @@
       "INT"
     ],
     [
-      3075,
+      3080,
       503,
       0,
-      1622,
+      1625,
       0,
       "MODEL"
     ],
     [
-      3076,
-      1622,
+      3081,
+      1625,
       0,
-      1623,
-      0,
-      "MODEL"
-    ],
-    [
-      3077,
-      1623,
-      0,
-      1624,
+      1626,
       0,
       "MODEL"
     ],
     [
-      3078,
-      1624,
+      3082,
+      1626,
+      0,
+      1627,
+      0,
+      "MODEL"
+    ],
+    [
+      3083,
+      1627,
       0,
       572,
       0,

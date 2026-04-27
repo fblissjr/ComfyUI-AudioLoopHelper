@@ -175,11 +175,11 @@ inserted between `LTX2SamplingPreviewOverride(503)` and `SetNode("model")(572)`.
 When all three are bypassed (`mode: 4`), the model passes through unchanged.
 Un-bypass any one of them in the ComfyUI UI to enable that LoRA.
 
-| Loader | Node type | Use for |
-|---|---|---|
-| **ID-LoRA File** | `LoraLoaderModelOnly` | Audio-conditioned identity transfer (e.g. [`AviadDahan/LTX-2.3-ID-LoRA-CelebVHQ-3K`](https://huggingface.co/AviadDahan/LTX-2.3-ID-LoRA-CelebVHQ-3K), paper [arxiv:2603.10256](https://arxiv.org/abs/2603.10256)). LoRA weights only — for the full reference-audio runtime pipeline you also need an `LTXVReferenceAudio` node wired in (see follow-up work). |
-| **IC-LoRA File** | `LTXICLoRALoaderModelOnly` | Visual reference adapters (MergeGreen, Outpaint, Cameraman, Motion-Track, etc.). For the full effect, also run [`scripts/apply_iclora_initial_render.py`](scripts/apply_iclora_initial_render.py) to add the `LTXAddVideoICLoRAGuide` on the conditioning side. |
-| **Style/Generic LoRA** | `LoraLoaderModelOnly` | Any standard LTX 2.3-compatible LoRA. |
+| Loader              | Node type                   | Use for |
+|---------------------|-----------------------------|---------|
+| **ID-LoRA File**    | `LoraLoaderModelOnly`       | Audio-conditioned identity transfer (e.g. [`AviadDahan/LTX-2.3-ID-LoRA-CelebVHQ-3K`](https://huggingface.co/AviadDahan/LTX-2.3-ID-LoRA-CelebVHQ-3K), paper [arxiv:2603.10256](https://arxiv.org/abs/2603.10256)). LoRA weights only; the full reference-audio runtime requires `LTXVReferenceAudio` wires not surfaced here. |
+| **IC-LoRA File**    | `LTXICLoRALoaderModelOnly`  | Visual reference adapters (MergeGreen, Outpaint, Cameraman, Motion-Track). For the full effect, also run [`scripts/apply_iclora_initial_render.py`](scripts/apply_iclora_initial_render.py) to add `LTXAddVideoICLoRAGuide` on the conditioning side. |
+| **Style/Generic**   | `LoraLoaderModelOnly`       | Any standard LTX 2.3-compatible LoRA. |
 
 To enable a single LoRA:
 1. Open the workflow in ComfyUI.

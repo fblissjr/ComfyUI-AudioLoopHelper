@@ -136,17 +136,19 @@ def _add_loader(ed: WorkflowEditor, *, node_type: str, title: str, y: int,
     return nid
 
 
-def _apply(ed: WorkflowEditor) -> str:
+def _apply(ed: WorkflowEditor) -> tuple[bool, str]:
+    """Returns (changed, message). `changed` triggers ed.save() in the
+    caller; message is the user-facing status string."""
     built, _ = _is_already_built(ed)
     if built:
-        return "no change (chain already present)"
+        return False, "no change (chain already present)"
 
     existing = ed.find_link_to_slot(SETNODE_MODEL_ID, 0)
     if existing is None:
-        return f"skip (#{SETNODE_MODEL_ID}.in[0] has no inbound link)"
+        return False, f"skip (#{SETNODE_MODEL_ID}.in[0] has no inbound link)"
     existing_link_id, src_node, src_slot, *_ = existing
     if src_node != LTX2_PREVIEW_OVERRIDE_ID:
-        return (
+        return False, (
             f"skip (#{SETNODE_MODEL_ID}.in[0] inbound from #{src_node}, "
             f"expected #{LTX2_PREVIEW_OVERRIDE_ID})"
         )
@@ -184,45 +186,34 @@ def _apply(ed: WorkflowEditor) -> str:
     ed.add_link(ic_id, 0, style_id, 0, "MODEL")
     ed.add_link(style_id, 0, SETNODE_MODEL_ID, 0, "MODEL")
 
-    return f"chain inserted (#{id_id} ID-LoRA -> #{ic_id} IC-LoRA -> #{style_id} Style)"
+    return True, f"chain inserted (#{id_id} ID-LoRA -> #{ic_id} IC-LoRA -> #{style_id} Style)"
 
 
-def _revert(ed: WorkflowEditor) -> str:
+def _revert(ed: WorkflowEditor) -> tuple[bool, str]:
     built, nodes = _is_already_built(ed)
     if not built:
-        return "already reverted (no chain found)"
-    id_n, _ic_n, style_n = nodes
+        return False, "already reverted (no chain found)"
+    id_n, _, style_n = nodes
 
-    # Restore direct 503 -> 572 link, then strip the three loader nodes.
+    # Capture the upstream of the chain head BEFORE detaching, so we know
+    # where to reattach the direct 503 -> 572 wire.
     incoming = ed.find_link_to_slot(id_n["id"], 0)
     if incoming is None:
-        return "skip (revert: ID-LoRA loader has no inbound link)"
-    _link_id, src_node, src_slot, *_ = incoming
+        return False, "skip (revert: ID-LoRA loader has no inbound link)"
+    _, src_node, src_slot, *_ = incoming
 
-    # Find the link from style -> 572 to know where to reattach.
     setnode_in = ed.find_link_to_slot(SETNODE_MODEL_ID, 0)
     if setnode_in is None:
-        return "skip (revert: SetNode model has no inbound link)"
+        return False, "skip (revert: SetNode model has no inbound link)"
     _, style_src, _, *_ = setnode_in
     if style_src != style_n["id"]:
-        return f"skip (revert: SetNode inbound is #{style_src}, not the Style loader)"
+        return False, f"skip (revert: SetNode inbound is #{style_src}, not the Style loader)"
 
     for n in nodes:
-        # remove_node_and_links lives in WorkflowEditor; falls back to
-        # manual cleanup if not available.
-        for inp in n.get("inputs") or []:
-            lid = inp.get("link")
-            if lid is not None:
-                ed.remove_link(lid)
-        for out in n.get("outputs") or []:
-            for lid in list(out.get("links") or []):
-                ed.remove_link(lid)
-    # Strip nodes
-    keep_ids = {n["id"] for n in nodes}
-    ed.wf["nodes"] = [n for n in ed.wf["nodes"] if n["id"] not in keep_ids]
+        ed.remove_node_and_links(n["id"])
 
     ed.add_link(src_node, src_slot, SETNODE_MODEL_ID, 0, "MODEL")
-    return "reverted (3 loaders removed, direct 503 -> 572 restored)"
+    return True, "reverted (3 loaders removed, direct 503 -> 572 restored)"
 
 
 def apply(revert: bool, dry_run: bool, wf_path: Path) -> int:
@@ -232,15 +223,10 @@ def apply(revert: bool, dry_run: bool, wf_path: Path) -> int:
         print(f"load error: {e}")
         return 1
 
-    if dry_run:
-        # Snapshot then discard.
-        result = _revert(ed) if revert else _apply(ed)
-        print(f"  {wf_path.relative_to(REPO_ROOT)}: would {result}")
-        return 0
-
-    result = _revert(ed) if revert else _apply(ed)
-    print(f"  {wf_path.relative_to(REPO_ROOT)}: {result}")
-    if "no change" not in result and "already" not in result and "skip" not in result:
+    changed, message = _revert(ed) if revert else _apply(ed)
+    prefix = "would " if dry_run and changed else ""
+    print(f"  {wf_path.relative_to(REPO_ROOT)}: {prefix}{message}")
+    if changed and not dry_run:
         ed.save(wf_path)
     return 0
 
