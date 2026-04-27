@@ -1253,24 +1253,13 @@ class AudioLoopPlanner(io.ComfyNode):
 # in script form: `audio["waveform"].shape[-1] / audio["sample_rate"]`.
 
 
-# Deprecation warning helper for legacy node classes.
-# `_warned` set is module-level so each (class, message) pair only warns
-# once per process — re-running the legacy node N times in a session
-# doesn't spam.
-_DEPRECATION_WARNED: set[str] = set()
-
-
 def _warn_legacy_use(class_name: str, replacement: str) -> None:
-    key = f"{class_name}->{replacement}"
-    if key in _DEPRECATION_WARNED:
-        return
-    _DEPRECATION_WARNED.add(key)
-    import sys
-    print(
-        f"[ComfyUI-AudioLoopHelper] DEPRECATED: {class_name} is legacy. "
-        f"Migrate to {replacement}. Class will be removed in a future "
-        f"release.",
-        file=sys.stderr,
+    """Once-per-process deprecation print for legacy node classes. Reuses
+    the project's `_log_once` mechanism (defined later in this file)."""
+    _log_once(
+        f"deprecated_{class_name}",
+        f"DEPRECATED: {class_name} is legacy. Migrate to {replacement}. "
+        f"Class will be removed in a future release.",
     )
 
 
@@ -1350,8 +1339,18 @@ def _compute_ltx_resolution(
     # of running cinema 1.85:1 (832x448 = 22,932) over true 16:9
     # (832x480 = 24,570 = "at the edge" per ltx23_model_reference.md).
 
-    latent_volume = (width // 32) * (height // 32) * ((frames - 1) // 8 + 1)
+    latent_volume, status = _classify_latent_volume(width, height, frames)
+    return width, height, latent_volume, status
 
+
+def _classify_latent_volume(width: int, height: int, frames: int) -> tuple[int, str]:
+    """Compute LTX 2.3 latent volume = (W/32) * (H/32) * ((L-1)/8 + 1) and
+    classify against the artifact ceiling (24,570 hard, 20,000 soft).
+    Returns (latent_volume, status_string). Shared between
+    `_compute_ltx_resolution` and `LTXFramePlanner.execute` so the
+    classification rule lives in one place.
+    """
+    latent_volume = (width // 32) * (height // 32) * ((frames - 1) // 8 + 1)
     if latent_volume <= _LTX_LATENT_VOLUME_OK_MAX:
         category = "OK"
     elif latent_volume <= _LTX_LATENT_VOLUME_EDGE_MAX:
@@ -1362,7 +1361,7 @@ def _compute_ltx_resolution(
         f"{category}: latent_volume={latent_volume} "
         f"(ok<={_LTX_LATENT_VOLUME_OK_MAX}, edge<={_LTX_LATENT_VOLUME_EDGE_MAX})"
     )
-    return width, height, latent_volume, status
+    return latent_volume, status
 
 
 def _ltx_clear_keyframe_idxs(positive, negative):
@@ -1609,20 +1608,9 @@ class LTXFramePlanner(io.ComfyNode):
     ) -> io.NodeOutput:
         width, height = _snap_dimensions(target_width, target_height)
         frames, actual_seconds = _snap_frames(target_seconds, fps)
-        latent_volume = (width // 32) * (height // 32) * ((frames - 1) // 8 + 1)
+        latent_volume, status = _classify_latent_volume(width, height, frames)
+        category = status.split(":", 1)[0]
 
-        if latent_volume <= _LTX_LATENT_VOLUME_OK_MAX:
-            category = "OK"
-        elif latent_volume <= _LTX_LATENT_VOLUME_EDGE_MAX:
-            category = "NEAR_EDGE"
-        else:
-            category = "OVER_EDGE"
-        status = (
-            f"{category}: latent_volume={latent_volume} "
-            f"(ok<={_LTX_LATENT_VOLUME_OK_MAX}, edge<={_LTX_LATENT_VOLUME_EDGE_MAX})"
-        )
-
-        # Human-readable summary; surface input vs snapped values when they differ
         snap_notes = []
         if (target_width, target_height) != (width, height):
             snap_notes.append(f"size {target_width}x{target_height} -> {width}x{height}")

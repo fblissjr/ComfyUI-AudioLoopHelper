@@ -58,8 +58,12 @@ Usage:
     uv run --group dev python scripts/apply_frame_planner_consolidation.py --revert
     uv run --group dev python scripts/apply_frame_planner_consolidation.py --dry-run
 
-Idempotent. Re-run reports "no change". --revert restores the pre-migration
-shape (re-adds the 4 helper nodes + their links, removes LTXFramePlanner).
+Idempotent. Re-run reports "no change". To revert: `git checkout` the
+workflow JSON from a pre-migration commit. The migration restructures
+6 wires + removes 4 helper nodes; restoring the exact pre-state via
+JSON edit is too brittle to ship as an apply-script revert. (Most other
+apply scripts in this repo DO ship --revert; this one is the exception
+because its rewire shape is irreversible without slot-index gymnastics.)
 """
 
 from __future__ import annotations
@@ -158,7 +162,7 @@ def _add_planner(ed: WorkflowEditor) -> int:
 
 
 def _wire_by_name(ed: WorkflowEditor, *, src_node: int, src_slot: int,
-                  tgt_node: int, tgt_input_name: str, dtype: str) -> int:
+                  tgt_node: int, tgt_input_name: str, dtype: str) -> None:
     """Wire src_node.out[src_slot] -> tgt_node.in[<tgt_input_name>], handling
     the widget-vs-wired-input asymmetry in saved JSON.
 
@@ -166,15 +170,11 @@ def _wire_by_name(ed: WorkflowEditor, *, src_node: int, src_slot: int,
     OR rendered visibly in the UI at save time; pure widget-only inputs are
     sometimes absent from inputs[]. Wiring such an input requires APPENDING
     a new entry with proper widget metadata, then adding the link.
-
-    Returns the slot index of the wired input (whether pre-existing or
-    newly appended).
     """
     node = ed.find_node(tgt_node)
     inputs = node.setdefault("inputs", [])
     inp = next((i for i in inputs if i.get("name") == tgt_input_name), None)
     if inp is None:
-        # Widget-only input — append it so the link has a slot to land on.
         inp = {
             "name": tgt_input_name,
             "type": dtype,
@@ -184,12 +184,10 @@ def _wire_by_name(ed: WorkflowEditor, *, src_node: int, src_slot: int,
         inputs.append(inp)
     tgt_slot = inputs.index(inp)
 
-    # Detach any existing link feeding this slot.
     if inp.get("link") is not None:
         ed.remove_link(inp["link"])
 
     ed.add_link(src_node, src_slot, tgt_node, tgt_slot, dtype)
-    return tgt_slot
 
 
 def _apply(ed: WorkflowEditor) -> tuple[bool, str]:
@@ -257,32 +255,14 @@ def _apply(ed: WorkflowEditor) -> tuple[bool, str]:
     return True, "; ".join(actions)
 
 
-def _revert(ed: WorkflowEditor) -> tuple[bool, str]:
-    """Revert is non-trivial: would need to re-create 4 helper nodes with
-    correct positions + IDs + restore widget values to consumers + restore
-    inter-node links by ID. The previous shape was reconstructable from
-    git history but reproducing it inside an apply script is brittle.
-
-    Recommendation: if you need to revert, `git checkout` the workflow
-    JSON to a pre-migration commit instead."""
-    if _find_planner(ed) is None:
-        return False, "already reverted (no LTXFramePlanner found)"
-    return False, (
-        "revert not implemented — to revert, `git checkout` the workflow "
-        "JSON from a pre-migration commit. The migration restructures 6 "
-        "wires + removes 4 helper nodes; restoring the exact pre-state via "
-        "JSON edit is too brittle to ship as an apply-script revert."
-    )
-
-
-def apply(revert: bool, dry_run: bool, wf_path: Path) -> int:
+def apply(dry_run: bool, wf_path: Path) -> int:
     try:
         ed = WorkflowEditor(wf_path)
     except Exception as e:  # noqa: BLE001
         print(f"load error: {e}")
         return 1
 
-    changed, message = _revert(ed) if revert else _apply(ed)
+    changed, message = _apply(ed)
     prefix = "would " if dry_run and changed else ""
     print(f"  {wf_path.relative_to(REPO_ROOT)}:")
     for line in message.split("; "):
@@ -298,12 +278,10 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     ap.add_argument("workflow", nargs="?", default=str(DEFAULT_WORKFLOW))
-    ap.add_argument("--revert", action="store_true",
-                    help="(Not implemented; use git checkout.)")
     ap.add_argument("--dry-run", action="store_true",
                     help="Report what WOULD change without writing.")
     args = ap.parse_args()
-    return apply(args.revert, args.dry_run, Path(args.workflow))
+    return apply(args.dry_run, Path(args.workflow))
 
 
 if __name__ == "__main__":
