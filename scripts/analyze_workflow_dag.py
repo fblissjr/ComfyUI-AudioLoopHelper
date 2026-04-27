@@ -87,6 +87,13 @@ _CATEGORY_COLORS = {
 }
 
 
+def _is_filtered_bypass(node: dict, include_bypassed: bool) -> bool:
+    """Node is mode=4 (bypassed) AND the renderer is configured to hide
+    bypassed nodes. Used at 5 sites to decide whether to skip a listing
+    entry, dim a render edge, or annotate a downstream reference."""
+    return node.get("mode") == MODE_BYPASS and not include_bypassed
+
+
 def _categorize(node: dict) -> str:
     if node["type"] in _HELPER_EXACT_TYPES:
         return "helper"
@@ -198,7 +205,7 @@ def render_mermaid(
     lines = ["```mermaid", "flowchart TD"]
     shown = set()
     for n in nodes:
-        if n.get("mode") == MODE_BYPASS and not include_bypassed:
+        if _is_filtered_bypass(n, include_bypassed):
             continue
         lines.append(f"    {label(n['id'])}")
         shown.add(n["id"])
@@ -226,7 +233,7 @@ def render_dot(
 
     lines = ["digraph workflow {", "    rankdir=TB;", "    node [shape=box];"]
     for n in nodes:
-        if n.get("mode") == MODE_BYPASS and not include_bypassed:
+        if _is_filtered_bypass(n, include_bypassed):
             continue
         nid = n["id"]
         color = (_CATEGORY_COLORS["dead"] if nid in dead
@@ -238,8 +245,7 @@ def render_dot(
             f'    n{nid} [label="{label}", fillcolor="{color}", style="{style}"];'
         )
     lines.append("")
-    shown = {n["id"] for n in nodes
-             if include_bypassed or n.get("mode") != MODE_BYPASS}
+    shown = {n["id"] for n in nodes if not _is_filtered_bypass(n, include_bypassed)}
     for src, tgt, dtype in edges:
         if src in shown and tgt in shown:
             lines.append(f'    n{src} -> n{tgt} [label="{dtype}"];')
@@ -261,7 +267,7 @@ def render_ascii(
     lines = [f"# Execution order ({len(order)} nodes)", ""]
     for i, nid in enumerate(order):
         n = nodes_by_id[nid]
-        if n.get("mode") == MODE_BYPASS and not include_bypassed:
+        if _is_filtered_bypass(n, include_bypassed):
             continue
         flags = []
         if n.get("mode") == MODE_BYPASS:
@@ -275,13 +281,8 @@ def render_ascii(
         for src, dtype in incoming[nid]:
             src_n = nodes_by_id.get(src)
             src_label = src_n["type"] if src_n else "?"
-            # Bypassed source nodes are filtered from the listing — annotate
-            # so the reader can resolve the missing # N entry instead of
-            # searching for it.
-            bypass_tag = ""
-            if (src_n and src_n.get("mode") == MODE_BYPASS
-                    and not include_bypassed):
-                bypass_tag = " [bypassed]"
+            # Annotate so missing # N entries are self-explanatory.
+            bypass_tag = " [bypassed]" if src_n and _is_filtered_bypass(src_n, include_bypassed) else ""
             lines.append(f"         <- {src:5d} {src_label}  ({dtype}){bypass_tag}")
     if cycle:
         lines.append("")
@@ -359,7 +360,7 @@ def analyze(
                     "widgets": n.get("widgets_values"),
                 }
                 for n in sorted(nodes, key=lambda x: order_rank.get(x["id"], 1e9))
-                if include_bypassed or n.get("mode") != MODE_BYPASS
+                if not _is_filtered_bypass(n, include_bypassed)
             ],
             "edges": [
                 {"src": src, "tgt": tgt, "type": dtype}
