@@ -1108,10 +1108,38 @@ class AudioLoopPlanner(io.ComfyNode):
                     min=1,
                     tooltip="Video frame rate. Same value as AudioLoopController.fps.",
                 ),
+                io.Int.Input(
+                    "max_iterations",
+                    default=0,
+                    min=0,
+                    max=999,
+                    tooltip=(
+                        "Cap the iteration count for debug / short-test runs. "
+                        "0 = auto (compute from audio_duration / stride; full-song "
+                        "render). >0 = run that many iterations regardless of song "
+                        "length. Useful for quickly testing prompt schedules without "
+                        "burning a full song's render. The cap NEVER inflates iter "
+                        "count above what the audio supports — short audio runs as "
+                        "many iters as it can fit, ignoring an oversized cap."
+                    ),
+                ),
+                io.String.Input(
+                    "schedule",
+                    default="",
+                    multiline=True,
+                    tooltip=(
+                        "Optional. Same TimestampPromptScheduleBatchEncode schedule "
+                        "text. When provided, the summary shows snap-boundary "
+                        "diagnostics: which entries snap to which iter, drift from "
+                        "your timestamps, and any collisions where two entries "
+                        "snap to the same iter (last-wins; one is silently dropped "
+                        "at runtime). Leave empty to skip the snap report."
+                    ),
+                ),
             ],
             outputs=[
-                io.String.Output("summary", tooltip="Iteration timeline text."),
-                io.Int.Output("total_iterations", tooltip="Estimated total iteration count."),
+                io.String.Output("summary", tooltip="Iteration timeline text + snap-boundary report."),
+                io.Int.Output("total_iterations", tooltip="Iteration count (after max_iterations cap)."),
             ],
         )
 
@@ -1122,12 +1150,23 @@ class AudioLoopPlanner(io.ComfyNode):
         window_seconds: float,
         overlap_seconds: float,
         fps: int,
+        max_iterations: int = 0,
+        schedule: str = "",
     ) -> io.NodeOutput:
         audio_duration = _audio_duration(audio)
         geometry = _compute_loop_geometry(window_seconds, overlap_seconds, fps)
         stride_seconds = geometry.stride_seconds
 
-        iterations = _compute_tile_count(audio_duration, stride_seconds)
+        auto_iterations = _compute_tile_count(audio_duration, stride_seconds)
+        if max_iterations > 0 and max_iterations < auto_iterations:
+            iterations = max_iterations
+            cap_note = (
+                f" [CAPPED by max_iterations={max_iterations}; "
+                f"auto would have been {auto_iterations}]"
+            )
+        else:
+            iterations = auto_iterations
+            cap_note = ""
 
         lines = [
             f"Audio: {audio_duration:.1f}s ({_format_timestamp(audio_duration)})",
@@ -1135,7 +1174,7 @@ class AudioLoopPlanner(io.ComfyNode):
             f"Overlap: {geometry.effective_overlap_seconds:.2f}s "
             f"(target {overlap_seconds:.2f}s, quantized to "
             f"{geometry.overlap_latent_frames} latents)",
-            f"Estimated {iterations} iterations:",
+            f"Estimated {iterations} iterations{cap_note}:",
             "",
             f"  Initial:  {_format_timestamp(0)} - {_format_timestamp(window_seconds)}"
             f"  (0.0s - {window_seconds:.1f}s)  [uses static prompt, not schedule]",
@@ -1147,6 +1186,50 @@ class AudioLoopPlanner(io.ComfyNode):
                 f"  Iter {i:2d}:  {_format_timestamp(start)} - {_format_timestamp(end)}"
                 f"  ({start:.1f}s - {end:.1f}s)"
             )
+
+        # Snap-boundary diagnostics — surface the snap_boundaries footgun
+        # (drift up to 1/2 stride, collisions silently last-wins) so the user
+        # sees what their schedule will actually become at runtime.
+        if schedule.strip():
+            lines.append("")
+            lines.append("Schedule snap report (snap_boundaries=True effects):")
+            try:
+                entries = _parse_schedule(schedule)
+                snapped = _snap_schedule_to_iterations(entries, stride_seconds)
+                # Build a lookup from snapped-start -> last-winning entry.
+                snapped_by_start: dict[float, tuple[float, float | None, str]] = {}
+                for s, e, v in snapped:
+                    snapped_by_start[s] = (s, e, v)
+                # Walk original entries; for each, find what it snapped to and
+                # whether it's the survivor at that snapped boundary.
+                for orig_start, _orig_end, orig_value in entries:
+                    snapped_start = round(orig_start / stride_seconds) * stride_seconds if stride_seconds > 0 else orig_start
+                    drift = snapped_start - orig_start
+                    survivor = snapped_by_start.get(snapped_start)
+                    label = (orig_value if isinstance(orig_value, str) else str(orig_value))[:60]
+                    if survivor is None:
+                        # Entry was filtered out (e.g., zero-length after snap)
+                        lines.append(
+                            f"  {_format_timestamp(orig_start)} \"{label}\" "
+                            f"-> DROPPED (zero-length after snap)"
+                        )
+                    elif survivor[2] != orig_value:
+                        # This entry collided and lost the last-wins race
+                        winner_label = (survivor[2] if isinstance(survivor[2], str) else str(survivor[2]))[:60]
+                        lines.append(
+                            f"  {_format_timestamp(orig_start)} \"{label}\" "
+                            f"-> {_format_timestamp(snapped_start)} (drift "
+                            f"{drift:+.2f}s) DROPPED — collides with "
+                            f"\"{winner_label}\""
+                        )
+                    else:
+                        marker = " (no change)" if abs(drift) < 1e-3 else f" (drift {drift:+.2f}s)"
+                        lines.append(
+                            f"  {_format_timestamp(orig_start)} \"{label}\" "
+                            f"-> {_format_timestamp(snapped_start)}{marker}"
+                        )
+            except Exception as e:  # noqa: BLE001
+                lines.append(f"  (schedule parse error: {e})")
 
         return io.NodeOutput("\n".join(lines), iterations)
 
@@ -1263,6 +1346,36 @@ _LTX_LATENT_VOLUME_OK_MAX = 20_000
 _LTX_LATENT_VOLUME_EDGE_MAX = 24_570
 
 _LTXOrientation = Literal["landscape", "portrait", "square"]
+
+
+def _snap_dimensions(target_width: int, target_height: int) -> tuple[int, int]:
+    """Snap each of (target_width, target_height) DOWN to the nearest div-32
+    boundary, with a floor of 32. LTX 2.3 requires div-by-32 dimensions
+    (single-stage); both axes are independently snapped.
+
+    Snap DOWN (not nearest, not up) biases toward latent-volume safety —
+    shrinking is always safer than growing for the artifact ceiling."""
+    w = max(32, (target_width // 32) * 32)
+    h = max(32, (target_height // 32) * 32)
+    return w, h
+
+
+def _snap_frames(target_seconds: float, fps: int) -> tuple[int, float]:
+    """Convert (target_seconds, fps) -> (frames, actual_seconds) where
+    frames satisfies the LTX video VAE temporal constraint (frames - 1) % 8 == 0.
+
+    Snap DOWN to the nearest valid frame count (smaller chunks = safer for
+    VRAM and gives more frequent re-anchoring). Returns the actual_seconds
+    that the snapped frame count represents (= frames / fps), which may be
+    slightly less than target_seconds. Minimum result is frames=1, the
+    only-9-or-greater rule is relaxed to 1 to allow degenerate test cases.
+    """
+    pixel_frames = max(1, round(target_seconds * fps))
+    # ((pixel_frames - 1) // 8) * 8 + 1 is the snap-down to (L-1)%8==0
+    snapped = ((pixel_frames - 1) // 8) * 8 + 1
+    snapped = max(1, snapped)
+    actual_seconds = snapped / fps
+    return snapped, actual_seconds
 
 
 def _compute_ltx_resolution(
@@ -1454,6 +1567,146 @@ class LTXResolutionFromAspect(io.ComfyNode):
             aspect_ratio, target_long_edge, frames, orientation
         )
         return io.NodeOutput(w, h, vol, status)
+
+
+class LTXFramePlanner(io.ComfyNode):
+    """Single source of truth for LTX 2.3 dimension config: width, height,
+    frames-per-iteration, fps. Auto-snaps to LTX-architectural constraints
+    so the user types human-readable values (832, 448, 20.0, 25) and the
+    node emits the snapped LTX-valid versions everywhere downstream.
+
+    Replaces scattered widget values across EmptyLTXVLatentVideo,
+    AudioLoopController, AudioLoopPlanner, LTXVConditioning, and
+    ImageResizeKJv2. Wire its outputs to those nodes' inputs and the
+    user only edits ONE node for "what shape and length is this render?"
+
+    Rules enforced (so the user never has to remember them):
+      - width and height are each div-by-32 (LTX 2.3 single-stage rule)
+      - frames satisfies (frames - 1) % 8 == 0 (video VAE temporal rule)
+      - actual_seconds = frames / fps (always self-consistent)
+      - latent_volume reported with status (OK / NEAR_EDGE / OVER_EDGE) vs
+        the artifact ceiling at 24,570 (per docs/reference/ltx23_model_reference.md)
+
+    Wiring map (apply via scripts/apply_frame_planner_consolidation.py):
+      LTXFramePlanner outputs:
+        width        -> EmptyLTXVLatentVideo.width, ImageResizeKJv2.width
+        height       -> EmptyLTXVLatentVideo.height, ImageResizeKJv2.height
+        frames       -> EmptyLTXVLatentVideo.length
+        actual_seconds -> AudioLoopController.window_seconds,
+                          AudioLoopPlanner.window_seconds,
+                          subgraph video_end_time slot
+        fps_int      -> AudioLoopController.fps, AudioLoopPlanner.fps
+        fps_float    -> LTXVConditioning.frame_rate
+        latent_volume, status, summary -> PreviewAny for visibility
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="LTXFramePlanner",
+            display_name="LTX Frame Planner",
+            category="AudioLoopHelper/utility",
+            description=(
+                "Single source of truth for LTX 2.3 dimension config. "
+                "Type human-readable target values; node snaps to LTX-valid "
+                "(div-32 width/height, (L-1)%8 frames) and emits everything "
+                "downstream consumers need. Wire outputs to EmptyLTXVLatentVideo, "
+                "AudioLoopController, AudioLoopPlanner, LTXVConditioning, "
+                "and ImageResizeKJv2."
+            ),
+            inputs=[
+                io.Int.Input(
+                    "target_width", default=832, min=32, max=4096, step=32,
+                    tooltip=(
+                        "Desired output width in pixels. Snapped DOWN to the "
+                        "nearest div-32 boundary. Common: 832 (16:9 cinema), "
+                        "960 (16:9 wider), 448 (9:16 portrait), 512 (1:1 square)."
+                    ),
+                ),
+                io.Int.Input(
+                    "target_height", default=448, min=32, max=4096, step=32,
+                    tooltip=(
+                        "Desired output height in pixels. Snapped DOWN to the "
+                        "nearest div-32 boundary. 448 pairs with 832 width for "
+                        "1.86:1 cinema aspect (volume 22,932 — under ceiling)."
+                    ),
+                ),
+                io.Float.Input(
+                    "target_seconds", default=19.88, min=0.04, max=120.0, step=0.01,
+                    tooltip=(
+                        "Per-iteration window duration in seconds. NOT total "
+                        "video length (that's determined by your audio). "
+                        "Snapped DOWN to (L-1)%8 frame count. Lower values = "
+                        "more iters = more re-anchoring (better identity, "
+                        "higher resolution headroom, more boundary seams). "
+                        "Default 19.88 = 497 frames at 25fps = ~9 iters per 3-min song."
+                    ),
+                ),
+                io.Int.Input(
+                    "fps", default=25, min=1, max=120,
+                    tooltip=(
+                        "Frames per second. 25 is Lightricks's distilled "
+                        "default (DEFAULT_FRAME_RATE in the official inference "
+                        "scripts). 24 for cinema-aesthetic; valid but moves "
+                        "you slightly off the model's training distribution."
+                    ),
+                ),
+            ],
+            outputs=[
+                io.Int.Output(display_name="width"),
+                io.Int.Output(display_name="height"),
+                io.Int.Output(display_name="frames"),
+                io.Float.Output(display_name="actual_seconds"),
+                io.Int.Output(display_name="fps_int"),
+                io.Float.Output(display_name="fps_float"),
+                io.Int.Output(display_name="latent_volume"),
+                io.String.Output(display_name="status"),
+                io.String.Output(display_name="summary"),
+            ],
+        )
+
+    @classmethod
+    def execute(
+        cls,
+        target_width: int,
+        target_height: int,
+        target_seconds: float,
+        fps: int,
+    ) -> io.NodeOutput:
+        width, height = _snap_dimensions(target_width, target_height)
+        frames, actual_seconds = _snap_frames(target_seconds, fps)
+        latent_volume = (width // 32) * (height // 32) * ((frames - 1) // 8 + 1)
+
+        if latent_volume <= _LTX_LATENT_VOLUME_OK_MAX:
+            category = "OK"
+        elif latent_volume <= _LTX_LATENT_VOLUME_EDGE_MAX:
+            category = "NEAR_EDGE"
+        else:
+            category = "OVER_EDGE"
+        status = (
+            f"{category}: latent_volume={latent_volume} "
+            f"(ok<={_LTX_LATENT_VOLUME_OK_MAX}, edge<={_LTX_LATENT_VOLUME_EDGE_MAX})"
+        )
+
+        # Human-readable summary; surface input vs snapped values when they differ
+        snap_notes = []
+        if (target_width, target_height) != (width, height):
+            snap_notes.append(f"size {target_width}x{target_height} -> {width}x{height}")
+        if abs(actual_seconds - target_seconds) > 1e-3:
+            snap_notes.append(f"window {target_seconds:.2f}s -> {actual_seconds:.2f}s ({frames} frames)")
+        snap_str = " (snapped: " + "; ".join(snap_notes) + ")" if snap_notes else ""
+
+        summary = (
+            f"{width}x{height}, {actual_seconds:.2f}s @ {fps}fps, "
+            f"{frames} frames, latent volume {latent_volume} ({category})"
+            + snap_str
+        )
+
+        return io.NodeOutput(
+            width, height, frames, actual_seconds,
+            fps, float(fps),
+            latent_volume, status, summary,
+        )
 
 
 class ConditioningBlend(io.ComfyNode):
@@ -2780,6 +3033,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             AudioDuration,
             AudioPitchDetect,
             LTXResolutionFromAspect,
+            LTXFramePlanner,
             LTXVCropGuidesNoLatent,
             KeyframeImageSchedule,
             KeyframeLatentScheduleBatchEncode,
