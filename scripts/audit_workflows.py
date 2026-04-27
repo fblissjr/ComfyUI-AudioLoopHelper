@@ -274,6 +274,34 @@ def _audit_one(wf_path: Path) -> list[Finding]:
             record("OK", "frame_planner_present",
                    "LTXFramePlanner is the single source for dim/fps config")
 
+    # Active LTXVTiledVAEDecode nodes should run [1,1,1] (single-tile)
+    # on production workflows. Tiled decode pays per-tile prepare/stage
+    # overhead that exceeds activation savings on 24GB+ cards. Empirical:
+    # [2,2,1] cold-pass 143s vs [1,1,1] cold-pass 47s (~3x). WARN not
+    # ERR because [2,2,1] is the safe fallback for ≤16GB cards. See
+    # scripts/apply_no_tile_vae_decode.py.
+    decoders = by_type.get("LTXVTiledVAEDecode", [])
+    tile_violations = []
+    for d in decoders:
+        if d.get("mode", 0) == 4:
+            continue  # bypassed; user choice
+        wv = d.get("widgets_values") or []
+        # Only flag nodes with downstream consumers; dead nodes are
+        # ComfyUI-skipped at runtime.
+        outs = d.get("outputs") or []
+        if not any(o.get("links") for o in outs):
+            continue
+        if len(wv) >= 3 and (wv[0] != 1 or wv[1] != 1):
+            tile_violations.append(f"#{d.get('id')} {wv[0]}x{wv[1]}")
+    if tile_violations:
+        record("WARN", "vae_decode_no_tile",
+               f"{', '.join(tile_violations)} not at [1,1,1] (3x slower cold-pass on 24GB). "
+               f"Run scripts/apply_no_tile_vae_decode.py if on 24GB+; "
+               f"keep tiled if on ≤16GB.")
+    elif decoders:
+        record("OK", "vae_decode_no_tile",
+               "active LTXVTiledVAEDecode at [1,1,1] (single-tile)")
+
     # Prompt schedule
     batch = by_type.get("TimestampPromptScheduleBatchEncode", [])
     legacy_cache = by_type.get("CachedTextEncode_AudioLoop", [])

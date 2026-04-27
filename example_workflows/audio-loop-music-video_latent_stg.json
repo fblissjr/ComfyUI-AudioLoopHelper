@@ -2400,8 +2400,8 @@
         "Node name for S&R": "LTXVTiledVAEDecode"
       },
       "widgets_values": [
-        2,
-        2,
+        1,
+        1,
         1,
         true,
         "auto",
@@ -3767,8 +3767,8 @@
         "Node name for S&R": "LTXVTiledVAEDecode"
       },
       "widgets_values": [
-        2,
-        2,
+        1,
+        1,
         1,
         true,
         "auto",
