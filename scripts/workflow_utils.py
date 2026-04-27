@@ -60,6 +60,67 @@ def _current_run_id() -> str | None:
     return raw or None
 
 
+_PER_PROMPT_ENV = "AUDIOLOOPHELPER_PER_PROMPT"
+_PER_PROMPT_TRUTHY = {"1", "true", "yes", "on", "auto"}
+
+
+def _per_prompt_enabled() -> bool:
+    """True iff the operator opted into per-prompt subdirectory routing.
+
+    Off by default — keeps `data/runs/${RUN_ID}/` flat for tools that
+    submit one prompt per ComfyUI launch (the original assumption).
+    Multi-prompt-per-session bench tools (sage-fork's bench_e2e_ltx)
+    set this so each prompt's telemetry lands in its own subdir without
+    needing to restart ComfyUI between bench iterations.
+    """
+    return os.environ.get(_PER_PROMPT_ENV, "").strip().lower() in _PER_PROMPT_TRUTHY
+
+
+def _current_prompt_id() -> str | None:
+    """Read the active prompt_id from ComfyUI's executing-context.
+
+    ComfyUI exposes the currently-running prompt via a contextvar in
+    `comfy_execution.utils.get_executing_context()`. Returns None when:
+      - we're outside a /prompt execution (e.g. graph-build, tests),
+      - ComfyUI isn't importable (module loaded standalone), OR
+      - the contextvar is set but its prompt_id is None.
+
+    Lazy import so non-ComfyUI consumers (pytest, debug scripts) don't
+    pay the import cost or fail when ComfyUI isn't on sys.path. Same
+    pattern as `nodes_sage._prompt_id_from_kwargs`.
+    """
+    try:
+        from comfy_execution.utils import get_executing_context
+    except ImportError:
+        return None
+    ctx = get_executing_context()
+    if ctx is None:
+        return None
+    pid = getattr(ctx, "prompt_id", None)
+    return str(pid) if pid is not None else None
+
+
+def _run_artifact_root() -> Path | None:
+    """Resolve the per-run (and optionally per-prompt) root dir under
+    `data/runs/`. Returns None when RUN_ID is unset (caller falls back
+    to the legacy `internal/analysis/runs/` path).
+
+    Centralizes the per-prompt-routing logic so every caller of
+    `run_artifact_path` and `run_artifact_dir` honors the same toggle —
+    that's the holistic-fix property: opting in once benefits every
+    current and future telemetry consumer.
+    """
+    run_id = _current_run_id()
+    if run_id is None:
+        return None
+    root = DATA_RUNS_DIR / run_id
+    if _per_prompt_enabled():
+        prompt_id = _current_prompt_id()
+        if prompt_id is not None:
+            root = root / prompt_id
+    return root
+
+
 def run_artifact_path(category: str, ext: str) -> Path:
     """Path for a per-render artifact, honoring the `RUN_ID` env var.
 
@@ -68,6 +129,11 @@ def run_artifact_path(category: str, ext: str) -> Path:
     directory, making cross-system correlation (exec_log + sage trace +
     profiler + output mp4) trivial.
 
+    With `RUN_ID` + `AUDIOLOOPHELPER_PER_PROMPT=1` AND an active
+    executing-context: `data/runs/${RUN_ID}/${prompt_id}/<category>.<ext>`.
+    Lets multi-prompt-per-session bench tools keep traces from different
+    prompts isolated without restarting ComfyUI.
+
     Without `RUN_ID`: falls back to the legacy
     `timestamped_run_path(category, category, ext)` shape so existing
     tooling that runs without the experiment harness keeps working.
@@ -75,12 +141,12 @@ def run_artifact_path(category: str, ext: str) -> Path:
     Diagnosed 2026-04-26 — three loggers stamping `time.time()` at
     different startup moments produced filenames that looked unrelated
     despite coming from the same render. Single env var fixes it.
+    Per-prompt routing added 2026-04-27 for sage-fork's bench harness.
     """
-    run_id = _current_run_id()
-    if run_id is not None:
-        out_dir = DATA_RUNS_DIR / run_id
-        out_dir.mkdir(parents=True, exist_ok=True)
-        return out_dir / f"{category}.{ext}"
+    root = _run_artifact_root()
+    if root is not None:
+        root.mkdir(parents=True, exist_ok=True)
+        return root / f"{category}.{ext}"
     return timestamped_run_path(category, category, ext)
 
 
@@ -92,15 +158,15 @@ def run_artifact_dir(subdir: str = "") -> Path:
     memory_timeline.html, frame sequences, etc.).
 
     With `RUN_ID` set: `data/runs/${RUN_ID}/<subdir>/` (or
-    `data/runs/${RUN_ID}/` when subdir is empty). Without RUN_ID, falls
+    `data/runs/${RUN_ID}/` when subdir is empty). When
+    `AUDIOLOOPHELPER_PER_PROMPT=1` and an executing-context is active,
+    inserts `${prompt_id}` before `<subdir>`. Without RUN_ID, falls
     back to a legacy timestamped dir under `internal/analysis/runs/`.
     Creates the directory if missing.
     """
-    run_id = _current_run_id()
-    if run_id is not None:
-        target = DATA_RUNS_DIR / run_id
-        if subdir:
-            target = target / subdir
+    root = _run_artifact_root()
+    if root is not None:
+        target = root / subdir if subdir else root
         target.mkdir(parents=True, exist_ok=True)
         return target
     return timestamped_run_dir(RUNS_DIR / subdir if subdir else RUNS_DIR)

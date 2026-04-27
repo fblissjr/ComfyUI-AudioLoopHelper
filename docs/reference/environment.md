@@ -1,4 +1,4 @@
-Last updated: 2026-04-26
+Last updated: 2026-04-27
 
 # Environment variables reference
 
@@ -16,6 +16,7 @@ helper.
 | `COMFYUI_EXEC_LOG` | unset → exec logger inactive | `start_experiment.sh` | `exec_logger.py::_resolve_log_target` |
 | `COMFYUI_EXEC_LOG_SHAPE_LIMIT` | unset → 8 items per list/dict shape snapshot | manual | `exec_logger.py::_shape_of` |
 | `AUDIOLOOPHELPER_SAGE_TRACE` | unset → sage tracer inactive | `start_experiment.sh` | `nodes_sage.py::resolve_trace_path` |
+| `AUDIOLOOPHELPER_PER_PROMPT` | unset → flat `data/runs/${RUN_ID}/` (current behavior) | manual / multi-prompt bench harnesses | `scripts/workflow_utils.py::_per_prompt_enabled` |
 | `COMFYUI_API_URL` | unset → `http://<local_comfyui_host>:<port>` (ComfyUI's loopback default, e.g. `localhost` on port `8188` for a stock install) | manual / Phase-2 harness | `internal/autoresearch/harness.py::_api_url` |
 | `COMFYUI_OUTPUT_DIR` | unset → harness skips mp4 symlinking; video-content metrics report `*_status: video_missing` | manual (point at ComfyUI's VHS output dir) | `internal/autoresearch/harness.py::_locate_and_link_output_mp4` |
 
@@ -111,6 +112,35 @@ does not install.
 **Auto path**: routes through `run_artifact_path("sage", "jsonl")` →
 `data/runs/${RUN_ID}/sage.jsonl` when `RUN_ID` is set, else
 `internal/analysis/runs/sage/sage_<TS>.jsonl`.
+
+### `AUDIOLOOPHELPER_PER_PROMPT`
+
+**Values**: `1` / `true` / `yes` / `on` / `auto` (per-prompt routing
+on); unset/empty/anything else → off (current flat behavior).
+
+**Read by**: `scripts/workflow_utils.py::_per_prompt_enabled` —
+consulted by `run_artifact_path` and `run_artifact_dir` on every call.
+
+**Effect**: when on AND ComfyUI's executing-context contextvar has a
+`prompt_id` (we're inside a `/prompt` execution), the auto-path moves
+from `data/runs/${RUN_ID}/<cat>.<ext>` to
+`data/runs/${RUN_ID}/${prompt_id}/<cat>.<ext>`. All telemetry consumers
+(`exec_logger`, `nodes_sage`, `ProfileBegin`'s torch.profiler) inherit
+this for free since they share the same chokepoint helpers. Falls back
+to the flat path when no executing-context is active (graph-build
+phase, debug scripts, tests).
+
+**Why opt-in**: the original assumption was one prompt per ComfyUI
+launch — `start_experiment.sh` exports a fresh `RUN_ID` and that's the
+correlation key. Multi-prompt-per-session bench tools (sage-fork's
+`bench_e2e_ltx.py` submits N workflows in one ComfyUI session) want
+per-prompt isolation without a ComfyUI restart between iterations.
+Default-off keeps the flat layout that existing tooling expects;
+opt-in for the bench case. Added 2026-04-27.
+
+**Set by**: manually only (export in shell or before invoking the bench
+harness). Not auto-set by `start_experiment.sh` to avoid surprising
+single-prompt users with a layout change.
 
 ### `COMFYUI_API_URL` (planned, Phase 2)
 

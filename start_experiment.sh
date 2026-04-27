@@ -1,10 +1,11 @@
 #!/bin/bash
 # start_experiment.sh — telemetry-enabled wrapper around ComfyUI's start.sh.
 #
-# Owns three env-var exports that make this plugin's instrumentation work:
+# Owns four env-var exports that make this plugin's instrumentation work:
 #   - RUN_ID                       (single correlation key for one render)
 #   - AUDIOLOOPHELPER_SAGE_TRACE   (per-attention-call sage tracer)
 #   - COMFYUI_EXEC_LOG             (per-node ComfyUI execution logger)
+#   - AUDIOLOOPHELPER_PER_PROMPT   (route artifacts under data/runs/${RUN_ID}/${prompt_id}/; off by default — only relevant for multi-prompt-per-session bench tools like sage-fork's bench_e2e_ltx)
 #
 # All three default to "auto" (or auto-generated, for RUN_ID) when unset,
 # so just running `./start_experiment.sh [mode]` gets you a fully-traced
