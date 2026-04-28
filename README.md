@@ -1,6 +1,10 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-04-27
+<p align="center">
+  <img src="assets/hero.webp" alt="ComfyUI-AudioLoopHelper" width="500">
+</p>
+
+Last updated: 2026-04-28
 
 **TLDR**: Custom ComfyUI nodes for generating full-length music videos with LTX 2.3.
 Handles loop timing, auto-stopping at the audio boundary, per-iteration seed
