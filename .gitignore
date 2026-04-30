@@ -3,8 +3,19 @@ __pycache__
 *.code-workspace
 .history
 .vscode
-.claude
+
+# Claude Code harness — track shared agents/skills/hooks/settings.json,
+# but keep per-user and per-machine state local. settings.local.json
+# (Claude Code convention) holds machine-specific permissions + the
+# ComfyUI-loader smoke test. privacy_patterns.local.json holds the
+# literal leak patterns scanned by .claude/hooks/privacy_guard.py.
+# cross-repo-handoff/ depends on a sister-repo symlink other clones
+# don't have.
+.claude/settings.local.json
+.claude/privacy_patterns.local.json
+.claude/skills/cross-repo-handoff/
 .claude.local.md
+
 internal/
 coderef/
 .pytest_cache

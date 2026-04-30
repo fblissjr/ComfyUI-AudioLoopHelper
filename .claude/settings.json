@@ -1,0 +1,81 @@
+{
+  "_comment": "Committed, machine-portable Claude Code settings. Per-user permissions and ComfyUI-loader smoke test live in settings.local.json (gitignored). Hook commands use ${CLAUDE_PROJECT_DIR} so they work on any clone.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PROJECT_DIR}/.claude/hooks/privacy_guard.py",
+            "timeout": 3000
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'if echo \"$CLAUDE_TOOL_INPUT\" | grep -qE \"example_workflows/.*\\\\.json\"; then echo \"NOTICE: direct workflow-JSON edit. Convention is that workflow changes go through scripts/apply_*.py (idempotent, reviewable). Proceed only if this is a one-off tweak; otherwise consider writing or extending an apply script.\" >&2; fi'",
+            "timeout": 1000
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'path=$(echo \"$CLAUDE_TOOL_INPUT\" | grep -oE \"example_workflows/[^\\\"]+\\\\.json\" | head -1); if [ -n \"$path\" ]; then cd ${CLAUDE_PROJECT_DIR} && python3 scripts/test_workflow_integrity.py \"$path\"; fi'",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'if echo \"$CLAUDE_TOOL_INPUT\" | grep -q \"nodes\\\\.py\\\\|nodes_analysis\\\\.py\\\\|__init__\\\\.py\"; then echo \"WARNING: nodes.py schema changed. Existing workflows may have stale slot indices. Users must delete and re-add modified nodes in ComfyUI.\"; fi'",
+            "timeout": 2000
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PROJECT_DIR}/.claude/hooks/doc_date_check.py",
+            "timeout": 2000
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'cd ${CLAUDE_PROJECT_DIR} && f=\"internal/log/log_$(date +%Y-%m-%d).md\"; if [ ! -f \"$f\" ] || ! grep -q \"$(date +%Y-%m-%d)\" \"$f\"; then echo \"REMINDER: no session-log entry for $(date +%Y-%m-%d). Append one to $f (doc-conventions: ALWAYS update session log before finishing a session or iteration of work).\" >&2; fi'",
+            "timeout": 2000
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/check_memo_inbox.sh",
+            "timeout": 2000
+          }
+        ]
+      }
+    ]
+  }
+}

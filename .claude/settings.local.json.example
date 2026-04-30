@@ -1,0 +1,24 @@
+{
+  "_comment": "EXAMPLE template. Copy to settings.local.json and edit for your machine. Gitignored. Merges with .claude/settings.json (committed). Provides per-user Read permissions for paths outside the repo and the ComfyUI-loader smoke test which needs the absolute path to your ComfyUI install.",
+  "permissions": {
+    "allow": [
+      "Bash(git diff *)",
+      "Read(//tmp/**)",
+      "Read(//path/to/your/ComfyUI/models/**)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'if echo \"$CLAUDE_TOOL_INPUT\" | grep -q \"nodes\\\\.py\\\\|nodes_analysis\\\\.py\\\\|__init__\\\\.py\"; then cd /path/to/your/ComfyUI && python -c \"import asyncio; import nodes as n; r=asyncio.run(n.load_custom_node(\\\"custom_nodes/ComfyUI-AudioLoopHelper\\\", module_parent=\\\"custom_nodes\\\")); print(\\\"ComfyUI loader: OK\\\" if r else \\\"COMFYUI LOADER FAILED\\\"); exit(0 if r else 1)\" 2>&1; fi'",
+            "timeout": 10000
+          }
+        ]
+      }
+    ]
+  }
+}

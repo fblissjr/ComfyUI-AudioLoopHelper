@@ -1,6 +1,6 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-04-27
+Last updated: 2026-04-30
 
 ComfyUI nodes that automate loop timing + audio analysis for full-length music video generation with LTX 2.3. Core pattern: `AudioLoopController` drives stride from integer latent counts, audio is frozen via `noise_mask=0`, prompts pre-encoded once outside the loop (CLIP must never enter the loop body). **Start here:** `docs/architecture_overview.md`; task-first nav at `docs/README.md`.
 
@@ -175,7 +175,7 @@ Two non-negotiable rules from that reference:
 - **Breaking changes trigger docs sweep** — add stale phrase to `scripts/validate_docs_consistency.py::STALE_PATTERNS`; `tests/test_docs_consistency.py` fails until fixed.
 - **Last-updated date at top of every doc** (`Last updated: YYYY-MM-DD`).
 - **Trim public + archive full** for reference docs >1000 lines. Public in `docs/reference/` → summary; full → `internal/archive/` (gitignored).
-- **internal skill state is gitignored** — local Claude Code automations only.
+- **`.claude/` harness is tracked, NOT gitignored.** Agents/skills/hooks/`settings.json` are shared via git so contributors get the same automation. Per-user state lives in `*.local.*` files (`settings.local.json`, `privacy_patterns.local.json`, `skills/cross-repo-handoff/`) which ARE gitignored. Full conventions for editing the harness: **`.claude/CLAUDE.md`**. Audit baseline (when present): `internal/analysis/harness_analysis.md` (gitignored). Drift protection: schedule a periodic re-audit via `/schedule` — routine IDs are per-account.
 
 ## Documentation layout
 
@@ -184,6 +184,16 @@ Public docs: `docs/README.md` (task-first nav) → `docs/guides/` (how-to), `doc
 Reference codebases (read-only): `coderef/LTX-2/` (LTX-2 native), `coderef/LTX-Desktop/` (Lightricks Desktop), `<comfyui_custom_nodes>/ComfyUI-LTXVideo/` (ComfyUI LTX integration).
 
 Example workflows (`example_workflows/`): seven shipped — `_image.json`, `_image_adain_perstep.json`, `_latent.json` (primary), `_latent_keyframe.json`, `_latent_stg.json`, `_latent_validator.json`, `_retake.json` (regenerate one section of a prior generation; built by `scripts/apply_audio_loop_retake.py`). All on `AudioLoopHelperSageAttention auto_mask_aware`. Validate via `scripts/audit_workflows.py`.
+
+Claude Code harness (`.claude/`, mostly tracked):
+- `.claude/CLAUDE.md` — conventions for editing harness contents (hook authoring, agent/skill rules, privacy abstraction, settings split). Read before adding/modifying anything under `.claude/`.
+- `.claude/README.md` — human-oriented contributor overview.
+- `.claude/agents/` — 4 subagents (`workflow-validator`, `conditioning-path-auditor`, `ltx-constraints-auditor`, `privacy-scrubber`).
+- `.claude/skills/` — 11 user-invokable workflows.
+- `.claude/hooks/` — `privacy_guard.py` (PreToolUse Write/Edit), `doc_date_check.py` (PostToolUse), `check_memo_inbox.sh` (SessionStart).
+- `.claude/settings.json` — shared hook wiring; uses `${CLAUDE_PROJECT_DIR}` for portability.
+- `.claude/settings.local.json` (gitignored) — per-user permissions + ComfyUI-loader smoke test.
+- `.claude/privacy_patterns.local.json` (gitignored) — literal leak patterns consumed by `privacy_guard.py`. Refactored 2026-04-30 so the harness files themselves stay public-clean.
 
 Internal (gitignored):
 - `internal/PLAN.md` — active roadmap.
