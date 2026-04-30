@@ -175,7 +175,8 @@ Two non-negotiable rules from that reference:
 - **Breaking changes trigger docs sweep** — add stale phrase to `scripts/validate_docs_consistency.py::STALE_PATTERNS`; `tests/test_docs_consistency.py` fails until fixed.
 - **Last-updated date at top of every doc** (`Last updated: YYYY-MM-DD`).
 - **Trim public + archive full** for reference docs >1000 lines. Public in `docs/reference/` → summary; full → `internal/archive/` (gitignored).
-- **`.claude/` harness is tracked, NOT gitignored.** Agents/skills/hooks/`settings.json` are shared via git so contributors get the same automation. Per-user state lives in `*.local.*` files (`settings.local.json`, `privacy_patterns.local.json`, `skills/cross-repo-handoff/`) which ARE gitignored. Full conventions for editing the harness: **`.claude/CLAUDE.md`**. Audit baseline (when present): `internal/analysis/harness_analysis.md` (gitignored). Drift protection: schedule a periodic re-audit via `/schedule` — routine IDs are per-account.
+- **`.claude/` harness is tracked, NOT gitignored.** Agents/skills/hooks/`settings.json` are shared via git so contributors get the same automation. Per-user state lives in `*.local.*` files (`settings.local.json`, `<repo-root>/.path-privacy.local.json`, `skills/cross-repo-handoff/`) which ARE gitignored. Full conventions for editing the harness: **`.claude/CLAUDE.md`**. Audit baseline (when present): `internal/analysis/harness_analysis.md` (gitignored). Drift protection: schedule a periodic re-audit via `/schedule` — routine IDs are per-account.
+- **Path-privacy enforcement comes from the `path-privacy` plugin** (in the `fb-claude-skills` marketplace), not from in-repo hooks. Plugin provides PreToolUse Write/Edit blocking + git pre-commit/commit-msg hooks + SessionStart directive + `find-external-paths.sh` (audit) + `scrub-paths.sh` (apply fixes with diff preview). Per-repo suggestion config lives at `<repo-root>/.path-privacy.local.json` (gitignored). Install the plugin's git hooks once per clone via `bash <plugin-root>/skills/path-privacy/skills/path-privacy/scripts/install-git-hooks.sh`.
 
 ## Documentation layout
 
@@ -188,12 +189,12 @@ Example workflows (`example_workflows/`): seven shipped — `_image.json`, `_ima
 Claude Code harness (`.claude/`, mostly tracked):
 - `.claude/CLAUDE.md` — conventions for editing harness contents (hook authoring, agent/skill rules, privacy abstraction, settings split). Read before adding/modifying anything under `.claude/`.
 - `.claude/README.md` — human-oriented contributor overview.
-- `.claude/agents/` — 4 subagents (`workflow-validator`, `conditioning-path-auditor`, `ltx-constraints-auditor`, `privacy-scrubber`).
-- `.claude/skills/` — 11 user-invokable workflows.
-- `.claude/hooks/` — `privacy_guard.py` (PreToolUse Write/Edit), `doc_date_check.py` (PostToolUse), `check_memo_inbox.sh` (SessionStart).
+- `.claude/agents/` — 3 subagents (`workflow-validator`, `conditioning-path-auditor`, `ltx-constraints-auditor`). Privacy-scrubbing now comes from the `path-privacy` plugin.
+- `.claude/skills/` — 10 user-invokable workflows. (Privacy scrub now via the plugin's `scrub-paths.sh`.)
+- `.claude/hooks/` — `doc_date_check.py` (PostToolUse), `check_memo_inbox.sh` (SessionStart). Privacy enforcement now via the `path-privacy` plugin's hooks.
 - `.claude/settings.json` — shared hook wiring; uses `${CLAUDE_PROJECT_DIR}` for portability.
 - `.claude/settings.local.json` (gitignored) — per-user permissions + ComfyUI-loader smoke test.
-- `.claude/privacy_patterns.local.json` (gitignored) — literal leak patterns consumed by `privacy_guard.py`. Refactored 2026-04-30 so the harness files themselves stay public-clean.
+- `<repo-root>/.path-privacy.local.json` (gitignored) — literal-substring suggestion config consumed by the `path-privacy` plugin.
 
 Internal (gitignored):
 - `internal/PLAN.md` — active roadmap.
