@@ -1,17 +1,7 @@
 {
-  "_comment": "Committed, machine-portable Claude Code settings. Per-user permissions and ComfyUI-loader smoke test live in settings.local.json (gitignored). Hook commands use ${CLAUDE_PROJECT_DIR} so they work on any clone.",
+  "_comment": "Committed, machine-portable Claude Code settings. Per-user permissions and ComfyUI-loader smoke test live in settings.local.json (gitignored). Hook commands use ${CLAUDE_PROJECT_DIR} so they work on any clone. Path-privacy enforcement (Write/Edit + git pre-commit/commit-msg) is provided by the path-privacy plugin from the fb-claude-skills marketplace; this file no longer ships a custom privacy hook.",
   "hooks": {
     "PreToolUse": [
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PROJECT_DIR}/.claude/hooks/privacy_guard.py",
-            "timeout": 3000
-          }
-        ]
-      },
       {
         "matcher": "Write|Edit",
         "hooks": [

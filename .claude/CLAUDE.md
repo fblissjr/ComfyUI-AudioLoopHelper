@@ -27,9 +27,9 @@ agent description silently misroutes invocations.
 | `settings.json` | yes | Hook wiring; uses `${CLAUDE_PROJECT_DIR}` for portability |
 | `README.md` | yes | Human contributor overview |
 | `CLAUDE.md` | yes | This file — Claude-facing conventions |
-| `*.local.json.example` | yes | Templates for the gitignored variants |
+| `settings.local.json.example` | yes | Template for the gitignored `settings.local.json` |
 | `settings.local.json` | **NO** | Per-user permissions + ComfyUI-loader smoke test |
-| `privacy_patterns.local.json` | **NO** | Literal leak patterns for `hooks/privacy_guard.py` |
+| `<repo-root>/.path-privacy.local.json` | **NO** | Literal-substring suggestion config consumed by the `path-privacy` plugin (loaded by its `pre-tool-use.sh` + `find-external-paths.sh` + `scrub-paths.sh`) |
 | `skills/cross-repo-handoff/` | **NO** | Sister-repo coordination (sage-fork symlink dependency) |
 
 `.gitignore` carries selective rules — see root `.gitignore` lines for
@@ -85,16 +85,24 @@ any new `*.local.*` file you introduce.
 
 ### Privacy
 
-- The hook `hooks/privacy_guard.py` blocks public-file writes that contain
-  patterns from `privacy_patterns.local.json` (gitignored). If absent, it
-  falls back to a generic `/home/<user>/` regex.
-- **Never inline literal private patterns** (your specific username, your
-  ComfyUI path) into committed `.claude/` files. The `privacy-scrubber`
-  agent and `scrub-for-public` skill reference the gitignored config by
-  pointer, not by inlining.
-- The hook's own pattern source contains exempt examples (the regex strings
-  themselves) — that's intentional, but the comment at the relevant call
-  site explains why so future reviewers don't strip them as leaks.
+- Path-privacy enforcement comes from the `path-privacy` plugin in the
+  `fb-claude-skills` marketplace, NOT from in-repo hooks. The plugin
+  ships a PreToolUse Write/Edit hook (blocks at edit time), git
+  pre-commit + commit-msg hooks (block at commit time), and a
+  SessionStart directive (so Claude knows the rule).
+- Suggestion config lives at `<repo-root>/.path-privacy.local.json`
+  (gitignored). The plugin's scanner uses it to emit `→ use:`
+  actionable hints; its `scrub-paths.sh` uses the same entries for
+  one-command fixes (with diff preview + opt-in `--apply`).
+- **Never inline literal private patterns** (your specific username,
+  your ComfyUI path) into committed `.claude/` files. Use placeholder
+  forms (`<user>`, `<comfyui>`, `${CLAUDE_PROJECT_DIR}`) or repo-relative
+  paths. The plugin's pre-commit hook will hard-block leaks; do not
+  bypass with `--no-verify`.
+- For files that legitimately need to mention path shapes (regex source,
+  doc examples, this file), use the plugin's escape hatches:
+  `<!-- path-privacy: skip-file -->` near the top of the file, or
+  `# path-privacy: ignore` on individual lines.
 
 ### Settings split
 
@@ -109,14 +117,14 @@ any new `*.local.*` file you introduce.
 
 ## When you're about to ship a change here
 
-1. **Privacy**: run `python3 .claude/hooks/privacy_guard.py` mentally —
-   does anything you wrote contain `/home/<user>/`, your username, or a
-   personal-storage path?
+1. **Privacy**: the path-privacy plugin's PreToolUse hook will block
+   leaks at edit time, and its pre-commit/commit-msg hooks block at
+   commit time. To audit the working tree on demand:
+   `bash <plugin-root>/skills/path-privacy/skills/path-privacy/scripts/find-external-paths.sh -d .`
 2. **JSON validity**: `python3 -c "import json; json.load(open('.claude/X.json'))"`
    on every JSON file you touched.
 3. **Hook smoke test**: if you changed a hook, run it against a synthetic
-   payload via stdin (see the `_scan` smoke test pattern in privacy_guard's
-   docstring) before declaring it shipped.
+   payload via stdin before declaring it shipped.
 4. **gitignore check**: `git ls-files --others --exclude-standard .claude/`
    to confirm gitignores are doing what you expect.
 5. **Update root CLAUDE.md** if a convention changed (where the root file

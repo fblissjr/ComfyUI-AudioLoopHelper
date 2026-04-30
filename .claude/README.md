@@ -14,16 +14,13 @@ stay per-user (see "Local-only files" below).
 ├── README.md                       (this file)
 ├── settings.json                   (committed — portable hooks)
 ├── settings.local.json             (gitignored — per-user permissions + ComfyUI loader test)
-├── privacy_patterns.local.json     (gitignored — literal leak patterns for privacy_guard.py)
 ├── agents/
 │   ├── conditioning-path-auditor.md
 │   ├── ltx-constraints-auditor.md
-│   ├── privacy-scrubber.md
 │   └── workflow-validator.md
 ├── hooks/
 │   ├── check_memo_inbox.sh         (SessionStart)
-│   ├── doc_date_check.py           (PostToolUse Write/Edit)
-│   └── privacy_guard.py            (PreToolUse Write/Edit; loads patterns from privacy_patterns.local.json)
+│   └── doc_date_check.py           (PostToolUse Write/Edit)
 └── skills/
     ├── apply-script-scaffold/
     ├── audio-analyze/
@@ -34,9 +31,13 @@ stay per-user (see "Local-only files" below).
     ├── prompt-schedule/
     ├── release-notes/
     ├── sage-trace-summary/
-    ├── scrub-for-public/
     └── workflow-edit/
 ```
+
+Path-privacy enforcement (Write/Edit + git pre-commit/commit-msg) and the
+companion `scrub` workflow now come from the `path-privacy` plugin in the
+`fb-claude-skills` marketplace, not from in-repo hooks/agents/skills. See
+"Path privacy" below.
 
 ## Local-only files
 
@@ -46,16 +47,13 @@ These are not in git. Each new clone needs to either ignore them
 | File | Purpose | What to do on first clone |
 |---|---|---|
 | `settings.local.json` | Per-user permissions + ComfyUI loader smoke test (needs the path to your ComfyUI install) | Copy from `settings.local.json.example` and edit; OR omit entirely — settings.json provides the portable hooks |
-| `privacy_patterns.local.json` | Regex patterns for `privacy_guard.py` to scan public files for. Holds private absolute paths + usernames. | Copy from `privacy_patterns.local.json.example` and edit; OR omit — `privacy_guard.py` falls back to a generic absolute-home-path catch-all |
+| `<repo-root>/.path-privacy.local.json` | Suggestion config consumed by the `path-privacy` plugin (literal-substring → placeholder mappings used in `→ use:` diagnostic and by `scrub-paths.sh`). | Copy the starter from `<plugin-root>/skills/path-privacy/skills/path-privacy/references/path-privacy.local.json.example` and edit for your machine; OR omit — the plugin's scanner falls back to a generic `/home/<user>/` regex | <!-- path-privacy: ignore -->
 | `skills/cross-repo-handoff/` | Memo channel between this Claude session and a sister sage-fork session. Depends on `coderef/sage-fork/` symlink. | Skip unless you're working on the sage-fork too |
 
 ## How the hooks compose
 
 `settings.json` (committed) provides:
 
-- **PreToolUse Write/Edit**: `privacy_guard.py` blocks public-file writes
-  containing private patterns (loaded from `privacy_patterns.local.json`,
-  or a generic fallback).
 - **PreToolUse Write/Edit**: notice when editing `example_workflows/*.json`
   directly — convention is to use `scripts/apply_*.py` instead.
 - **PostToolUse Write/Edit**: workflow integrity validator
@@ -71,6 +69,17 @@ These are not in git. Each new clone needs to either ignore them
 needs to know where your ComfyUI install lives — this is intentionally
 not committed because it differs across machines.
 
+The `path-privacy` plugin (installed via the `fb-claude-skills`
+marketplace) layers on:
+
+- **PreToolUse Write/Edit**: blocks writes that would introduce a path
+  leak before bytes hit disk.
+- **SessionStart**: injects the path-privacy directive so Claude knows
+  the rule.
+- **Git pre-commit + commit-msg**: hard-block leaks in staged files,
+  commit messages, and branch names. Install via
+  `bash <plugin-root>/skills/path-privacy/skills/path-privacy/scripts/install-git-hooks.sh`.
+
 > **Note**: the agent + skill tables below are hand-maintained for at-a-glance
 > readability. Each agent's `description:` frontmatter is the source of truth
 > if these go stale.
@@ -82,7 +91,10 @@ not committed because it differs across machines.
 | `workflow-validator` | "is this workflow JSON shaped correctly?" — runs `scripts/audit_workflows.py` first, then drills into IMAGE vs LATENT specifics |
 | `conditioning-path-auditor` | "are CONDITIONING flows symmetric between initial render and loop body?" — catches the frame_rate-metadata-asymmetry bug class |
 | `ltx-constraints-auditor` | "does this workflow honor LTX 2.3 critical constraints?" — sigma chain, decoder tile, noise_mask, etc. (semantic, not structural) |
-| `privacy-scrubber` | "is anything I'm about to commit leaking private paths?" — read-only audit; pair with `/scrub-for-public` for fixes |
+
+For privacy auditing, use the `path-privacy` plugin: `bash
+<plugin-root>/skills/path-privacy/skills/path-privacy/scripts/find-external-paths.sh
+-d .` (audit) or `... scrub-paths.sh -d .` (preview fixes).
 
 ## How the skills compose
 
@@ -96,8 +108,25 @@ not committed because it differs across machines.
 | `prompt-schedule` | generating prompt-schedule variations from audio + init image |
 | `release-notes` | drafting next CHANGELOG.md section from commits since last release |
 | `sage-trace-summary` | post-gen sage telemetry report (per-prompt + attribution + gate verdict) |
-| `scrub-for-public` | applying privacy-scrub fixes (with user confirmation) |
 | `workflow-edit` | editing workflow JSON via WorkflowEditor (avoids hand-rolled link splices) |
+
+## Path privacy
+
+This repo previously shipped a home-grown `privacy_guard.py` PreToolUse
+hook + `privacy-scrubber` agent + `scrub-for-public` skill. They were
+retired once the `path-privacy` plugin (in the `fb-claude-skills`
+marketplace) reached feature parity:
+
+| Old (in-repo) | New (plugin) |
+|---|---|
+| `.claude/hooks/privacy_guard.py` (PreToolUse Write/Edit blocker) | `path-privacy` plugin's `pre-tool-use.sh` hook |
+| `.claude/agents/privacy-scrubber.md` (audit) | `find-external-paths.sh` script (same surface, more robust) |
+| `.claude/skills/scrub-for-public/` (apply fixes) | `scrub-paths.sh` script (with `--apply` opt-in + diff preview) |
+| `.claude/privacy_patterns.local.json` (regex + replacements) | `<repo-root>/.path-privacy.local.json` (literal-substring suggestions; same purpose) |
+
+The plugin's `pre-commit` and `commit-msg` git hooks add a second
+defensive layer that the home-grown version didn't have. Install them
+once per clone via the plugin's `install-git-hooks.sh`.
 
 ## Maintenance
 
@@ -116,18 +145,3 @@ When you add a new fix that ships an apply script, also update any skill
 or agent that references the audit's named-check inventory — same rule
 as CLAUDE.md's "Bake new topology constraints into `audit_workflows.py`"
 mandate.
-
-## Alternative pre-built solutions
-
-The Claude Code marketplace has plugins that overlap with our home-grown
-harness. Worth evaluating before extending ours:
-
-- `path-privacy` — git pre-commit/commit-msg hooks that hard-block
-  external-path leaks. Could replace `hooks/privacy_guard.py` if its
-  ergonomics fit.
-- `scan-for-secrets` — wraps simonw/scan-for-secrets for literal +
-  regex-based leak detection. Could complement or replace
-  `agents/privacy-scrubber.md`.
-
-Our home-grown versions exist because the harness predates these plugins;
-no migration is currently planned.
