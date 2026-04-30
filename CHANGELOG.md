@@ -7,6 +7,43 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Video-reference IC-LoRA wiring (`scripts/apply_iclora_video_reference.py`)** —
+  in-loop `LTXAddVideoICLoRAGuide` driven by a reference video clip, mirroring
+  the canonical pattern from popular LTX 2.3 IC-LoRA HuggingFace repos
+  (cameraman, outpaint, union-control). Splices `LTXICLoRALoaderModelOnly` on
+  the top-level MODEL chain + `VHS_LoadVideo → ImageResizeKJv2 →
+  LTXVPreprocess(val=18) → SetNode → subgraph IMAGE input` for the ref-video
+  preprocessing chain (F2 symmetric with the init-image path) +
+  `GetImageRangeFromBatch` (KJNodes) + `LTXAddVideoICLoRAGuide` inside the loop
+  subgraph, downstream of `#1519 LTXVAddLatentGuide` and upstream of
+  `LTXVCropGuides[NoLatent]` (F3 symmetric). Static is the default widget
+  configuration of the sliding-capable wiring (`start_index=0`, `num_frames=25`);
+  switching to sliding mode is widget edits, not graph rebuild. Reference workflow
+  pattern: `internal/ref_workflows/ltx2.3-ic-lora-cameraman.json`. Decisions:
+  `internal/ic_lora_assessment.md` D19–D23.
+- **Three audit checks for video-reference IC-LoRA topology** (F12) —
+  `iclora_video_reference_guide_in_loop_with_cropguides` (ERR: guide CONDITIONING
+  outputs must reach CFGGuider via cropguides),
+  `iclora_loader_present_when_guide_present` (ERR: guide implies loader on top-level),
+  `iclora_ref_video_preprocess_symmetry` (ERR: `LTXVPreprocess(val=18)` must be
+  present on the ref-video chain). Fire only when `LTXAddVideoICLoRAGuide` is in
+  the subgraph; bail fast on workflows without it.
+- **`audit_workflows.py [path...]`** — positional path argument for auditing
+  arbitrary workflow JSONs (e.g. staged scratch files in `internal/scratch/`).
+  No-args still sweeps `example_workflows/` + audited `experimental/` subset.
+
+### Changed
+- **Stripped dead bypassed LoRA-loader scaffolding from the canonical**
+  (`scripts/apply_strip_dead_lora_loaders.py`). Three nodes (`#1625 LoraLoaderModelOnly`
+  "ID-LoRA File", `#1626 LTXICLoRALoaderModelOnly` "IC-LoRA File", `#1627
+  LoraLoaderModelOnly` "Style/Generic LoRA" with placeholder filename) were
+  inert (mode=4 → MODEL passes through unchanged) but suggested behavior the
+  workflow didn't have. Strict triple-match `(id, type, title, mode=4, file)`
+  preserves user customizations. Audit check `dead_lora_loader_scaffolding_absent`
+  (F11, ERR) prevents regression. Bridge link rebridges `#503.0 → #572.0`
+  directly (skipping the dead chain).
+
+### Added
 - **Phase 2.1 perceptual metric: `av_consistency`** — Perception
   Encoder PE-AV-16-frame (`facebook/pe-av-large-16-frame`,
   arxiv:2512.19687, **Apache-2.0**) joint audio-video-text embedding.

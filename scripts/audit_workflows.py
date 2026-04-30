@@ -249,6 +249,46 @@ def _audit_one(wf_path: Path) -> list[Finding]:
             record("OK", "planner_no_stride_input",
                    "computes stride internally (cycle-free)")
 
+    # Dead LoRA-loader scaffolding (id 1625/1626/1627). Three bypassed
+    # placeholder nodes were left in the canonical from earlier
+    # exploration; they're never wired to a guide and one points at a
+    # placeholder filename. Misleading UI clutter — strip via
+    # scripts/apply_strip_dead_lora_loaders.py. See that script's
+    # docstring for the full rationale.
+    _dead_scaffolding_sigs = (
+        (1625, "LoraLoaderModelOnly",
+         "ID-LoRA File (audio-conditioned identity)",
+         "LTX-2.3-ID-LoRA-CelebVHQ-3K/lora_weights.safetensors"),
+        (1626, "LTXICLoRALoaderModelOnly",
+         "IC-LoRA File (visual reference adapter)",
+         "MergeGreen_IC-lora_ltx2.3.safetensors"),
+        (1627, "LoraLoaderModelOnly",
+         "Style/Generic LoRA",
+         "your_style_lora.safetensors"),
+    )
+    _dead_matches = []
+    for nid, ntype, ntitle, nfile in _dead_scaffolding_sigs:
+        n = by_id.get(nid)
+        if n is None:
+            continue
+        if n.get("type") != ntype:
+            continue  # id collision with a different node type — ignore
+        if n.get("title") != ntitle:
+            continue  # user renamed; preserve their customization
+        if n.get("mode") != 4:
+            continue  # user un-bypassed; preserve their customization
+        widgets = n.get("widgets_values") or []
+        if not widgets or widgets[0] != nfile:
+            continue
+        _dead_matches.append(f"#{nid}")
+    if _dead_matches:
+        record("ERR", "dead_lora_loader_scaffolding_absent",
+               f"dead bypassed scaffolding present: {', '.join(_dead_matches)}. "
+               f"Run scripts/apply_strip_dead_lora_loaders.py")
+    else:
+        record("OK", "dead_lora_loader_scaffolding_absent",
+               "no dead scaffolding (canonical post-strip shape)")
+
     # LoopIterationStamp
     if by_type.get("LoopIterationStamp"):
         record("OK", "iteration_stamp", "present")
@@ -564,6 +604,7 @@ def _audit_one(wf_path: Path) -> list[Finding]:
 
     _check_prompt_relay_wiring(wf, by_type, record)
     _check_ltx2_nag_reaches_loop(wf, by_type, record)
+    _check_iclora_video_reference_wiring(wf, by_type, record)
     _check_graph_acyclic(wf, by_id, record)
     _check_link_integrity(wf, by_id, links_by_id, record)
     _check_widget_shape(wf, record)
@@ -982,18 +1023,119 @@ def _check_ltx2_nag_reaches_loop(wf, by_type, record) -> None:
         )
 
 
+# Video-reference IC-LoRA wiring (apply_iclora_video_reference.py).
+# Class-of-drift checks that fire ONLY when the workflow uses the
+# in-loop LTXAddVideoICLoRAGuide pattern. Fire-once: emit at most one
+# of each check per workflow (no spam).
+def _check_iclora_video_reference_wiring(wf, by_type, record) -> None:
+    sgs = wf.get("definitions", {}).get("subgraphs", []) or []
+    if not sgs:
+        return
+    sg = sgs[0]
+    sg_nodes = sg.get("nodes", [])
+    sg_links = sg.get("links", [])
+    iclora_guides = [n for n in sg_nodes if n.get("type") == "LTXAddVideoICLoRAGuide"]
+    if not iclora_guides:
+        return  # video-ref wiring absent; checks don't apply
+
+    # Check: F3 cropguides symmetry on guide CONDITIONING outputs. The
+    # guide's positive/negative outputs (slots 0, 1) must reach CFGGuider
+    # only via LTXVCropGuides or LTXVCropGuidesNoLatent — never directly.
+    sg_node_by_id = {n.get("id"): n for n in sg_nodes}
+    guide_ids = {g.get("id") for g in iclora_guides}
+    direct_violation = next(
+        (
+            (link["origin_id"], link["origin_slot"], link["target_id"])
+            for link in sg_links
+            if link.get("origin_id") in guide_ids
+            and link.get("origin_slot") in (0, 1)
+            and (sg_node_by_id.get(link.get("target_id")) or {}).get("type") == "CFGGuider"
+        ),
+        None,
+    )
+    if direct_violation:
+        gid, gslot, cfg_id = direct_violation
+        record(
+            "ERR", "iclora_video_reference_guide_in_loop_with_cropguides",
+            f"LTXAddVideoICLoRAGuide({gid}).out[{gslot}] feeds CFGGuider({cfg_id}) "
+            f"directly. Must pass through LTXVCropGuides or LTXVCropGuidesNoLatent. "
+            f"Re-run scripts/apply_iclora_video_reference.py.",
+        )
+    else:
+        record(
+            "OK", "iclora_video_reference_guide_in_loop_with_cropguides",
+            f"{len(iclora_guides)} LTXAddVideoICLoRAGuide reaches CFGGuider only via cropguides",
+        )
+
+    # Check: guide implies loader on top-level. The patched MODEL must be
+    # active for the guide to do anything; without the loader, only the
+    # guide attention-entry append fires (no LoRA effect).
+    if not by_type.get("LTXICLoRALoaderModelOnly"):
+        record(
+            "ERR", "iclora_loader_present_when_guide_present",
+            "LTXAddVideoICLoRAGuide present in subgraph but no LTXICLoRALoaderModelOnly "
+            "on the top-level MODEL chain. Re-run scripts/apply_iclora_video_reference.py.",
+        )
+    else:
+        record(
+            "OK", "iclora_loader_present_when_guide_present",
+            "LTXICLoRALoaderModelOnly on top-level MODEL chain",
+        )
+
+    # Check: F2 ref-video preprocess symmetry. The ref-video preprocessing
+    # chain must include LTXVPreprocess(val=18) — same value the init-image
+    # path uses. Without it, ref-video frames hit different edge-statistics
+    # than the init image, causing iter-over-iter drift.
+    vhs_loaders = by_type.get("VHS_LoadVideo", [])
+    preprocs = by_type.get("LTXVPreprocess", [])
+    if not vhs_loaders:
+        record(
+            "WARN", "iclora_ref_video_preprocess_symmetry",
+            "video-ref IC-LoRA guide present but no VHS_LoadVideo on top-level. "
+            "Cannot verify F2 preprocess symmetry.",
+        )
+    else:
+        symmetric = any(
+            (p.get("widgets_values") or [None])[0] == 18 for p in preprocs
+        )
+        if symmetric:
+            record(
+                "OK", "iclora_ref_video_preprocess_symmetry",
+                "LTXVPreprocess(val=18) present (F2 symmetric with init-image path)",
+            )
+        else:
+            record(
+                "ERR", "iclora_ref_video_preprocess_symmetry",
+                "no LTXVPreprocess(val=18) found — ref-video path may not match "
+                "init-image preprocessing. Re-run scripts/apply_iclora_video_reference.py.",
+            )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--verbose", action="store_true", help="Print OK findings too.")
+    ap.add_argument(
+        "paths", nargs="*", type=Path,
+        help="Optional workflow JSON paths to audit. Default sweeps example_workflows/ "
+             "(plus the audited subset of experimental/). Pass paths to audit a staged "
+             "scratch file or any other JSON.",
+    )
     args = ap.parse_args()
 
     all_findings: list[Finding] = []
-    paths = list(EXAMPLE_WORKFLOWS_DIR.glob("*.json"))
-    exp_dir = EXAMPLE_WORKFLOWS_DIR / EXPERIMENTAL_DIR_NAME
-    for fn in EXPERIMENTAL_AUDITED_FILES:
-        p = exp_dir / fn
-        if p.exists():
-            paths.append(p)
+    if args.paths:
+        paths = list(args.paths)
+        for p in paths:
+            if not p.exists():
+                print(f"error: path does not exist: {p}", file=sys.stderr)
+                return 1
+    else:
+        paths = list(EXAMPLE_WORKFLOWS_DIR.glob("*.json"))
+        exp_dir = EXAMPLE_WORKFLOWS_DIR / EXPERIMENTAL_DIR_NAME
+        for fn in EXPERIMENTAL_AUDITED_FILES:
+            p = exp_dir / fn
+            if p.exists():
+                paths.append(p)
     for wf_path in sorted(paths):
         all_findings.extend(_audit_one(wf_path))
 

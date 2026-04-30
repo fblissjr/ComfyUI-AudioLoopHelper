@@ -1,4 +1,4 @@
-Last updated: 2026-04-27
+Last updated: 2026-04-30
 
 # Debug & Workflow Tooling Reference
 
@@ -43,6 +43,10 @@ paired with their apply scripts. Two flavors:
 | `iterations_autowired` (F5) | `apply_iterations_autowire.py` | TensorLoopOpen.iterations_in not from AudioLoopPlanner.total_iterations |
 | `alc_widget_drift` (F6) | `apply_strip_alc_control_after_generate.py` | AudioLoopController widgets_values has stale 6th `'randomize'` entry |
 | `planner_no_stride_input` (F7) | `apply_planner_break_stride_cycle.py` | AudioLoopPlanner has legacy `stride_seconds` input (closes a cycle) |
+| `dead_lora_loader_scaffolding_absent` (F11) | `apply_strip_dead_lora_loaders.py` | Bypassed `#1625/#1626/#1627` LoRA scaffolding nodes (inert UI clutter) still in canonical |
+| `iclora_video_reference_guide_in_loop_with_cropguides` (F12a) | `apply_iclora_video_reference.py` | In-loop `LTXAddVideoICLoRAGuide` CONDITIONING outputs feed `CFGGuider` directly (must pass through `LTXVCropGuides[NoLatent]`) |
+| `iclora_loader_present_when_guide_present` (F12b) | `apply_iclora_video_reference.py` | Subgraph has IC-LoRA guide but top-level has no `LTXICLoRALoaderModelOnly` |
+| `iclora_ref_video_preprocess_symmetry` (F12c) | `apply_iclora_video_reference.py` | IC-LoRA guide present but no `LTXVPreprocess(val=18)` on the ref-video chain |
 
 **Generic structural invariants** (catch CLASSES of drift without per-bug rules):
 
