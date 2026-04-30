@@ -47,7 +47,7 @@ These are not in git. Each new clone needs to either ignore them
 | File | Purpose | What to do on first clone |
 |---|---|---|
 | `settings.local.json` | Per-user permissions + ComfyUI loader smoke test (needs the path to your ComfyUI install) | Copy from `settings.local.json.example` and edit; OR omit entirely — settings.json provides the portable hooks |
-| `<repo-root>/.path-privacy.local.json` | Suggestion config consumed by the `path-privacy` plugin (literal-substring → placeholder mappings used in `→ use:` diagnostic and by `scrub-paths.sh`). | Copy the starter from `<plugin-root>/skills/path-privacy/skills/path-privacy/references/path-privacy.local.json.example` and edit for your machine; OR omit — the plugin's scanner falls back to a generic `/home/<user>/` regex | <!-- path-privacy: ignore -->
+| `<repo-root>/.path-privacy.local.json` | Suggestion config consumed by the `path-privacy` plugin (literal-substring → placeholder mappings used in `→ use:` diagnostic and by `scrub-paths.sh`). | Copy the starter from `<plugin-root>/skills/path-privacy/skills/path-privacy/references/path-privacy.local.json.example` and edit for your machine; OR omit — the plugin's scanner falls back to a generic `/home/<user>/` regex |
 | `skills/cross-repo-handoff/` | Memo channel between this Claude session and a sister sage-fork session. Depends on `coderef/sage-fork/` symlink. | Skip unless you're working on the sage-fork too |
 
 ## How the hooks compose
