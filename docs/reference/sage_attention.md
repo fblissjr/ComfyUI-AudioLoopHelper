@@ -75,7 +75,7 @@ Semantics:
   > SDPA by ~4% per element on average; `0.94` means ~94% per-element
   > disagreement (i.e., the mask-ignoring kernels are producing
   > essentially garbage on padded shapes). Formula:
-  > `~/dev/sage-fork/tests/test_sageattn_ltx_shapes.py::accuracy_metrics`.
+  > `<sage-fork>/tests/test_sageattn_ltx_shapes.py::accuracy_metrics`.
 - **`disabled`** — no-op, returns the input model unchanged.
 - **`auto`** — calls `sageattention.sageattn()` and lets sage's own
   dispatch pick the best kernel. On sm89 + CUDA >= 12.8 this lands on
