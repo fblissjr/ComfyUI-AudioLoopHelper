@@ -7,6 +7,26 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **`LTXVideoRegionalCompile` (experimental node, `nodes_regional_compile.py`)** —
+  spike implementation of regional `torch.compile` per-block FFN on the LTX-2.3
+  transformer. Compiles `transformer_blocks[i].ff` across all 48 blocks, leaves
+  attention paths in eager dispatching to sage's `optimized_attention_override`.
+  This is the canonical PyTorch + Diffusers pattern for diffusion DiTs: compile
+  the static-shape compute modules, exclude attention because attention
+  dispatchers (sage's pybind kernels graph-break Inductor and produce rtol
+  drift on torch 2.11 per N5 spike 2026-05-01). Targets the 42% launch-overhead
+  bucket from clean chrome trace 2026-05-01. Two modes: "default" (kernel
+  fusion only, ~5-10% e2e estimate) and "reduce-overhead" (also enables
+  cudagraph_trees, ~13-25% e2e estimate per FasterCache/PyGraph research, +1-2GB
+  VRAM). Connect AFTER the LTX checkpoint loader and BEFORE other patches;
+  order vs sage doesn't matter (orthogonal hook surfaces — sage on attn1/attn2,
+  this on ff). Mutates shared `transformer_blocks[i].ff` in place; cleanup
+  callback restores originals on unload, with sentinel-attribute detection so
+  re-applies refresh rather than double-wrap. 8 unit tests at
+  `tests/test_regional_compile.py`. Validation render pending. Surfaced by
+  SOTA research agent 2026-05-01 (regional compile is the documented
+  Diffusers-team recipe, not exotic).
+
 - **Sliding-mode flag on `scripts/apply_iclora_video_reference.py`** — Phase 2
   of the IC-LoRA video-reference roadmap. `--ref-mode {static,sliding}` (default
   `static` preserves prior behavior). Sliding mode inserts a `SimpleCalculatorKJ`

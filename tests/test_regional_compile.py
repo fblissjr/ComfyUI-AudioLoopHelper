@@ -1,0 +1,246 @@
+"""Tests for nodes_regional_compile.LTXVideoRegionalCompile.
+
+Spike-shape unit tests covering:
+- _patch_blocks replaces block.ff with a wrapper, sets sentinel
+- _restore_blocks puts originals back, clears state
+- Re-applying detects sentinel and refreshes (no double-wrap)
+- _patch_impl wires cleanup callback that restores on invocation
+
+These tests do NOT touch torch.compile (it would invoke Inductor,
+needing a full torch+CUDA setup beyond the unit-test ceiling). Instead
+we monkeypatch torch.compile to a no-op identity-marker so we can
+verify the patch/restore plumbing without GPU.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+import torch
+import torch.nn as nn
+
+# Add scripts/ + tests/ to sys.path (matches conftest.py)
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
+
+from _fakes import FakeModelWithCallbacks  # noqa: E402
+
+from nodes_regional_compile import (  # noqa: E402
+    PATCH_KEY,
+    _SENTINEL_ATTR,
+    LTXVideoRegionalCompile,
+    _patch_blocks,
+    _restore_blocks,
+)
+
+
+# -----------------------------------------------------------------------------
+# Fakes specific to this node — mirror the LTX-2.3 transformer-block shape.
+# -----------------------------------------------------------------------------
+
+class _FakeFFN(nn.Module):
+    """Stands in for `BasicTransformerBlock.ff` (FeedForward)."""
+    def __init__(self, dim: int = 32, name: str = "ffn"):
+        super().__init__()
+        self.linear = nn.Linear(dim, dim)
+        self.name = name  # for identity asserts
+
+    def forward(self, x):
+        return self.linear(x)
+
+
+class _FakeTransformerBlock(nn.Module):
+    def __init__(self, dim: int = 32, idx: int = 0):
+        super().__init__()
+        self.attn1 = nn.Linear(dim, dim)  # untouched by regional compile
+        self.attn2 = nn.Linear(dim, dim)  # untouched
+        self.ff = _FakeFFN(dim=dim, name=f"block{idx}_ffn")
+
+
+class _FakeDiffusionModel(nn.Module):
+    def __init__(self, n_blocks: int = 4, dim: int = 32):
+        super().__init__()
+        self.transformer_blocks = nn.ModuleList(
+            [_FakeTransformerBlock(dim=dim, idx=i) for i in range(n_blocks)]
+        )
+
+
+class _FakeModelInner:
+    def __init__(self, diffusion_model):
+        self.diffusion_model = diffusion_model
+
+
+class FakeLTXModel(FakeModelWithCallbacks):
+    """FakeModelWithCallbacks + .model.diffusion_model.transformer_blocks shape.
+
+    Mirrors the production access pattern: clone.model.diffusion_model.transformer_blocks[i].ff.
+    """
+    def __init__(self, n_blocks: int = 4):
+        super().__init__()
+        self._diffusion = _FakeDiffusionModel(n_blocks=n_blocks)
+        self.model = _FakeModelInner(self._diffusion)
+
+    def add_callback_with_key(self, call_type: str, key: str, fn):
+        # Production ModelPatcher uses keyed callbacks; mirror the signature.
+        self.callbacks[(call_type, key)] = fn
+
+    def clone(self):
+        # Shallow-clone the patcher state but SHARE the underlying model
+        # (mirrors production ModelPatcher.clone() behavior — the model is
+        # shared, only model_options + callbacks are per-clone).
+        c = FakeLTXModel.__new__(FakeLTXModel)
+        c.model_options = {"transformer_options": dict(self.model_options.get("transformer_options", {}))}
+        c.callbacks = {}
+        c._diffusion = self._diffusion  # SHARED
+        c.model = self.model            # SHARED
+        return c
+
+
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
+
+def _identity_compile(module, mode="default", **kwargs):
+    """Stand-in for torch.compile that wraps in a marker module so we can
+    distinguish compiled vs original by identity. Doesn't actually compile."""
+    class _CompiledMarker(nn.Module):
+        def __init__(self, inner):
+            super().__init__()
+            self._inner = inner
+            self._compile_mode = mode  # for assertion
+
+        def forward(self, x):
+            return self._inner(x)
+
+    return _CompiledMarker(module)
+
+
+# -----------------------------------------------------------------------------
+# _patch_blocks / _restore_blocks
+# -----------------------------------------------------------------------------
+
+class TestPatchBlocks:
+
+    def test_patches_every_block(self):
+        model = FakeLTXModel(n_blocks=4)
+        diffusion = model.model.diffusion_model
+        original_ffs = [b.ff for b in diffusion.transformer_blocks]
+
+        with patch("nodes_regional_compile.torch.compile", _identity_compile):
+            originals = _patch_blocks(diffusion, mode="default")
+
+        assert len(originals) == 4
+        for i, block in enumerate(diffusion.transformer_blocks):
+            # block.ff should be the new wrapper, not the original
+            assert block.ff is not original_ffs[i], (
+                f"block {i}.ff was not replaced by the compile wrapper"
+            )
+            # Sentinel attribute should point back to the original
+            assert getattr(block.ff, _SENTINEL_ATTR) is original_ffs[i]
+            # And originals dict should track the original
+            assert originals[i] is original_ffs[i]
+
+    def test_respects_compile_mode(self):
+        model = FakeLTXModel(n_blocks=2)
+        diffusion = model.model.diffusion_model
+
+        with patch("nodes_regional_compile.torch.compile", _identity_compile):
+            _patch_blocks(diffusion, mode="reduce-overhead")
+
+        assert diffusion.transformer_blocks[0].ff._compile_mode == "reduce-overhead"
+
+    def test_restore_puts_originals_back(self):
+        model = FakeLTXModel(n_blocks=3)
+        diffusion = model.model.diffusion_model
+        original_ffs = [b.ff for b in diffusion.transformer_blocks]
+
+        with patch("nodes_regional_compile.torch.compile", _identity_compile):
+            originals = _patch_blocks(diffusion, mode="default")
+            _restore_blocks(diffusion, originals)
+
+        for i, block in enumerate(diffusion.transformer_blocks):
+            assert block.ff is original_ffs[i], f"block {i}.ff was not restored"
+        assert originals == {}, "originals dict should be cleared after restore"
+
+    def test_reapply_detects_sentinel_and_refreshes(self):
+        """Re-running _patch_blocks on already-compiled blocks should
+        restore-then-recompile, not double-wrap."""
+        model = FakeLTXModel(n_blocks=2)
+        diffusion = model.model.diffusion_model
+        original_ffs = [b.ff for b in diffusion.transformer_blocks]
+
+        with patch("nodes_regional_compile.torch.compile", _identity_compile):
+            _patch_blocks(diffusion, mode="default")
+            first_compiled = [b.ff for b in diffusion.transformer_blocks]
+            # Re-apply
+            originals2 = _patch_blocks(diffusion, mode="reduce-overhead")
+
+        # The originals tracked by the second apply should be the
+        # ORIGINAL FFs, not the first-pass compiled wrappers.
+        for i in range(2):
+            assert originals2[i] is original_ffs[i], (
+                f"reapply must track ORIGINAL ff (idx {i}), not the prior wrapper"
+            )
+            # New compiled wrapper is a fresh object
+            assert diffusion.transformer_blocks[i].ff is not first_compiled[i]
+            # Sentinel still points at the true original
+            assert getattr(diffusion.transformer_blocks[i].ff, _SENTINEL_ATTR) is original_ffs[i]
+
+    def test_missing_transformer_blocks_raises(self):
+        """Hard fail if diffusion_model lacks transformer_blocks — better
+        than silent no-op."""
+        broken = nn.Module()
+        with pytest.raises(RuntimeError, match="transformer_blocks"):
+            _patch_blocks(broken, mode="default")
+
+
+# -----------------------------------------------------------------------------
+# _patch_impl: full node-execution surface
+# -----------------------------------------------------------------------------
+
+class TestPatchImpl:
+
+    def test_returns_clone_with_compiled_blocks(self):
+        model = FakeLTXModel(n_blocks=2)
+        original_ffs = [b.ff for b in model.model.diffusion_model.transformer_blocks]
+
+        with patch("nodes_regional_compile.torch.compile", _identity_compile):
+            patched = LTXVideoRegionalCompile._patch_impl(model, mode="default")
+
+        # Returned clone shares the model, so its blocks are the patched ones
+        for i, block in enumerate(patched.model.diffusion_model.transformer_blocks):
+            assert block.ff is not original_ffs[i]
+
+    def test_registers_cleanup_callback(self):
+        model = FakeLTXModel(n_blocks=2)
+        with patch("nodes_regional_compile.torch.compile", _identity_compile):
+            patched = LTXVideoRegionalCompile._patch_impl(model, mode="default")
+
+        # Callback must be registered with the canonical key
+        assert any(
+            ct == "on_cleanup" and key == PATCH_KEY
+            for (ct, key) in patched.callbacks.keys()
+        ), f"cleanup callback missing; have {list(patched.callbacks.keys())}"
+
+    def test_cleanup_callback_restores_originals(self):
+        model = FakeLTXModel(n_blocks=2)
+        original_ffs = [b.ff for b in model.model.diffusion_model.transformer_blocks]
+
+        with patch("nodes_regional_compile.torch.compile", _identity_compile):
+            patched = LTXVideoRegionalCompile._patch_impl(model, mode="default")
+
+        # Confirm patched
+        for i, block in enumerate(patched.model.diffusion_model.transformer_blocks):
+            assert block.ff is not original_ffs[i]
+
+        # Invoke cleanup
+        cleanup_fn = patched.callbacks[("on_cleanup", PATCH_KEY)]
+        cleanup_fn()
+
+        # Originals restored
+        for i, block in enumerate(patched.model.diffusion_model.transformer_blocks):
+            assert block.ff is original_ffs[i], f"block {i}.ff not restored"
