@@ -54,6 +54,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Literal
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -61,6 +62,10 @@ from workflow_utils import WorkflowEditor  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS_DIR = REPO_ROOT / "example_workflows"
+
+_Classification = Literal[
+    "scaffolding_present", "already_stripped", "partial_or_mismatch", "collision_only",
+]
 
 
 # Canonical scaffolding signatures. Strict triple (id, type, title) plus
@@ -230,9 +235,7 @@ def _restore(ed: WorkflowEditor) -> str:
     return f"reverted (re-added 3 scaffolding nodes; rewired through {len(bridge_links)} consumer(s))"
 
 
-def _classify(ed: WorkflowEditor) -> str:
-    """Return one of: 'scaffolding_present', 'already_stripped',
-    'partial_or_mismatch', 'collision_only'."""
+def _classify(ed: WorkflowEditor) -> _Classification:
     matches = []
     present = []
     for sig in _SCAFFOLDING:

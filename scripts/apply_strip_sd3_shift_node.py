@@ -50,10 +50,15 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Literal
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from workflow_utils import WorkflowEditor  # noqa: E402
+
+_Classification = Literal[
+    "absent", "canonical_present", "user_customized", "mixed_canonical_and_custom",
+]
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS_DIR = REPO_ROOT / "example_workflows"
@@ -79,7 +84,7 @@ def _matches_canonical_sd3(node: dict) -> bool:
     return True
 
 
-def _classify(ed: WorkflowEditor) -> str:
+def _classify(ed: WorkflowEditor) -> _Classification:
     n = ed.find_nodes_by_type(SD3_NODE_TYPE)
     if not n:
         return "absent"
@@ -107,7 +112,6 @@ def _restore(ed: WorkflowEditor) -> str:
     if not ed.has_node(src_id):
         return f"skip (upstream source #{src_id} not present)"
 
-    # Re-add the node with its canonical shape
     node = {
         "id": SD3_NODE_ID,
         "type": SD3_NODE_TYPE,
