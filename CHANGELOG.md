@@ -6,6 +6,28 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **`scripts/apply_audio_latent_pre_encode.py`** — implements the
+  audio-latent pre-encode topology designed at
+  `internal/design/audio_latent_pre_encode_design.md`. Replaces the
+  per-iter `LTXVAudioVAEEncode` + `TrimAudioDuration` subgraph chain
+  with a one-shot full-song encode + per-iter `AudioLatentSlice`. Saves
+  ~8.5s/render of audio re-encode (~1.7s × 5 loop iters) plus per-iter
+  AudioVAE re-stage cost (5-15s/render of `Model AudioVAE prepared for
+  dynamic VRAM loading` console-log overhead). Realistic estimate: 8-15s
+  total wall savings on the iclora workflow. Stages to
+  `internal/scratch/audio-loop-music-video_latent_audio_pre_encode.json`.
+  CLI flags `--source-seconds` (default 300, matches upstream
+  `TrimAudioDuration` widget) and `--window-seconds` (default 17.92,
+  matches `LTXFramePlanner` widget) bake into the `AudioLatentSlice`
+  widget values. Subgraph schema changes force a UI delete-and-re-add
+  of the loop subgraph node per CLAUDE.md. `#598 LTXVAudioVAEEncode` and
+  `#600 TrimAudioDuration` are bypassed (`mode=4`) rather than deleted —
+  cleaner UI, supports easy `--revert`. 13 unit tests at
+  `tests/test_apply_audio_latent_pre_encode.py`. Validation render
+  pending; reference_video VAE re-stage is still per-iter (not addressed
+  by this script — separate spike if needed).
+
 ### Empirical negative result
 - **`LTXVideoRegionalCompile` mode="default" delivers null effect on the iclora
   workflow.** Bench 2026-05-01 (`ab_compile_default_v2` vs `bench_profile2`):
