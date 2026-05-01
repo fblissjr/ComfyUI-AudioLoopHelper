@@ -285,8 +285,7 @@ under `internal/analysis/runs/{sage,exec_log}/`. The files accumulate
 until you manually delete them.
 
 A separate startup cleanup runs only on `internal/analysis/runs/profiler/`
-and the legacy `profile_output/` (see `__init__.py`); the sage and
-exec_log directories are NOT touched.
+(see `__init__.py`); the sage and exec_log directories are NOT touched.
 
 ### Manual cleanup
 

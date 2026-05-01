@@ -22,7 +22,7 @@ class TestProfileBeginDisabled:
         result = ProfileBegin.execute(
             trigger=trigger,
             enabled=False,
-            output_dir="./profile_output/",
+            output_dir="./internal/analysis/runs/profiler/",
             warmup_iterations=1,
             active_iterations=3,
             include_cpu=True,
@@ -38,7 +38,7 @@ class TestProfileBeginDisabled:
         ProfileBegin.execute(
             trigger="anything",
             enabled=False,
-            output_dir="./profile_output/",
+            output_dir="./internal/analysis/runs/profiler/",
             warmup_iterations=1,
             active_iterations=3,
             include_cpu=True,
@@ -129,7 +129,7 @@ class TestProfilerStateCoordination:
         begin_out = ProfileBegin.execute(
             trigger=trigger,
             enabled=False,
-            output_dir="./profile_output/",
+            output_dir="./internal/analysis/runs/profiler/",
             warmup_iterations=1,
             active_iterations=3,
             include_cpu=True,

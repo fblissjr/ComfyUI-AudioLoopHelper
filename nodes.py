@@ -2663,7 +2663,9 @@ class ProfileBegin(io.ComfyNode):
                         "Root dir for profile outputs. Relative paths resolve "
                         "against the ComfyUI-AudioLoopHelper plugin folder "
                         "(gitignored under internal/). Use an absolute path to "
-                        "write elsewhere. A timestamped subdir is created per run."
+                        "write elsewhere. A timestamped subdir is created per run. "
+                        "Overridden to data/runs/${RUN_ID}/profiler when RUN_ID is "
+                        "set (e.g. via start_experiment.sh)."
                     ),
                 ),
                 io.Int.Input(

@@ -4,7 +4,7 @@ Can be re-run on existing traces without re-executing the workflow. Useful
 for deeper analysis after the initial ProfileEnd output.
 
 Usage:
-    uv run python scripts/profile_summary.py ./profile_output/20260417_120000/trace.json
+    uv run python scripts/profile_summary.py ./internal/analysis/runs/profiler/20260417_120000/trace.json
 """
 
 import argparse

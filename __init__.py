@@ -10,10 +10,10 @@ else:
     # See exec_logger.py for output format.
     from . import exec_logger  # noqa: F401
 
-    # Clear stale profile output on ComfyUI startup. Guarded on torch so
+    # Clear profiler run artifacts on ComfyUI startup. Guarded on torch so
     # ComfyUI-HotReloadHack reimports don't re-wipe mid-run (guard survives
     # module reloads since `torch` isn't hot-reloaded).
-    def _clear_stale_profile_output() -> None:
+    def _clear_profiler_run_artifacts() -> None:
         import shutil
         from pathlib import Path
 
@@ -26,22 +26,8 @@ else:
             return
         setattr(torch, flag, True)
 
-        # Clean both the legacy location and the new canonical one so
-        # stale runs don't accumulate after the move.
-        plugin_root = Path(__file__).resolve().parent
-        for profile_dir in (
-            plugin_root / "profile_output",
-            plugin_root / "internal" / "analysis" / "runs" / "profiler",
-        ):
-            if not profile_dir.exists():
-                continue
-            for child in profile_dir.iterdir():
-                try:
-                    if child.is_dir():
-                        shutil.rmtree(child)
-                    else:
-                        child.unlink()
-                except OSError as e:  # permission / concurrent access
-                    print(f"[AudioLoopHelper] skipped {child.name}: {e}")
+        profile_dir = Path(__file__).resolve().parent / "internal" / "analysis" / "runs" / "profiler"
+        shutil.rmtree(profile_dir, ignore_errors=True)
+        profile_dir.mkdir(parents=True, exist_ok=True)
 
-    _clear_stale_profile_output()
+    _clear_profiler_run_artifacts()

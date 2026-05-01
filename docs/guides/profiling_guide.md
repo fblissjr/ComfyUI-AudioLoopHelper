@@ -33,12 +33,12 @@ and link count exactly (only link IDs renumber).
 ## What you get
 
 Three output files per profile run, in a timestamped subdirectory of
-`<plugin>/profile_output/<YYYYMMDD_HHMMSS>/`. The default `output_dir`
-widget value is `profile_output` (relative), which resolves to
-`ComfyUI/custom_nodes/ComfyUI-AudioLoopHelper/profile_output/` —
-gitignored, co-located with the plugin, and automatically cleared at
-each ComfyUI startup. Set an absolute path in the widget to write
-elsewhere.
+`<plugin>/internal/analysis/runs/profiler/<YYYYMMDD_HHMMSS>/`. The default
+`output_dir` widget value is `internal/analysis/runs/profiler` (relative),
+which resolves under the plugin folder — gitignored, co-located with the
+plugin, and automatically cleared at each ComfyUI startup. Set an
+absolute path in the widget to write elsewhere (e.g. `data/runs/${RUN_ID}/profiler`
+when driven from `start_experiment.sh`).
 
 - **`trace.json`** — full chrome trace. Open at
   [perfetto.dev](https://ui.perfetto.dev/) (drag-drop the file) or
@@ -143,7 +143,7 @@ For a first-run "where is time going?" look, use the defaults:
 | Widget | Default | Why |
 |---|---|---|
 | `enabled` | `True` | — |
-| `output_dir` | `profile_output` | Plugin-relative; resolves to `<plugin>/profile_output/`. Absolute paths accepted. Cleared at ComfyUI startup. |
+| `output_dir` | `internal/analysis/runs/profiler` | Plugin-relative; resolves under the plugin folder (gitignored). Absolute paths accepted. Cleared at ComfyUI startup. |
 | `warmup_iterations` | `1` | Iteration 1 has first-time compilation noise |
 | `active_iterations` | `3` | Captures variance across real iterations |
 | `include_cpu` | `True` | Catches Python overhead and node dispatch cost |
@@ -197,7 +197,7 @@ Key views:
 ## Re-running summaries on saved traces
 
 ```bash
-uv run python scripts/profile_summary.py ./profile_output/20260417_120000/trace.json
+uv run python scripts/profile_summary.py ./internal/analysis/runs/profiler/20260417_120000/trace.json
 ```
 
 Produces a categorized summary without re-running the workflow. Handy if
