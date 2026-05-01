@@ -1,15 +1,15 @@
 """Tests for nodes_regional_compile.LTXVideoRegionalCompile.
 
 Spike-shape unit tests covering:
-- _patch_blocks replaces block.ff with a wrapper, sets sentinel
+- _patch_blocks replaces block.ff with a torch.compile wrapper
 - _restore_blocks puts originals back, clears state
-- Re-applying detects sentinel and refreshes (no double-wrap)
+- Re-applying detects existing OptimizedModule and unwraps cleanly (no double-wrap)
 - _patch_impl wires cleanup callback that restores on invocation
 
-These tests do NOT touch torch.compile (it would invoke Inductor,
+These tests do NOT touch real torch.compile (it would invoke Inductor,
 needing a full torch+CUDA setup beyond the unit-test ceiling). Instead
-we monkeypatch torch.compile to a no-op identity-marker so we can
-verify the patch/restore plumbing without GPU.
+we monkeypatch torch.compile to a no-op identity-marker AND the
+OptimizedModule import to recognize that marker as the wrapper class.
 """
 
 from __future__ import annotations
@@ -18,8 +18,8 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-import torch
+import pytest  # noqa: F401  (kept for future parametrize)
+import torch  # noqa: F401  (used by helper modules)
 import torch.nn as nn
 
 # Add scripts/ + tests/ to sys.path (matches conftest.py)
@@ -31,7 +31,6 @@ from _fakes import FakeModelWithCallbacks  # noqa: E402
 
 from nodes_regional_compile import (  # noqa: E402
     PATCH_KEY,
-    _SENTINEL_ATTR,
     LTXVideoRegionalCompile,
     _patch_blocks,
     _restore_blocks,
@@ -101,22 +100,60 @@ class FakeLTXModel(FakeModelWithCallbacks):
 
 
 # -----------------------------------------------------------------------------
-# Helpers
+# Helpers — fake OptimizedModule + identity-compile that respects the
+# production unwrap path (`isinstance(ff, OptimizedModule)` + `_orig_mod`).
 # -----------------------------------------------------------------------------
 
-def _identity_compile(module, mode="default", **kwargs):
-    """Stand-in for torch.compile that wraps in a marker module so we can
-    distinguish compiled vs original by identity. Doesn't actually compile."""
-    class _CompiledMarker(nn.Module):
-        def __init__(self, inner):
-            super().__init__()
-            self._inner = inner
-            self._compile_mode = mode  # for assertion
+class _FakeOptimizedModule(nn.Module):
+    """Stands in for `torch._dynamo.eval_frame.OptimizedModule`. Production
+    code unwraps via `isinstance(ff, OptimizedModule)` + `ff._orig_mod`;
+    these tests patch the import so this class IS OptimizedModule."""
+    def __init__(self, mod, mode):
+        super().__init__()
+        self._orig_mod = mod
+        self._compile_mode = mode  # test-only assertion handle
 
-        def forward(self, x):
-            return self._inner(x)
+    def forward(self, x):
+        return self._orig_mod(x)
 
-    return _CompiledMarker(module)
+
+def _identity_compile(module, mode="default", **_kwargs):
+    """torch.compile stand-in that returns a fake OptimizedModule wrapping
+    the input. Pairs with the patched _unwrap_compiled below so the
+    unwrap path is exercised in tests."""
+    return _FakeOptimizedModule(module, mode)
+
+
+def _patch_compile_and_unwrap(target_path):
+    """Context-manager helper: patches both torch.compile (via
+    `nodes_regional_compile.torch.compile`) AND the OptimizedModule
+    import inside `_unwrap_compiled` so that our `_FakeOptimizedModule`
+    is recognized as the wrapper. Returns a single combined patcher."""
+    return _CombinedPatch(target_path)
+
+
+class _CombinedPatch:
+    def __init__(self, _target_path: str):
+        self._patches = []
+
+    def __enter__(self):
+        # Patch torch.compile in the consumer module
+        p1 = patch("nodes_regional_compile.torch.compile", _identity_compile)
+        # Patch _unwrap_compiled to recognize our fake as the OptimizedModule
+        from nodes_regional_compile import _unwrap_compiled as _real_unwrap  # noqa: F401
+        def _fake_unwrap(ff):
+            if isinstance(ff, _FakeOptimizedModule):
+                return ff._orig_mod
+            return ff
+        p2 = patch("nodes_regional_compile._unwrap_compiled", _fake_unwrap)
+        self._patches = [p1, p2]
+        for p in self._patches:
+            p.start()
+        return self
+
+    def __exit__(self, *exc):
+        for p in self._patches:
+            p.stop()
 
 
 # -----------------------------------------------------------------------------
@@ -130,25 +167,47 @@ class TestPatchBlocks:
         diffusion = model.model.diffusion_model
         original_ffs = [b.ff for b in diffusion.transformer_blocks]
 
-        with patch("nodes_regional_compile.torch.compile", _identity_compile):
+        with _patch_compile_and_unwrap("nodes_regional_compile"):
             originals = _patch_blocks(diffusion, mode="default")
 
         assert len(originals) == 4
         for i, block in enumerate(diffusion.transformer_blocks):
-            # block.ff should be the new wrapper, not the original
             assert block.ff is not original_ffs[i], (
                 f"block {i}.ff was not replaced by the compile wrapper"
             )
-            # Sentinel attribute should point back to the original
-            assert getattr(block.ff, _SENTINEL_ATTR) is original_ffs[i]
-            # And originals dict should track the original
+            # OptimizedModule API: original is at _orig_mod
+            assert block.ff._orig_mod is original_ffs[i]
             assert originals[i] is original_ffs[i]
+
+    def test_no_setattr_cycle_in_compiled_wrapper(self):
+        """Regression for the 2026-05-01 RecursionError: the prior version
+        did setattr(compiled, '_compile_orig', ff) which auto-registered
+        ff as a submodule of compiled (because nn.Module.__setattr__
+        registers Module values), creating a state_dict cycle that broke
+        downstream IC-LoRA loader. This test confirms compiled wrappers
+        only have the canonical _orig_mod child, no extra Module-typed
+        attrs."""
+        model = FakeLTXModel(n_blocks=2)
+        diffusion = model.model.diffusion_model
+
+        with _patch_compile_and_unwrap("nodes_regional_compile"):
+            _patch_blocks(diffusion, mode="default")
+
+        for block in diffusion.transformer_blocks:
+            # The fake OptimizedModule should only have _orig_mod as its
+            # registered submodule. No `_compile_orig` or other Module-
+            # typed sentinel attribute that would duplicate registration.
+            module_children = dict(block.ff.named_children())
+            assert set(module_children.keys()) == {"_orig_mod"}, (
+                f"compiled wrapper has unexpected child modules: "
+                f"{list(module_children.keys())} — would create state_dict cycle"
+            )
 
     def test_respects_compile_mode(self):
         model = FakeLTXModel(n_blocks=2)
         diffusion = model.model.diffusion_model
 
-        with patch("nodes_regional_compile.torch.compile", _identity_compile):
+        with _patch_compile_and_unwrap("nodes_regional_compile"):
             _patch_blocks(diffusion, mode="reduce-overhead")
 
         assert diffusion.transformer_blocks[0].ff._compile_mode == "reduce-overhead"
@@ -158,7 +217,7 @@ class TestPatchBlocks:
         diffusion = model.model.diffusion_model
         original_ffs = [b.ff for b in diffusion.transformer_blocks]
 
-        with patch("nodes_regional_compile.torch.compile", _identity_compile):
+        with _patch_compile_and_unwrap("nodes_regional_compile"):
             originals = _patch_blocks(diffusion, mode="default")
             _restore_blocks(diffusion, originals)
 
@@ -166,29 +225,29 @@ class TestPatchBlocks:
             assert block.ff is original_ffs[i], f"block {i}.ff was not restored"
         assert originals == {}, "originals dict should be cleared after restore"
 
-    def test_reapply_detects_sentinel_and_refreshes(self):
-        """Re-running _patch_blocks on already-compiled blocks should
-        restore-then-recompile, not double-wrap."""
+    def test_reapply_unwraps_optimized_module_and_refreshes(self):
+        """Re-running _patch_blocks on already-compiled blocks must unwrap
+        via OptimizedModule._orig_mod and recompile cleanly, not double-
+        wrap the prior compiled module."""
         model = FakeLTXModel(n_blocks=2)
         diffusion = model.model.diffusion_model
         original_ffs = [b.ff for b in diffusion.transformer_blocks]
 
-        with patch("nodes_regional_compile.torch.compile", _identity_compile):
+        with _patch_compile_and_unwrap("nodes_regional_compile"):
             _patch_blocks(diffusion, mode="default")
             first_compiled = [b.ff for b in diffusion.transformer_blocks]
-            # Re-apply
             originals2 = _patch_blocks(diffusion, mode="reduce-overhead")
 
-        # The originals tracked by the second apply should be the
-        # ORIGINAL FFs, not the first-pass compiled wrappers.
         for i in range(2):
+            # Originals tracked by reapply must be the TRUE original FF,
+            # not the first-pass wrapper.
             assert originals2[i] is original_ffs[i], (
                 f"reapply must track ORIGINAL ff (idx {i}), not the prior wrapper"
             )
             # New compiled wrapper is a fresh object
             assert diffusion.transformer_blocks[i].ff is not first_compiled[i]
-            # Sentinel still points at the true original
-            assert getattr(diffusion.transformer_blocks[i].ff, _SENTINEL_ATTR) is original_ffs[i]
+            # New wrapper unwraps to the true original
+            assert diffusion.transformer_blocks[i].ff._orig_mod is original_ffs[i]
 
     def test_missing_transformer_blocks_raises(self):
         """Hard fail if diffusion_model lacks transformer_blocks — better
@@ -208,7 +267,7 @@ class TestPatchImpl:
         model = FakeLTXModel(n_blocks=2)
         original_ffs = [b.ff for b in model.model.diffusion_model.transformer_blocks]
 
-        with patch("nodes_regional_compile.torch.compile", _identity_compile):
+        with _patch_compile_and_unwrap("nodes_regional_compile"):
             patched = LTXVideoRegionalCompile._patch_impl(model, mode="default")
 
         # Returned clone shares the model, so its blocks are the patched ones
@@ -217,7 +276,7 @@ class TestPatchImpl:
 
     def test_registers_cleanup_callback(self):
         model = FakeLTXModel(n_blocks=2)
-        with patch("nodes_regional_compile.torch.compile", _identity_compile):
+        with _patch_compile_and_unwrap("nodes_regional_compile"):
             patched = LTXVideoRegionalCompile._patch_impl(model, mode="default")
 
         # Callback must be registered with the canonical key
@@ -230,7 +289,7 @@ class TestPatchImpl:
         model = FakeLTXModel(n_blocks=2)
         original_ffs = [b.ff for b in model.model.diffusion_model.transformer_blocks]
 
-        with patch("nodes_regional_compile.torch.compile", _identity_compile):
+        with _patch_compile_and_unwrap("nodes_regional_compile"):
             patched = LTXVideoRegionalCompile._patch_impl(model, mode="default")
 
         # Confirm patched

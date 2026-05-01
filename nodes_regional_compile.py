@@ -7,9 +7,15 @@ Inductor — N5 spike 2026-05-01). Targets the 42% launch-overhead bucket
 from clean chrome trace 2026-05-01.
 
 SPIKE: mutates shared `transformer_blocks[i].ff` in place (clones share
-the underlying model). ON_CLEANUP callback restores originals. Sentinel
-attribute on the compiled wrapper lets re-applies refresh rather than
-double-wrap. Full rationale + research links in CHANGELOG `[Unreleased]`.
+the underlying model). ON_CLEANUP callback restores originals. Stale
+state detected via `isinstance(ff, OptimizedModule)` + the official
+`._orig_mod` API. Full rationale + research links in CHANGELOG.
+
+PLACEMENT: insert this node AFTER any node that calls `model.state_dict()`
+(notably `LTXICLoRALoaderModelOnly`). Compiled `OptimizedModule` wrappers
+in the diffusion model break LoRA-key matching during `state_dict()`
+traversal. Order: `UNETLoader → ... → LTXICLoRALoaderModelOnly →
+LTXVideoRegionalCompile → SetNode "model"`.
 """
 
 from __future__ import annotations
@@ -52,15 +58,28 @@ except ImportError:
 # stacking compiled wrappers.
 PATCH_KEY = "ltxv_regional_compile"
 
-# Sentinel attribute name on the FF module to detect already-compiled state.
-_SENTINEL_ATTR = "_compile_orig"
+
+def _unwrap_compiled(ff: torch.nn.Module) -> torch.nn.Module:
+    """Return the original module if `ff` is a torch.compile wrapper,
+    else `ff` unchanged. Uses the official OptimizedModule._orig_mod
+    API rather than a custom sentinel attribute (custom attrs on a
+    Module wrapper get auto-registered as submodules by
+    nn.Module.__setattr__, which created a state_dict cycle in the
+    first spike — caught 2026-05-01 against the IC-LoRA loader chain)."""
+    try:
+        from torch._dynamo.eval_frame import OptimizedModule
+    except ImportError:
+        return ff
+    if isinstance(ff, OptimizedModule):
+        return ff._orig_mod
+    return ff
 
 
 def _patch_blocks(diffusion_model: torch.nn.Module, mode: CompileMode) -> dict[int, torch.nn.Module]:
     """Replace `block.ff` with `torch.compile(block.ff, mode=mode)` on
     every transformer block. Returns `{block_idx: original_ff}` so we
-    can restore on cleanup. Idempotent: if `_SENTINEL_ATTR` is already
-    set on a block.ff, we restore-then-recompile to refresh.
+    can restore on cleanup. Idempotent via `_unwrap_compiled`: re-runs
+    unwrap-then-recompile to refresh, never double-wraps.
     """
     blocks = getattr(diffusion_model, "transformer_blocks", None)
     if blocks is None:
@@ -73,14 +92,10 @@ def _patch_blocks(diffusion_model: torch.nn.Module, mode: CompileMode) -> dict[i
         ff = getattr(block, "ff", None)
         if ff is None:
             continue
-        # If stale state from prior render, unwrap to the true original
-        # before recompiling — prevents double-wrapping.
-        ff = getattr(ff, _SENTINEL_ATTR, ff)
+        ff = _unwrap_compiled(ff)
         block.ff = ff
         originals[i] = ff
-        compiled = torch.compile(ff, mode=mode)
-        setattr(compiled, _SENTINEL_ATTR, ff)
-        block.ff = compiled
+        block.ff = torch.compile(ff, mode=mode)
     return originals
 
 
@@ -101,10 +116,13 @@ class LTXVideoRegionalCompile(io.ComfyNode):
     `optimized_attention_override` hook (sage's pybind kernels would
     graph-break Inductor — N5 spike 2026-05-01 confirmed rtol drift).
 
-    Connect AFTER the LTX checkpoint loader and BEFORE the next patch
-    (typically `AudioLoopHelperSageAttention` or KJ patches). Order
-    relative to sage doesn't matter (sage hooks attention, this hooks
-    FFN — orthogonal surfaces).
+    PLACEMENT: insert AFTER any node that calls `model.state_dict()` —
+    most importantly, AFTER `LTXICLoRALoaderModelOnly`. Compiled
+    `OptimizedModule` wrappers don't preserve the LoRA-key naming
+    convention; LoRA loader's `model.state_dict()` walk fails when
+    blocks are already compiled. Canonical order:
+    `UNETLoader → ... → LTXICLoRALoaderModelOnly → LTXVideoRegionalCompile
+    → SetNode "model"`.
 
     Mode trade-offs:
     - "default" — kernel fusion only, no graph capture. Lowest VRAM
@@ -117,9 +135,8 @@ class LTXVideoRegionalCompile(io.ComfyNode):
 
     EXPERIMENTAL: this node mutates shared model state in place
     (clone.model.diffusion_model is shared across patcher clones).
-    Cleanup restores originals on unload. If a crash leaves stale
-    compiled state, re-applying this node refreshes it via the
-    `_SENTINEL_ATTR` detection.
+    Cleanup restores originals on unload. Re-applying detects existing
+    `OptimizedModule` wrappers via `._orig_mod` and refreshes cleanly.
     """
 
     @classmethod
