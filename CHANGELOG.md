@@ -6,6 +6,19 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Empirical negative result
+- **`LTXVideoRegionalCompile` mode="default" delivers null effect on the iclora
+  workflow.** Bench 2026-05-01 (`ab_compile_default_v2` vs `bench_profile2`):
+  555.85s vs 559.90s wall (-0.7%, within noise); 260.83s vs 261.51s sampler
+  (-0.3%). Why: LTX 2.3's FFN is already fp8-quantized matmul (`sm89_xmma_gemm`),
+  Inductor's "default" mode does kernel fusion but there's not much left to
+  fuse around an already-fused fp8 matmul. The 42% launch overhead from the
+  bench is dominated by ATTENTION + memcpy + sync launches, not FFN compile-
+  amenable work. mode="reduce-overhead" (cudagraph_trees) might still help —
+  bench variant ready at `internal/scratch/audio-loop-music-video_latent_iclora_bench_compile_reduce.json`
+  — not yet tested. The node stays shipped as an experimental tool for future
+  workflows that may benefit (e.g. larger DiT models with non-pre-fused FFN).
+
 ### Added
 - **`AudioLatentSlice` (`nodes_audio_latent_slice.py`)** — slice an audio
   LATENT by source-timeline seconds. Companion to the audio-latent
