@@ -1,52 +1,24 @@
-"""LTX-2.3 Regional Compile (spike): torch.compile per-block FFN only.
+"""LTX-2.3 Regional Compile (spike): torch.compile per-block FFN.
 
-Compiles `transformer_blocks[i].ff` via torch.compile across all 48 LTX
-blocks, leaving attention paths in eager dispatching to sage's
-`optimized_attention_override` hook. This is the canonical PyTorch +
-Diffusers pattern for diffusion DiTs (https://pytorch.org/blog/torch-compile-and-diffusers-a-hands-on-guide-to-peak-performance/):
-compile the static-shape compute modules, exclude attention dispatchers
-(sage's pybind kernels graph-break Inductor and produce rtol drift on
-torch 2.11 per N5 spike 2026-05-01).
+Compiles `transformer_blocks[i].ff` across all 48 LTX blocks via
+`torch.compile`, leaves attention in eager dispatching to sage's
+`optimized_attention_override` hook (sage's pybind kernels graph-break
+Inductor — N5 spike 2026-05-01). Targets the 42% launch-overhead bucket
+from clean chrome trace 2026-05-01.
 
-Why this works for LTX-2.3 audio-loop where compile-the-denoiser doesn't:
-- FFN has static shape per (block, sequence-length); LTX-2.3 has only
-  2 distinct seq lengths across the 6 sampler invocations (init=22932,
-  loop iters=23296), so cudagraph_trees caches at most 2 graphs/block
-- Sage attention runs eager on the unwrapped attn1/attn2 paths
-- NAG cond/uncond both go through the same compiled FFN — same graph,
-  no recapture
-- Norm operations are inline `comfy.ldm.common_dit.rms_norm()` calls
-  in BasicTransformerBlock.forward, NOT submodule attributes — so
-  they're not directly compilable via setattr replacement (they would
-  be compilable as part of a wrapper-around-forward, but that's a
-  bigger surface; FFN-only is the tight spike scope).
-
-Hooks:
-- Mutates `model.model.diffusion_model.transformer_blocks[i].ff` in
-  place (the underlying model is SHARED across clones — see "Cleanup
-  semantics" below). Replaces with `torch.compile(original_ff, mode)`.
-- Cleanup callback (CallbacksMP.ON_CLEANUP) restores originals.
-
-Cleanup semantics — IMPORTANT:
-- `ModelPatcher.clone()` does a shallow clone; `clone.model.diffusion_model`
-  is the SAME object as `original.model.diffusion_model`. So our
-  `block.ff = compiled` mutation affects the underlying model that
-  every clone references.
-- The ON_CLEANUP callback restores originals when the patched clone is
-  unloaded. If cleanup is missed (e.g., process crash mid-render),
-  next render starts with compiled `block.ff` from the prior session.
-  Re-applying this node refreshes; bypassing it leaves stale compiled
-  modules. Mitigation: track a sentinel attribute on the model so we
-  detect and restore even on stale state.
-
-This is a SPIKE node (`is_experimental=True`). If validation render
-shows wins, harden into a proper wrapper-based version that doesn't
-mutate shared state.
+SPIKE: mutates shared `transformer_blocks[i].ff` in place (clones share
+the underlying model). ON_CLEANUP callback restores originals. Sentinel
+attribute on the compiled wrapper lets re-applies refresh rather than
+double-wrap. Full rationale + research links in CHANGELOG `[Unreleased]`.
 """
 
 from __future__ import annotations
 
+from typing import Literal
+
 import torch
+
+CompileMode = Literal["default", "reduce-overhead"]
 
 try:
     from comfy_api.latest import io
@@ -81,10 +53,10 @@ except ImportError:
 PATCH_KEY = "ltxv_regional_compile"
 
 # Sentinel attribute name on the FF module to detect already-compiled state.
-_SENTINEL_ATTR = "_audioloophelper_regional_compile_orig"
+_SENTINEL_ATTR = "_compile_orig"
 
 
-def _patch_blocks(diffusion_model: torch.nn.Module, mode: str) -> dict[int, torch.nn.Module]:
+def _patch_blocks(diffusion_model: torch.nn.Module, mode: CompileMode) -> dict[int, torch.nn.Module]:
     """Replace `block.ff` with `torch.compile(block.ff, mode=mode)` on
     every transformer block. Returns `{block_idx: original_ff}` so we
     can restore on cleanup. Idempotent: if `_SENTINEL_ATTR` is already
@@ -101,15 +73,12 @@ def _patch_blocks(diffusion_model: torch.nn.Module, mode: str) -> dict[int, torc
         ff = getattr(block, "ff", None)
         if ff is None:
             continue
-        # If we've already compiled this block (stale state from prior render),
-        # restore the original first so we don't double-wrap.
-        if hasattr(ff, _SENTINEL_ATTR):
-            ff = getattr(ff, _SENTINEL_ATTR)
-            block.ff = ff
+        # If stale state from prior render, unwrap to the true original
+        # before recompiling — prevents double-wrapping.
+        ff = getattr(ff, _SENTINEL_ATTR, ff)
+        block.ff = ff
         originals[i] = ff
         compiled = torch.compile(ff, mode=mode)
-        # Stash the original on the compiled wrapper so future re-applies
-        # can find it even if our state dict is lost.
         setattr(compiled, _SENTINEL_ATTR, ff)
         block.ff = compiled
     return originals
@@ -120,8 +89,7 @@ def _restore_blocks(diffusion_model: torch.nn.Module, originals: dict[int, torch
     if blocks is None:
         return
     for i, original in originals.items():
-        if i < len(blocks):
-            blocks[i].ff = original
+        blocks[i].ff = original
     originals.clear()
 
 
@@ -190,7 +158,7 @@ class LTXVideoRegionalCompile(io.ComfyNode):
         return io.NodeOutput(cls._patch_impl(model, mode=mode))
 
     @classmethod
-    def _patch_impl(cls, model, *, mode: str):
+    def _patch_impl(cls, model, *, mode: CompileMode):
         """Testable seam. Returns the patched clone."""
         clone = model.clone()
         diffusion_model = clone.model.diffusion_model
