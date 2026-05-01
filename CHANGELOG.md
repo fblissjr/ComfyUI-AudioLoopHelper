@@ -6,6 +6,18 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (continued)
+- **`example_workflows/audio-loop-music-video_latent_iclora.json`** — promoted
+  the IC-LoRA video-reference variant to a shipped example workflow. Mirrors
+  the wiring used to render `numa.mp4` (LTX-2_00248.png snapshot): canonical
+  audio-loop pipeline + `LTXICLoRALoaderModelOnly` (Cseti cameraman LoRA at
+  strength 1.0) + `VHS_LoadVideo → ImageResizeKJv2 → LTXVPreprocess(val=18) →
+  SetNode → subgraph reference_video IMAGE input → GetImageRangeFromBatch →
+  LTXAddVideoICLoRAGuide` inside the loop subgraph, downstream of the F3
+  cropguides chain. 84 nodes, 121 links. Audit: 29 OK / 1 WARN (pre-existing
+  `latent_volume` near-edge soft ceiling) / 0 ERR. Users substitute their own
+  `--reference-video` MP4 and IC-LoRA file when loading.
+
 ### Removed
 - **`ModelSamplingSD3 shift=13` from all shipped workflows that had it** — 8 of our
   workflows (5 production variants + 3 experimental forks) shipped with this node;
