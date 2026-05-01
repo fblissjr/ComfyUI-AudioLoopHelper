@@ -48,7 +48,6 @@ EXPECTED_CHAIN = {
         ["1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"],
         "manual_sigmas",
     ),
-    "ModelSamplingSD3": ([13], "model_sampling_shift"),
     "KSamplerSelect": (["euler"], "sampler_type"),
 }
 
@@ -605,6 +604,7 @@ def _audit_one(wf_path: Path) -> list[Finding]:
     _check_prompt_relay_wiring(wf, by_type, record)
     _check_ltx2_nag_reaches_loop(wf, by_type, record)
     _check_iclora_video_reference_wiring(wf, by_type, record)
+    _check_no_sd3_shift_node(wf, by_type, record)
     _check_graph_acyclic(wf, by_id, record)
     _check_link_integrity(wf, by_id, links_by_id, record)
     _check_widget_shape(wf, record)
@@ -1027,6 +1027,33 @@ def _check_ltx2_nag_reaches_loop(wf, by_type, record) -> None:
 # Class-of-drift checks that fire ONLY when the workflow uses the
 # in-loop LTXAddVideoICLoRAGuide pattern. Fire-once: emit at most one
 # of each check per workflow (no spam).
+# ModelSamplingSD3 should NOT be present on LTX 2.3 distilled workflows.
+# Lightricks's distilled inference applies no flow-matching shift; the
+# DISTILLED_SIGMA_VALUES are the final schedule fed directly to the
+# Euler denoising loop. Adding `ModelSamplingSD3 shift=13` distorts the
+# sigma-to-timestep mapping in a way the distilled checkpoint was not
+# trained for. See `internal/analysis/ltx23_sigma_shift_audit.md` for
+# the full evidence trail (Lightricks' distilled.py + their official
+# 2.3 distilled example workflows have no shift node).
+#
+# The 8 instances we shipped with `ModelSamplingSD3` had `outputs[0].links == []`
+# (dead nodes) — strip is pure cleanup. Migration: apply_strip_sd3_shift_node.py.
+def _check_no_sd3_shift_node(wf, by_type, record) -> None:
+    sd3 = by_type.get("ModelSamplingSD3", [])
+    if not sd3:
+        record("OK", "model_sampling_shift",
+               "no ModelSamplingSD3 (correct for LTX 2.3 distilled)")
+        return
+    active = [n for n in sd3 if n.get("mode") != 4]
+    if not active:
+        record("OK", "model_sampling_shift",
+               f"{len(sd3)} ModelSamplingSD3 present but bypassed")
+        return
+    record("WARN", "model_sampling_shift",
+           f"{len(active)} active ModelSamplingSD3 node(s) — distorts the "
+           "distilled sigma schedule. Run scripts/apply_strip_sd3_shift_node.py.")
+
+
 def _check_iclora_video_reference_wiring(wf, by_type, record) -> None:
     sgs = wf.get("definitions", {}).get("subgraphs", []) or []
     if not sgs:

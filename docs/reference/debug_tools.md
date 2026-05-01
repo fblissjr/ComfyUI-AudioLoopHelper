@@ -47,6 +47,7 @@ paired with their apply scripts. Two flavors:
 | `iclora_video_reference_guide_in_loop_with_cropguides` (F12a) | `apply_iclora_video_reference.py` | In-loop `LTXAddVideoICLoRAGuide` CONDITIONING outputs feed `CFGGuider` directly (must pass through `LTXVCropGuides[NoLatent]`) |
 | `iclora_loader_present_when_guide_present` (F12b) | `apply_iclora_video_reference.py` | Subgraph has IC-LoRA guide but top-level has no `LTXICLoRALoaderModelOnly` |
 | `iclora_ref_video_preprocess_symmetry` (F12c) | `apply_iclora_video_reference.py` | IC-LoRA guide present but no `LTXVPreprocess(val=18)` on the ref-video chain |
+| `model_sampling_shift` (F13) | `apply_strip_sd3_shift_node.py` | `ModelSamplingSD3` present and active on a distilled workflow (Lightricks's distilled inference applies no shift; the SD3 node distorts the sigma-to-timestep mapping). WARN-level. |
 
 **Generic structural invariants** (catch CLASSES of drift without per-bug rules):
 

@@ -84,8 +84,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            1571,
-            2794
+            1571
           ]
         }
       ],
@@ -363,43 +362,6 @@
       ],
       "color": "#485248",
       "bgcolor": "#272e27"
-    },
-    {
-      "id": 1513,
-      "type": "ModelSamplingSD3",
-      "pos": [
-        54.13368417325855,
-        5193.399339769185
-      ],
-      "size": [
-        270,
-        58
-      ],
-      "flags": {},
-      "order": 63,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "model",
-          "type": "MODEL",
-          "link": 2794
-        }
-      ],
-      "outputs": [
-        {
-          "name": "MODEL",
-          "type": "MODEL",
-          "links": []
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.16.4",
-        "Node name for S&R": "ModelSamplingSD3"
-      },
-      "widgets_values": [
-        13
-      ]
     },
     {
       "id": 604,
@@ -4739,14 +4701,6 @@
       1423,
       0,
       "IMAGE"
-    ],
-    [
-      2794,
-      503,
-      0,
-      1513,
-      0,
-      "MODEL"
     ],
     [
       2821,

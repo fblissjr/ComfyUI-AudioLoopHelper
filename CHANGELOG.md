@@ -6,6 +6,24 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+- **`ModelSamplingSD3 shift=13` from all shipped workflows that had it** — 8 of our
+  workflows (5 production variants + 3 experimental forks) shipped with this node;
+  the canonical did not. Verified against Lightricks's reference distilled
+  pipeline (`coderef/ID-LoRA/ID-LoRA-2.3/packages/ltx-pipelines/src/ltx_pipelines/distilled.py:106-112`)
+  and their official 2.3 distilled example workflows: **no flow-matching shift
+  is applied between sigma scheduling and denoising**. The `DISTILLED_SIGMA_VALUES`
+  are the final sampling schedule, fed directly to `euler_denoising_loop`.
+  `ModelSamplingSD3` was a borrowed-from-SD3 holdover that distorted the
+  sigma-to-timestep mapping (`t' = 13t / (1 + 12t)`) for a checkpoint trained
+  on raw sigmas. Bonus finding during the strip: in all 8 instances the node's
+  output was already wired to nothing (`outputs[0].links == []`) — the node was
+  effectively dead. Strip is pure cleanup, no behavior change at render time.
+  Migration: `scripts/apply_strip_sd3_shift_node.py` (in-place, idempotent,
+  `--revert`able). Audit `model_sampling_shift` semantic flipped: now WARNs
+  when `ModelSamplingSD3` is present on production workflows. CLAUDE.md L45
+  retracted accordingly. Full audit + evidence: `internal/analysis/ltx23_sigma_shift_audit.md`.
+
 ### Added
 - **Video-reference IC-LoRA wiring (`scripts/apply_iclora_video_reference.py`)** —
   in-loop `LTXAddVideoICLoRAGuide` driven by a reference video clip, mirroring
