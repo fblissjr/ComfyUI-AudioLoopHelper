@@ -444,3 +444,134 @@ def test_audit_fires_err_when_preprocess_val_wrong(
         and f.status == "ERR"
     ]
     assert errs, "audit should ERR when no LTXVPreprocess has val=18"
+
+
+# ---------- sliding mode (Phase 2) ----------
+
+def test_ref_mode_static_default_has_no_calculator(
+    staged_paths, stub_ref_video, stub_lora,
+):
+    """Default (no --ref-mode flag) is static. No SimpleCalculatorKJ
+    should be added; GetImageRangeFromBatch.start_index stays a widget-
+    driven INT, not a wired input."""
+    input_path, output_path = staged_paths
+    _assert_ok(_apply(input_path, output_path, stub_ref_video, stub_lora))
+    ed = WorkflowEditor(output_path)
+    sg = ed.get_subgraph(0)
+    assert sg is not None
+    calcs = [n for n in sg.get("nodes", []) if n.get("type") == "SimpleCalculatorKJ"]
+    assert calcs == [], (
+        f"static mode (default) must not add SimpleCalculatorKJ; found {len(calcs)}"
+    )
+    slicer = next(
+        (n for n in sg.get("nodes", []) if n.get("type") == "GetImageRangeFromBatch"),
+        None,
+    )
+    assert slicer is not None, "GetImageRangeFromBatch missing"
+    start_idx_input = next(
+        (i for i in slicer.get("inputs", []) if i.get("name") == "start_index"),
+        None,
+    )
+    assert start_idx_input is not None
+    assert start_idx_input.get("link") is None, (
+        "static mode: start_index must remain widget-driven (link=None)"
+    )
+    assert "widget" in start_idx_input, (
+        "static mode: start_index must keep its widget field"
+    )
+
+
+def test_ref_mode_sliding_inserts_calculator_and_wires_start_index(
+    staged_paths, stub_ref_video, stub_lora,
+):
+    """--ref-mode sliding inserts SimpleCalculatorKJ in the subgraph,
+    bakes ref_fps (default 25) into the expression as `round(a * 25)`,
+    wires its `a` input from the subgraph's video_start_time (FLOAT),
+    and rewires GetImageRangeFromBatch.start_index from widget to a
+    wired INT input fed by the calculator's Int output (slot 1)."""
+    input_path, output_path = staged_paths
+    _assert_ok(_apply(
+        input_path, output_path, stub_ref_video, stub_lora,
+        "--ref-mode", "sliding",
+    ))
+    ed = WorkflowEditor(output_path)
+    sg = ed.get_subgraph(0)
+    assert sg is not None
+
+    calcs = [n for n in sg.get("nodes", []) if n.get("type") == "SimpleCalculatorKJ"]
+    assert len(calcs) == 1, (
+        f"sliding mode must add exactly one SimpleCalculatorKJ; found {len(calcs)}"
+    )
+    calc = calcs[0]
+    expr = (calc.get("widgets_values") or [None])[0]
+    assert expr == "round(a * 25)", (
+        f"calculator expression must bake force_rate (default 25) into "
+        f'the formula; got widgets_values[0]={expr!r}'
+    )
+
+    # Calculator's `a` input must be wired (from video_start_time via -10)
+    a_input = next((i for i in calc.get("inputs", []) if i.get("name") == "a"), None)
+    assert a_input is not None, "SimpleCalculatorKJ missing 'a' input"
+    assert a_input.get("link") is not None, (
+        f"calculator.a must be wired; got link={a_input.get('link')}"
+    )
+
+    # Slicer.start_index must now be wired (link != None) AND have no widget field
+    slicer = next(
+        (n for n in sg.get("nodes", []) if n.get("type") == "GetImageRangeFromBatch"),
+        None,
+    )
+    assert slicer is not None
+    start_idx = next(
+        (i for i in slicer.get("inputs", []) if i.get("name") == "start_index"),
+        None,
+    )
+    assert start_idx is not None
+    assert start_idx.get("link") is not None, (
+        "sliding mode: GetImageRangeFromBatch.start_index must be wired"
+    )
+    assert "widget" not in start_idx, (
+        "sliding mode: start_index input must NOT carry a widget field "
+        "(widget→wire conversion incomplete)"
+    )
+
+    # The link feeding start_index must originate from the calculator's
+    # Int output (slot 1, not Float slot 0).
+    link_id = start_idx["link"]
+    link = next((l for l in sg["links"] if l.get("id") == link_id), None)
+    assert link is not None
+    assert link.get("origin_id") == calc["id"], (
+        f"start_index link must originate from SimpleCalculatorKJ; "
+        f"got origin_id={link.get('origin_id')}"
+    )
+    assert link.get("origin_slot") == 1, (
+        f"start_index link must read from calculator's Int output (slot 1); "
+        f"got origin_slot={link.get('origin_slot')}"
+    )
+
+
+def test_ref_mode_sliding_with_custom_ref_fps_bakes_into_expression(
+    staged_paths, stub_ref_video, stub_lora,
+):
+    """--ref-fps overrides the default 25 baked into BOTH the calculator
+    expression AND VHS_LoadVideo.force_rate (single source of truth)."""
+    input_path, output_path = staged_paths
+    _assert_ok(_apply(
+        input_path, output_path, stub_ref_video, stub_lora,
+        "--ref-mode", "sliding", "--ref-fps", "30",
+    ))
+    ed = WorkflowEditor(output_path)
+    # Calculator expression must reference 30
+    sg = ed.get_subgraph(0)
+    calc = next((n for n in sg["nodes"] if n.get("type") == "SimpleCalculatorKJ"), None)
+    assert calc is not None
+    expr = calc.get("widgets_values", [None])[0]
+    assert expr == "round(a * 30)", (
+        f"calculator expression must bake --ref-fps=30; got {expr!r}"
+    )
+    # VHS_LoadVideo.force_rate must also be 30 (single SoT)
+    vhs = ed.find_nodes_by_type("VHS_LoadVideo")[0]
+    fr = vhs.get("widgets_values", {}).get("force_rate")
+    assert fr == 30, (
+        f"VHS_LoadVideo.force_rate must match --ref-fps; got {fr}"
+    )

@@ -6,6 +6,23 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Sliding-mode flag on `scripts/apply_iclora_video_reference.py`** — Phase 2
+  of the IC-LoRA video-reference roadmap. `--ref-mode {static,sliding}` (default
+  `static` preserves prior behavior). Sliding mode inserts a `SimpleCalculatorKJ`
+  in the loop subgraph computing `start_index = round(video_start_time * ref_fps)`,
+  rewires `GetImageRangeFromBatch.start_index` from widget to wired INT input, and
+  the slicer's reference-video window advances with each loop iteration instead
+  of statically reusing the same slice. Useful for long songs where a single
+  ref-video window doesn't carry enough motion variation.
+  Companion flag `--ref-fps INT` (default 25) is the single source of truth: it's
+  baked into BOTH `VHS_LoadVideo.force_rate` (controls reference-video resampling)
+  AND the calculator's expression (controls per-iter index advancement). Setting
+  one without the other is impossible by construction. 3 new tests; all 21
+  existing IC-LoRA tests still pass; both modes audit-clean (29 OK / 1 WARN
+  pre-existing latent-volume informational / 0 ERR). To switch modes after a
+  prior apply, run `--revert` then re-apply with the new mode.
+
 ### Changed
 - **Retired the legacy `profile_output/` profile artifact path.** The runtime
   default for `ProfileBegin.output_dir` was migrated to

@@ -37,11 +37,13 @@ Pre-flight checks:
   - Input workflow is post-Step-0 (no dead scaffolding nodes
     #1625/#1626/#1627). Refuses if Step 0 hasn't been applied.
 
-Sliding mode is a planned follow-up. The static-mode wiring shipped
-here is the durable foundation (per the approved plan: "sliding is a
-parameterization, not a separate code path"). Adding sliding requires
-inserting one SimpleCalculatorKJ + one widget rewire — no graph
-rebuild — which a follow-up apply script will handle.
+Reference-window evolution is controlled by --ref-mode:
+  - static (default): same window every iter (start_index widget).
+  - sliding: window advances with video_start_time per iter via a
+    SimpleCalculatorKJ in the loop subgraph computing
+    `round(video_start_time * ref_fps)`. --ref-fps (default 25) is
+    baked into BOTH VHS_LoadVideo.force_rate and the calculator's
+    expression as a single source of truth.
 
 Compatibility:
   - Requires `apply_strip_dead_lora_loaders.py` to have been applied
@@ -107,6 +109,14 @@ DEFAULT_GUIDE_TILE_OVERLAP = 64
 DEFAULT_REF_NUM_FRAMES = 25            # matches our typical window length
 DEFAULT_REF_START_INDEX = 0            # static reuse (slot 0 each iter)
 DEFAULT_PREPROCESS_VAL = 18            # F2 symmetry with init-image LTXVPreprocess
+DEFAULT_REF_FPS = 25                   # VHS_LoadVideo.force_rate; also baked
+                                       # into sliding-mode calculator expression
+                                       # (single source of truth)
+DEFAULT_REF_MODE = "static"            # "static" = same ref-window every iter;
+                                       # "sliding" = window advances with
+                                       # video_start_time per iter
+SG_VIDEO_START_TIME_INPUT = "video_start_time"  # subgraph FLOAT input slot;
+                                       # name-resolved at apply time
 
 DEFAULT_INPUT = "example_workflows/audio-loop-music-video_latent.json"
 DEFAULT_OUTPUT = "internal/scratch/audio-loop-music-video_latent_iclora_video.json"
@@ -214,10 +224,14 @@ def _add_iclora_loader(ed: WorkflowEditor, ic_lora_file: str, strength: float) -
 # Top-level splice: ref-video preprocessing chain
 # --------------------------------------------------------------------------
 
-def _add_ref_video_chain(ed: WorkflowEditor, reference_video: Path) -> tuple[int, int, int]:
+def _add_ref_video_chain(
+    ed: WorkflowEditor, reference_video: Path, ref_fps: int,
+) -> tuple[int, int, int]:
     """Add VHS_LoadVideo -> ImageResizeKJv2 -> LTXVPreprocess(val=18). Returns
     (loader_id, resizer_id, preproc_id). The preproc.output_image is what
-    flows into the subgraph invoker's new IMAGE slot."""
+    flows into the subgraph invoker's new IMAGE slot. ref_fps is baked into
+    VHS_LoadVideo.force_rate (single source of truth — also baked into the
+    sliding-mode calculator expression when --ref-mode sliding)."""
     loader_id = ed.add_top_level_node(
         node_type="VHS_LoadVideo",
         pos=[-2200, 1300],
@@ -234,7 +248,7 @@ def _add_ref_video_chain(ed: WorkflowEditor, reference_video: Path) -> tuple[int
         ],
         widgets_values={
             "video": str(reference_video),
-            "force_rate": 24,
+            "force_rate": ref_fps,
             "custom_width": 0,
             "custom_height": 0,
             "frame_load_cap": 0,
@@ -476,6 +490,95 @@ def _splice_subgraph(
 
 
 # --------------------------------------------------------------------------
+# Subgraph splice: sliding-mode calculator (Phase 2)
+# --------------------------------------------------------------------------
+
+def _splice_sliding_calculator(
+    ed: WorkflowEditor, slicer_id: int, ref_fps: int,
+) -> int:
+    """Add SimpleCalculatorKJ inside the subgraph + rewire
+    GetImageRangeFromBatch.start_index from widget to a wired INT input
+    fed by the calculator's Int output (slot 1).
+
+    The calculator evaluates `round(a * <ref_fps>)` where `a` is the
+    subgraph's video_start_time (FLOAT, varies per-iter from
+    AudioLoopController). Result is the frame index into the ref-video
+    batch, advancing the consumed window per iter.
+
+    ref_fps is baked into the expression string rather than carried as
+    a separate variable widget — keeps the workflow self-documenting
+    and avoids the SimpleCalculatorKJ Autogrow widget complexity.
+
+    Returns the calculator's node id.
+    """
+    sg = ed.get_subgraph(0)
+    assert sg is not None
+
+    # Locate the subgraph's video_start_time input slot (FLOAT).
+    vst_slot = WorkflowEditor.find_input_slot(sg, SG_VIDEO_START_TIME_INPUT)
+    if vst_slot is None:
+        raise SystemExit(
+            f"--ref-mode sliding requires subgraph input "
+            f"'{SG_VIDEO_START_TIME_INPUT}' (FLOAT). Not found in this workflow."
+        )
+
+    # Add SimpleCalculatorKJ. The shape mirrors the upstream KJNodes
+    # workflow convention: top-level `a`/`b` inputs (backwards-compat
+    # path), `expression` widget input, plus `variables.a`/`variables.b`
+    # autogrow children. Only `a` is wired; `b` is unused (force_rate
+    # baked into expression).
+    calc_id = ed.add_subgraph_node(
+        node_type="SimpleCalculatorKJ",
+        pos=[900, 3700],
+        size=[270, 130],
+        inputs=[
+            {"localized_name": "a", "name": "a", "shape": 7,
+             "type": "*", "link": None},
+            {"localized_name": "b", "name": "b", "shape": 7,
+             "type": "*", "link": None},
+            {"localized_name": "expression", "name": "expression",
+             "type": "STRING", "widget": {"name": "expression"}, "link": None},
+            {"label": "a", "localized_name": "variables.a",
+             "name": "variables.a", "shape": 7,
+             "type": "INT,FLOAT,BOOLEAN", "link": None},
+            {"label": "b", "localized_name": "variables.b",
+             "name": "variables.b", "shape": 7,
+             "type": "INT,FLOAT,BOOLEAN", "link": None},
+        ],
+        outputs=[
+            {"name": "FLOAT", "type": "FLOAT", "links": []},
+            {"name": "INT", "type": "INT", "links": []},
+            {"name": "BOOLEAN", "type": "BOOLEAN", "links": []},
+        ],
+        widgets_values=[f"round(a * {ref_fps})"],
+        properties={
+            "cnr_id": "kjnodes",
+            "Node name for S&R": "SimpleCalculatorKJ",
+        },
+        title=f"Sliding-mode start_index = round(video_start_time * {ref_fps})",
+    )
+
+    # Wire calculator.a from subgraph input video_start_time (FLOAT, via -10).
+    ed.add_subgraph_link(-10, vst_slot, calc_id, 0, "*")
+
+    # Rewire slicer.start_index: widget -> wired INT from calculator slot 1.
+    slicer = ed.find_subgraph_node(slicer_id, 0)
+    assert slicer is not None
+    start_idx_input = next(
+        (i for i in slicer["inputs"] if i.get("name") == "start_index"),
+        None,
+    )
+    if start_idx_input is None:
+        raise SystemExit("slicer GetImageRangeFromBatch missing 'start_index' input")
+    # Drop the widget field; the link will supply the value at runtime.
+    start_idx_input.pop("widget", None)
+    # add_subgraph_link sets the target's input.link
+    ed.add_subgraph_link(calc_id, 1, slicer_id, 0, "INT")
+
+    return calc_id
+
+
+# --------------------------------------------------------------------------
 # Driver
 # --------------------------------------------------------------------------
 
@@ -484,6 +587,7 @@ def _migrate(
     reference_video: Path, ic_lora_file: Path,
     ic_lora_strength: float, guide_frame_idx: int, guide_strength: float,
     latent_downscale: float, ref_start_index: int, ref_num_frames: int,
+    ref_mode: str, ref_fps: int,
     dry_run: bool,
 ) -> None:
     if input_path != output_path and output_path.exists():
@@ -515,9 +619,9 @@ def _migrate(
     loader_id = _add_iclora_loader(ed, str(ic_lora_file), ic_lora_strength)
     print(f"  added LTXICLoRALoaderModelOnly as node {loader_id}")
 
-    vhs_id, resize_id, preproc_id = _add_ref_video_chain(ed, reference_video)
-    print(f"  added VHS_LoadVideo({vhs_id}) -> ImageResizeKJv2({resize_id}) "
-          f"-> LTXVPreprocess({preproc_id})")
+    vhs_id, resize_id, preproc_id = _add_ref_video_chain(ed, reference_video, ref_fps)
+    print(f"  added VHS_LoadVideo({vhs_id}) [force_rate={ref_fps}] "
+          f"-> ImageResizeKJv2({resize_id}) -> LTXVPreprocess({preproc_id})")
 
     sg_input_slot = _add_ref_video_subgraph_input(ed)
     invoker_slot = _add_invoker_input(ed)
@@ -537,6 +641,12 @@ def _migrate(
     )
     print(f"  added subgraph GetImageRangeFromBatch({slicer_id}) "
           f"+ LTXAddVideoICLoRAGuide({guide_id}); rewired #1519 consumers")
+
+    if ref_mode == "sliding":
+        calc_id = _splice_sliding_calculator(ed, slicer_id, ref_fps)
+        print(f"  added SimpleCalculatorKJ({calc_id}) "
+              f"[expr='round(a * {ref_fps})']; rewired "
+              f"GetImageRangeFromBatch.start_index widget -> wired INT")
 
     ed.save(output_path)
     print(f"  wrote {output_path}")
@@ -577,6 +687,16 @@ def main() -> int:
                     help=f"slicer.start_index widget (default {DEFAULT_REF_START_INDEX} = static)")
     ap.add_argument("--ref-num-frames", type=int, default=DEFAULT_REF_NUM_FRAMES,
                     help=f"slicer.num_frames widget (default {DEFAULT_REF_NUM_FRAMES})")
+    ap.add_argument("--ref-mode", choices=("static", "sliding"),
+                    default=DEFAULT_REF_MODE,
+                    help=f"Reference-window evolution per iter. "
+                         f"'static' (default): same window every iter "
+                         f"(start_index widget). 'sliding': window advances "
+                         f"with video_start_time (SimpleCalculatorKJ wired in).")
+    ap.add_argument("--ref-fps", type=int, default=DEFAULT_REF_FPS,
+                    help=f"VHS_LoadVideo.force_rate (default {DEFAULT_REF_FPS}); "
+                         "single source of truth — also baked into the "
+                         "sliding-mode calculator expression.")
     ap.add_argument("--revert", action="store_true",
                     help="Delete the output staging file (does not touch --input).")
     ap.add_argument("--dry-run", action="store_true",
@@ -591,11 +711,19 @@ def main() -> int:
     if not args.reference_video or not args.ic_lora_file:
         raise SystemExit("--reference-video and --ic-lora-file are required (unless --revert)")
 
+    if args.ref_fps <= 0:
+        raise SystemExit(
+            f"--ref-fps must be a positive integer (got {args.ref_fps}). "
+            "If your ref-video should use its native fps, this apply script "
+            "doesn't support that today — file a follow-up if needed."
+        )
+
     _migrate(
         Path(args.input), output_path,
         Path(args.reference_video), Path(args.ic_lora_file),
         args.ic_lora_strength, args.guide_frame_idx, args.guide_strength,
         args.latent_downscale, args.ref_start_index, args.ref_num_frames,
+        args.ref_mode, args.ref_fps,
         args.dry_run,
     )
     return 0
