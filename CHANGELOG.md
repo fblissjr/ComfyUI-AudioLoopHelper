@@ -7,6 +7,23 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **`AudioLatentSlice` (`nodes_audio_latent_slice.py`)** — slice an audio
+  LATENT by source-timeline seconds. Companion to the audio-latent
+  pre-encode pattern (design doc: `internal/design/audio_latent_pre_encode_design.md`).
+  The current loop subgraph re-encodes the windowed audio slice via
+  `LTXVAudioVAEEncode` each iteration (~1.7s × 5 loop iters = ~8.5s/render
+  of pure encode + ~5-15s of `AudioVAE` re-stage overhead per console-log
+  observation). Encoding the full song's audio latent ONCE outside the
+  loop and slicing in latent space per-iter eliminates both costs.
+  Latent rate inferred empirically from `latent.shape[temporal_dim] /
+  source_seconds` — works regardless of audio VAE's mel hop_length /
+  autoencoder downscale. Slicing math handles edge cases: out-of-range
+  start clamps safely (returns at least 1 frame), zero duration yields
+  a 1-frame slice. 21 unit tests at `tests/test_audio_latent_slice.py`.
+  Workflow integration (apply script + subgraph schema change for the
+  full pre-encode topology) is the bigger ~3.5hr piece, deferred until
+  bench data shows the chunk + regional-compile candidates aren't enough.
+
 - **`LTXVideoRegionalCompile` (experimental node, `nodes_regional_compile.py`)** —
   spike implementation of regional `torch.compile` per-block FFN on the LTX-2.3
   transformer. Compiles `transformer_blocks[i].ff` across all 48 blocks, leaves
