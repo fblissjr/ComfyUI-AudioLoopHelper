@@ -3312,7 +3312,7 @@
           ]
         }
       ],
-      "title": "VAE Encode (init image \u2192 guide latent)",
+      "title": "VAE Encode (init image → guide latent)",
       "properties": {
         "cnr_id": "comfy-core",
         "ver": "0.20.1",
@@ -3935,10 +3935,10 @@
       },
       "widgets_values": {
         "video": "LTX-2_00065.mp4",
-        "force_rate": 24,
+        "force_rate": 25,
         "custom_width": 0,
         "custom_height": 0,
-        "frame_load_cap": 0,
+        "frame_load_cap": 25,
         "skip_first_frames": 0,
         "select_every_nth": 1,
         "format": "LTXV",
@@ -3949,8 +3949,8 @@
             "filename": "LTX-2_00065.mp4",
             "type": "input",
             "format": "video/mp4",
-            "force_rate": 24,
-            "frame_load_cap": 0,
+            "force_rate": 25,
+            "frame_load_cap": 25,
             "skip_first_frames": 0,
             "select_every_nth": 1
           }
@@ -4058,7 +4058,7 @@
         "cnr_id": "comfyui-audioloophelper"
       },
       "widgets_values": [
-        "0:00+: video of a man singing",
+        "0:00+: video of a man dancing",
         17.92,
         180,
         true,
@@ -6320,7 +6320,7 @@
                 "type": "LATENT"
               }
             ],
-            "title": "CropGuides (LATENT-only \u2014 split)",
+            "title": "CropGuides (LATENT-only — split)",
             "properties": {
               "cnr_id": "comfy-core",
               "ver": "0.20.1",
@@ -6891,7 +6891,7 @@
         },
         "class_type": "LTXVGemmaCLIPModelLoader",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Gemma 3 Model Loader"
+          "title": "🅛🅣🅧 Gemma 3 Model Loader"
         }
       },
       "3": {
@@ -6977,7 +6977,7 @@
         },
         "class_type": "LTXVAudioVAELoader",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Audio VAE Loader"
+          "title": "🅛🅣🅧 LTXV Audio VAE Loader"
         }
       },
       "14": {
@@ -6993,7 +6993,7 @@
         },
         "class_type": "LTXVAudioVAEDecode",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Audio VAE Decode"
+          "title": "🅛🅣🅧 LTXV Audio VAE Decode"
         }
       },
       "15": {
@@ -7022,7 +7022,7 @@
         },
         "class_type": "VHS_VideoCombine",
         "_meta": {
-          "title": "Video Combine \ud83c\udfa5\ud83c\udd65\ud83c\udd57\ud83c\udd62"
+          "title": "Video Combine 🎥🅥🅗🅢"
         }
       },
       "17": {
@@ -7047,7 +7047,7 @@
         },
         "class_type": "MultimodalGuider",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Multimodal Guider"
+          "title": "🅛🅣🅧 Multimodal Guider"
         }
       },
       "18": {
@@ -7064,7 +7064,7 @@
         },
         "class_type": "GuiderParameters",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Guider Parameters"
+          "title": "🅛🅣🅧 Guider Parameters"
         }
       },
       "19": {
@@ -7077,7 +7077,7 @@
         },
         "class_type": "GuiderParameters",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Guider Parameters"
+          "title": "🅛🅣🅧 Guider Parameters"
         }
       },
       "21": {
@@ -7136,7 +7136,7 @@
         },
         "class_type": "LTXVEmptyLatentAudio",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Empty Latent Audio"
+          "title": "🅛🅣🅧 LTXV Empty Latent Audio"
         }
       },
       "27": {
@@ -7165,7 +7165,7 @@
         },
         "class_type": "LTXVConcatAVLatent",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Concat AV Latent"
+          "title": "🅛🅣🅧 LTXV Concat AV Latent"
         }
       },
       "29": {
@@ -7181,7 +7181,7 @@
         },
         "class_type": "LTXVSeparateAVLatent",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Separate AV Latent"
+          "title": "🅛🅣🅧 LTXV Separate AV Latent"
         }
       },
       "41": {
