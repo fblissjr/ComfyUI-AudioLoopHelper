@@ -15,6 +15,7 @@ OptimizedModule import to recognize that marker as the wrapper class.
 from __future__ import annotations
 
 import sys
+from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
@@ -124,36 +125,23 @@ def _identity_compile(module, mode="default", **_kwargs):
     return _FakeOptimizedModule(module, mode)
 
 
-def _patch_compile_and_unwrap(target_path):
-    """Context-manager helper: patches both torch.compile (via
-    `nodes_regional_compile.torch.compile`) AND the OptimizedModule
-    import inside `_unwrap_compiled` so that our `_FakeOptimizedModule`
-    is recognized as the wrapper. Returns a single combined patcher."""
-    return _CombinedPatch(target_path)
+def _fake_unwrap(ff):
+    """Recognize our `_FakeOptimizedModule` as the OptimizedModule the
+    production `_unwrap_compiled` handles. Used by the patch context."""
+    if isinstance(ff, _FakeOptimizedModule):
+        return ff._orig_mod
+    return ff
 
 
-class _CombinedPatch:
-    def __init__(self, _target_path: str):
-        self._patches = []
-
-    def __enter__(self):
-        # Patch torch.compile in the consumer module
-        p1 = patch("nodes_regional_compile.torch.compile", _identity_compile)
-        # Patch _unwrap_compiled to recognize our fake as the OptimizedModule
-        from nodes_regional_compile import _unwrap_compiled as _real_unwrap  # noqa: F401
-        def _fake_unwrap(ff):
-            if isinstance(ff, _FakeOptimizedModule):
-                return ff._orig_mod
-            return ff
-        p2 = patch("nodes_regional_compile._unwrap_compiled", _fake_unwrap)
-        self._patches = [p1, p2]
-        for p in self._patches:
-            p.start()
-        return self
-
-    def __exit__(self, *exc):
-        for p in self._patches:
-            p.stop()
+def _patch_compile_and_unwrap(_target_path=None):
+    """Context manager that patches both `torch.compile` in
+    `nodes_regional_compile` AND `_unwrap_compiled` so the fake-
+    OptimizedModule unwrap path is exercised. Uses `ExitStack` so
+    both patches lift cleanly even on exception."""
+    stack = ExitStack()
+    stack.enter_context(patch("nodes_regional_compile.torch.compile", _identity_compile))
+    stack.enter_context(patch("nodes_regional_compile._unwrap_compiled", _fake_unwrap))
+    return stack
 
 
 # -----------------------------------------------------------------------------
@@ -274,32 +262,20 @@ class TestPatchImpl:
         for i, block in enumerate(patched.model.diffusion_model.transformer_blocks):
             assert block.ff is not original_ffs[i]
 
-    def test_registers_cleanup_callback(self):
+    def test_no_cleanup_callback_registered(self):
+        """Regression guard: ON_CLEANUP fires after EVERY model invocation
+        (= every sampler), not at model-unload. Registering cleanup to
+        restore-and-recompile would trash the compile cache between
+        samplers, paying cold-compile per sampler. Bench 2026-05-01:
+        with cleanup registered, regional_compile was +6% slower than
+        baseline. The fix is to skip cleanup entirely; let compile state
+        persist for the lifetime of the loaded diffusion model.
+        """
         model = FakeLTXModel(n_blocks=2)
         with _patch_compile_and_unwrap("nodes_regional_compile"):
             patched = LTXVideoRegionalCompile._patch_impl(model, mode="default")
 
-        # Callback must be registered with the canonical key
-        assert any(
-            ct == "on_cleanup" and key == PATCH_KEY
-            for (ct, key) in patched.callbacks.keys()
-        ), f"cleanup callback missing; have {list(patched.callbacks.keys())}"
-
-    def test_cleanup_callback_restores_originals(self):
-        model = FakeLTXModel(n_blocks=2)
-        original_ffs = [b.ff for b in model.model.diffusion_model.transformer_blocks]
-
-        with _patch_compile_and_unwrap("nodes_regional_compile"):
-            patched = LTXVideoRegionalCompile._patch_impl(model, mode="default")
-
-        # Confirm patched
-        for i, block in enumerate(patched.model.diffusion_model.transformer_blocks):
-            assert block.ff is not original_ffs[i]
-
-        # Invoke cleanup
-        cleanup_fn = patched.callbacks[("on_cleanup", PATCH_KEY)]
-        cleanup_fn()
-
-        # Originals restored
-        for i, block in enumerate(patched.model.diffusion_model.transformer_blocks):
-            assert block.ff is original_ffs[i], f"block {i}.ff not restored"
+        assert patched.callbacks == {}, (
+            f"no callbacks should be registered (cleanup would trash compile "
+            f"cache between samplers); have {list(patched.callbacks.keys())}"
+        )

@@ -7,9 +7,14 @@ Inductor — N5 spike 2026-05-01). Targets the 42% launch-overhead bucket
 from clean chrome trace 2026-05-01.
 
 SPIKE: mutates shared `transformer_blocks[i].ff` in place (clones share
-the underlying model). ON_CLEANUP callback restores originals. Stale
-state detected via `isinstance(ff, OptimizedModule)` + the official
-`._orig_mod` API. Full rationale + research links in CHANGELOG.
+the underlying model). NO cleanup callback — the compile cache MUST
+persist across sampler invocations to deliver the speedup, but
+`CallbacksMP.ON_CLEANUP` fires after every model invocation (= every
+sampler), so registering it would trash the cache between samplers.
+Bench 2026-05-01 confirmed: with cleanup registered, regional_compile
+was +6% slower than baseline (every sampler paid cold-compile cost).
+Stale state across re-applies handled via `isinstance(ff,
+OptimizedModule)` + the official `._orig_mod` API.
 
 PLACEMENT: insert this node AFTER any node that calls `model.state_dict()`
 (notably `LTXICLoRALoaderModelOnly`). Compiled `OptimizedModule` wrappers
@@ -47,15 +52,9 @@ except ImportError:
     def override(fn):  # type: ignore[no-redef]
         return fn
 
-try:
-    from comfy.patcher_extension import CallbacksMP
-    _ON_CLEANUP = CallbacksMP.ON_CLEANUP
-except ImportError:
-    _ON_CLEANUP = "on_cleanup"
-
-
 # Single key so re-applying this node overwrites cleanly rather than
-# stacking compiled wrappers.
+# stacking compiled wrappers. Reserved for future use; not currently
+# wired (no cleanup callback — see module docstring for why).
 PATCH_KEY = "ltxv_regional_compile"
 
 
@@ -176,7 +175,13 @@ class LTXVideoRegionalCompile(io.ComfyNode):
 
     @classmethod
     def _patch_impl(cls, model, *, mode: CompileMode):
-        """Testable seam. Returns the patched clone."""
+        """Testable seam. Returns the patched clone.
+
+        No cleanup callback registered: see module docstring. Compile
+        state must persist across sampler invocations or the cache
+        gets thrown away between samplers and we pay cold-compile per
+        sampler (verified bench-regression 2026-05-01).
+        """
         clone = model.clone()
         diffusion_model = clone.model.diffusion_model
         originals = _patch_blocks(diffusion_model, mode)
@@ -185,20 +190,6 @@ class LTXVideoRegionalCompile(io.ComfyNode):
             f"[RegionalCompile] patched {n_patched} transformer_blocks[i].ff "
             f"with torch.compile(mode='{mode}')"
         )
-
-        def _cleanup(*_args, **_kwargs):
-            _restore_blocks(diffusion_model, originals)
-            print(f"[RegionalCompile] restored {n_patched} originals on cleanup")
-
-        if hasattr(clone, "add_callback_with_key"):
-            clone.add_callback_with_key(_ON_CLEANUP, PATCH_KEY, _cleanup)
-        else:
-            # Fallback path for older ModelPatcher revs / test stubs
-            try:
-                clone.add_callback(_ON_CLEANUP, _cleanup)
-            except AttributeError:
-                pass  # test environment without the API; cleanup runs on next manual call
-
         return clone
 
 

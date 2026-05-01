@@ -202,20 +202,19 @@ class AudioLatentSlice(io.ComfyNode):
     ) -> io.NodeOutput:
         samples = latent["samples"]
         sliced = _slice_latent(samples, source_seconds, start_seconds, duration_seconds)
-        out: dict = {"samples": sliced}
-        # Preserve any non-samples keys (noise_mask, batch_index, etc.) but
-        # they don't carry the temporal-slice semantics — pass-through with
-        # a warning if noise_mask is present (it would need to be sliced too).
-        for k, v in latent.items():
-            if k == "samples":
-                continue
-            if k == "noise_mask":
-                # Audio noise_mask should follow the same slice — but our
-                # canonical workflow strips noise_mask via StripLatentNoiseMask
-                # before audio chains, so this branch shouldn't fire in the
-                # supported topology. Pass through; if a future workflow
-                # carries noise_mask here, add a warning.
-                out[k] = v
-            else:
-                out[k] = v
+        if "noise_mask" in latent:
+            # Canonical workflow strips noise_mask via StripLatentNoiseMask
+            # before the audio chain. If a future workflow carries
+            # noise_mask through here, the mask shape no longer matches the
+            # sliced samples — silent passthrough would corrupt downstream
+            # masking. Warn loudly rather than fail-silently.
+            import warnings
+            warnings.warn(
+                "AudioLatentSlice received noise_mask; passing through "
+                "unchanged but mask shape no longer matches sliced samples. "
+                "Strip noise_mask before this node or extend AudioLatentSlice "
+                "to slice the mask too.",
+                stacklevel=2,
+            )
+        out: dict = {**latent, "samples": sliced}
         return io.NodeOutput(out)
