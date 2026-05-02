@@ -7,6 +7,22 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **`example_workflows/audio-loop-music-video_latent_iclora_audio_pre_encode.json`** —
+  shipped variant of the iclora workflow with the audio-latent pre-encode
+  topology applied. Validation render 2026-05-01 measured **−12.8s wall
+  vs the apples-to-apples baseline** (`bench_profile2` adjusted for the
+  ~178s of Profile* node overhead it carries that this workflow doesn't):
+  381.7s → 368.94s, **−3.4% wall**. Breakdown matches design prediction:
+  `LTXVAudioVAEEncode` count drops from 6 → 2 (saves 1.16s on encode
+  itself), `IterationCleanup` drops from 9.67s × 5 to 1.28s × 5 (saves
+  8.4s — the per-iter AudioVAE re-stage cost we predicted from console-
+  log analysis), plus various per-iter savings on adjacent nodes. The
+  smoking-gun confirmation: AudioVAE no longer re-stages between sampler
+  invocations because the loop body no longer needs it. **Real win,
+  matches estimate, ships as a shipped variant.** Audit clean (29 OK /
+  1 WARN pre-existing latent_volume / 0 ERR). Promote to canonical iclora
+  variant after a second confirmation render.
+
 - **`scripts/apply_audio_latent_pre_encode.py`** — implements the
   audio-latent pre-encode topology designed at
   `internal/design/audio_latent_pre_encode_design.md`. Replaces the
@@ -15,8 +31,10 @@ This project uses [Semantic Versioning](https://semver.org/).
   ~8.5s/render of audio re-encode (~1.7s × 5 loop iters) plus per-iter
   AudioVAE re-stage cost (5-15s/render of `Model AudioVAE prepared for
   dynamic VRAM loading` console-log overhead). Realistic estimate: 8-15s
-  total wall savings on the iclora workflow. Stages to
-  `internal/scratch/audio-loop-music-video_latent_audio_pre_encode.json`.
+  total wall savings on the iclora workflow — empirically confirmed at
+  −12.8s on validation render. Stages to
+  `internal/scratch/audio-loop-music-video_latent_audio_pre_encode.json`;
+  shipped variant promoted to `example_workflows/audio-loop-music-video_latent_iclora_audio_pre_encode.json`.
   CLI flags `--source-seconds` (default 300, matches upstream
   `TrimAudioDuration` widget) and `--window-seconds` (default 17.92,
   matches `LTXFramePlanner` widget) bake into the `AudioLatentSlice`
