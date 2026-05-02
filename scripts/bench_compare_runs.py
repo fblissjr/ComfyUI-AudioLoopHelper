@@ -92,16 +92,37 @@ def _load_jsonl(path: Path) -> list[dict]:
 
 
 def _resolve_run_path(run_id: str) -> Path | None:
+    """Resolve a run id to its root directory.
+
+    Supports BOTH layouts:
+    - flat:       data/runs/<id>/exec.jsonl
+    - per-prompt: data/runs/<id>/<prompt_id>/exec.jsonl  (when launched
+                  with AUDIOLOOPHELPER_PER_PROMPT=1)
+
+    Returns the run root (data/runs/<id>) in both cases. Caller uses
+    `_run_exec_files(run_dir)` to get the actual exec.jsonl path(s)."""
     candidates = [RUNS_ROOT / run_id]
-    # Also try if user passed a partial / glob
     if not candidates[0].is_dir():
         for p in RUNS_ROOT.iterdir() if RUNS_ROOT.is_dir() else []:
             if p.is_dir() and run_id.lower() in p.name.lower():
                 candidates.append(p)
     for c in candidates:
-        if c.is_dir() and (c / "exec.jsonl").exists():
+        if c.is_dir() and _run_jsonl_files(c, "exec"):
             return c
     return None
+
+
+def _run_jsonl_files(run_dir: Path, name: str) -> list[Path]:
+    """Return all `<name>.jsonl` files under a run dir, supporting both
+    flat (`<run>/<name>.jsonl`) and per-prompt subdir
+    (`<run>/<prompt_id>/<name>.jsonl`) layouts. Returns flat-only if
+    present (single-prompt run), else lists per-prompt subdirs sorted
+    by mtime so warmup → measurement ordering is preserved. Empty list
+    if no matching files."""
+    flat = run_dir / f"{name}.jsonl"
+    if flat.exists():
+        return [flat]
+    return sorted(run_dir.glob(f"*/{name}.jsonl"), key=lambda p: p.stat().st_mtime)
 
 
 def _aggregate_run(run_id: str) -> RunStats | None:
@@ -109,39 +130,46 @@ def _aggregate_run(run_id: str) -> RunStats | None:
     if run_dir is None:
         print(f"warn: run '{run_id}' not found under {RUNS_ROOT}", file=sys.stderr)
         return None
-    exec_path = run_dir / "exec.jsonl"
-    sage_path = run_dir / "sage.jsonl" if (run_dir / "sage.jsonl").exists() else None
+    exec_files = _run_jsonl_files(run_dir, "exec")
+    sage_files = _run_jsonl_files(run_dir, "sage")
+    # Aggregated mode: concat all per-prompt files into one set of stats.
+    if not exec_files:
+        return None
+    primary_exec = exec_files[0]
+    primary_sage = sage_files[0] if sage_files else None
 
-    stats = RunStats(run_id=run_dir.name, exec_path=exec_path, sage_path=sage_path)
+    stats = RunStats(run_id=run_dir.name, exec_path=primary_exec, sage_path=primary_sage)
 
     by_class: dict[str, float] = defaultdict(float)
     by_class_count: dict[str, int] = defaultdict(int)
-    for row in _load_jsonl(exec_path):
-        if row.get("event") != "end":
-            continue
-        d = row.get("duration_s")
-        if not isinstance(d, (int, float)):
-            continue
-        ct = row.get("class_type") or "?"
-        by_class[ct] += float(d)
-        by_class_count[ct] += 1
-        stats.total_wall_s += float(d)
-        if ct in KSAMPLER_CLASSES:
-            stats.sampler_wall_s += float(d)
+    for exec_path in exec_files:
+        for row in _load_jsonl(exec_path):
+            if row.get("event") != "end":
+                continue
+            d = row.get("duration_s")
+            if not isinstance(d, (int, float)):
+                continue
+            ct = row.get("class_type") or "?"
+            by_class[ct] += float(d)
+            by_class_count[ct] += 1
+            stats.total_wall_s += float(d)
+            if ct in KSAMPLER_CLASSES:
+                stats.sampler_wall_s += float(d)
     stats.by_class = dict(by_class)
     stats.by_class_count = dict(by_class_count)
 
-    if sage_path is not None:
+    if sage_files:
         atten_by_mode: dict[tuple[str, bool], list[float]] = defaultdict(list)
-        for row in _load_jsonl(sage_path):
-            elapsed = row.get("elapsed_us")
-            if not isinstance(elapsed, (int, float)):
-                continue
-            mode = row.get("effective_mode") or "auto"
-            has_mask = bool(row.get("has_mask"))
-            atten_by_mode[(mode, has_mask)].append(float(elapsed))
-            stats.attention_calls += 1
-            stats.attention_total_us += float(elapsed)
+        for sage_path in sage_files:
+            for row in _load_jsonl(sage_path):
+                elapsed = row.get("elapsed_us")
+                if not isinstance(elapsed, (int, float)):
+                    continue
+                mode = row.get("effective_mode") or "auto"
+                has_mask = bool(row.get("has_mask"))
+                atten_by_mode[(mode, has_mask)].append(float(elapsed))
+                stats.attention_calls += 1
+                stats.attention_total_us += float(elapsed)
 
         for (mode, has_mask), durs in atten_by_mode.items():
             stats.attention_by_mode[f"{mode}{'@masked' if has_mask else '@unmasked'}"] = {
@@ -265,9 +293,10 @@ def main() -> int:
     elif args.latest:
         if not RUNS_ROOT.is_dir():
             raise SystemExit(f"--latest: {RUNS_ROOT} doesn't exist")
+        # Match runs in either flat or per-prompt layout.
         candidates = sorted(
             (p for p in RUNS_ROOT.iterdir()
-             if p.is_dir() and (p / "exec.jsonl").exists()),
+             if p.is_dir() and _run_jsonl_files(p, "exec")),
             key=lambda p: p.stat().st_mtime,
             reverse=True,
         )

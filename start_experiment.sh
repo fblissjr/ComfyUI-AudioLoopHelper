@@ -62,10 +62,29 @@ set -e
 export RUN_ID=${RUN_ID-$(date -u +%Y%m%dT%H%M%SZ)_$(openssl rand -hex 2)}
 export AUDIOLOOPHELPER_SAGE_TRACE=${AUDIOLOOPHELPER_SAGE_TRACE-auto}
 export COMFYUI_EXEC_LOG=${COMFYUI_EXEC_LOG-auto}
+# Per-prompt artifact routing: data/runs/${RUN_ID}/${prompt_id}/<category>.<ext>
+# instead of flat data/runs/${RUN_ID}/<category>.<ext>. Lets multiple prompts
+# in the same ComfyUI session land in their own subdirs (warm-cache benches,
+# parameter sweeps). Reader scripts (bench_compare_runs, exec_log_summary,
+# sage_telemetry_summary) auto-detect both layouts.
+export AUDIOLOOPHELPER_PER_PROMPT=${AUDIOLOOPHELPER_PER_PROMPT-1}
 
-echo "[start_experiment.sh] RUN_ID=$RUN_ID  SAGE_TRACE=$AUDIOLOOPHELPER_SAGE_TRACE  EXEC_LOG=$COMFYUI_EXEC_LOG"
+echo "[start_experiment.sh] RUN_ID=$RUN_ID  SAGE_TRACE=$AUDIOLOOPHELPER_SAGE_TRACE  EXEC_LOG=$COMFYUI_EXEC_LOG  PER_PROMPT=$AUDIOLOOPHELPER_PER_PROMPT"
 
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Clean prior chrome-trace.json files (~1.8GB each) before launching.
+# Keeps summary.txt + memory_timeline.html (small, structured). Without
+# this, trace.json files accumulate at ~1.8GB per profiled bench render
+# and reach 10GB+ after a session of experiments.
+if [[ -d "$PLUGIN_DIR/data/runs" ]]; then
+    # Single-pass: list-and-delete via -print -delete; count from the printed lines.
+    deleted_count=$(find "$PLUGIN_DIR/data/runs" -name "trace.json" -type f -print -delete 2>/dev/null | wc -l)
+    if [[ "$deleted_count" -gt 0 ]]; then
+        echo "[start_experiment.sh] cleaned $deleted_count prior chrome trace.json file(s) (kept summary.txt)"
+    fi
+fi
+
 # ComfyUI plugin layout: <comfyui>/custom_nodes/<this-plugin>/
 COMFYUI_DIR="$(cd "$PLUGIN_DIR/../.." && pwd)"
 START_SH="$COMFYUI_DIR/start.sh"

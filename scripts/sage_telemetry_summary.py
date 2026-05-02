@@ -425,23 +425,27 @@ _DATA_RUNS_DIR = Path("data/runs")
 
 
 def _latest_jsonl(subdir: str, prefix: str, runs_dir: Path = _DEFAULT_RUNS_DIR) -> Path | None:
-    """Return the most recent JSONL across both layouts, or None.
+    """Return the most recent JSONL across all layouts, or None.
 
-    Searches:
-      - Legacy: <runs_dir>/<subdir>/<prefix>_*.jsonl   (timestamped filenames)
-      - RUN_ID: data/runs/*/<{subdir|prefix}>.jsonl    (per-run dirs, filename
-        = `<prefix>.jsonl`; subdir name was 'exec_log' but stored as 'exec.jsonl').
+    Searches (in order):
+      - Legacy:        <runs_dir>/<subdir>/<prefix>_*.jsonl   (timestamped)
+      - Flat RUN_ID:   data/runs/*/<prefix>.jsonl             (per-run dirs)
+      - Per-prompt:    data/runs/*/*/<prefix>.jsonl           (per-prompt subdirs;
+                       AUDIOLOOPHELPER_PER_PROMPT=1, default since 2026-05-01)
 
-    Returns the most recent by mtime across both. New data/runs/ layout
-    came online 2026-04-26 with RUN_ID propagation.
+    Returns the most recent by mtime across all matches. RUN_ID layout
+    came online 2026-04-26; per-prompt subdir layout 2026-05-01.
     """
     candidates: list[Path] = []
     legacy_target = runs_dir / subdir
     if legacy_target.is_dir():
         candidates.extend(legacy_target.glob(f"{prefix}_*.jsonl"))
     if _DATA_RUNS_DIR.is_dir():
-        # data/runs/<RUN_ID>/<prefix>.jsonl   (e.g. exec.jsonl, sage.jsonl)
+        # Flat layout: data/runs/<RUN_ID>/<prefix>.jsonl
         candidates.extend(_DATA_RUNS_DIR.glob(f"*/{prefix}.jsonl"))
+        # Per-prompt subdir layout (AUDIOLOOPHELPER_PER_PROMPT=1):
+        # data/runs/<RUN_ID>/<prompt_id>/<prefix>.jsonl
+        candidates.extend(_DATA_RUNS_DIR.glob(f"*/*/{prefix}.jsonl"))
     if not candidates:
         return None
     return max(candidates, key=lambda p: p.stat().st_mtime)

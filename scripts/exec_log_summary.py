@@ -147,24 +147,39 @@ def _format_table(stats: list[NodeStats], total_s: float, top: int = 15) -> str:
 
 
 def _resolve_exec_log(args: argparse.Namespace) -> Path:
+    """Resolve --latest to the most recent exec.jsonl. Supports BOTH
+    layouts: flat `data/runs/<id>/exec.jsonl` and per-prompt-subdir
+    `data/runs/<id>/<prompt_id>/exec.jsonl` (when launched with
+    AUDIOLOOPHELPER_PER_PROMPT=1)."""
     if args.exec_log:
         return Path(args.exec_log)
     if not args.latest:
         raise SystemExit("--exec-log <path> or --latest required")
     candidates: list[Path] = []
     if DEFAULT_RUNS_ROOT.is_dir():
-        for run_dir in sorted(DEFAULT_RUNS_ROOT.iterdir(), reverse=True):
-            f = run_dir / "exec.jsonl"
-            if f.exists() and f.stat().st_size > 0:
-                candidates.append(f)
-                break
+        # Flat layout first: <run>/exec.jsonl
+        flat_files = [
+            f for run_dir in DEFAULT_RUNS_ROOT.iterdir() if run_dir.is_dir()
+            for f in [run_dir / "exec.jsonl"]
+            if f.exists() and f.stat().st_size > 0
+        ]
+        # Per-prompt subdir layout: <run>/<prompt_id>/exec.jsonl
+        subdir_files = [
+            f for f in DEFAULT_RUNS_ROOT.glob("*/*/exec.jsonl")
+            if f.stat().st_size > 0
+        ]
+        all_files = flat_files + subdir_files
+        if all_files:
+            all_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+            candidates.append(all_files[0])
     if not candidates and LEGACY_RUNS_ROOT.is_dir():
         legacy = sorted(LEGACY_RUNS_ROOT.glob("exec_*.jsonl"), reverse=True)
         if legacy:
             candidates.append(legacy[0])
     if not candidates:
         raise SystemExit(
-            f"--latest: no exec.jsonl found under {DEFAULT_RUNS_ROOT}/<run>/exec.jsonl "
+            f"--latest: no exec.jsonl found under {DEFAULT_RUNS_ROOT}/<run>/exec.jsonl, "
+            f"{DEFAULT_RUNS_ROOT}/<run>/<prompt_id>/exec.jsonl, "
             f"or {LEGACY_RUNS_ROOT}/exec_*.jsonl. Did you launch via ./start_experiment.sh?"
         )
     return candidates[0]
