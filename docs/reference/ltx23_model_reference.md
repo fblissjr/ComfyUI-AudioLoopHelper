@@ -1,4 +1,4 @@
-Last updated: 2026-04-14
+Last updated: 2026-05-03
 
 # LTX 2.3 Model Reference
 
@@ -177,7 +177,7 @@ extraction and output trimming nodes. Shared internals:
 - CFGGuider (644) -- packages for sampling (cfg=1.0, NAG does guidance)
 - SamplerCustomAdvanced (573) -- generates new frames
 
-Full traces: `docs/reference/pipeline_flow_image.md` and `docs/reference/pipeline_flow_latent.md`.
+Full trace: `docs/reference/pipeline_flow_latent.md` (LATENT workflow, the primary baseline).
 
 ## LTX 2.3 audio-video alignment
 

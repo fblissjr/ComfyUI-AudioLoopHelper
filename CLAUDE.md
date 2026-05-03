@@ -1,6 +1,6 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-05-01 (rev 2)
+Last updated: 2026-05-03
 
 ComfyUI nodes that automate loop timing + audio analysis for full-length music video generation with LTX 2.3. Core pattern: `AudioLoopController` drives stride from integer latent counts, audio is frozen via `noise_mask=0`, prompts pre-encoded once outside the loop (CLIP must never enter the loop body). **Start here:** `docs/architecture_overview.md`; task-first nav at `docs/README.md`.
 
@@ -215,7 +215,7 @@ Public docs: `docs/README.md` (task-first nav) → `docs/guides/` (how-to), `doc
 
 Reference codebases (read-only): `coderef/LTX-2/` (LTX-2 native), `coderef/LTX-Desktop/` (Lightricks Desktop), `<comfyui_custom_nodes>/ComfyUI-LTXVideo/` (ComfyUI LTX integration).
 
-Example workflows (`example_workflows/`): seven shipped — `_image.json`, `_image_adain_perstep.json`, `_latent.json` (primary), `_latent_keyframe.json`, `_latent_stg.json`, `_latent_validator.json`, `_retake.json` (regenerate one section of a prior generation; built by `scripts/apply_audio_loop_retake.py`). All on `AudioLoopHelperSageAttention auto_mask_aware`. Validate via `scripts/audit_workflows.py`.
+Example workflows (`example_workflows/`): eight shipped — `_image_adain_perstep.json`, `_latent.json` (primary), `_latent_iclora.json`, `_latent_iclora_audio_pre_encode.json`, `_latent_keyframe.json`, `_latent_stg.json`, `_latent_validator.json`, `_retake.json`. The plain `_image.json` was retired 2026-04-27. All on `AudioLoopHelperSageAttention auto_mask_aware`. Validate via `scripts/audit_workflows.py`.
 
 Claude Code harness (`.claude/`, mostly tracked):
 - `.claude/CLAUDE.md` — conventions for editing harness contents (hook authoring, agent/skill rules, privacy abstraction, settings split). Read before adding/modifying anything under `.claude/`.
@@ -230,7 +230,7 @@ Claude Code harness (`.claude/`, mostly tracked):
 Internal (gitignored):
 - `internal/PLAN.md` — active roadmap.
 - `internal/TODO.md` — step-by-step "what to do next" with checkbox sections, when present. Updated by Claude on demand.
-- `internal/ic_lora_assessment.md` — IC-LoRA phases + decisions index (D1–D18).
+- `internal/ic_lora_assessment.md` — IC-LoRA phases + decisions index (D1–D23).
 - `internal/design/*.md` — long-term designs (`spectrogram_reference_design`, `sage_backlog`, `upscale_workflow_design`).
 - `internal/autoresearch/` — Karpathy-autoresearch-style experiment-runner framework adapted for LTX video. Agent edits `apply.py`; harness orchestrates; tracker is DuckDB; metric extractors live under `metrics/`. Brief: `internal/autoresearch/program.md`. Public-facing test contract: `tests/test_autoresearch.py`.
 - `internal/scripts/` — canonical sources for files that deploy out-of-repo (`start.sh` → `<comfyui>/start.sh`; `sage_fork_build.sh` → `<sage-fork>/build.sh`). Edit here, push via `internal/scripts/sync_to_deployed.sh`. README at `internal/scripts/README.md`.

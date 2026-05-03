@@ -1,4 +1,4 @@
-Last updated: 2026-04-23 (doc reorg: guides/ + reference/ split)
+Last updated: 2026-05-03 (drop dead pipeline_flow_image reference)
 
 # Architecture overview — ComfyUI-AudioLoopHelper
 
@@ -626,8 +626,7 @@ For "I want to...":
 ## See also
 
 - `docs/reference/pipeline_flow_latent.md` — full node-by-node trace
-  of the LATENT workflow
-- `docs/reference/pipeline_flow_image.md` — IMAGE workflow trace
+  of the LATENT workflow (the primary baseline)
 - `docs/reference/sampler_reference.md` — sampler walkthrough with
   ComfyUI + MultimodalGuider source references
 - `docs/reference/nag_technical_reference.md` — NAG deep dive

@@ -4,7 +4,7 @@
   <img src="assets/hero.webp" alt="ComfyUI-AudioLoopHelper" width="500">
 </p>
 
-Last updated: 2026-04-28
+Last updated: 2026-05-03
 
 **TLDR**: Custom ComfyUI nodes for generating full-length music videos with LTX 2.3.
 Handles loop timing, auto-stopping at the audio boundary, per-iteration seed
@@ -12,29 +12,46 @@ variation, timestamp-based prompt scheduling, smooth conditioning blending,
 latent-space overlap conversion, and per-iteration keyframe image scheduling
 for scene changes. No manual iteration counting or fragile constants.
 
-Six workflow variants included:
+Eight workflow variants included:
 - **Latent workflow** (`audio-loop-music-video_latent.json`) -- **primary
   baseline.** Operates in latent space via LatentContextExtract and
-  LatentOverlapTrim. No per-iteration VAE round-trip. Uses
-  LTXVTiledVAEDecode (spatial-only tiling, no temporal-tile seams).
-  Reverse-engineered to produce the bit-exact `DISTILLED_SIGMAS` from
-  LTX 2.3's distilled-1.1 pipeline via `linear_quadratic, 8, 1` +
-  `ModelSamplingSD3 shift=13` + `euler` + `CFGGuider CFG=1`.
+  LatentOverlapTrim. No per-iteration VAE round-trip. Single-tile
+  `LTXVTiledVAEDecode [1,1,1]` on 24GB+ (fall back to `[2,2,1]` on
+  ≤16GB). Lightricks's bit-exact distilled sigma chain via
+  `ManualSigmas` (9 values) + `euler` + `CFGGuider CFG=1`. No
+  `ModelSamplingSD3` shift node — distilled inference applies no shift.
 - **Latent + STG hybrid** (`audio-loop-music-video_latent_stg.json`) --
-  A/B target against the baseline. Same authoritative distilled sigma
-  chain, but swaps `CFGGuider` for `MultimodalGuider` + two
-  `GuiderParameters` (AUDIO/VIDEO both `cfg=1, stg=1`) for
-  Spatial-Temporal Guidance quality lift. Bypasses `LTX2_NAG`.
+  A/B target against the baseline. Same sigma chain but swaps
+  `CFGGuider` for `MultimodalGuider` + two `GuiderParameters`
+  (AUDIO/VIDEO both `cfg=1, stg=1`) for Spatial-Temporal Guidance.
+  Bypasses `LTX2_NAG`.
 - **Latent + keyframe schedule** (`audio-loop-music-video_latent_keyframe.json`) --
-  Latent workflow plus KeyframeImageSchedule + ImageBlend wired to the
-  subgraph init_image input. Different reference images per song
-  section (verse/chorus/bridge) for actual scene changes, not just
-  lighting shifts.
+  Latent workflow plus `KeyframeLatentScheduleBatchEncode` +
+  `LatentSelectByIteration` (or legacy `KeyframeImageSchedule` +
+  `ImageBlend`) wired to the subgraph init_image / guide_latent input.
+  Different reference images per song section (verse/chorus/bridge) for
+  actual scene changes, not just lighting shifts.
+- **Latent + IC-LoRA video reference** (`audio-loop-music-video_latent_iclora.json`) --
+  Latent workflow plus an in-loop `LTXAddVideoICLoRAGuide` (cameraman /
+  outpaint / union-control) splice. Reference video sliced per iteration
+  via `GetImageRangeFromBatch`. Built by
+  `scripts/apply_iclora_video_reference.py` (`--ref-mode {static,sliding}`).
+- **Latent + IC-LoRA + audio pre-encode** (`audio-loop-music-video_latent_iclora_audio_pre_encode.json`) --
+  IC-LoRA variant with audio VAE-encoded once outside the loop
+  (saves ~12.8s per render). Built by
+  `scripts/apply_audio_latent_pre_encode.py`.
+- **Latent + config validator** (`audio-loop-music-video_latent_validator.json`) --
+  Latent workflow plus a `LoopConfigValidator` + `PreviewAny` node
+  wired to the same audio / window / length / resolution sources that
+  feed `AudioLoopController` + `EmptyLTXVLatentVideo`. One widget to
+  change, zero sync risk between samplers and validator. Built by
+  `scripts/apply_config_validator.py`.
 - **Image + per-step AdaIN** (`audio-loop-music-video_image_adain_perstep.json`) --
-  per-iteration VAE decode/encode plus LTXVPerStepAdainPatcher on the model
-  chain — applies AdaIN at every denoising step for color drift prevention.
-  The plain image workflow was retired 2026-04-27 (use latent for normal
-  generation; image-AdaIN only when you specifically need per-iteration AdaIN).
+  per-iteration VAE decode/encode plus `LTXVPerStepAdainPatcher` on the
+  model chain — applies AdaIN at every denoising step for color-drift
+  prevention. The plain image workflow was retired 2026-04-27 (use
+  latent for normal generation; image-AdaIN only when you specifically
+  need per-iteration AdaIN).
 - **Retake** (`audio-loop-music-video_retake.json`) --
   regenerate a `[start_time, end_time]` window of a previously generated
   video without re-rendering the rest. Loads a prior mp4, encodes it,
@@ -253,7 +270,7 @@ just the audio tensor + window/overlap settings.
 | should_stop | BOOLEAN | TensorLoopClose's stop input |
 | audio_duration | FLOAT | Informational (total audio length) |
 | iteration_seed | INT | Extension component's noise_seed input |
-| stride_seconds | FLOAT | TimestampPromptSchedule (AudioLoopPlanner derives stride internally post-2026-04-27 cycle break — no longer takes this wire) |
+| stride_seconds | FLOAT | `TimestampPromptScheduleBatchEncode` (and the legacy `TimestampPromptSchedule`). AudioLoopPlanner derives stride internally post-2026-04-27 cycle break — no longer takes this wire. |
 | overlap_frames | INT | Extension component's overlap_frames input (pixel space) |
 | overlap_latent_frames | INT | LatentContextExtract / LatentOverlapTrim in latent-space subgraph |
 | overlap_seconds | FLOAT | Extension subgraph's LTXVAudioVideoMask video_start_time |
@@ -314,40 +331,18 @@ returns the first entry. Empty list raises `ValueError` (wiring bug).
 
 ### Timestamp Prompt Schedule (legacy)
 
-Per-iteration prompt variation based on song timestamps. Write prompts
-for verse, chorus, bridge -- the node picks the right one each iteration.
-Supports gradual blending between prompts at transitions via `blend_seconds`.
+Per-iteration prompt variation based on song timestamps; emits
+`prompt` / `next_prompt` / `blend_factor` STRING/FLOAT triples to feed
+a `CLIPTextEncode → ConditioningBlend` chain.
 
-**As of 2026-04-22 this node is no longer wired in the shipped
-`_latent.json` workflow.** Superseded by the Batch Encode path above.
-Kept available for workflows that genuinely need per-iteration
-re-encode (the batch approach requires schedule + audio duration +
-stride to be known at graph build time).
+**Not wired in shipped workflows since 2026-04-22.** Superseded by
+`TimestampPromptScheduleBatchEncode` + `ConditioningSelectByIteration`
+(see "CLIP must not enter the loop body" in [CLAUDE.md](CLAUDE.md) for
+the mechanism). Kept for workflows that genuinely need per-iter re-encode
+(the batch path requires schedule + audio duration + stride to be known
+at graph build time).
 
-**Inputs:**
-
-| Input | Type | Description |
-|-------|------|-------------|
-| current_iteration | INT | From TensorLoopOpen |
-| stride_seconds | FLOAT | From AudioLoopController |
-| schedule | STRING | Timestamp-based prompt schedule (see format below) |
-| blend_seconds | FLOAT | Transition duration. Default 0 = hard switch at each snapped boundary. Values in `(0, stride_seconds)` are auto-clamped up to `stride_seconds` with a one-time warning — smaller values cannot produce smooth ramps at iteration resolution. Values `>= stride_seconds` produce a raised-cosine ramp centered on each boundary, spanning multiple iterations. |
-| snap_boundaries | BOOLEAN | Default True. Snaps schedule boundaries to iteration multiples of `stride_seconds` so every iteration runs on one pure prompt (no mid-iteration conditioning mix). Turn off only if you need sub-stride timing precision and accept the jitter risk (re-enables the legacy spike-blend path). |
-
-**Outputs:**
-
-| Output | Type | Wire to |
-|--------|------|---------|
-| prompt | STRING | Text encode -> ConditioningBlend conditioning_a |
-| next_prompt | STRING | Text encode -> ConditioningBlend conditioning_b |
-| blend_factor | FLOAT | ConditioningBlend blend_factor |
-| current_time | FLOAT | Informational (position in audio) |
-
-When `blend_seconds = 0`, `next_prompt` equals `prompt` and `blend_factor` is
-always 0.0. You can wire just `prompt` through a single text encoder directly
-to the extension component -- no blending needed.
-
-**Schedule format:** see [`docs/guides/prompt_creation_guide.md`](docs/guides/prompt_creation_guide.md) §9 for syntax (timestamps, ranges, fallback) and concrete examples.
+Schedule format: [`docs/guides/prompt_creation_guide.md`](docs/guides/prompt_creation_guide.md) §9.
 
 ### Audio Loop Planner
 
@@ -394,53 +389,16 @@ Estimated 7 iterations:
 
 ### Conditioning Blend (legacy)
 
-Blends two conditionings with a factor. Works with LTX 2.3 Gemma 3
-text encoder (no pooled_output required).
+Blends two conditionings with a factor. Handles sequence-length
+alignment (zero-pads shorter tensor), attention-mask combining (OR of
+both masks), and pooled-output blending when present. Works with LTX
+2.3 Gemma 3 (no `pooled_output` required) despite ComfyUI's CLIP-named
+wrapper. `blend_factor=0.0` passthroughs `conditioning_a` (no compute).
 
-**Not wired in the shipped `_latent.json` after 2026-04-22.** The new
-batch-encode path hard-cuts between schedule entries at the iteration
-grid rather than cross-fading. Kept available for workflows that still
-use `TimestampPromptSchedule` inside the loop.
-
-**Inputs:**
-
-| Input | Type | Description |
-|-------|------|-------------|
-| conditioning_a | CONDITIONING | Current prompt conditioning |
-| conditioning_b | CONDITIONING | Next prompt conditioning |
-| blend_factor | FLOAT | 0.0 = all A, 1.0 = all B. Wire from TimestampPromptSchedule. |
-
-**Outputs:**
-
-| Output | Type | Wire to |
-|--------|------|---------|
-| conditioning | CONDITIONING | Extension component's positive input |
-
-Handles sequence length alignment (zero-pads shorter tensor), attention mask
-combining (OR of both masks), and pooled_output blending when present.
-
-When blend_factor = 0.0, passes conditioning_a through unchanged (no computation).
-
-**Note:** LTX 2.3 wraps its Gemma 3 text encoder in ComfyUI's
-"CLIPTextEncode" node for compatibility. Despite the CLIP name, the
-conditioning has no pooled_output. ConditioningBlend handles this correctly.
-
-**Wiring for prompt blending:**
-```
-TimestampPromptSchedule
-  |           |           |
-  prompt   next_prompt  blend_factor
-  |           |           |
-  v           v           |
-Text       Text          |
-Encode     Encode        |
-  |           |           |
-  v           v           v
-ConditioningBlend --------+
-  |
-  v
-Extension #843 positive input
-```
+**Not wired in shipped workflows after 2026-04-22.** The batch-encode
+path hard-cuts between schedule entries at the iteration grid rather
+than cross-fading. Kept for workflows that still wire
+`TimestampPromptSchedule` in-loop.
 
 ### Audio Duration
 
@@ -577,39 +535,15 @@ When `blend_factor = 1.0`, passes image_b through unchanged.
 
 ### Cached Text Encode (legacy)
 
-Drop-in replacement for `CLIPTextEncode` with an LRU cache keyed on
-`(id(clip), text)`. Skips Gemma 3 encoding when the same prompt is reused
-across iterations. Same input/output signature as `CLIPTextEncode` — no
-other wiring changes needed when swapping.
+Drop-in replacement for `CLIPTextEncode` with a module-level LRU cache
+(max 20 entries, ~16MB each) keyed on `(id(clip), text)`. Skips Gemma 3
+re-encoding when the same prompt is reused across iterations.
 
-**Not wired in `_latent.json` after 2026-04-22.** The batch-encode path
-encodes the whole schedule once and never re-enters CLIP, which is
-strictly better than per-iter caching (cache hits are still a "CLIP is
-loaded somewhere in the loop graph" signal to ComfyUI's memory manager,
-and cache misses trigger the DiT-eviction cycle documented in
-[CLAUDE.md](CLAUDE.md)). Kept for workflows that genuinely need
-per-iter CLIP access.
-
-**Inputs:**
-
-| Input | Type | Description |
-|-------|------|-------------|
-| clip | CLIP | CLIP model (Gemma 3 for LTX 2.3) |
-| text | STRING | Prompt text. Identical text + same CLIP hits the cache. |
-
-**Outputs:** `conditioning` (CONDITIONING)
-
-**Why this is useful**: `TimestampPromptSchedule` often emits the same
-prompt string across multiple iterations when a schedule range spans more
-than one iteration (e.g., `0:00-0:38: ...` at stride ~19s covers iterations
-0-2). Without caching, Gemma re-encodes the same text each time. With the
-cache, iteration 2+ returns instantly.
-
-**Bounded**: LRU, max 20 entries. At ~16MB per cached conditioning, worst
-case is ~320MB — negligible next to LTX's 22B DiT.
-
-**Scope**: cache is module-level, so it persists across loop iterations
-(our goal) AND across workflow runs within the same Python process (bonus).
+**Not wired in shipped workflows after 2026-04-22.** The batch-encode
+path encodes the whole schedule ONCE outside the loop and never re-enters
+CLIP — strictly better than per-iter caching, even on cache hits (see
+"CLIP must not enter the loop body" in [CLAUDE.md](CLAUDE.md)). Kept for
+workflows that genuinely need per-iter CLIP access.
 
 ### Iteration Cleanup
 
@@ -774,24 +708,23 @@ Tips:
   init_image as a guide at frame -1 each loop iteration via
   LTXVAddLatentGuide for continuity.
 
-### blend_seconds (TimestampPromptSchedule)
+### Prompt-transition behavior
 
-Controls how gradually prompt transitions happen. Paired with
-`snap_boundaries` (default True), which forces schedule boundaries to land
-on integer multiples of `stride_seconds` so every iteration runs on one
-pure prompt (no mid-iteration conditioning mix).
+The shipped `TimestampPromptScheduleBatchEncode` hard-cuts between
+schedule entries at the iteration grid (`snap_boundaries=True` default
++ no per-iter blend). With consistent subject across entries, this
+reads as visually clean. If you see a visible seam at a transition, the
+fix is on the prompt-authoring side (keep subject + framing consistent
+across adjacent entries) — see [`docs/guides/prompt_creation_guide.md`](docs/guides/prompt_creation_guide.md).
 
-| Value | Effect |
-|-------|--------|
-| **0** | **Hard switch (default).** Prompt changes at each snapped boundary. Clean when subject is identical across entries — recommended starting point. |
-| `(0, stride_seconds)` | **Auto-clamped up to `stride_seconds`** with a one-time console warning. Values smaller than stride can't produce smooth ramps at iteration resolution (the pre-fix behavior here was the source of the jitter bug). |
-| `stride_seconds` (≈18) | Raised-cosine ramp spanning exactly one iteration on each side of the boundary. Use if you see a visible seam at transitions. |
-| `2 * stride_seconds` (≈36) | Wider raised-cosine ramp, softer cross-fade across multiple iterations. Reduces distinctness of adjacent prompts. |
-
-With `snap_boundaries=False` (legacy path), `blend_seconds` uses the old
-spike-blend behavior — blend_factor ramps linearly from 0 to 1 in the
-`blend_seconds` window BEFORE the boundary, then snaps. Not recommended;
-causes per-iteration jitter when `blend_seconds < stride_seconds`.
+For workflows that genuinely need cross-fading, the legacy
+`TimestampPromptSchedule` + `ConditioningBlend` chain still ships:
+`blend_seconds=0` = hard switch; `blend_seconds >= stride_seconds`
+(≈18) = raised-cosine ramp spanning one iteration on each side;
+`2 * stride_seconds` (≈36) = wider cross-fade across multiple
+iterations. Sub-stride `blend_seconds` is auto-clamped up to
+`stride_seconds` with a one-time warning — smaller values can't
+produce smooth ramps at iteration resolution.
 
 ## Audio feature analysis (offline)
 
@@ -856,7 +789,8 @@ The script outputs two clearly labeled sections:
 
 1. **Node 169 (initial render prompt)** -- paste into the CLIPTextEncode
    for the first ~20 seconds
-2. **TimestampPromptSchedule (node 1558)** -- paste into the schedule text box
+2. **TimestampPromptScheduleBatchEncode** -- paste into the `schedule`
+   widget on the batch encoder node
 
 The node 169 prompt automatically matches the first schedule entry to
 avoid visual discontinuity at the ~20-second boundary.
