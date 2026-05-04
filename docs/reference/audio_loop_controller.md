@@ -115,4 +115,6 @@ Tests: `tests/test_audio_loop_controller.py` (stride math, clamping, boundary), 
 - `docs/reference/pipeline_flow_latent.md` — where ALC sits in the full loop
 - `docs/reference/debug_tools.md` — F-pair convention and audit inventory
 - `docs/reference/noise_mask_semantics.md` — `overlap_latent_frames` is the count consumed at boundaries
+- `docs/reference/timestamp_prompt_schedule_batch_encode.md` — consumes `stride_seconds` and `audio_duration` for prompt schedule
+- `docs/reference/f_pair_convention.md` — F4/F5/F6/F7/F8 audits documented above follow this pairing convention
 - `docs/reference/_atomic_note_template.md` — entity-note variant template

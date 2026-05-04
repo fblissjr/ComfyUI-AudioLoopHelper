@@ -54,6 +54,7 @@ linking out (parallel-scrubbed-copy convention retired 2026-04-25).
 ### "I want to write a prompt schedule"
 - Project-specific rules + variation patterns: [`guides/prompt_creation_guide.md`](guides/prompt_creation_guide.md)
 - LLM-mediated schedule generation: [`guides/prompt_workflow_end_to_end.md`](guides/prompt_workflow_end_to_end.md)
+- Pre-encoding the schedule outside the loop (entity reference): [`reference/timestamp_prompt_schedule_batch_encode.md`](reference/timestamp_prompt_schedule_batch_encode.md)
 - Standup / dialogue system prompt (music variant ships embedded in analyzer JSON): [`reference/standup_system_prompt.md`](reference/standup_system_prompt.md)
 - Raw Lightricks i2v/t2v system prompts (historical reference): [`reference/ltx23_prompt_system_prompts.md`](reference/ltx23_prompt_system_prompts.md)
 
@@ -89,6 +90,14 @@ linking out (parallel-scrubbed-copy convention retired 2026-04-25).
 ### "I need env-vars / runtime knobs"
 - Environment-variable registry: [`reference/environment.md`](reference/environment.md)
 
+### "I want to amplify a conditional contribution at inference time"
+- CFG-analog amplification pattern (IC-LoRA, style LoRAs, identity LoRAs, attention guidance): [`reference/cfg_analog_amplification.md`](reference/cfg_analog_amplification.md)
+
+### "I want to add a new workflow-mutation fix"
+- F-pair convention (apply script + audit check + pre-flight chaining): [`reference/f_pair_convention.md`](reference/f_pair_convention.md)
+- Live F-pair inventory + apply-script three-tier staging: [`reference/debug_tools.md`](reference/debug_tools.md)
+- Apply-script conventions in detail: [`../scripts/CLAUDE.md`](../scripts/CLAUDE.md)
+
 ---
 
 ## File reference (alphabetical, per folder)
@@ -114,12 +123,15 @@ linking out (parallel-scrubbed-copy convention retired 2026-04-25).
 | File | When to read |
 |---|---|
 | `_atomic_note_template.md` | (For authors.) The shape every new reference note follows + 5-step ingest checklist + anti-pattern list. |
-| `audio_loop_controller.md` | `AudioLoopController` — pacing brain; stride from integer latents; F4/F5/F6/F7 audits. |
+| `audio_loop_controller.md` | `AudioLoopController` — loop pacing; stride from integer latents; F4/F5/F6/F7 audits. |
+| `cfg_analog_amplification.md` | Inference-time pattern — `(positive_with_X, positive_without_X) → CFGGuider` for amplifying any conditional. |
 | `debug_tools.md` | Canonical first-pass when a workflow won't run; audit invariant table; apply-script three-tier staging; RUN_ID artifact correlation. |
 | `environment.md` | Environment-variable registry (sage trace, exec log, per-prompt routing, etc.). |
+| `f_pair_convention.md` | Apply-script + audit-check pairing convention; pre-flight chaining; how to add a new F-pair. |
 | `frame_planner_reference.md` | `LTXFramePlanner` — single-source-of-truth dimension config; snap rules + wiring + F8 audit. |
 | `ltx23_model_reference.md` | Image guides, latent volume, VAE conversion, AdaIN, noise_mask, conditioning path. |
-| `noise_mask_semantics.md` | `noise_mask=0`/`1` semantics; setters + strippers; loop-body discipline; gotchas. |
+| `noise_mask_semantics.md` | `noise_mask=0`/`1` semantics; setters + strippers; loop-body discipline; failure modes. |
+| `timestamp_prompt_schedule_batch_encode.md` | Pre-encodes prompts outside the loop; pairs with `ConditioningSelectByIteration`; prevents NAG silent disengagement. |
 | `ltx23_prompt_system_prompts.md` | Raw Lightricks i2v/t2v system prompts + why our frozen-audio + i2v workflow prefers concise prompts. |
 | `ltxv_looping_sampler_reference.md` | Video-only structural reference for `LTXVLoopingSampler`. We don't recommend building this for music video (AV-incompatible). |
 | `nag_technical_reference.md` | LTX2_NAG — attention math, widgets, closure-capture mechanism, NAG×CFG composition, troubleshooting. |

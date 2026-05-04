@@ -80,4 +80,5 @@ Edge cases:
 - `docs/reference/audio_loop_controller.md` — emits `overlap_latent_frames` count consumed by `LatentContextExtract`/`LatentOverlapTrim`
 - `docs/analysis/audio_in_prompt_research.md` — why audio is frozen (rationale `noise_mask=0` enforces)
 - `docs/analysis/nag_object_patches_offload_asymmetry.md` — adjacent constraint on what enters the loop body
+- `docs/reference/timestamp_prompt_schedule_batch_encode.md` — solves the same class of "what must stay outside the loop body" question for CONDITIONING
 - `docs/reference/_atomic_note_template.md` — concept-note variant template
