@@ -1,15 +1,15 @@
 {
   "id": "3db70343-fd10-483b-8d66-6be2395b9681",
   "revision": 0,
-  "last_node_id": 2008,
-  "last_link_id": 3159,
+  "last_node_id": 2019,
+  "last_link_id": 3181,
   "nodes": [
     {
       "id": 252,
       "type": "SetNode",
       "pos": [
-        -1456.0504085803832,
-        5227.9506961682155
+        730,
+        332
       ],
       "size": [
         210,
@@ -50,8 +50,8 @@
       "id": 503,
       "type": "LTX2SamplingPreviewOverride",
       "pos": [
-        -301.9214727268815,
-        4711.264658679048
+        730,
+        872.9406725722047
       ],
       "size": [
         316.7017578125,
@@ -84,7 +84,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            3142
+            3179
           ]
         }
       ],
@@ -101,8 +101,8 @@
       "id": 153,
       "type": "CFGGuider",
       "pos": [
-        -31.57526548198955,
-        4886.59130811587
+        2930,
+        332
       ],
       "size": [
         270,
@@ -157,8 +157,8 @@
       "id": 420,
       "type": "ConditioningZeroOut",
       "pos": [
-        -871.4378344976978,
-        5429.862021876726
+        2080,
+        569.754251339016
       ],
       "size": [
         204.1750030517578,
@@ -196,8 +196,8 @@
       "id": 1322,
       "type": "RandomNoise",
       "pos": [
-        265.8394025442724,
-        4434.62284223573
+        2930,
+        1124.540243514551
       ],
       "size": [
         270,
@@ -239,8 +239,8 @@
       "id": 579,
       "type": "SetNode",
       "pos": [
-        504.90757761510156,
-        5208.531502506624
+        2930,
+        260
       ],
       "size": [
         210,
@@ -283,8 +283,8 @@
       "id": 604,
       "type": "GetNode",
       "pos": [
-        3721.5301548829034,
-        4389.334941028758
+        30,
+        260
       ],
       "size": [
         210,
@@ -319,8 +319,8 @@
       "id": 164,
       "type": "LTXVConditioning",
       "pos": [
-        -597.4212828374407,
-        5232.3018273208445
+        2080,
+        260
       ],
       "size": [
         270,
@@ -388,8 +388,8 @@
       "id": 1421,
       "type": "ManualSigmas",
       "pos": [
-        55.82988745479996,
-        5300.041515062131
+        2930,
+        1256.540243514551
       ],
       "size": [
         270,
@@ -421,8 +421,8 @@
       "id": 154,
       "type": "KSamplerSelect",
       "pos": [
-        -28.332732216331422,
-        5056.223521436168
+        2930,
+        488.6666666666667
       ],
       "size": [
         270,
@@ -462,8 +462,8 @@
       "id": 1269,
       "type": "FloatConstant",
       "pos": [
-        258.8205931737419,
-        4021.8814735052774
+        30,
+        1726.7051202626735
       ],
       "size": [
         210,
@@ -497,8 +497,8 @@
       "id": 1528,
       "type": "SetNode",
       "pos": [
-        507.45894029899154,
-        4213.535845400204
+        30,
+        306
       ],
       "size": [
         210,
@@ -539,8 +539,8 @@
       "id": 568,
       "type": "MelBandRoFormerModelLoader",
       "pos": [
-        -1738.6636738334032,
-        6397.641210608204
+        30,
+        1060.7051202626735
       ],
       "size": [
         328.1861328125,
@@ -572,8 +572,8 @@
       "id": 569,
       "type": "MelBandRoFormerSampler",
       "pos": [
-        -1315.8845167529958,
-        6399.3014853090335
+        30,
+        1168.7051202626735
       ],
       "size": [
         232.275,
@@ -617,8 +617,8 @@
       "id": 1523,
       "type": "LTX2AttentionTunerPatch",
       "pos": [
-        -738.4584286029475,
-        4423.4852675453385
+        730,
+        1152.9406725722047
       ],
       "size": [
         283.875,
@@ -661,8 +661,8 @@
       "id": 504,
       "type": "LTXVChunkFeedForward",
       "pos": [
-        -1058.934464243564,
-        4437.96689723917
+        730,
+        1020.9406725722047
       ],
       "size": [
         272.35703125,
@@ -701,8 +701,8 @@
       "id": 508,
       "type": "LTX2_NAG",
       "pos": [
-        -566.1277441173199,
-        4926.496023864981
+        2080,
+        801.8244144977641
       ],
       "size": [
         270,
@@ -755,8 +755,8 @@
       "id": 572,
       "type": "SetNode",
       "pos": [
-        -189.84177702146894,
-        4881.639612948262
+        1430,
+        260
       ],
       "size": [
         210,
@@ -799,8 +799,8 @@
       "id": 601,
       "type": "TrimAudioDuration",
       "pos": [
-        -729.9438542787724,
-        6292.488251202696
+        30,
+        1374.7051202626735
       ],
       "size": [
         270,
@@ -823,7 +823,7 @@
           "widget": {
             "name": "duration"
           },
-          "link": 3159
+          "link": 3176
         }
       ],
       "outputs": [
@@ -843,14 +843,15 @@
       "widgets_values": [
         0,
         10
-      ]
+      ],
+      "title": "Initial-Render Audio Trim (10s context)"
     },
     {
       "id": 254,
       "type": "GetNode",
       "pos": [
-        -349.8891866847036,
-        6349.627680395143
+        30,
+        2022
       ],
       "size": [
         210,
@@ -869,7 +870,8 @@
           "links": [
             1557,
             3109,
-            3111
+            3111,
+            3160
           ]
         }
       ],
@@ -888,8 +890,8 @@
       "id": 566,
       "type": "LTXVAudioVAEEncode",
       "pos": [
-        -151.66660339445923,
-        6243.906727269755
+        30,
+        3410
       ],
       "size": [
         202.2249969482422,
@@ -931,8 +933,8 @@
       "id": 571,
       "type": "SolidMask",
       "pos": [
-        -33.64039519577022,
-        6380.453708368191
+        30,
+        3602
       ],
       "size": [
         270,
@@ -968,8 +970,8 @@
       "id": 570,
       "type": "SetLatentNoiseMask",
       "pos": [
-        88.32898108287768,
-        6244.357914670989
+        30,
+        3506
       ],
       "size": [
         188.87500610351563,
@@ -1010,8 +1012,8 @@
       "id": 344,
       "type": "EmptyLTXVLatentVideo",
       "pos": [
-        -1191.3586299577555,
-        5865.256646974672
+        30,
+        2328
       ],
       "size": [
         270,
@@ -1071,8 +1073,8 @@
       "id": 531,
       "type": "LTXVImgToVideoInplaceKJ",
       "pos": [
-        -827.9993126403026,
-        5842.734507486255
+        30,
+        3214
       ],
       "size": [
         294.98046875,
@@ -1124,8 +1126,8 @@
       "id": 413,
       "type": "GetNode",
       "pos": [
-        -821.8510352765845,
-        5781.008249199719
+        30,
+        2068
       ],
       "size": [
         210,
@@ -1161,8 +1163,8 @@
       "id": 350,
       "type": "LTXVConcatAVLatent",
       "pos": [
-        331.36555097799305,
-        5833.390661874638
+        30,
+        2508
       ],
       "size": [
         182.025,
@@ -1203,8 +1205,8 @@
       "id": 1533,
       "type": "Note",
       "pos": [
-        -1309.3342101668718,
-        6490.431550822049
+        30,
+        1942.7051202626735
       ],
       "size": [
         263.77690584887705,
@@ -1226,8 +1228,8 @@
       "id": 414,
       "type": "UNETLoader",
       "pos": [
-        -1976.7940527072533,
-        4870.621640198784
+        730,
+        560.9406725722047
       ],
       "size": [
         508.1994429437957,
@@ -1262,8 +1264,8 @@
       "id": 228,
       "type": "SetNode",
       "pos": [
-        -1293.8692970532295,
-        5049.024369502461
+        730,
+        260
       ],
       "size": [
         210,
@@ -1304,8 +1306,8 @@
       "id": 617,
       "type": "VHS_VideoCombine",
       "pos": [
-        3715.8458218450364,
-        4438.634708436207
+        4530,
+        260
       ],
       "size": [
         1316.2193406509891,
@@ -1381,8 +1383,8 @@
       "id": 1537,
       "type": "VAELoaderKJ",
       "pos": [
-        -1921.3714099162587,
-        5011.312014057029
+        730,
+        1380.9406725722047
       ],
       "size": [
         464.69008376778993,
@@ -1416,8 +1418,8 @@
       "id": 1538,
       "type": "VAELoaderKJ",
       "pos": [
-        -1894.3810781660818,
-        5211.751531003164
+        730,
+        1560.7455922166919
       ],
       "size": [
         270,
@@ -1451,8 +1453,8 @@
       "id": 416,
       "type": "DualCLIPLoader",
       "pos": [
-        -1917.124892087946,
-        5384.234817557101
+        730,
+        692.9406725722047
       ],
       "size": [
         478.8229382589643,
@@ -1491,8 +1493,8 @@
       "id": 268,
       "type": "AudioLoopHelperSageAttention",
       "pos": [
-        -1363.844464482797,
-        4439.804943637588
+        730,
+        404.9406725722047
       ],
       "size": [
         270,
@@ -1532,8 +1534,8 @@
       "id": 445,
       "type": "ImageResizeKJv2",
       "pos": [
-        -1755.1890131225216,
-        5674.748871571807
+        30,
+        2720
       ],
       "size": [
         270,
@@ -1615,8 +1617,8 @@
       "id": 1422,
       "type": "VisualizeSigmasKJ",
       "pos": [
-        203.1134500564372,
-        5597.8715118105
+        2930,
+        1412.540243514551
       ],
       "size": [
         270,
@@ -1662,8 +1664,8 @@
       "id": 641,
       "type": "GetNode",
       "pos": [
-        2434.6362189222077,
-        4855.493874111346
+        30,
+        1616.7051202626735
       ],
       "size": [
         210,
@@ -1697,8 +1699,8 @@
       "id": 599,
       "type": "GetNode",
       "pos": [
-        2445.0597852463147,
-        4744.809867759395
+        30,
+        3868
       ],
       "size": [
         210,
@@ -1734,8 +1736,8 @@
       "id": 580,
       "type": "GetNode",
       "pos": [
-        2497.512566743891,
-        4130.384253352641
+        2930,
+        1014.5402435145512
       ],
       "size": [
         210,
@@ -1771,8 +1773,8 @@
       "id": 654,
       "type": "GetNode",
       "pos": [
-        2475.508554003081,
-        4254.98235262541
+        3530,
+        260
       ],
       "size": [
         210,
@@ -1808,8 +1810,8 @@
       "id": 1530,
       "type": "GetNode",
       "pos": [
-        -33.300806631477904,
-        4336.534556100069
+        2930,
+        1982.540243514551
       ],
       "size": [
         210,
@@ -1845,8 +1847,8 @@
       "id": 1527,
       "type": "INTConstant",
       "pos": [
-        255.73862386325192,
-        4191.6776982407855
+        30,
+        1834.7051202626735
       ],
       "size": [
         210,
@@ -1881,8 +1883,8 @@
       "id": 640,
       "type": "SetNode",
       "pos": [
-        -981.5481626390541,
-        6252.285236051731
+        30,
+        1506.7051202626735
       ],
       "size": [
         210,
@@ -1921,8 +1923,8 @@
       "id": 1423,
       "type": "PreviewImage",
       "pos": [
-        263.2539555885531,
-        5786.034188629307
+        2930,
+        1564.540243514551
       ],
       "size": [
         343.8398953655369,
@@ -1950,8 +1952,8 @@
       "id": 582,
       "type": "GetNode",
       "pos": [
-        849.7513050307878,
-        4312.391779560795
+        30,
+        3758
       ],
       "size": [
         210,
@@ -1983,8 +1985,8 @@
       "id": 236,
       "type": "GetNode",
       "pos": [
-        1276.0538449452777,
-        4332.470682242739
+        30,
+        1960
       ],
       "size": [
         210,
@@ -2018,8 +2020,8 @@
       "id": 245,
       "type": "LTXVSeparateAVLatent",
       "pos": [
-        1084.829228294183,
-        4145.848023193626
+        30,
+        2232
       ],
       "size": [
         194.04999389648438,
@@ -2062,8 +2064,8 @@
       "id": 381,
       "type": "LTXVCropGuides",
       "pos": [
-        1294.2276451467214,
-        4261.3453591429425
+        30,
+        2604
       ],
       "size": [
         153.3000015258789,
@@ -2121,8 +2123,8 @@
       "id": 161,
       "type": "SamplerCustomAdvanced",
       "pos": [
-        494.59351226842546,
-        4581.254079403526
+        2930,
+        607.546875
       ],
       "size": [
         445.27339866988086,
@@ -2190,8 +2192,8 @@
       "id": 581,
       "type": "SetNode",
       "pos": [
-        -574.4181996230428,
-        6030.426814785101
+        30,
+        1264.7051202626735
       ],
       "size": [
         210,
@@ -2230,8 +2232,8 @@
       "id": 1560,
       "type": "AudioLoopPlanner",
       "pos": [
-        1179.064769638146,
-        5508.024158069799
+        3530,
+        1452.8384522244141
       ],
       "size": [
         363.3837577591728,
@@ -2298,8 +2300,8 @@
       "id": 1563,
       "type": "PreviewAny",
       "pos": [
-        1723.1595380839854,
-        5477.46919625663
+        3530,
+        1706.8384522244141
       ],
       "size": [
         349.7276963877482,
@@ -2340,8 +2342,8 @@
       "id": 1529,
       "type": "GetNode",
       "pos": [
-        2477.2449213529476,
-        5221.721009503329
+        2930,
+        1872.540243514551
       ],
       "size": [
         210,
@@ -2377,8 +2379,8 @@
       "id": 619,
       "type": "GetNode",
       "pos": [
-        2548.328770150962,
-        4306.627013482165
+        4530,
+        644
       ],
       "size": [
         210,
@@ -2415,8 +2417,8 @@
       "id": 567,
       "type": "TrimAudioDuration",
       "pos": [
-        -1406.1682423280993,
-        6152.762834648423
+        30,
+        928.7051202626735
       ],
       "size": [
         270,
@@ -2441,7 +2443,8 @@
             1580,
             2907,
             2935,
-            3049
+            3049,
+            3159
           ]
         }
       ],
@@ -2453,14 +2456,15 @@
       "widgets_values": [
         5,
         300
-      ]
+      ],
+      "title": "Song Trim (skip intro, take N seconds)"
     },
     {
       "id": 1540,
       "type": "TensorLoopClose",
       "pos": [
-        2442.8428365742216,
-        5583.719217516866
+        3530,
+        1280.8384522244141
       ],
       "size": [
         270,
@@ -2512,8 +2516,8 @@
       "id": 843,
       "type": "b4973d68-09b9-4da5-9845-38ad62ae9aca",
       "pos": [
-        2967.4696783995114,
-        4207.000748148983
+        3530,
+        370
       ],
       "size": [
         318.69998270248334,
@@ -2642,6 +2646,16 @@
           "name": "reference_video",
           "type": "IMAGE",
           "link": 3147
+        },
+        {
+          "name": "full_audio_latent",
+          "type": "LATENT",
+          "link": 3162
+        },
+        {
+          "name": "source_seconds",
+          "type": "FLOAT",
+          "link": 3172
         }
       ],
       "outputs": [
@@ -2701,8 +2715,8 @@
       "id": 1539,
       "type": "TensorLoopOpen",
       "pos": [
-        2429.5743175178723,
-        5380.67137156403
+        3530,
+        1064.8384522244141
       ],
       "size": [
         279.908203125,
@@ -2775,8 +2789,8 @@
       "id": 446,
       "type": "LTXVPreprocess",
       "pos": [
-        -1182.6912373194205,
-        5725.571173142179
+        30,
+        3106
       ],
       "size": [
         270,
@@ -2815,8 +2829,8 @@
       "id": 1582,
       "type": "AudioLoopController",
       "pos": [
-        1784.5863316089612,
-        4418.137286185389
+        3530,
+        1976.173677883955
       ],
       "size": [
         363.0537287503814,
@@ -2883,7 +2897,8 @@
           "name": "audio_duration",
           "type": "FLOAT",
           "links": [
-            3045
+            3045,
+            3172
           ]
         },
         {
@@ -2943,8 +2958,8 @@
       "id": 1586,
       "type": "PreviewAny",
       "pos": [
-        2103.9182450776216,
-        4112.272090076335
+        3530,
+        2352.4072790010223
       ],
       "size": [
         210,
@@ -2982,8 +2997,8 @@
       "id": 1587,
       "type": "LTXVConditioning",
       "pos": [
-        3247.4792724623944,
-        5176.886032930646
+        4530,
+        752
       ],
       "size": [
         270,
@@ -3032,8 +3047,8 @@
       "id": 1598,
       "type": "GetNode",
       "pos": [
-        3900,
-        5800
+        4530,
+        1188
       ],
       "size": [
         270,
@@ -3066,8 +3081,8 @@
       "id": 1589,
       "type": "LatentUpscaleModelLoader",
       "pos": [
-        3900,
-        6220
+        4530,
+        888
       ],
       "size": [
         270,
@@ -3100,8 +3115,8 @@
       "id": 1591,
       "type": "LTXVLatentUpsampler",
       "pos": [
-        4820,
-        5800
+        4530,
+        1038
       ],
       "size": [
         270,
@@ -3146,8 +3161,8 @@
       "id": 1604,
       "type": "LTXVTiledVAEDecode",
       "pos": [
-        3800,
-        4500
+        4530,
+        1338
       ],
       "size": [
         320,
@@ -3196,8 +3211,8 @@
       "id": 1605,
       "type": "LatentConcat",
       "pos": [
-        3600,
-        4700
+        4530,
+        1586
       ],
       "size": [
         300,
@@ -3241,8 +3256,8 @@
       "id": 1616,
       "type": "ConditioningSelectByIteration",
       "pos": [
-        -520,
-        4780
+        2080,
+        1275.824414497764
       ],
       "size": [
         290,
@@ -3289,8 +3304,8 @@
       "id": 1617,
       "type": "VAEEncode",
       "pos": [
-        2785.635219733824,
-        4649.355894068363
+        30,
+        3976
       ],
       "size": [
         297.9224609375,
@@ -3332,8 +3347,8 @@
       "id": 1618,
       "type": "LoopIterationStamp",
       "pos": [
-        2667.4696783995114,
-        4167.000748148983
+        3530,
+        2568.4072790010223
       ],
       "size": [
         260,
@@ -3379,8 +3394,8 @@
       "id": 1631,
       "type": "TrimAudioDuration",
       "pos": [
-        -750,
-        6650
+        1430,
+        332
       ],
       "size": [
         270,
@@ -3421,8 +3436,8 @@
       "id": 1634,
       "type": "LTXFramePlanner",
       "pos": [
-        -2300,
-        4500
+        2080,
+        1403.824414497764
       ],
       "size": [
         420,
@@ -3465,7 +3480,7 @@
             3135,
             3137,
             3139,
-            3159
+            3176
           ]
         },
         {
@@ -3516,8 +3531,8 @@
       "id": 507,
       "type": "CLIPTextEncode",
       "pos": [
-        -1012.9765047289093,
-        4947.549447714299
+        2080,
+        645.754251339016
       ],
       "size": [
         402.0532386328766,
@@ -3564,8 +3579,8 @@
       "id": 1632,
       "type": "LTXVReferenceAudio",
       "pos": [
-        -253.67734275929885,
-        5639.427464119149
+        1430,
+        464
       ],
       "size": [
         400,
@@ -3641,8 +3656,8 @@
       "id": 1633,
       "type": "LTXVReferenceAudio",
       "pos": [
-        -246.65352216347105,
-        5971.495728579877
+        1430,
+        714
       ],
       "size": [
         400,
@@ -3718,8 +3733,8 @@
       "id": 1638,
       "type": "LTXVPreprocess",
       "pos": [
-        -234.46991257471294,
-        3896.06580976361
+        1530,
+        2706
       ],
       "size": [
         283.792578125,
@@ -3758,8 +3773,8 @@
       "id": 1635,
       "type": "LTXICLoRALoaderModelOnly",
       "pos": [
-        -721.1379281577258,
-        4087.4055360146317
+        1430,
+        964
       ],
       "size": [
         480,
@@ -3767,12 +3782,12 @@
       ],
       "flags": {},
       "order": 64,
-      "mode": 0,
+      "mode": 4,
       "inputs": [
         {
           "name": "model",
           "type": "MODEL",
-          "link": 3142
+          "link": 3181
         }
       ],
       "outputs": [
@@ -3804,8 +3819,8 @@
       "id": 1637,
       "type": "ImageResizeKJv2",
       "pos": [
-        -1143.1260377992987,
-        3950.476498943777
+        1530,
+        2320
       ],
       "size": [
         270,
@@ -3888,8 +3903,8 @@
       "id": 1636,
       "type": "VHS_LoadVideo",
       "pos": [
-        -1722.3293823681408,
-        3957.9817050271968
+        1530,
+        1960
       ],
       "size": [
         270,
@@ -3897,7 +3912,7 @@
       ],
       "flags": {},
       "order": 27,
-      "mode": 0,
+      "mode": 4,
       "inputs": [
         {
           "name": "meta_batch",
@@ -3970,8 +3985,8 @@
       "id": 444,
       "type": "LoadImage",
       "pos": [
-        -2079.981484808406,
-        5674.3781823135105
+        30,
+        378.7051202626735
       ],
       "size": [
         282.798828125,
@@ -4012,8 +4027,8 @@
       "id": 1615,
       "type": "TimestampPromptScheduleBatchEncode",
       "pos": [
-        -1154.4159916252033,
-        4637.898395551966
+        2080,
+        1021.8244144977641
       ],
       "size": [
         400,
@@ -4080,8 +4095,8 @@
       "id": 169,
       "type": "CLIPTextEncode",
       "pos": [
-        -1128.8717169532833,
-        5214.599230186133
+        2080,
+        396.6666666666667
       ],
       "size": [
         479.90633183546925,
@@ -4129,8 +4144,8 @@
       "id": 565,
       "type": "LoadAudio",
       "pos": [
-        -1893.6298485958166,
-        6176.567729782126
+        30,
+        742.7051202626735
       ],
       "size": [
         282.798828125,
@@ -4159,6 +4174,341 @@
         null,
         null
       ]
+    },
+    {
+      "id": 2009,
+      "type": "LTXVAudioVAEEncode",
+      "pos": [
+        30,
+        4072
+      ],
+      "size": [
+        202,
+        46
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 3159
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 3160
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Audio Latent",
+          "type": "LATENT",
+          "links": [
+            3161
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "Node name for S&R": "LTXVAudioVAEEncode"
+      },
+      "widgets_values": [],
+      "title": "Full-song Audio VAE Encode (pre-encode pattern)"
+    },
+    {
+      "id": 2010,
+      "type": "SetNode",
+      "pos": [
+        30,
+        2114
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "link": 3161
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes",
+        "previousName": "full_audio_latent"
+      },
+      "widgets_values": [
+        "full_audio_latent"
+      ],
+      "title": "Set_full_audio_latent",
+      "color": "#322",
+      "bgcolor": "#533"
+    },
+    {
+      "id": 2011,
+      "type": "GetNode",
+      "pos": [
+        30,
+        2186
+      ],
+      "size": [
+        210,
+        34
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            3162
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes"
+      },
+      "widgets_values": [
+        "full_audio_latent"
+      ],
+      "title": "Get_full_audio_latent",
+      "color": "#322",
+      "bgcolor": "#533"
+    },
+    {
+      "id": 2013,
+      "type": "LoraLoaderModelOnly",
+      "pos": [
+        1430,
+        1116
+      ],
+      "size": [
+        440,
+        82
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 3179
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            3180
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.8.2",
+        "Node name for S&R": "LoraLoaderModelOnly",
+        "_alh_group": "3_loras"
+      },
+      "widgets_values": [
+        "ltx-2.3-22b-distilled-1.1_lora-dynamic_fro09_avg_rank_111_bf16.safetensors",
+        0.5
+      ],
+      "title": "Distill LoRA (enable for base ltx-2.3 dev model)"
+    },
+    {
+      "id": 2014,
+      "type": "LoraLoaderModelOnly",
+      "pos": [
+        1430,
+        1248
+      ],
+      "size": [
+        440,
+        82
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 3180
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            3181
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.8.2",
+        "Node name for S&R": "LoraLoaderModelOnly",
+        "_alh_group": "3_loras"
+      },
+      "widgets_values": [
+        "",
+        1.0
+      ],
+      "title": "Style or ID LoRA (optional)"
+    },
+    {
+      "id": 2015,
+      "type": "Note",
+      "pos": [
+        0,
+        -510
+      ],
+      "size": [
+        660,
+        600
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "_alh_note_key": "README"
+      },
+      "widgets_values": [
+        "AudioLoopHelper - Intro Workflow\n\n1. LoadAudio (group 1):  drop your song.\n2. LoadImage (group 1):  drop init image (matches first scene).\n3. start_seed (group 1): any int.\n4. Schedule + Node 169 (group 4): paste from\n   analyze_audio_features.py --subject \"...\" output.\n\nRun.\n\nOptional:\n  - LoRAs (group 3):    un-bypass + set lora_name.\n  - IC-LoRA (group 9):  un-bypass loader + guide + ref video.\n\nSage attention (group 2): expects fblissjr/SageAttention-ada.\nNo build? Bypass the AudioLoopHelperSageAttention node and\nfall back to default attention or KJNodes' Patch Sage Attention KJ.\n\nModels (DiT, VAEs, CLIP, distill LoRA, etc.) are at:\n  https://huggingface.co/Kijai/LTX2.3_comfy\n"
+      ],
+      "title": "README",
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 2016,
+      "type": "Note",
+      "pos": [
+        1400,
+        -170
+      ],
+      "size": [
+        600,
+        280
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "_alh_note_key": "LORA"
+      },
+      "widgets_values": [
+        "LoRA chain.\n\nBoth bypassed by default. Model passes through unchanged.\n\nUn-bypass \"Distill LoRA\" when running the BASE ltx-2.3 dev\ncheckpoint (NOT the merged distilled file the workflow ships\nwith by default).\n\nOrder: Distill -> Style. Either or both can be active.\n"
+      ],
+      "title": "LoRA chain",
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 2017,
+      "type": "Note",
+      "pos": [
+        2700,
+        170
+      ],
+      "size": [
+        320,
+        320
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "_alh_note_key": "NODE_169"
+      },
+      "widgets_values": [
+        "Initial render prompt (Node 169).\n\nPaste the \"Node 169\" block from analyze_audio_features.py here.\n\nVerb choice is load-bearing. LTX 2.3 audio-video cross-attention binds\nthe visible action to the verb. Pick the verb that matches the action:\n  - is singing / are singing together   (vocal performance)\n  - is dancing                          (movement)\n  - is playing <instrument>             (instrumental)\nGeneric verbs (performing, vocalizing) dilute the signal.\n\nConcise > verbose. Tokens compete with audio + image alignment.\n"
+      ],
+      "title": "Node 169 prompt",
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 2018,
+      "type": "Note",
+      "pos": [
+        2700,
+        530
+      ],
+      "size": [
+        320,
+        280
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "_alh_note_key": "SCHEDULE"
+      },
+      "widgets_values": [
+        "Prompt schedule.\n\nPaste the \"TimestampPromptScheduleBatchEncode\" block here.\nUse 'In a [shot], [camera]' continuation framing for entries\nafter the first - NOT 'Cut to ...'. Lightricks's LTX 2.3 system\nprompt explicitly trains the model to treat scene-cut language\nas a discontinuation directive.\n"
+      ],
+      "title": "Schedule",
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 2019,
+      "type": "Note",
+      "pos": [
+        1500,
+        1570
+      ],
+      "size": [
+        660,
+        240
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "_alh_note_key": "ICLORA"
+      },
+      "widgets_values": [
+        "IC-LoRA chain.\n\nBypassed by default. To enable, un-bypass all THREE:\n  - Reference Video (VHS_LoadVideo)\n  - IC-LoRA Loader\n  - IC-LoRA Guide (inside the loop subgraph)\n\nUsed for visual reference adapters: cameraman, outpaint,\nunion-control. Reference video is sliced per iteration via\nGetImageRangeFromBatch inside the loop.\n\nCameraman IC-LoRA weights:\n  https://huggingface.co/Cseti/LTX2.3-22B_IC-LoRA-Cameraman_v1\n"
+      ],
+      "title": "IC-LoRA chain",
+      "color": "#432",
+      "bgcolor": "#653"
     }
   ],
   "links": [
@@ -5083,14 +5433,6 @@
       "MODEL"
     ],
     [
-      3142,
-      503,
-      0,
-      1635,
-      0,
-      "MODEL"
-    ],
-    [
       3143,
       1636,
       0,
@@ -5132,22 +5474,177 @@
     ],
     [
       3159,
+      567,
+      0,
+      2009,
+      0,
+      "AUDIO"
+    ],
+    [
+      3160,
+      254,
+      0,
+      2009,
+      1,
+      "VAE"
+    ],
+    [
+      3161,
+      2009,
+      0,
+      2010,
+      0,
+      "LATENT"
+    ],
+    [
+      3162,
+      2011,
+      0,
+      843,
+      18,
+      "LATENT"
+    ],
+    [
+      3172,
+      1582,
+      2,
+      843,
+      19,
+      "FLOAT"
+    ],
+    [
+      3176,
       1634,
       3,
       601,
       1,
       "FLOAT"
+    ],
+    [
+      3179,
+      503,
+      0,
+      2013,
+      0,
+      "MODEL"
+    ],
+    [
+      3180,
+      2013,
+      0,
+      2014,
+      0,
+      "MODEL"
+    ],
+    [
+      3181,
+      2014,
+      0,
+      1635,
+      0,
+      "MODEL"
     ]
   ],
   "groups": [
     {
-      "id": 8,
-      "title": "Extend",
+      "id": 1,
+      "title": "1. Inputs",
       "bounding": [
-        2486.4876724372302,
-        4147.984658962787,
-        2661.3597792145047,
-        1665.6397882768233
+        0,
+        170,
+        438.1861328125,
+        1920.7051202626735
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "2. Models (DiT + VAEs + CLIP + Sage)",
+      "bounding": [
+        700,
+        170,
+        618.1994429437957,
+        1556.7455922166919
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "3. LoRAs (bypassed)",
+      "bounding": [
+        1400,
+        170,
+        590,
+        1220
+      ],
+      "color": "#1b4669",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 4,
+      "title": "4. Conditioning + Frame Planner",
+      "bounding": [
+        2050,
+        170,
+        589.9063318354692,
+        1583.824414497764
+      ],
+      "color": "#485248",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 5,
+      "title": "5. Sampler",
+      "bounding": [
+        2900,
+        170,
+        555.2733986698809,
+        1930.540243514551
+      ],
+      "color": "#b58b2a",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 6,
+      "title": "6. Loop",
+      "bounding": [
+        3500,
+        170,
+        473.3837577591728,
+        2536.4072790010223
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 7,
+      "title": "7. Output",
+      "bounding": [
+        4500,
+        170,
+        1426.2193406509891,
+        1576
+      ],
+      "color": "#b58b2a",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 8,
+      "title": "8. Audio pre-encode + init render path",
+      "bounding": [
+        0,
+        1870,
+        407.9224609375,
+        2308
       ],
       "color": "#3f789e",
       "font_size": 24,
@@ -5155,14 +5652,14 @@
     },
     {
       "id": 9,
-      "title": "Audio",
+      "title": "9. IC-LoRA reference (bypassed)",
       "bounding": [
-        -2104.2750017665153,
-        6082.91105135067,
-        2909.651869207888,
-        700.020548336257
+        1500,
+        1870,
+        393.792578125,
+        976
       ],
-      "color": "#3f789e",
+      "color": "#a18c25",
       "font_size": 24,
       "flags": {}
     }
@@ -5276,7 +5773,8 @@
               1784,
               1783,
               2084,
-              1782
+              1782,
+              3178
             ],
             "localized_name": "video_end_time",
             "label": "window_size_seconds",
@@ -5355,7 +5853,8 @@
             "name": "start_index",
             "type": "FLOAT",
             "linkIds": [
-              1927
+              1927,
+              3177
             ],
             "localized_name": "start_index",
             "label": "start_index",
@@ -5441,6 +5940,34 @@
             "pos": [
               -3015,
               3590
+            ]
+          },
+          {
+            "id": "b48daa6e-c81e-427e-b2ba-3f93f4bf2b4a",
+            "name": "full_audio_latent",
+            "type": "LATENT",
+            "linkIds": [
+              3163
+            ],
+            "localized_name": "full_audio_latent",
+            "label": "full audio latent (pre-encoded)",
+            "pos": [
+              -3015,
+              3700
+            ]
+          },
+          {
+            "id": "8dccbeca-f817-4b61-a712-5b883720940e",
+            "name": "source_seconds",
+            "type": "FLOAT",
+            "linkIds": [
+              3173
+            ],
+            "localized_name": "source_seconds",
+            "label": "actual audio duration (auto from controller)",
+            "pos": [
+              -3015,
+              3850
             ]
           }
         ],
@@ -5650,7 +6177,7 @@
               "collapsed": false
             },
             "order": 4,
-            "mode": 0,
+            "mode": 4,
             "inputs": [
               {
                 "localized_name": "audio",
@@ -5671,9 +6198,7 @@
                 "localized_name": "Audio Latent",
                 "name": "Audio Latent",
                 "type": "LATENT",
-                "links": [
-                  2956
-                ]
+                "links": null
               }
             ],
             "properties": {
@@ -5947,7 +6472,7 @@
               "collapsed": false
             },
             "order": 5,
-            "mode": 0,
+            "mode": 4,
             "inputs": [
               {
                 "localized_name": "audio",
@@ -6021,7 +6546,7 @@
                 "name": "audio_latent",
                 "shape": 7,
                 "type": "LATENT",
-                "link": 2956
+                "link": 3165
               },
               {
                 "localized_name": "video_start_time",
@@ -6415,7 +6940,7 @@
             ],
             "flags": {},
             "order": 11,
-            "mode": 0,
+            "mode": 4,
             "inputs": [
               {
                 "localized_name": "positive",
@@ -6491,6 +7016,71 @@
               256,
               64
             ]
+          },
+          {
+            "id": 2012,
+            "type": "AudioLatentSlice",
+            "pos": [
+              300,
+              4400
+            ],
+            "size": [
+              270,
+              130
+            ],
+            "flags": {},
+            "order": 0,
+            "mode": 0,
+            "inputs": [
+              {
+                "name": "latent",
+                "type": "LATENT",
+                "link": 3163
+              },
+              {
+                "name": "source_seconds",
+                "type": "FLOAT",
+                "widget": {
+                  "name": "source_seconds"
+                },
+                "link": 3173
+              },
+              {
+                "name": "start_seconds",
+                "type": "FLOAT",
+                "widget": {
+                  "name": "start_seconds"
+                },
+                "link": 3177
+              },
+              {
+                "name": "duration_seconds",
+                "type": "FLOAT",
+                "widget": {
+                  "name": "duration_seconds"
+                },
+                "link": 3178
+              }
+            ],
+            "outputs": [
+              {
+                "name": "LATENT",
+                "type": "LATENT",
+                "links": [
+                  3165
+                ]
+              }
+            ],
+            "properties": {
+              "Node name for S&R": "AudioLatentSlice",
+              "aux_id": "fblissjr/ComfyUI-AudioLoopHelper"
+            },
+            "widgets_values": [
+              300.0,
+              0.0,
+              17.92
+            ],
+            "title": "Slice full-audio latent for this iter"
           }
         ],
         "groups": [],
@@ -6662,14 +7252,6 @@
             "target_id": 574,
             "target_slot": 0,
             "type": "INT"
-          },
-          {
-            "id": 2956,
-            "origin_id": 598,
-            "origin_slot": 0,
-            "target_id": 606,
-            "target_slot": 1,
-            "type": "LATENT"
           },
           {
             "id": 1782,
@@ -6878,6 +7460,46 @@
             "target_id": 583,
             "target_slot": 0,
             "type": "LATENT"
+          },
+          {
+            "id": 3163,
+            "origin_id": -10,
+            "origin_slot": 18,
+            "target_id": 2012,
+            "target_slot": 0,
+            "type": "LATENT"
+          },
+          {
+            "id": 3165,
+            "origin_id": 2012,
+            "origin_slot": 0,
+            "target_id": 606,
+            "target_slot": 1,
+            "type": "LATENT"
+          },
+          {
+            "id": 3173,
+            "origin_id": -10,
+            "origin_slot": 19,
+            "target_id": 2012,
+            "target_slot": 1,
+            "type": "FLOAT"
+          },
+          {
+            "id": 3177,
+            "origin_id": -10,
+            "origin_slot": 11,
+            "target_id": 2012,
+            "target_slot": 2,
+            "type": "FLOAT"
+          },
+          {
+            "id": 3178,
+            "origin_id": -10,
+            "origin_slot": 5,
+            "target_id": 2012,
+            "target_slot": 3,
+            "type": "FLOAT"
           }
         ],
         "extra": {

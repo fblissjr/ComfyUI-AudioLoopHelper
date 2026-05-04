@@ -336,11 +336,14 @@ the image which pool applies.
 
 ### Hard rules R1-R8
 
-1. **R1 — Singing verb is mandatory.** Every entry contains "is
-   singing..." (single) or "are singing together..." (multi). Drives
-   LTX 2.3's audio-video cross-attention for lip sync. No
-   "performing", "vocalizing", generic verbs. For instrumental scenes
-   use "is playing <instrument>".
+1. **R1 — Pick a concrete verb that matches the action; keep it
+   consistent.** LTX 2.3 audio-video cross-attention binds the visible
+   action to the verb. For vocal performance, `is singing ...` /
+   `are singing together ...` is the canonical default — confirmed
+   working with non-singing verbs (e.g. `is dancing`,
+   `is playing <instrument>`) when the verb matches the audio.
+   Generic verbs (`performing`, `vocalizing`) dilute the signal.
+   Reframed from "must contain singing" 2026-05-04.
 2. **R2 — Node 169 = first schedule entry, byte-exact.** The LLM MUST
    copy the first schedule entry verbatim into `node_169_prompt`. Any
    drift causes a visible seam at the ~20s loop-entry boundary.

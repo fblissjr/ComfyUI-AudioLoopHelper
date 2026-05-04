@@ -926,15 +926,21 @@ as visual chaos.
 HARD RULES (non-negotiable)
 ==========================================================================
 
-R1. The singing verb drives lip sync. EVERY entry MUST contain an explicit
-    form of "singing":
+R1. The action verb drives audio-video cross-attention. Every entry uses
+    a CONCRETE verb that matches the visible action of the audio. For the
+    default vocal-music-video subject this scaffold expects, that means
+    "is singing" / "are singing together":
     - Single performer: "is singing ..." (present progressive).
     - Multiple performers: "are singing together ..." (group verb, always
       with "together"). Use this form whenever the subject names 2+
       people (e.g. "two men", "a man and a woman", "the duo").
-    Do NOT substitute "is performing", "is vocalizing", or any generic
-    verb. If the scene is explicitly instrumental, use "is playing
-    <instrument>" and skip "singing".
+    For non-vocal audio, substitute the matching verb: "is dancing"
+    (movement), "is playing <instrument>" (instrumental), etc. Confirmed
+    working with non-singing verbs when the verb matches the audio. The
+    actual anti-pattern is GENERIC verbs ("is performing", "is
+    vocalizing", "is delivering" without object) — they don't bind to a
+    specific motion class and the cross-attention signal degrades.
+    Reframed from "MUST contain singing" 2026-05-04.
 
 R2. node_169_prompt MUST be IDENTICAL, character-for-character, to the
     first schedule entry's prompt text (everything after the timestamp

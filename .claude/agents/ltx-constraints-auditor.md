@@ -65,8 +65,8 @@ For workflows running `ltx-2.3-22b-distilled-1.1.safetensors`:
 ### Initial-render vs schedule continuity
 - [ ] Node 169 prompt (initial render) byte-exact to `TimestampPromptSchedule` entry at `0:00`. Enforced in code via `get_node_169_prompt` + `_generate_subject_schedule` both routing through `_build_prompt_for_section` / `_prepare_sections`. Grep the workflow JSON and the schedule text to confirm match.
 
-### Lip-sync verb rule
-- [ ] Every schedule prompt contains the verb `singing` (or `are singing together` for multi-subject). Generic `performing` loses the cross-attention signal. Grep each schedule entry; flag any that lack `singing`.
+### Action-verb rule
+- [ ] Every schedule prompt uses a CONCRETE action verb that matches the audio (e.g. `is singing` / `are singing together` for vocal music, `is dancing` for movement, `is playing <instrument>` for instrumental). Generic verbs (`performing`, `vocalizing`, `delivering`) dilute the cross-attention signal. Grep each schedule entry; flag any that use only generic verbs. **Don't flag absence of the literal word "singing"** — it's not a hard rule (retracted 2026-05-04). Flag presence of generic-verb-only entries instead.
 
 ### Frozen-audio prompting
 - [ ] Prompts do NOT describe music / instrumentation (`her voice echoes`, `brass swells`, `snare firing`). Audio is frozen via `noise_mask=0`; verbal audio descriptions double-signal and over-crank visual intensity at beats.

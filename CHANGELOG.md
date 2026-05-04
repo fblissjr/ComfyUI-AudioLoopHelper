@@ -6,7 +6,35 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **Lip-sync drift in pre-encode workflows.** Three `AudioLatentSlice`
+  widgets (`source_seconds`, `start_seconds`, `duration_seconds`) and
+  `#601 TrimAudioDuration.duration` were widget-driven defaults that
+  silently mismatched per-song audio geometry, causing each iteration's
+  audio slice to misalign with the corresponding video frames. All four
+  now wire to their canonical sources:
+  `AudioLoopController.audio_duration`, `start_index`, and
+  `LTXFramePlanner.actual_seconds`. The bug had been latent since the
+  pre-encode topology shipped — only songs coincidentally ~300s with
+  default everything appeared to work. Verified end-to-end on user
+  render. Apply scripts:
+  `apply_audio_latent_slice_source_seconds_autowire.py`,
+  `apply_audio_latent_slice_iter_wiring_fix.py`,
+  `apply_initial_render_audio_duration_autowire.py`. Audit pairs ERR
+  with concrete remediation pointers on regression
+  (`audio_latent_slice_source_seconds_wired`,
+  `audio_latent_slice_iter_wiring`,
+  `initial_render_audio_duration_wired`).
+
 ### Added
+- **`example_workflows/audio-loop-music-video_latent_intro.json`** —
+  shipped "intro" variant built atop the pre-encode workflow. Two
+  `LoraLoaderModelOnly` nodes bypassed-by-default (Distill + Style;
+  Distill pre-filled at strength 0.5), IC-LoRA chain bypassed, 9-group
+  two-row layout for self-documenting discovery, five `Note` nodes
+  annotating usage and Hugging Face model sources. Built by
+  `scripts/apply_intro_workflow.py`.
+
 - **`example_workflows/audio-loop-music-video_latent_iclora_audio_pre_encode.json`** —
   shipped variant of the iclora workflow with the audio-latent pre-encode
   topology applied. Validation render 2026-05-01 measured **−12.8s wall
@@ -45,6 +73,17 @@ This project uses [Semantic Versioning](https://semver.org/).
   `tests/test_apply_audio_latent_pre_encode.py`. Validation render
   pending; reference_video VAE re-stage is still per-iter (not addressed
   by this script — separate spike if needed).
+
+### Changed
+- Retracted "every prompt must contain 'singing'" hard-rule. Confirmed
+  working with non-singing verbs (e.g. dancing) when the verb matches
+  the audio's action class. Reframed across `README.md`, `CLAUDE.md`,
+  `docs/guides/`, the `ltx-constraints-auditor` agent, and
+  `analyze_audio_features.py`'s LLM system prompt as a token-budget
+  principle: pick a concrete verb that matches the visible action;
+  generic verbs (`performing`, `vocalizing`) dilute cross-attention;
+  concise > verbose because tokens compete with audio + image alignment
+  in LTX 2.3's cross-attention budget.
 
 ### Empirical negative result
 - **`LTXVideoRegionalCompile` mode="default" delivers null effect on the iclora

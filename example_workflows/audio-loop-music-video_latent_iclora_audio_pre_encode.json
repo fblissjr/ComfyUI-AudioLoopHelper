@@ -2,7 +2,7 @@
   "id": "3db70343-fd10-483b-8d66-6be2395b9681",
   "revision": 0,
   "last_node_id": 2012,
-  "last_link_id": 3165,
+  "last_link_id": 3178,
   "nodes": [
     {
       "id": 252,
@@ -816,6 +816,14 @@
           "name": "audio",
           "type": "AUDIO",
           "link": 2821
+        },
+        {
+          "name": "duration",
+          "type": "FLOAT",
+          "widget": {
+            "name": "duration"
+          },
+          "link": 3176
         }
       ],
       "outputs": [
@@ -2641,6 +2649,11 @@
           "name": "full_audio_latent",
           "type": "LATENT",
           "link": 3162
+        },
+        {
+          "name": "source_seconds",
+          "type": "FLOAT",
+          "link": 3172
         }
       ],
       "outputs": [
@@ -2882,7 +2895,8 @@
           "name": "audio_duration",
           "type": "FLOAT",
           "links": [
-            3045
+            3045,
+            3172
           ]
         },
         {
@@ -3463,7 +3477,8 @@
           "links": [
             3135,
             3137,
-            3139
+            3139,
+            3176
           ]
         },
         {
@@ -5280,6 +5295,22 @@
       843,
       18,
       "LATENT"
+    ],
+    [
+      3172,
+      1582,
+      2,
+      843,
+      19,
+      "FLOAT"
+    ],
+    [
+      3176,
+      1634,
+      3,
+      601,
+      1,
+      "FLOAT"
     ]
   ],
   "groups": [
@@ -5419,7 +5450,8 @@
               1784,
               1783,
               2084,
-              1782
+              1782,
+              3178
             ],
             "localized_name": "video_end_time",
             "label": "window_size_seconds",
@@ -5498,7 +5530,8 @@
             "name": "start_index",
             "type": "FLOAT",
             "linkIds": [
-              1927
+              1927,
+              3177
             ],
             "localized_name": "start_index",
             "label": "start_index",
@@ -5564,8 +5597,7 @@
             "name": "video_start_time",
             "type": "FLOAT",
             "linkIds": [
-              3006,
-              3164
+              3006
             ],
             "label": "overlap_seconds",
             "pos": [
@@ -5599,6 +5631,20 @@
             "pos": [
               -3015,
               3700
+            ]
+          },
+          {
+            "id": "8dccbeca-f817-4b61-a712-5b883720940e",
+            "name": "source_seconds",
+            "type": "FLOAT",
+            "linkIds": [
+              3173
+            ],
+            "localized_name": "source_seconds",
+            "label": "actual audio duration (auto from controller)",
+            "pos": [
+              -3015,
+              3850
             ]
           }
         ],
@@ -6674,7 +6720,7 @@
                 "widget": {
                   "name": "source_seconds"
                 },
-                "link": null
+                "link": 3173
               },
               {
                 "name": "start_seconds",
@@ -6682,7 +6728,7 @@
                 "widget": {
                   "name": "start_seconds"
                 },
-                "link": 3164
+                "link": 3177
               },
               {
                 "name": "duration_seconds",
@@ -6690,7 +6736,7 @@
                 "widget": {
                   "name": "duration_seconds"
                 },
-                "link": null
+                "link": 3178
               }
             ],
             "outputs": [
@@ -7101,20 +7147,36 @@
             "type": "LATENT"
           },
           {
-            "id": 3164,
-            "origin_id": -10,
-            "origin_slot": 16,
-            "target_id": 2012,
-            "target_slot": 2,
-            "type": "FLOAT"
-          },
-          {
             "id": 3165,
             "origin_id": 2012,
             "origin_slot": 0,
             "target_id": 606,
             "target_slot": 1,
             "type": "LATENT"
+          },
+          {
+            "id": 3173,
+            "origin_id": -10,
+            "origin_slot": 19,
+            "target_id": 2012,
+            "target_slot": 1,
+            "type": "FLOAT"
+          },
+          {
+            "id": 3177,
+            "origin_id": -10,
+            "origin_slot": 11,
+            "target_id": 2012,
+            "target_slot": 2,
+            "type": "FLOAT"
+          },
+          {
+            "id": 3178,
+            "origin_id": -10,
+            "origin_slot": 5,
+            "target_id": 2012,
+            "target_slot": 3,
+            "type": "FLOAT"
           }
         ],
         "extra": {

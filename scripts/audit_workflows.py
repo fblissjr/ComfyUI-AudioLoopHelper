@@ -604,6 +604,9 @@ def _audit_one(wf_path: Path) -> list[Finding]:
     _check_prompt_relay_wiring(wf, by_type, record)
     _check_ltx2_nag_reaches_loop(wf, by_type, record)
     _check_iclora_video_reference_wiring(wf, by_type, record)
+    _check_audio_latent_slice_source_seconds_wired(wf, by_type, record)
+    _check_audio_latent_slice_iter_wiring(wf, by_type, record)
+    _check_initial_render_audio_duration_wired(wf, by_type, record)
     _check_no_sd3_shift_node(wf, by_type, record)
     _check_graph_acyclic(wf, by_id, record)
     _check_link_integrity(wf, by_id, links_by_id, record)
@@ -1136,6 +1139,187 @@ def _check_iclora_video_reference_wiring(wf, by_type, record) -> None:
                 "no LTXVPreprocess(val=18) found — ref-video path may not match "
                 "init-image preprocessing. Re-run scripts/apply_iclora_video_reference.py.",
             )
+
+
+def _check_audio_latent_slice_source_seconds_wired(wf, by_type, record) -> None:
+    """ERR if AudioLatentSlice's `source_seconds` input is widget-driven.
+
+    AudioLatentSlice infers the per-iter slice rate as
+    `latent_T / source_seconds`. When `source_seconds` is a hardcoded
+    widget value but the encoded audio is shorter (TrimAudioDuration
+    silently clamps to song length), the inferred rate drifts and
+    every per-iter slice misaligns with the corresponding video frames
+    — visible as lip-sync drift. The widget MUST come from
+    `AudioLoopController.audio_duration`. Migration:
+    `scripts/apply_audio_latent_slice_source_seconds_autowire.py`.
+
+    Note: AudioLatentSlice lives in the loop subgraph, so `by_type`
+    (which only indexes top-level nodes) doesn't help here. We walk
+    `sg["nodes"]` directly. Signature kept consistent with sibling
+    checks per the audit-framework convention.
+    """
+    del by_type  # subgraph nodes; intentionally unused
+    sgs = wf.get("definitions", {}).get("subgraphs", [])
+    if not sgs:
+        return
+    sg = sgs[0]
+    slicers = [n for n in sg.get("nodes", []) if n.get("type") == "AudioLatentSlice"]
+    if not slicers:
+        return  # node absent → no pre-encode chain → check N/A
+    sg_link_ids = {l.get("id") for l in sg.get("links", [])}
+    for slicer in slicers:
+        # Input name kept in sync with NEW_SUBGRAPH_INPUT_NAME in
+        # scripts/apply_audio_latent_slice_source_seconds_autowire.py
+        source_input = next(
+            (i for i in slicer.get("inputs", []) if i.get("name") == "source_seconds"),
+            None,
+        )
+        if source_input is None:
+            record(
+                "ERR", "audio_latent_slice_source_seconds_wired",
+                f"AudioLatentSlice(#{slicer.get('id')}) missing 'source_seconds' input. "
+                "Re-run scripts/apply_audio_latent_pre_encode.py.",
+            )
+            continue
+        link_id = source_input.get("link")
+        if link_id is None or link_id not in sg_link_ids:
+            # Treat dangling refs (link id with no matching record) the same
+            # as widget-only — neither carries a runtime value into the slicer.
+            record(
+                "ERR", "audio_latent_slice_source_seconds_wired",
+                f"AudioLatentSlice(#{slicer.get('id')}).source_seconds is widget-driven; "
+                "must wire from AudioLoopController.audio_duration to avoid drift on "
+                "songs not exactly matching the widget value. Run "
+                "scripts/apply_audio_latent_slice_source_seconds_autowire.py.",
+            )
+        else:
+            record(
+                "OK", "audio_latent_slice_source_seconds_wired",
+                f"AudioLatentSlice(#{slicer.get('id')}).source_seconds is wired",
+            )
+
+
+def _check_audio_latent_slice_iter_wiring(wf, by_type, record) -> None:
+    """ERR if AudioLatentSlice's `start_seconds` or `duration_seconds`
+    are sourced incorrectly.
+
+    `start_seconds` MUST come from the subgraph's `start_index` input
+    (post-trim audio time of iter N's window). The `video_start_time`
+    input, which is sourced from `AudioLoopController.overlap_seconds`
+    (constant ~1.0), was the original buggy source — every iter sliced
+    from t=1.0, never advancing through the song.
+
+    `duration_seconds` MUST be wired (not widget-only). Canonical source
+    is `video_end_time` (= `LTXFramePlanner.actual_seconds`), so the
+    audio slice length tracks the video window length.
+
+    Migration: scripts/apply_audio_latent_slice_iter_wiring_fix.py.
+    """
+    del by_type
+    sgs = wf.get("definitions", {}).get("subgraphs", [])
+    if not sgs:
+        return
+    sg = sgs[0]
+    slicers = [n for n in sg.get("nodes", []) if n.get("type") == "AudioLatentSlice"]
+    if not slicers:
+        return
+
+    # Resolve subgraph slot indices by name (not hardcoded — robust to
+    # workflow-specific slot ordering).
+    sg_inputs = sg.get("inputs", [])
+    name_to_slot = {
+        inp.get("name"): i for i, inp in enumerate(sg_inputs)
+    }
+    start_index_slot = name_to_slot.get("start_index")
+
+    sg_links = sg.get("links", [])
+    for slicer in slicers:
+        sid = slicer.get("id")
+        # AudioLatentSlice schema: input slot 2 = start_seconds, 3 = duration_seconds
+        start_link = next(
+            (l for l in sg_links if l.get("target_id") == sid and l.get("target_slot") == 2),
+            None,
+        )
+        if start_link is None or start_link.get("origin_slot") != start_index_slot:
+            origin = start_link.get("origin_slot") if start_link else None
+            origin_name = (
+                sg_inputs[origin].get("name") if origin is not None and origin < len(sg_inputs)
+                else "unwired"
+            )
+            record(
+                "ERR", "audio_latent_slice_iter_wiring",
+                f"AudioLatentSlice(#{sid}).start_seconds sourced from {origin_name!r}; "
+                "must come from 'start_index' (post-trim audio time per iter), not "
+                "'video_start_time' (constant overlap_seconds). Run "
+                "scripts/apply_audio_latent_slice_iter_wiring_fix.py.",
+            )
+        else:
+            record(
+                "OK", "audio_latent_slice_iter_wiring",
+                f"AudioLatentSlice(#{sid}).start_seconds correctly sourced from start_index",
+            )
+
+        dur_link = next(
+            (l for l in sg_links if l.get("target_id") == sid and l.get("target_slot") == 3),
+            None,
+        )
+        if dur_link is None:
+            record(
+                "ERR", "audio_latent_slice_iter_wiring",
+                f"AudioLatentSlice(#{sid}).duration_seconds is widget-only; "
+                "must wire to 'video_end_time' (= FramePlanner.actual_seconds) so "
+                "audio slice length matches video window length. Run "
+                "scripts/apply_audio_latent_slice_iter_wiring_fix.py.",
+            )
+        else:
+            record(
+                "OK", "audio_latent_slice_iter_wiring",
+                f"AudioLatentSlice(#{sid}).duration_seconds is wired",
+            )
+
+
+def _check_initial_render_audio_duration_wired(wf, by_type, record) -> None:
+    """ERR if #601 TrimAudioDuration's `duration` is widget-only.
+
+    The initial-render audio context comes from #601 TrimAudioDuration.
+    Its `duration` widget must match `LTXFramePlanner.actual_seconds`
+    (the initial render's video length). Static widget values silently
+    truncate the audio context — the model has nothing to align lip
+    movements to past the widget value, producing visible drift.
+    Migration: scripts/apply_initial_render_audio_duration_autowire.py.
+
+    Fires on any workflow that has #601 — the bug isn't specific to
+    the pre-encode pipeline. Loop-body audio (per-iter encode or pre-
+    encoded slice) is independent of the initial-render audio context,
+    which #601 always controls.
+    """
+    del by_type
+    trim = next(
+        (n for n in wf.get("nodes", [])
+         if n.get("type") == "TrimAudioDuration" and n.get("id") == 601),
+        None,
+    )
+    if trim is None:
+        return  # node renumbered or absent; not our concern here
+    duration_input = next(
+        (i for i in trim.get("inputs", []) if i.get("name") == "duration"),
+        None,
+    )
+    link_id = duration_input.get("link") if duration_input else None
+    top_level_link_ids = {l[0] for l in wf.get("links", []) if isinstance(l, list)}
+    if link_id is None or link_id not in top_level_link_ids:
+        record(
+            "ERR", "initial_render_audio_duration_wired",
+            f"TrimAudioDuration(#{trim.get('id')}).duration is widget-only; "
+            "must wire from LTXFramePlanner.actual_seconds so the initial-"
+            "render audio context matches the video length. Run "
+            "scripts/apply_initial_render_audio_duration_autowire.py.",
+        )
+    else:
+        record(
+            "OK", "initial_render_audio_duration_wired",
+            f"TrimAudioDuration(#{trim.get('id')}).duration is wired",
+        )
 
 
 def main() -> int:

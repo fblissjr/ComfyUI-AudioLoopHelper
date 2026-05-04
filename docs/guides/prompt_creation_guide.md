@@ -131,25 +131,43 @@ fraction toward the kitten`. Those describe visuals, not audio.
 
 ## 4. What MUST stay (carve-outs)
 
-These are non-negotiable. Stripping them breaks load-bearing
-mechanisms.
+These are load-bearing. Stripping them breaks specific mechanisms.
 
-### 4.1 The verb
+### 4.1 The verb (and the token budget)
 
-- **Vocal tracks:** every entry must contain `is singing` or
-  `are singing together` (multi-subject). LTX 2.3's audio-video
-  cross-attention binds lip sync to the singing verb. Generic
-  `performing` / `vocalizing` / `delivering` *kills* the lip-sync
-  signal. The auto-generator (`scripts/analyze_audio_features.py`)
-  enforces this structurally.
-- **Instrumental / action tracks:** drop the singing verb requirement;
-  use **concrete action verbs** in every entry (`slams`, `lunges`,
-  `whips`, `drives`, `vaults`, `rips`, `plunges`). The same
-  cross-attention that handles lip sync handles action-to-audio
-  binding for orchestral / impact-event tracks.
-- **Comedy / dialogue:** use `is delivering the punchline`,
-  `is mid-bit`, `is leaning into the mic`, `is telling a joke`.
-  Concrete dialogue verbs.
+LTX 2.3's audio-video cross-attention binds the visible action to the
+verb in the prompt. The verb is load-bearing **but it's not "singing"-
+specific** — confirmed working with non-singing verbs (e.g. `dancing`)
+when the verb matches what the audio implies. Earlier copies of this
+guide framed this as "every entry must contain singing"; that was an
+overstatement, retracted 2026-05-04.
+
+The actual rule is: **pick a concrete verb that matches the visible
+action you want, and keep it consistent across entries.** Generic verbs
+dilute the cross-attention signal.
+
+- **Vocal performance:** `is singing ...` / `are singing together ...`
+  is the canonical default. The auto-generator
+  (`scripts/analyze_audio_features.py`) emits this for vocal music
+  videos because it's a strong default for that workload — not because
+  the model rejects other verbs.
+- **Instrumental / action tracks:** concrete action verbs every entry
+  (`slams`, `lunges`, `whips`, `drives`, `vaults`, `rips`, `plunges`).
+  Same cross-attention path; just a different action class.
+- **Dance / movement video:** `is dancing`, `spins through the frame`,
+  `slides across the floor`. Confirmed working.
+- **Comedy / dialogue:** `is delivering the punchline`, `is mid-bit`,
+  `is leaning into the mic`, `is telling a joke`.
+- **Generic anti-patterns:** `performing`, `vocalizing`, `delivering`
+  (without object) — abstract enough that the model can't bind them to
+  visible motion.
+
+**Token-budget principle.** Prompt tokens compete with audio + image
+cross-attention for LTX 2.3's attention budget. Concise prompts
+generally win. With i2v init the image carries scene + style + subject
+identity for free, so text should be tight. Without i2v, text has to do
+more work and may need more length. Decide where your constraints live;
+don't spend tokens on prose that the init image already establishes.
 
 ### 4.2 Subject byte-exact across every entry
 

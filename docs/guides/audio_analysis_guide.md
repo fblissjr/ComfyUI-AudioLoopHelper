@@ -65,10 +65,14 @@ Without `--subject`, the script outputs placeholder prompts:
 0:02-0:45: [VERSE - medium] describe action and audio here
 ```
 
-With `--subject`, the output has two clearly labeled sections. Every line
-contains `is singing` (singular) or `are singing together` (if the subject
-names 2+ people) — the singing verb keeps LTX 2.3's audio-video
-cross-attention signal for lip sync.
+With `--subject`, the output has two clearly labeled sections. The
+default scaffold emits `is singing` (singular) or `are singing together`
+(2+ people in the subject) — a sensible default for vocal music videos.
+**Not a hard rule** — pick whatever concrete verb matches the visible
+action you want (`is dancing`, `is playing <instrument>`, etc.). The
+verb binds LTX 2.3's audio-video cross-attention to a specific action
+class; generic verbs (`performing`, `vocalizing`) dilute that signal.
+Edit the script's output if the default verb doesn't match your audio.
 
 **Node 169 (initial render prompt):**
 ```
@@ -112,7 +116,9 @@ ornaments — frozen audio carries delivery). The previous schema's
 "Audio description" column ("Soft ambient hum", "Voice fills space",
 "Sound fades, room tone") was removed 2026-04-25 — those phrases
 double-signal what the frozen audio already carries.
-Multi-subject detection rewrites "is singing" to "are singing together".
+Multi-subject detection rewrites the default `is singing` to
+`are singing together`. Override the verb in your subject string if your
+audio implies a different action (dancing, instrument, etc.).
 
 ### Scene-diversity taxonomy
 

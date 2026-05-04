@@ -287,14 +287,22 @@ the mouth makes vowel-like shapes for consonant sounds.
    model re-interprets "who is singing/speaking" per boundary and has
    to re-establish mouth correspondence. Keep subject byte-exact.
 
-5. **Using generic verbs instead of sync-driving ones.** "is
-   performing," "is speaking," "is vocalizing" — these are weak. LTX's
-   action-verb attention drives lip shape. Use:
-   - Music: "is singing..." (single) / "are singing together..." (multi)
+5. **Using generic verbs instead of action-specific ones.** "is
+   performing," "is speaking," "is vocalizing" — these are abstract
+   enough that the model can't bind them to visible motion. LTX's
+   action-verb cross-attention drives lip + body shape. Pick a
+   concrete verb that matches the visible action:
+   - Music (vocal): "is singing..." (single) / "are singing together..." (multi)
+   - Music (dance / movement): "is dancing," "spins through the frame," etc.
+   - Music (instrumental): "is playing <instrument>"
    - Standup: "is telling a joke," "is delivering the punchline",
      "is pausing for the laugh," etc. (see `docs/reference/standup_system_prompt.md`).
    - Dialogue: emotion-loaded verbs like "is pressing the point," "is
      softening." Avoid the too-generic "is speaking."
+
+   Reframed 2026-05-04 from "must contain singing" — the verb is
+   load-bearing, but it's the action-class binding that matters, not
+   the literal word "singing".
 
 Fix top-down. #1 and #2 are usually the dominant problems on real
 runs.

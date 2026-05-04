@@ -62,9 +62,12 @@ video and the prompt:
   `LTXAVTools.LTXFrameCalculator` node — input
   `(seconds, fps)`, output `(frames, latent, actual_seconds)`.
 - **Resolution**: width and height divisible by 32.
-- **Prompt**: must contain the word "singing" (or "are singing
-  together"). LTX 2.3 audio-video cross-attention binds lip sync to
-  this verb; without it, motion stalls.
+- **Prompt**: pick a concrete verb that matches the visible action of
+  the window you're regenerating. For vocal performance,
+  `is singing` / `are singing together` is the canonical default; for
+  other actions, use the matching verb (`is dancing`,
+  `is playing <instrument>`, etc.). Generic verbs (`performing`,
+  `vocalizing`) dilute the cross-attention signal.
 - **`frame_rate`** stamped on `LTXVConditioning` (default 25.0).
 
 ## Audio behavior
