@@ -113,7 +113,7 @@ linking out (parallel-scrubbed-copy convention retired 2026-04-25).
 |---|---|
 | `debug_tools.md` | Canonical first-pass when a workflow won't run; audit invariant table; apply-script three-tier staging; RUN_ID artifact correlation. |
 | `environment.md` | Environment-variable registry (sage trace, exec log, per-prompt routing, etc.). |
-| `frame_planner_reference.md` | `LTXFramePlanner` — single source of truth for width/height/length/fps; snap rules; latent-volume ceiling; wiring map; F8 audit. |
+| `frame_planner_reference.md` | `LTXFramePlanner` — single-source-of-truth dimension config; snap rules + wiring + F8 audit. |
 | `ltx23_model_reference.md` | Image guides, latent volume, VAE conversion, AdaIN, noise_mask, conditioning path. |
 | `ltx23_prompt_system_prompts.md` | Raw Lightricks i2v/t2v system prompts + why our frozen-audio + i2v workflow prefers concise prompts. |
 | `ltxv_looping_sampler_reference.md` | Video-only structural reference for `LTXVLoopingSampler`. We don't recommend building this for music video (AV-incompatible). |

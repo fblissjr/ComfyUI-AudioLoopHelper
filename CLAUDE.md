@@ -76,7 +76,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 
 ### Conditioning + prompts
 
-- **Every prompt must contain "singing"** (or "are singing together"). LTX 2.3 audio-video cross-attention binds lip sync to the action verb.
+- **Verb choice drives cross-attention; generic verbs dilute it. Token budget is shared.** LTX 2.3's audio-video cross-attention binds the visible action to the verb in the prompt — but it's not "singing"-specific (confirmed working with `dancing` and other action verbs when the verb matches what the audio implies). Pick the verb for the action you want: `is singing` / `are singing together` for vocal performance, `is dancing` for movement, `is playing <instrument>` for instrumental. Generic verbs (`performing`, `vocalizing`) dilute the signal. Prompt tokens compete with audio + image cross-attention for budget; **concise > verbose, especially with i2v init** (which carries scene/style for free). Without i2v, text has to do more work and may need more length. Decide where your constraints live. Retracted as a hard "must contain singing" rule 2026-05-04.
 - **Use `In a [shot], [camera]` continuation framing for non-first entries — NOT `Cut to a ...`.** Lightricks's official LTX 2.3 system prompt explicitly trains the model to treat scene-cut language as a discontinuation directive. Convention retracted 2026-04-25. Guide: `docs/guides/prompt_creation_guide.md`. Evidence: `docs/reference/ltx23_prompt_system_prompts.md`.
 - **Node 169 prompt matches schedule 0:00 entry** structurally (`_build_prompt_for_section` via shared `_prepare_sections`; byte-exact).
 - **CLIP must not enter the loop body.** Pre-encode via `TimestampPromptScheduleBatchEncode`; `object_patches` don't survive the offload/reload → silent NAG disengagement iter 2+. Mechanism: `docs/analysis/nag_object_patches_offload_asymmetry.md`.
@@ -177,16 +177,15 @@ Subtree CLAUDE.md files (auto-loaded when working in that subtree):
 
 Internal (gitignored): `internal/PLAN.md`, `internal/TODO.md`, `internal/ic_lora_assessment.md`, `internal/design/*.md` (long-term designs), `internal/autoresearch/`, `internal/scripts/` (out-of-repo deploy sources), `internal/postmortem_*.md`, `internal/prompts/`, `internal/analysis/`, `internal/log/log_YYYY-MM-DD.md` (session logs).
 
-## Pending review
+## Pending review (last drained: 2026-05-04)
 
 <!--
 Capture-then-review staging area. New findings (via `#`-key or otherwise)
 land HERE, not inline above. Drained on each curation pass: most demote
 to internal/ archive, some promote to scripts/audit_workflows.py or a
 test, few earn a slot in the curated body. Policy: .claude/CLAUDE.md
-"CLAUDE.md governance".
-
-Last drained: 2026-05-04
+"CLAUDE.md governance". Update the "last drained" date above when you
+finish a curation pass.
 -->
 
 (empty)

@@ -221,25 +221,12 @@ in-the-moment additions.
 
 ### Validate before structural refactors
 
-For any refactor that touches **multiple CLAUDE.md / docs / agent / skill
-files** (typical signal: ≥ 3 files, ≥ 2 different concerns), dispatch three
-parallel Explore agents *before* writing changes:
-
-1. **Canonical-home map.** "For each topic in the file(s) being restructured,
-   identify the single canonical home or flag it as a gap." Validates the
-   pointer-discipline plan — every restated bullet either has an existing
-   home or earns a new one.
-2. **Rule classifier.** "Bucket every substantive bullet/section into:
-   turn-1-must-know vs subtree-specific vs already-restated vs postmortem
-   narrative vs dated-empirical vs duplicate." Turns "compress this" into a
-   concrete edit list.
-3. **Subtree density check.** When proposing new subtree CLAUDE.md files,
-   confirm each candidate subtree has ≥ 5 substantive subtree-specific
-   rules. Prevents premature splitting.
-
-Cost: ~30 seconds of agent time. Caught real issues every time it's been
-run. The pattern was promoted from one-off to convention 2026-05-04 after
-the curation pass that introduced this section.
+For multi-file refactors (≥ 3 CLAUDE.md / docs / agent / skill files; ≥ 2
+concerns), run `/validate-structural-refactor` before writing changes. The
+skill dispatches three parallel Explore agents (canonical-home map, rule
+classifier, subtree density) that turn vague "compress this" into a
+concrete edit list and prevent premature subtree splits. ~30s of agent
+time. Skill body has the full briefs and what-to-do-with-the-output.
 
 ### Wiki direction (Karpathy LLM wiki pattern)
 
