@@ -4,18 +4,11 @@ Last updated: 2026-05-04
 
 # Claude instructions — working in `.claude/`
 
-You are editing the project's Claude Code harness: agents, skills, hooks,
-and settings. This file orients you to the conventions specific to this
-directory; the human-oriented overview is `.claude/README.md`. Root
-project conventions live in `../CLAUDE.md`.
+You are editing the project's Claude Code harness: agents, skills, hooks, settings. Root conventions: `../CLAUDE.md`. Human-oriented overview: `.claude/README.md`.
 
 ## Mental model
 
-`.claude/` is **executable configuration**, not application code. The
-contents change Claude Code's behavior for every contributor working in
-this repo. Treat edits with the same care you'd give to CI configuration
-or a pre-commit hook — a typo in a hook command silently no-ops; a stale
-agent description silently misroutes invocations.
+`.claude/` is executable configuration. Edits change behavior for every session. Failure modes are silent: typo in a hook command → no-op; stale agent description → misroute; broken hook script path → blocks Write/Edit until session restart.
 
 ## File layout (committed vs local)
 
@@ -132,24 +125,29 @@ any new `*.local.*` file you introduce.
 
 ## CLAUDE.md governance
 
-This is the policy that keeps root and subtree CLAUDE.md files load-bearing
-without growing monotonically. Established 2026-05-04 after a curation pass
-brought root CLAUDE.md from 51 KB / 237 lines back under budget.
+### All CLAUDE.md and `docs/reference/` are LLM-consumer documents
+
+Future Claude sessions read these via the Read tool; humans rarely. Discipline:
+
+- **Density target**: ≥ 70% unique-fact bullets, ≤ 30% connector glue.
+- **Anchor durability**: cite `file::ClassName.method` (function/class names survive refactors), not `~line N` (rots).
+- **Units on every numeric column**: seconds vs pixel-frames vs latent-frames vs samples. LLMs hallucinate units.
+- **Disambiguation as first-class section**: `X ≠ Y ≠ Z` callouts go top-level when LLMs would conflate.
+- **Reference, don't copy**: code-derived content (schema bodies, function signatures, audit-check IDs) lives in code; wiki notes cite + add the *why*. Drift caught by `tests/test_claude_md_budget.py::test_cited_audit_ids_exist` (audit IDs) and `test_pointer_targets_exist` (file paths).
+- **No motivational paragraphs, no "When this matters" sections, no narrating which session uncovered the finding** — see `docs/reference/_atomic_note_template.md` for the full anti-pattern list.
+
+Template + ingest checklist + variant guidance: `docs/reference/_atomic_note_template.md`.
 
 ### The four layers
 
-Knowledge in this repo lives in one of four layers, in order of reliability:
-
 | Layer | Where | What lives here | Reliability |
 |---|---|---|---|
-| 1. Rules-as-code | `scripts/audit_workflows.py`, `tests/test_*.py`, hooks | Mechanically enforceable invariants (F-checks, schema AST tests, link integrity) | Highest — can't drift |
-| 2. Wiki / canonical docs | `docs/reference/`, `docs/guides/`, `docs/analysis/` | The "why" + atomic-note deep dives | Medium — humans must update |
-| 3. CLAUDE.md (root + subtree) | `./CLAUDE.md`, subtree CLAUDE.md files | Rules a fresh session must know on turn 1 + pointers down to layers 1–2 | Variable — depends on discipline |
-| 4. Findings ledger | `internal/findings_ledger.md`, `internal/log/`, `internal/postmortem_*.md` | Raw findings before they earn promotion; investigation narratives | Transient |
+| 1. Rules-as-code | `scripts/audit_workflows.py`, `tests/test_*.py`, hooks | Mechanically enforceable invariants | Highest — can't drift |
+| 2. Wiki / canonical docs | `docs/reference/`, `docs/guides/`, `docs/analysis/` | Atomic-note deep dives + the *why* | Medium |
+| 3. CLAUDE.md (root + subtree) | `./CLAUDE.md`, subtree CLAUDE.md | Turn-1 rules + pointers to layers 1–2 | Variable |
+| 4. Findings ledger | `internal/findings_ledger.md`, `internal/log/`, `internal/postmortem_*.md` | Pre-promotion findings; investigation narratives | Transient |
 
-The trap: findings naturally land in layer 3 (easiest place to write) and
-never get promoted down to 1–2 or demoted to 4. The lifecycle below is the
-counter-pressure.
+Findings drift up into layer 3 by default. The lifecycle below is the counter-pressure pulling them back down.
 
 ### Rule lifecycle
 

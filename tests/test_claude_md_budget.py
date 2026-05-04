@@ -162,6 +162,73 @@ def test_no_orphan_reference_notes() -> None:
     )
 
 
+def _audit_workflows_check_ids() -> set[str]:
+    """Extract audit-check IDs from scripts/audit_workflows.py record() calls."""
+    audit_path = REPO_ROOT / "scripts" / "audit_workflows.py"
+    if not audit_path.exists():
+        return set()
+    text = audit_path.read_text()
+    pattern = re.compile(r'record\(\s*[^,]+,\s*["\']([a-z_][a-z0-9_]+)["\']')
+    return set(pattern.findall(text))
+
+
+def _cited_audit_ids(text: str) -> set[str]:
+    """Extract audit IDs from markdown via four citation forms used in docs.
+
+    Forms (using ID as the backticked snake_case identifier):
+      - "Audit: ID"          immediate citation
+      - "Audit: F<N> (ID)"   numbered with id in parens
+      - "(F<N> -- ID)"       compound paren citation with em-dash or hyphen
+      - "ID (F<N>)"          id-first form
+    """
+    cited: set[str] = set()
+    cited.update(re.findall(r"[Aa]udit[s]?:\s*`([a-z_][a-z0-9_]+)`", text))
+    cited.update(re.findall(r"[Aa]udit[s]?:\s*F\d+\s*\(\s*`([a-z_][a-z0-9_]+)`", text))
+    cited.update(re.findall(r"\(F\d+\s*[—\-]\s*`([a-z_][a-z0-9_]+)`", text))
+    cited.update(re.findall(r"`([a-z_][a-z0-9_]+)`\s*\(F\d+\)", text))
+    return cited
+
+
+def test_cited_audit_ids_exist() -> None:
+    """Every audit ID cited in CLAUDE.md / docs/reference/ must exist as a
+    record(...) call in scripts/audit_workflows.py. Drift class: rename
+    in audit_workflows.py without propagating to docs."""
+    truth_set = _audit_workflows_check_ids()
+    if not truth_set:
+        pytest.skip("audit_workflows.py not found or no record() calls extracted")
+
+    paths = list(_all_claude_md_files())
+    ref_dir = REPO_ROOT / "docs" / "reference"
+    if ref_dir.is_dir():
+        paths.extend(ref_dir.glob("*.md"))
+
+    misses: list[str] = []
+    for path in paths:
+        text = path.read_text()
+        for cited in _cited_audit_ids(text):
+            if cited not in truth_set:
+                rel = path.relative_to(REPO_ROOT)
+                misses.append(f"{rel} cites '{cited}'")
+    _fail_if_any(
+        sorted(misses),
+        "Cited audit IDs not found in scripts/audit_workflows.py:",
+    )
+
+
+def test_audit_id_extractor_picks_up_citation_forms() -> None:
+    text = """
+    Audit: `frame_planner_present` (F8)
+    Audit: F7 (`planner_no_stride_input`)
+    The `alc_widget_drift` (F6) check fires when...
+    Plain prose with `not_an_audit_call` should not match.
+    """
+    cited = _cited_audit_ids(text)
+    assert "frame_planner_present" in cited
+    assert "planner_no_stride_input" in cited
+    assert "alc_widget_drift" in cited
+    assert "not_an_audit_call" not in cited
+
+
 def test_extract_repo_relative_paths_picks_up_common_shapes() -> None:
     text = """
     See docs/reference/frame_planner_reference.md for details.
