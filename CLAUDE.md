@@ -52,12 +52,12 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 ## Key patterns
 
 - `AUDIO = {"waveform": Tensor, "sample_rate": int}`. Duration = `waveform.shape[-1] / sample_rate`.
-- **Stride from integer-latent counts**, not widget seconds: `stride_seconds = (window_latents - overlap_latents) * 8 / fps`. `overlap_seconds` widget is a TARGET; node emits EFFECTIVE quantized overlap. Eliminates lip-sync drift. Tests: `tests/test_audio_loop_controller.py`.
+- **Stride from integer-latent counts**, not widget seconds. `overlap_seconds` widget is a target; node emits the effective quantized overlap. Prevents lip-sync drift across overlap-widget changes. Math + wiring + audits: `docs/reference/audio_loop_controller.md`.
 - LTX 2.3 text encoder is Gemma 3, NOT CLIP. Format: `[tensor, {"attention_mask": mask}]`, no pooled.
 - Video VAE formula: `latent = (pixel - 1) // 8 + 1`. Not `pixel // 8`.
-- `noise_mask=0` = fixed context; `mask=1` = regenerate. Audio is 0; video is 1.
+- `noise_mask=0` = fixed context; `mask=1` = regenerate. Audio frames always 0, video 1, overlap context 0. Setters/strippers + decision table: `docs/reference/noise_mask_semantics.md`.
 - Guide chaining: multiple `LTXVAddLatentGuide` / `LTXVAddGuideMulti` (up to 20) accumulate via `keyframe_idxs`; `LTXVCropGuides` strips them.
-- **CFG-analog amplification of any conditional**: feed `(positive_with_X, positive_without_X)` to `CFGGuider` as `(positive, negative)`. Sampler computes `eps = eps_without + cfg * (eps_with - eps_without)` per step. Generalizes to style LoRAs, identity LoRAs, per-reference ablation. POC: `scripts/apply_ttc_iclora_amplification_poc.py`. Landscape: `internal/analysis/iclora_landscape_analysis.md` (private clone only).
+- **CFG-analog amplification**: feed `(positive_with_X, positive_without_X)` to `CFGGuider` to amplify any conditional via existing CFG math. POC: `scripts/apply_ttc_iclora_amplification_poc.py`. Mechanism + decision table + failure modes: `docs/reference/cfg_analog_amplification.md`.
 
 ## Critical constraints
 
@@ -79,8 +79,8 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **Verb choice drives cross-attention; generic verbs dilute it. Token budget is shared.** LTX 2.3's audio-video cross-attention binds the visible action to the verb in the prompt — but it's not "singing"-specific (confirmed working with `dancing` and other action verbs when the verb matches what the audio implies). Pick the verb for the action you want: `is singing` / `are singing together` for vocal performance, `is dancing` for movement, `is playing <instrument>` for instrumental. Generic verbs (`performing`, `vocalizing`) dilute the signal. Prompt tokens compete with audio + image cross-attention for budget; **concise > verbose, especially with i2v init** (which carries scene/style for free). Without i2v, text has to do more work and may need more length. Decide where your constraints live. Retracted as a hard "must contain singing" rule 2026-05-04.
 - **Use `In a [shot], [camera]` continuation framing for non-first entries — NOT `Cut to a ...`.** Lightricks's official LTX 2.3 system prompt explicitly trains the model to treat scene-cut language as a discontinuation directive. Convention retracted 2026-04-25. Guide: `docs/guides/prompt_creation_guide.md`. Evidence: `docs/reference/ltx23_prompt_system_prompts.md`.
 - **Node 169 prompt matches schedule 0:00 entry** structurally (`_build_prompt_for_section` via shared `_prepare_sections`; byte-exact).
-- **CLIP must not enter the loop body.** Pre-encode via `TimestampPromptScheduleBatchEncode`; `object_patches` don't survive the offload/reload → silent NAG disengagement iter 2+. Mechanism: `docs/analysis/nag_object_patches_offload_asymmetry.md`.
-- **Loop-body CONDITIONING must carry `frame_rate`** (default 25.0). Batch encoder stamps it; any new CONDITIONING-producing loop-body node must too (via `node_helpers.conditioning_set_values`). Missing → identity drift + hallucinated objects iter-over-iter.
+- **CLIP must not enter the loop body.** Pre-encode via `TimestampPromptScheduleBatchEncode` outside; `ConditioningSelectByIteration` plucks per-iter inside. Mechanism + cache + failure modes: `docs/reference/timestamp_prompt_schedule_batch_encode.md`.
+- **Loop-body CONDITIONING must carry `frame_rate`** (default 25.0). Batch encoder stamps it; new CONDITIONING-producing loop-body nodes must too via `node_helpers.conditioning_set_values`. Missing → identity drift iter-over-iter.
 - **Illustrated inits drift toward photoreal across iterations** (cross-attention is photoreal-trained). Match init-image style family; or re-anchor via `LTXVAddGuideMulti` per iteration.
 - **LTX2_NAG widgets** `[nag_scale, nag_alpha, nag_tau, inplace]`. KJNodes default `scale=11` is aggressive for distilled — dial to 3-7 if initial render freezes. Reference: `docs/reference/nag_technical_reference.md`.
 
@@ -94,10 +94,10 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 ### Workflow JSON discipline
 
 - **Always use `WorkflowEditor`** (`scripts/workflow_utils.py`) for JSON edits. Apply-script + audit-pair conventions: see `scripts/CLAUDE.md`.
-- **Never name an INT widget exactly `"seed"` or `"noise_seed"`.** ComfyUI's frontend auto-attaches a `control_after_generate` dropdown to those literal names, which silently mutates the saved widget value across runs even when the input is wired. Use `base_seed`, `seed_in`, etc. Guard: `tests/test_node_schemas.py::test_no_seed_or_noise_seed_named_inputs`.
-- **A schema rename is not enough — strip leftover widget values too.** Example: F4 `seed`→`base_seed` rename also stripped a leftover `'randomize'` that ComfyUI's positional widget pop would otherwise have shifted into the `fps` slot. Companion: `scripts/apply_strip_alc_control_after_generate.py`. Audit: `alc_widget_drift` (F6).
-- **Don't ship two schema changes that touch the same iteration-state plane in one session.** When adding an auto-wire that closes a control loop, walk every existing edge between the involved nodes and confirm none of them produces a cycle. Audit: `planner_no_stride_input` (F7).
-- **Bake new topology constraints into `audit_workflows.py`.** Every fix that ships an apply script ships a matching audit check. F-pair inventory + remediation pointers: `docs/reference/debug_tools.md`.
+- **Never name an INT widget exactly `"seed"` or `"noise_seed"`.** ComfyUI's frontend auto-attaches a `control_after_generate` dropdown to those names, silently mutating saved widget values across runs. Use `base_seed`, `seed_in`. Guard: `tests/test_node_schemas.py::test_no_seed_or_noise_seed_named_inputs`. Audit: `alc_seed_legacy_name` (F4).
+- **Schema renames must strip leftover widget values too.** ComfyUI's backend pops widgets positionally — a rename without paired widget-value strip shifts stale strings into the wrong slot. Audit: `alc_widget_drift` (F6). Canonical incident + fix: `docs/reference/audio_loop_controller.md`.
+- **Don't ship two schema changes touching the same iteration-state plane in one session.** Walk every edge between involved nodes; confirm none closes a cycle. Audit: `planner_no_stride_input` (F7).
+- **Bake new topology constraints into `audit_workflows.py`.** Apply script + audit-check pair (F-pair convention). Inventory: `docs/reference/debug_tools.md`. How-to: `docs/reference/f_pair_convention.md`.
 
 ## ComfyUI gotchas
 
@@ -128,8 +128,8 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 
 - **Initial render**: `#531 LTXVImgToVideoInplaceKJ` writes encoded init into frame 0; `noise_mask=0` locks it.
 - **Loop iterations**: top-level `VAEEncode → subgraph slot 8 → #1519 LTXVAddLatentGuide latent_idx=-1`. Init encoded ONCE.
-- **F2 + F3 are MANDATORY symmetry rules** for the init-image path: both initial and loop branches consume the SAME `LTXVPreprocess(img_compression=18)` output (F2); loop CFGGuider positive/negative come from `LTXVCropGuides`, not `LTXVAddLatentGuide` directly (F3). Skipping either is the photoreal-drift / identity-drift footgun. Apply: `scripts/apply_loop_guide_preprocess_symmetry.py` + `scripts/apply_loop_cropguides_symmetry.py`. Full trace: `docs/reference/pipeline_flow_latent.md`.
-- **F12 video-reference IC-LoRA**: companion to F2/F3, adds an IC-LoRA guide inside the subgraph between `#1519` and the F3 cropguides chain. F2 + F3 ref-video symmetry rules apply to the ref-video chain too. Apply + decisions + flag reference: `scripts/apply_iclora_video_reference.py` + `internal/ic_lora_assessment.md` D19–D23 (private clone only).
+- **F2 + F3 are MANDATORY symmetry rules** for the init-image path: both initial and loop branches share the same `LTXVPreprocess(img_compression=18)` output (F2); loop `CFGGuider` positive/negative flow through `LTXVCropGuides` (F3). Skipping either is the photoreal-drift / identity-drift footgun. Full trace + apply scripts: `docs/reference/pipeline_flow_latent.md`.
+- **F12 video-reference IC-LoRA** (companion to F2/F3): IC-LoRA guide inside the subgraph between `#1519` and the F3 cropguides chain; F2/F3 symmetry rules extend to the ref-video chain. Apply: `scripts/apply_iclora_video_reference.py`. Decisions: `internal/ic_lora_assessment.md` D19–D23 (private clone only).
 
 ## Working with Claude across sessions
 
