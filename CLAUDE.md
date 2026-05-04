@@ -123,6 +123,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **KJNodes ships `GetImageRangeFromBatch` and `SimpleCalculatorKJ`.** Compose these before building custom slicer or math nodes. Grep `ComfyUI-KJNodes/__init__.py` registry before designing new utility nodes.
 - **No `.py` edits to ANY file in this package while a render is in flight.** ComfyUI-HotReloadHack reloads the entire package on any `.py` change, invalidating Inductor autotune state. CPU-only edits to docs / scripts / `internal/scratch/*.json` / non-package files are safe.
 - **Always `git status --short` before `git commit`.** Pre-staged files get swept into your commit otherwise. Scrub workflows before open-sourcing.
+- **Concurrent unstaged edits get bundled into your commit.** When a file you intend to edit already shows ` M` in `git status`, `git add <file>` stages BOTH the prior unstaged changes AND your edits — your commit captures both. Either `git stash` first, or `git diff --cached -- <file>` post-stage to verify scope when you only meant to land your own edits.
 
 ## Init image conditioning + IC-LoRA paths
 
