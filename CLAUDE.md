@@ -185,6 +185,8 @@ land HERE, not inline above. Drained on each curation pass: most demote
 to internal/ archive, some promote to scripts/audit_workflows.py or a
 test, few earn a slot in the curated body. Policy: .claude/CLAUDE.md
 "CLAUDE.md governance".
+
+Last drained: 2026-05-04
 -->
 
 (empty)
