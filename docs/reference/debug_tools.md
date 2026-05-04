@@ -84,7 +84,7 @@ Workflow migrations live in `scripts/apply_*.py`. Each script:
    to audit via `EXPERIMENTAL_AUDITED_FILES` allowlist in
    `audit_workflows.py`.
 3. `example_workflows/` — production, "ships AND stabilizes" per
-   `internal/PLAN.md`.
+   `internal/PLAN.md` (private clone only).
 
 POCs that intentionally break a production invariant (e.g. F3 asymmetry)
 ship a paired audit check that dispatches on a node-title prefix and ERRs

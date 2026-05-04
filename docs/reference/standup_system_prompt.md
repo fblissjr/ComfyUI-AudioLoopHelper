@@ -220,4 +220,4 @@ pool and the AMBITION line:
 
 If you use any of these domains regularly, it's worth adding a
 `--domain` flag to the analyzer. See
-`internal/audio_analysis_evolution.md` for the broader discussion.
+`internal/audio_analysis_evolution.md` (private clone only) for the broader discussion.

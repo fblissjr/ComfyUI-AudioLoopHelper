@@ -162,6 +162,57 @@ def test_no_orphan_reference_notes() -> None:
     )
 
 
+_INTERNAL_PATH_PATTERN = re.compile(r"`(internal/[\w/.-]+\.md)`")
+
+
+def test_internal_citations_marked() -> None:
+    """Specific-file citations to internal/X.md from public docs must be
+    marked with '(private clone only)' on the same line, OR live inside an
+    HTML comment block. Catches the dead-link UX issue for public-clone
+    readers who follow a citation and find nothing.
+
+    Skipped: meta-references to internal/ as a directory concept (e.g.
+    `internal/postmortem_*.md`) — only specific .md filenames trigger.
+    """
+    public_paths: list[Path] = []
+    public_paths.extend(_all_claude_md_files())
+    # docs/reference/ holds the wiki notes the marker convention targets;
+    # docs/guides/ and docs/analysis/ are pre-existing prose with their own
+    # citation conventions — skip until they're touched organically.
+    ref_dir = REPO_ROOT / "docs" / "reference"
+    if ref_dir.is_dir():
+        public_paths.extend(ref_dir.glob("*.md"))
+
+    misses: list[str] = []
+    for path in public_paths:
+        rel = path.relative_to(REPO_ROOT)
+        if rel.parts and rel.parts[0] == "internal":
+            continue
+        text = path.read_text()
+        in_html_comment = False
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if "<!--" in line:
+                in_html_comment = True
+            if in_html_comment:
+                if "-->" in line:
+                    in_html_comment = False
+                continue
+            for m in _INTERNAL_PATH_PATTERN.finditer(line):
+                cited = m.group(1)
+                # Skip glob-shape and meta-references (e.g. internal/postmortem_*.md)
+                if "*" in cited:
+                    continue
+                if "private clone" in line.lower():
+                    continue
+                if "gitignored" in line.lower():
+                    continue
+                misses.append(f"{rel}:{lineno} cites `{cited}`")
+    _fail_if_any(
+        sorted(misses),
+        "Unmarked internal/ citations in public docs (add '(private clone only)' marker):",
+    )
+
+
 def _audit_workflows_check_ids() -> set[str]:
     """Extract audit-check IDs from scripts/audit_workflows.py record() calls."""
     audit_path = REPO_ROOT / "scripts" / "audit_workflows.py"

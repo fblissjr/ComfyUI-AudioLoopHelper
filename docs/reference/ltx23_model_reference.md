@@ -53,7 +53,7 @@ comfy_extras/nodes_lt.py (append_keyframe), comfy/ldm/lightricks/model.py
   Landscape and square work best.
 - **Two-stage approach is the recommended workaround**: generate at lower res (720p),
   then spatial latent upscale to 1080p+. This is what LTX-Desktop and native LTX-2
-  both do. See `docs/analysis/ltx23_gaps_analysis.md` (upscale workflow is designed but not yet shipped — see `internal/design/upscale_workflow_design.md`).
+  both do. See `docs/analysis/ltx23_gaps_analysis.md` (upscale workflow is designed but not yet shipped — see `internal/design/upscale_workflow_design.md` (private clone only)).
 - For our loop workflow: each window is 497 frames at 832x480. Changing resolution
   requires adjusting window_seconds or temporal_tile_size to stay under the limit.
 
@@ -203,4 +203,4 @@ Getting this wrong silently misconfigures the node.
   3-step refinement sampler -> VAEDecodeTiled.
 - Model: `ltx-2.3-spatial-upscaler-x2-1.1.safetensors`
 - Refinement sigmas: [0.85, 0.725, 0.4219, 0.0] (3 steps).
-- Design doc (workflow not yet shipped): `internal/design/upscale_workflow_design.md`
+- Design doc (workflow not yet shipped): `internal/design/upscale_workflow_design.md` (private clone only)

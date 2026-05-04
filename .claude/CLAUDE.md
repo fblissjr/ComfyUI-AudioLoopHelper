@@ -138,6 +138,28 @@ Future Claude sessions read these via the Read tool; humans rarely. Discipline:
 
 Template + ingest checklist + variant guidance: `docs/reference/_atomic_note_template.md`.
 
+### Public/private surface
+
+Three private surfaces, each for a different shape of content:
+
+| Private surface | Loaded? | Use for |
+|---|---|---|
+| `./.claude.local.md` (root, gitignored) | **Auto-loaded after root `CLAUDE.md`** | Per-user / per-machine / doubt-private supplements to root rules. Content here is read last; can override public defaults. Per-subdir `.local.md` files are NOT supported by Claude Code; root only. |
+| `./internal/reference/<topic>.md` (gitignored, lazy) | On-demand via Read | Atomic-note-shaped private content — durable knowledge that follows the wiki template but can't ship publicly. Created when first such content lands. |
+| `./internal/postmortem_*.md`, `./internal/analysis/*.md`, `./internal/design/*.md` | On-demand via Read | Investigation narratives, dated empiricals, in-progress designs. Existing shapes; not retrofit. |
+
+Routing rules for new content:
+
+- **When in doubt about whether content is public-safe** → `.claude.local.md`. Single root-level catch-all; gitignored; supplements/overrides public CLAUDE.md.
+- **Atomic-note-shaped durable knowledge** (customer specifics, unscrubbed prompts, dated benchmarks) → `internal/reference/<topic>.md` (template applies).
+- **Investigation narrative** (one-time, story matters) → `internal/postmortem_*.md`.
+- **Dated empirical** (replaceable on re-measurement) → `internal/analysis/<topic>.md`.
+- **Public-shareable codebase reference** → `docs/reference/<topic>.md` (template applies).
+
+**Citation discipline**: public docs citing `internal/X.md` must mark `(private clone only)` on the citation line OR paraphrase the public-shareable summary inline + cite for full version. Test `test_internal_citations_marked` enforces.
+
+**Commit titles + bodies follow the same public-readers framing as `docs/`.** No `internal/` filenames; no customer-specific context; no dated empirical observations. Subject describes what changed at the abstract level. Body can reference public artifacts (`docs/reference/X.md`, `scripts/apply_X.py`, audit IDs) freely; can summarize internal incidents at abstract level but should not cite internal filenames or specific case content. Path-privacy plugin enforces path leaks; this rule covers content leaks.
+
 ### The four layers
 
 | Layer | Where | What lives here | Reliability |
@@ -145,7 +167,7 @@ Template + ingest checklist + variant guidance: `docs/reference/_atomic_note_tem
 | 1. Rules-as-code | `scripts/audit_workflows.py`, `tests/test_*.py`, hooks | Mechanically enforceable invariants | Highest — can't drift |
 | 2. Wiki / canonical docs | `docs/reference/`, `docs/guides/`, `docs/analysis/` | Atomic-note deep dives + the *why* | Medium |
 | 3. CLAUDE.md (root + subtree) | `./CLAUDE.md`, subtree CLAUDE.md | Turn-1 rules + pointers to layers 1–2 | Variable |
-| 4. Findings ledger | `internal/findings_ledger.md`, `internal/log/`, `internal/postmortem_*.md` | Pre-promotion findings; investigation narratives | Transient |
+| 4. Findings ledger | `internal/findings_ledger.md`, `internal/log/`, `internal/postmortem_*.md` (all gitignored) | Pre-promotion findings; investigation narratives | Transient |
 
 Findings drift up into layer 3 by default. The lifecycle below is the counter-pressure pulling them back down.
 

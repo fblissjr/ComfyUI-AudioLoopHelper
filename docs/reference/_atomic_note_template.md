@@ -28,6 +28,24 @@ Last updated: YYYY-MM-DD
 
 **Non-negotiable**: Last-updated, Role, Failure modes, References. **Optional**: Disambiguation (when LLMs would conflate), Decision table (when ≥3 alternatives), Migration, Audit + tests.
 
+## Public vs private placement
+
+The wiki has a public surface (`docs/reference/`, committed) and a private extension (`internal/reference/`, gitignored — created lazily when first private wiki-grade content lands). Both follow this template. Three rules for which `internal/` subdir a private note lands in:
+
+| Content shape | Goes to |
+|---|---|
+| Atomic-note-shaped private content (durable knowledge that future Claude looks up but can't ship publicly) | `internal/reference/<topic>.md` |
+| Dated empirical observation that gets replaced on re-measurement | `internal/analysis/<topic>.md` |
+| Investigation narrative — one-time, the *story* matters | `internal/postmortem_<topic>.md` |
+| Public-shareable codebase reference | `docs/reference/<topic>.md` |
+
+**Citation discipline across the boundary:**
+
+- **Public → private**: when a public doc cites `internal/X.md`, mark with `(private clone only)` so a public reader knows the link is dead-ended on their clone. Hygiene test `tests/test_claude_md_budget.py::test_internal_citations_marked` enforces.
+- **Public → private (preferred form)**: paraphrase + private link. Public doc carries the public-shareable summary inline; cites internal only for the unscrubbed full version. Pattern: `Mechanism: <inline summary>. Full case study: internal/X.md (private clone only).`
+- **Private → public**: cite freely, no marker needed.
+- **Private → private**: cite freely.
+
 ## Note-type variants
 
 | Type | When to use | Variable middle section names | Example |
@@ -74,7 +92,7 @@ Find 2–4 existing reference docs whose topics touch the new one. Add an entry 
 
 ### 4. Append to the session log
 
-One line in `internal/log/log_YYYY-MM-DD.md` under "What changed":
+One line in `internal/log/log_YYYY-MM-DD.md` (private clone only) under "What changed":
 
 > Added `docs/reference/<note>.md` (entity/concept). Consolidates [list]. Cross-linked from [list].
 

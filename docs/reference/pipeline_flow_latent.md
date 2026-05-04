@@ -697,7 +697,7 @@ Output Assembly:
 - **Why bypassed**: Was wrapping the Extension's conditioning with frame_rate=25.
   This caused ComfyUI's execution engine to evaluate the conditioning graph in a
   way that corrupted the initial render's audio-video cross-attention, destroying
-  lip sync. Removed 2026-04-12. See `internal/postmortem_v0409_latent_rework.md` Issue 6.
+  lip sync. Removed 2026-04-12. See `internal/postmortem_v0409_latent_rework.md` Issue 6 (private clone only).
 - Conditioning now flows directly from #1588/#648 to #843.
 
 ### Node 1560 -- AudioLoopPlanner (BYPASSED, mode=4)

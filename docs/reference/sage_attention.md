@@ -63,7 +63,7 @@ Semantics:
   per-element relative error stays at **~0.039** across the same
   range. Stateless per-call decision: no closure caches, no
   offload-survival risk beyond the base override. Full
-  characterization: `internal/design/sage_backlog.md` item 2.
+  characterization: `internal/design/sage_backlog.md` item 2 (private clone only).
 
   > **What `rtol` means in this section:** these numbers are
   > *measured divergence*, not a `torch.allclose` tolerance
@@ -121,7 +121,7 @@ applies to models that pass through this node.
 stack sage (node 268) → `LTXVChunkFeedForward` → `LTX2AttentionTunerPatch`
 → `LTX2_NAG` → preview override. These all attach to different
 surfaces and compose cleanly. See
-`internal/analysis/sage_attention_analysis.md` for the detailed
+`internal/analysis/sage_attention_analysis.md` (private clone only) for the detailed
 patch-chain analysis.
 
 ## Telemetry
@@ -192,11 +192,11 @@ flipping back if anything regresses.
 
 ## Related
 
-- `internal/analysis/sage_attention_analysis.md` — patch-chain
+- `internal/analysis/sage_attention_analysis.md` (private clone only) — patch-chain
   analysis with file:line references for the 5-node LTX-2 patch
   chain, why sage + tuner compose correctly, where LTX-Video actually
   calls attention, and the offload-asymmetry sibling risk.
-- `internal/design/sage_backlog.md` — 8 deferred items with
+- `internal/design/sage_backlog.md` (private clone only) — 8 deferred items with
   measurement gates. Top items: accuracy baselining (PSNR/SSIM/LPIPS
   fp8++ vs SDPA), mask-aware mode split (fp16 for cross-attn where
   masks live, fp8++ for self-attn), offload-asymmetry verification.

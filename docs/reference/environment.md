@@ -58,7 +58,7 @@ string is treated identically to unset (`_current_run_id` returns
 each stamped `time.time()` at startup, so files from one render drifted
 apart by seconds and looked unrelated by name. Single shared key fixes
 correlation. Diagnosed 2026-04-26 in
-`internal/analysis/id_lora_ablation_and_seed_widget_audit.md`.
+`internal/analysis/id_lora_ablation_and_seed_widget_audit.md` (private clone only).
 
 ### `COMFYUI_EXEC_LOG`
 
@@ -206,7 +206,7 @@ gitignored shell profile or pass per-launch.
 4. Add a row to the table at the top of this doc with default behavior
    + who reads + who sets.
 5. If it's an experiment-runner concern, document the override pattern
-   in `internal/autoresearch/program.md` too.
+   in `internal/autoresearch/program.md` (private clone only) too.
 
 ## Audit command
 

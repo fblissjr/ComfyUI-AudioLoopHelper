@@ -57,7 +57,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - Video VAE formula: `latent = (pixel - 1) // 8 + 1`. Not `pixel // 8`.
 - `noise_mask=0` = fixed context; `mask=1` = regenerate. Audio is 0; video is 1.
 - Guide chaining: multiple `LTXVAddLatentGuide` / `LTXVAddGuideMulti` (up to 20) accumulate via `keyframe_idxs`; `LTXVCropGuides` strips them.
-- **CFG-analog amplification of any conditional**: feed `(positive_with_X, positive_without_X)` to `CFGGuider` as `(positive, negative)`. Sampler computes `eps = eps_without + cfg * (eps_with - eps_without)` per step. Generalizes to style LoRAs, identity LoRAs, per-reference ablation. POC: `scripts/apply_ttc_iclora_amplification_poc.py`. Landscape: `internal/analysis/iclora_landscape_analysis.md`.
+- **CFG-analog amplification of any conditional**: feed `(positive_with_X, positive_without_X)` to `CFGGuider` as `(positive, negative)`. Sampler computes `eps = eps_without + cfg * (eps_with - eps_without)` per step. Generalizes to style LoRAs, identity LoRAs, per-reference ablation. POC: `scripts/apply_ttc_iclora_amplification_poc.py`. Landscape: `internal/analysis/iclora_landscape_analysis.md` (private clone only).
 
 ## Critical constraints
 
@@ -116,7 +116,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **`CLIPTextEncode(169) → ConditioningZeroOut(420) → LTXVConditioning(164).negative → CFGGuider(153).negative` chain is wired-correctly but runtime-inert at `CFG=1`.** Don't try to remove it — `CFGGuider` validates both slots.
 - `torchaudio.detect_pitch_frequency` on silence → false positives. Gate with RMS > 0.005.
 - `LTXVPreprocess img_compression=0` SKIPS preprocessing (frozen first frames). Use 18 (Lightricks) or 35 (core).
-- **`LTXVConcatAVLatent` isn't buggy.** Two `output.update(...)` lines are dead writes; the `NestedTensor` assignment that follows is load-bearing. Don't chase. Full investigation: `internal/postmortem_concat_av_latent_investigation.md`.
+- **`LTXVConcatAVLatent` isn't buggy.** Two `output.update(...)` lines are dead writes; the `NestedTensor` assignment that follows is load-bearing. Don't chase. Full investigation: `internal/postmortem_concat_av_latent_investigation.md` (private clone only).
 - Validate after edits: `python3 -c "import json; json.load(open('file.json'))"`.
 - **TensorLoop framework-cache invalidation is transitive.** Any node downstream of `current_iteration` re-executes per iter. Memoize via `id()`-keyed LRU + `IS_CHANGED`.
 - **LTX has no image VAE encode node.** For image→latent, use core `VAEEncode`.
@@ -129,7 +129,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **Initial render**: `#531 LTXVImgToVideoInplaceKJ` writes encoded init into frame 0; `noise_mask=0` locks it.
 - **Loop iterations**: top-level `VAEEncode → subgraph slot 8 → #1519 LTXVAddLatentGuide latent_idx=-1`. Init encoded ONCE.
 - **F2 + F3 are MANDATORY symmetry rules** for the init-image path: both initial and loop branches consume the SAME `LTXVPreprocess(img_compression=18)` output (F2); loop CFGGuider positive/negative come from `LTXVCropGuides`, not `LTXVAddLatentGuide` directly (F3). Skipping either is the photoreal-drift / identity-drift footgun. Apply: `scripts/apply_loop_guide_preprocess_symmetry.py` + `scripts/apply_loop_cropguides_symmetry.py`. Full trace: `docs/reference/pipeline_flow_latent.md`.
-- **F12 video-reference IC-LoRA**: companion to F2/F3, adds an IC-LoRA guide inside the subgraph between `#1519` and the F3 cropguides chain. F2 + F3 ref-video symmetry rules apply to the ref-video chain too. Apply + decisions + flag reference: `scripts/apply_iclora_video_reference.py` + `internal/ic_lora_assessment.md` D19–D23.
+- **F12 video-reference IC-LoRA**: companion to F2/F3, adds an IC-LoRA guide inside the subgraph between `#1519` and the F3 cropguides chain. F2 + F3 ref-video symmetry rules apply to the ref-video chain too. Apply + decisions + flag reference: `scripts/apply_iclora_video_reference.py` + `internal/ic_lora_assessment.md` D19–D23 (private clone only).
 
 ## Working with Claude across sessions
 
@@ -139,10 +139,10 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **Verify a new model via its paper, not its name.** Run `paper_search` / fetch README before designing around assumptions. Cost ~30s; saves entire sessions.
 - **Promote helpers at the 3rd call site, not the 2nd.** Two sites can share inline; the third earns the abstraction.
 - **`PLAN.md` (or feature design doc) is the spec.** When red TDD tests disagree with the spec formula, fix the test — the spec wins unless you explicitly update PLAN first.
-- **Decisions-index pattern**: DECISION / WHY / CONTEXT triples, grouped by feature. Template at `internal/ic_lora_assessment.md`. Roll up any feature >3 commits.
+- **Decisions-index pattern**: DECISION / WHY / CONTEXT triples, grouped by feature. Template at `internal/ic_lora_assessment.md` (private clone only). Roll up any feature >3 commits.
 - **LTX 2.3 audio-feature seed variance is ~±20 BPM** for equivalent electronic-genre conditioning. Single-seed comparisons are noise; multi-seed (3-5 per config) needed.
 - **Record the prior in writing BEFORE the measurement.** A rough Amdahl derivation commits a prediction the result can grade against. "Did the prior hold?" is more useful than "what was the number?"
-- **Measure the boundary you actually patch**, not the boundary your model predicts. Sage e2e was +17 points above the strict-attention Amdahl prediction because int8 amortization reaches into FFN-adjacent sampler work. Specific bench numbers: `internal/analysis/empirical_bench_findings.md`.
+- **Measure the boundary you actually patch**, not the boundary your model predicts. Sage e2e was +17 points above the strict-attention Amdahl prediction because int8 amortization reaches into FFN-adjacent sampler work. Specific bench numbers: `internal/analysis/empirical_bench_findings.md` (private clone only).
 - **Check sibling-session backlogs (`internal/design/*_backlog.md`) before executing stale PLAN items** that touch defaults.
 - **Project-level `settings.json` hook config is loaded once at session start** — deleting a hook script mid-session leaves the cached config trying to run a missing file, blocking every Write/Edit until session restart. Workaround: use Bash for post-deletion edits.
 - **Marketplace plugin cache lags behind merged plugin changes.** To pick up freshly-merged plugin changes immediately, re-run the plugin's `install-git-hooks.sh` from a workspace clone of the plugin repo.
@@ -172,7 +172,7 @@ Example workflows: eight shipped on `AudioLoopHelperSageAttention auto_mask_awar
 Subtree CLAUDE.md files (auto-loaded when working in that subtree):
 - `scripts/CLAUDE.md` — apply-script conventions, audit invariants, WorkflowEditor patterns.
 - `tests/CLAUDE.md` — pytest invocation, AST patterns, fakes hierarchy.
-- `internal/autoresearch/CLAUDE.md` — experiment-runner framework (target-agnostic).
+- `internal/autoresearch/CLAUDE.md` — experiment-runner framework (target-agnostic; gitignored, only loads on private clone).
 - `.claude/CLAUDE.md` — harness conventions + CLAUDE.md governance policy.
 
 Internal (gitignored): `internal/PLAN.md`, `internal/TODO.md`, `internal/ic_lora_assessment.md`, `internal/design/*.md` (long-term designs), `internal/autoresearch/`, `internal/scripts/` (out-of-repo deploy sources), `internal/postmortem_*.md`, `internal/prompts/`, `internal/analysis/`, `internal/log/log_YYYY-MM-DD.md` (session logs).
