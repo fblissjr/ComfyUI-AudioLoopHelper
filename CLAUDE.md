@@ -95,8 +95,8 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 
 - **Always use `WorkflowEditor`** (`scripts/workflow_utils.py`) for JSON edits. Apply-script + audit-pair conventions: see `scripts/CLAUDE.md`.
 - **Never name an INT widget exactly `"seed"` or `"noise_seed"`.** ComfyUI's frontend auto-attaches a `control_after_generate` dropdown to those names, silently mutating saved widget values across runs. Use `base_seed`, `seed_in`. Guard: `tests/test_node_schemas.py::test_no_seed_or_noise_seed_named_inputs`. Audit: `alc_seed_legacy_name` (F4).
-- **Schema renames must strip leftover widget values too.** ComfyUI's backend pops widgets positionally — a rename without paired widget-value strip shifts stale strings into the wrong slot. Audit: `alc_widget_drift` (F6). Canonical incident + fix: `docs/reference/audio_loop_controller.md`.
-- **Don't ship two schema changes touching the same iteration-state plane in one session.** Walk every edge between involved nodes; confirm none closes a cycle. Audit: `planner_no_stride_input` (F7).
+- **Schema renames must strip leftover widget values too.** ComfyUI's backend pops widgets positionally — a rename without paired widget-value strip shifts stale strings into the wrong slot. Audit: `alc_widget_drift` (F6). Widget-order spec + failure modes: `docs/reference/audio_loop_controller.md`.
+- **Don't ship two schema changes touching the same iteration-state plane in one session.** Walk every edge between involved nodes; confirm none closes a cycle. Audit: `planner_no_stride_input` (F7). Cycle topology: `docs/reference/audio_loop_controller.md`.
 - **Bake new topology constraints into `audit_workflows.py`.** Apply script + audit-check pair (F-pair convention). Inventory: `docs/reference/debug_tools.md`. How-to: `docs/reference/f_pair_convention.md`.
 
 ## ComfyUI gotchas
@@ -129,7 +129,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **Initial render**: `#531 LTXVImgToVideoInplaceKJ` writes encoded init into frame 0; `noise_mask=0` locks it.
 - **Loop iterations**: top-level `VAEEncode → subgraph slot 8 → #1519 LTXVAddLatentGuide latent_idx=-1`. Init encoded ONCE.
 - **F2 + F3 are MANDATORY symmetry rules** for the init-image path: both initial and loop branches share the same `LTXVPreprocess(img_compression=18)` output (F2); loop `CFGGuider` positive/negative flow through `LTXVCropGuides` (F3). Skipping either is the photoreal-drift / identity-drift footgun. Full trace + apply scripts: `docs/reference/pipeline_flow_latent.md`.
-- **F12 video-reference IC-LoRA** (companion to F2/F3): IC-LoRA guide inside the subgraph between `#1519` and the F3 cropguides chain; F2/F3 symmetry rules extend to the ref-video chain. Apply: `scripts/apply_iclora_video_reference.py`. Decisions: `internal/ic_lora_assessment.md` D19–D23 (private clone only).
+- **F12 video-reference IC-LoRA** (companion to F2/F3): IC-LoRA guide inside the subgraph between `#1519` and the F3 cropguides chain; F2/F3 symmetry rules extend to the ref-video chain. F2/F3 background: `docs/reference/pipeline_flow_latent.md`. Apply: `scripts/apply_iclora_video_reference.py`. Decisions: `internal/ic_lora_assessment.md` D19–D23 (private clone only).
 
 ## Working with Claude across sessions
 
