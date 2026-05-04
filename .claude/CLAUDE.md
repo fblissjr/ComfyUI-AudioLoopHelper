@@ -135,6 +135,7 @@ Future Claude sessions read these via the Read tool; humans rarely. Discipline:
 - **Disambiguation as first-class section**: `X ≠ Y ≠ Z` callouts go top-level when LLMs would conflate.
 - **Reference, don't copy**: code-derived content (schema bodies, function signatures, audit-check IDs) lives in code; wiki notes cite + add the *why*. Drift caught by `tests/test_claude_md_budget.py::test_cited_audit_ids_exist` (audit IDs) and `test_pointer_targets_exist` (file paths).
 - **No motivational paragraphs, no "When this matters" sections, no narrating which session uncovered the finding** — see `docs/reference/_atomic_note_template.md` for the full anti-pattern list.
+- **Solo experimental repo, not OSS team.** Skip "for contributors" / team-coordination framing; document for future-you on a fresh clone. When in doubt whether content is public-safe, default to `.claude.local.md` (gitignored).
 
 Template + ingest checklist + variant guidance: `docs/reference/_atomic_note_template.md`.
 

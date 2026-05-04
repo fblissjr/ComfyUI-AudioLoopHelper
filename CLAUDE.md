@@ -136,6 +136,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **GPU contention check before any bench/render.** `mtime` of `data/runs/*/*/sage.jsonl` (per-prompt routing) within last few minutes ⇒ a sibling-repo render is likely active. Ask before starting GPU work.
 - **`AUDIOLOOPHELPER_PER_PROMPT=1` is default in `start_experiment.sh`** (since 2026-05-01). Artifacts route under `data/runs/${RUN_ID}/${prompt_id}/`. Reader scripts auto-detect both layouts.
 - **Run `/simplify` after non-trivial code changes.** Three-agent review (reuse / quality / efficiency) catches data-flow correctness bugs that shape-only tests miss.
+- **Magic string vs semantic literal**: extract opaque magic (`"v2"`, `"7"`) eagerly; leave semantic literals (`"DEBUG"`, `"private clone"`, `"singing"`) inline until 3rd call site or drift risk. `/simplify` reviewers flag both as "magic strings" — false-positive class on semantic literals.
 - **Verify a new model via its paper, not its name.** Run `paper_search` / fetch README before designing around assumptions. Cost ~30s; saves entire sessions.
 - **Promote helpers at the 3rd call site, not the 2nd.** Two sites can share inline; the third earns the abstraction.
 - **`PLAN.md` (or feature design doc) is the spec.** When red TDD tests disagree with the spec formula, fix the test — the spec wins unless you explicitly update PLAN first.
