@@ -111,6 +111,7 @@ linking out (parallel-scrubbed-copy convention retired 2026-04-25).
 ### `reference/` — technical deep-dive
 | File | When to read |
 |---|---|
+| `_atomic_note_template.md` | (For authors.) The shape every new reference note follows + 5-step ingest checklist + anti-pattern list. |
 | `debug_tools.md` | Canonical first-pass when a workflow won't run; audit invariant table; apply-script three-tier staging; RUN_ID artifact correlation. |
 | `environment.md` | Environment-variable registry (sage trace, exec log, per-prompt routing, etc.). |
 | `frame_planner_reference.md` | `LTXFramePlanner` — single-source-of-truth dimension config; snap rules + wiring + F8 audit. |

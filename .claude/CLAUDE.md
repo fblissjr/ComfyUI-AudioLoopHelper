@@ -230,30 +230,17 @@ time. Skill body has the full briefs and what-to-do-with-the-output.
 
 ### Wiki direction (Karpathy LLM wiki pattern)
 
-Layer 2 is evolving toward Karpathy's LLM-wiki shape (gist:
-`https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f`). Three
-implications for how new docs are written:
+Layer 2 is evolving toward Karpathy's LLM-wiki shape. New `docs/reference/`
+notes follow the template + ingest checklist at
+`docs/reference/_atomic_note_template.md`. Existing notes are not retrofit
+on a schedule — they migrate when an author touches them.
 
-1. **Atomic notes with uniform shape.** Each `docs/reference/X.md` follows
-   the template seeded by `docs/reference/frame_planner_reference.md`:
-   Last-updated date → Role → Key facts → Mechanism / Wiring → Gotchas →
-   Migration → Audit + tests → References (in + out). New reference docs
-   match this shape.
-2. **Strong cross-linking.** Every atomic note ends with a References
-   section listing both outgoing pointers (other docs/scripts cited) and
-   the upstream `docs/README.md` index entry. The lint mode in
-   `tests/test_claude_md_budget.py` fails on orphan reference docs.
-3. **Three operational modes** (informal, no skill yet):
-   - *Ingest*: when a new finding stabilizes, write the atomic note → update
-     `docs/README.md` index → update related notes that should cross-link →
-     append to `internal/log/`.
-   - *Query*: read the index → traverse cross-links → synthesize.
-   - *Lint*: `audit_workflows.py` (rules-as-code), budget test (size +
-     orphans + broken pointers), `validate_docs_consistency.py` (stale
-     phrases). Together these are the wiki's lint pass.
-
-A formal ingest skill is a P5 follow-up; for now the convention is in your
-hands.
+Lint at the wiki level is split across three checks: `audit_workflows.py`
+(rules-as-code), `tests/test_claude_md_budget.py` (size + pointer
+integrity + orphan check), `validate_docs_consistency.py` (stale phrases).
+Together they're the lint pass; a formal `/wiki-ingest` skill is deferred
+until the third future ingest surfaces friction the checklist doesn't
+handle.
 
 ### Curation cadence
 
