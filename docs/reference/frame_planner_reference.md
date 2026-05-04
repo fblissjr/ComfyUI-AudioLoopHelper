@@ -85,5 +85,6 @@ Idempotent + reversible. Operates on `example_workflows/_latent.json` by default
 - `tests/test_audit_frame_planner.py`
 - `docs/reference/ltx23_model_reference.md` — artifact-ceiling source
 - `docs/reference/debug_tools.md` — F-pair convention (frame_planner_present is part of the F-series)
+- `docs/reference/audio_loop_controller.md` — `actual_seconds` and `fps_int` are the dimension feed AudioLoopController consumes
 - `docs/reference/_atomic_note_template.md` — this doc follows the entity-note variant
 - `comfy_extras/nodes_lt.py:36` — silent-floor behavior in `EmptyLTXVLatentVideo`

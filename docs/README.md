@@ -44,6 +44,7 @@ linking out (parallel-scrubbed-copy convention retired 2026-04-25).
 ### "I want to build or modify a workflow"
 - End-to-end pipeline (init image → VLM → audio analysis → LLM → schedule → workflow): [`guides/prompt_workflow_end_to_end.md`](guides/prompt_workflow_end_to_end.md)
 - Set dimensions / aspect ratio / per-iteration window length (`LTXFramePlanner`): [`reference/frame_planner_reference.md`](reference/frame_planner_reference.md)
+- Loop pacing — how stride / overlap / iteration count get computed (`AudioLoopController`): [`reference/audio_loop_controller.md`](reference/audio_loop_controller.md)
 - The LATENT-loop workflow, node by node: [`reference/pipeline_flow_latent.md`](reference/pipeline_flow_latent.md)
 - LTXVLoopingSampler structural reference (video-only; NOT for music video): [`reference/ltxv_looping_sampler_reference.md`](reference/ltxv_looping_sampler_reference.md)
 - Fix one section of a previously generated video (retake): [`guides/retake_guide.md`](guides/retake_guide.md)
@@ -62,6 +63,7 @@ linking out (parallel-scrubbed-copy convention retired 2026-04-25).
 ### "My output looks wrong / workflow won't run"
 - **First stop**: [`guides/debugging_guide.md`](guides/debugging_guide.md) — symptom → first-check table
 - Canonical first-pass when validation fails: [`reference/debug_tools.md`](reference/debug_tools.md) (or invoke `/diagnose-workflow`)
+- Iter-over-iter drift / heatmap frames / lost continuity (`noise_mask` semantics): [`reference/noise_mask_semantics.md`](reference/noise_mask_semantics.md)
 - ModelPatcher offload asymmetry (why CLIP cannot enter the loop body): [`analysis/nag_object_patches_offload_asymmetry.md`](analysis/nag_object_patches_offload_asymmetry.md)
 - Sampler choice (why `euler` is mandatory): [`reference/sampler_reference.md`](reference/sampler_reference.md)
 - NAG deep dive (mechanism + loop-body constraint + troubleshooting): [`reference/nag_technical_reference.md`](reference/nag_technical_reference.md)
@@ -112,10 +114,12 @@ linking out (parallel-scrubbed-copy convention retired 2026-04-25).
 | File | When to read |
 |---|---|
 | `_atomic_note_template.md` | (For authors.) The shape every new reference note follows + 5-step ingest checklist + anti-pattern list. |
+| `audio_loop_controller.md` | `AudioLoopController` — pacing brain; stride from integer latents; F4/F5/F6/F7 audits. |
 | `debug_tools.md` | Canonical first-pass when a workflow won't run; audit invariant table; apply-script three-tier staging; RUN_ID artifact correlation. |
 | `environment.md` | Environment-variable registry (sage trace, exec log, per-prompt routing, etc.). |
 | `frame_planner_reference.md` | `LTXFramePlanner` — single-source-of-truth dimension config; snap rules + wiring + F8 audit. |
 | `ltx23_model_reference.md` | Image guides, latent volume, VAE conversion, AdaIN, noise_mask, conditioning path. |
+| `noise_mask_semantics.md` | `noise_mask=0`/`1` semantics; setters + strippers; loop-body discipline; gotchas. |
 | `ltx23_prompt_system_prompts.md` | Raw Lightricks i2v/t2v system prompts + why our frozen-audio + i2v workflow prefers concise prompts. |
 | `ltxv_looping_sampler_reference.md` | Video-only structural reference for `LTXVLoopingSampler`. We don't recommend building this for music video (AV-incompatible). |
 | `nag_technical_reference.md` | LTX2_NAG — attention math, widgets, closure-capture mechanism, NAG×CFG composition, troubleshooting. |
