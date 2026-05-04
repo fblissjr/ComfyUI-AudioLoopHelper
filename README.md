@@ -4,820 +4,177 @@
   <img src="assets/hero.webp" alt="ComfyUI-AudioLoopHelper" width="500">
 </p>
 
-Last updated: 2026-05-03
+Last updated: 2026-05-04
 
-**TLDR**: Custom ComfyUI nodes for generating full-length music videos with LTX 2.3.
-Handles loop timing, auto-stopping at the audio boundary, per-iteration seed
-variation, timestamp-based prompt scheduling, smooth conditioning blending,
-latent-space overlap conversion, and per-iteration keyframe image scheduling
-for scene changes. No manual iteration counting or fragile constants.
+Custom ComfyUI nodes for full-length music video generation with LTX 2.3.
+Drives loop timing from integer-latent counts, freezes audio via
+`noise_mask=0`, pre-encodes prompts once outside the loop. Originally built this repo as a few helper nodes for experimenting with
+[kijai's LTX 2.3 long-loop extension](https://github.com/kijai/ComfyUI-NativeLooping_testing/blob/main/ltx23_long_loop_extension_test.json) - thanks to Kijai for all his work, and for giving me some fun ideas to explore.
 
-Eight workflow variants included:
-- **Latent workflow** (`audio-loop-music-video_latent.json`) -- **primary
-  baseline.** Operates in latent space via LatentContextExtract and
-  LatentOverlapTrim. No per-iteration VAE round-trip. Single-tile
-  `LTXVTiledVAEDecode [1,1,1]` on 24GB+ (fall back to `[2,2,1]` on
-  ≤16GB). Lightricks's bit-exact distilled sigma chain via
-  `ManualSigmas` (9 values) + `euler` + `CFGGuider CFG=1`. No
-  `ModelSamplingSD3` shift node — distilled inference applies no shift.
-- **Latent + STG hybrid** (`audio-loop-music-video_latent_stg.json`) --
-  A/B target against the baseline. Same sigma chain but swaps
-  `CFGGuider` for `MultimodalGuider` + two `GuiderParameters`
-  (AUDIO/VIDEO both `cfg=1, stg=1`) for Spatial-Temporal Guidance.
-  Bypasses `LTX2_NAG`.
-- **Latent + keyframe schedule** (`audio-loop-music-video_latent_keyframe.json`) --
-  Latent workflow plus `KeyframeLatentScheduleBatchEncode` +
-  `LatentSelectByIteration` (or legacy `KeyframeImageSchedule` +
-  `ImageBlend`) wired to the subgraph init_image / guide_latent input.
-  Different reference images per song section (verse/chorus/bridge) for
-  actual scene changes, not just lighting shifts.
-- **Latent + IC-LoRA video reference** (`audio-loop-music-video_latent_iclora.json`) --
-  Latent workflow plus an in-loop `LTXAddVideoICLoRAGuide` (cameraman /
-  outpaint / union-control) splice. Reference video sliced per iteration
-  via `GetImageRangeFromBatch`. Built by
-  `scripts/apply_iclora_video_reference.py` (`--ref-mode {static,sliding}`).
-- **Latent + IC-LoRA + audio pre-encode** (`audio-loop-music-video_latent_iclora_audio_pre_encode.json`) --
-  IC-LoRA variant with audio VAE-encoded once outside the loop
-  (saves ~12.8s per render). Built by
-  `scripts/apply_audio_latent_pre_encode.py`.
-- **Latent + config validator** (`audio-loop-music-video_latent_validator.json`) --
-  Latent workflow plus a `LoopConfigValidator` + `PreviewAny` node
-  wired to the same audio / window / length / resolution sources that
-  feed `AudioLoopController` + `EmptyLTXVLatentVideo`. One widget to
-  change, zero sync risk between samplers and validator. Built by
-  `scripts/apply_config_validator.py`.
-- **Image + per-step AdaIN** (`audio-loop-music-video_image_adain_perstep.json`) --
-  per-iteration VAE decode/encode plus `LTXVPerStepAdainPatcher` on the
-  model chain — applies AdaIN at every denoising step for color-drift
-  prevention. The plain image workflow was retired 2026-04-27 (use
-  latent for normal generation; image-AdaIN only when you specifically
-  need per-iteration AdaIN).
-- **Retake** (`audio-loop-music-video_retake.json`) --
-  regenerate a `[start_time, end_time]` window of a previously generated
-  video without re-rendering the rest. Loads a prior mp4, encodes it,
-  applies `LatentTemporalMask`, samples only the masked range, decodes,
-  passes audio through unchanged. Built by
-  `scripts/apply_audio_loop_retake.py`. See
-  [`docs/guides/retake_guide.md`](docs/guides/retake_guide.md).
+> Power-user repo. Assumes you know ComfyUI. Architecture nuance lives in
+> `docs/architecture_overview.md`
 
-Workflow adapted from [kijai's LTX 2.3 long loop extension test](https://github.com/kijai/ComfyUI-NativeLooping_testing/blob/main/ltx23_long_loop_extension_test.json).
+## Quick start — the intro workflow
 
-### Experimental (not on the shipped-workflow promotion path)
+Open `example_workflows/audio-loop-music-video_latent_intro.json` in ComfyUI.
+The workflow itself documents what to change via group titles, node titles,
+and Note nodes. Five things to set:
 
-`example_workflows/experimental/` holds workflows paired with exploratory
-experiments. Current contents:
+1. **LoadAudio** — drop your song.
+2. **LoadImage** — drop the init image (matches the first scene visually).
+3. **start_seed** — any int.
+4. **CLIPTextEncode (Node 169)** — initial-render prompt.
+5. **TimestampPromptScheduleBatchEncode** — paste the schedule.
 
-- **`spectrogram_iclora_minimal.json`** — V2A round-trip experiment: Mel
-  spectrogram fed as IC-LoRA structural reference (via `LTXAddVideoICLoRAGuide`),
-  audio generated rather than frozen. Tutorial: `docs/experimental/spectrogram_iclora_tutorial.md`.
-  Full run log + findings: `docs/experiments/exp_2026-04-24_spectrogram_iclora_v2a.md`.
-- **`iclora_amplification_poc.json`** — proof of concept for inference-time
-  amplification of any conditional contribution (IC-LoRA, style LoRAs, etc.).
-  Feeds `(conditioning_with_X, conditioning_without_X)` to `CFGGuider`;
-  existing sampler math computes the blend with cfg as the amplification
-  factor. Zero new sampler code. Apply script:
-  `scripts/apply_ttc_iclora_amplification_poc.py`.
-- **`init_guide_amplification_poc.json`** — same TTC1 mechanism as
-  above, wired against the production audio-loop subgraph's init-frame
-  `LTXVAddLatentGuide` instead of an IC-LoRA reference. Demonstrates
-  the technique without IC-LoRA in the graph at all and gives an
-  amplification knob on init-frame identity drift across loop
-  iterations. Apply script:
-  `scripts/apply_ttc_init_guide_amplification_poc.py`. Audit
-  recognizes the deliberate F3 asymmetry on the negative branch as
-  intentional.
+> **On prompt budget.** LTX 2.3's cross-attention has to share its
+> token budget across text, audio coherence, and (with i2v) image
+> coherence. Concise prompts usually win. Pick the verb that matches
+> the visible action you want — `is singing` for vocal performance,
+> `is dancing` for movement, `is playing <instrument>` for instrumental,
+> etc. Generic verbs (`performing`, `vocalizing`) dilute the signal.
+> Without an i2v init, text has to do more work and may need to be
+> longer. With i2v, text should be tight. Pick where to spend your
+> constraints.
 
-Per-experiment logs with hypothesis, setup, observations, inferences, and
-next steps live under `docs/experiments/` (convention in
-`docs/experiments/README.md`). These are working research notes, not
-production docs.
-
-Built for use alongside:
-- [ComfyUI-NativeLooping](https://github.com/kijai/ComfyUI-NativeLooping_testing) -- TensorLoopOpen/Close loop mechanism
-- [ComfyUI-LTXVideo](https://github.com/logtd/ComfyUI-LTXVideo) -- LTXVAddLatentGuide, LTXVCropGuides, LTXVPreprocess, spatial upscaler
-- [ComfyUI-VideoHelperSuite](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite) -- video output and batching
-- [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes) -- Set/Get nodes, LTX2_NAG, LTXVImgToVideoInplaceKJ, LTXVAddGuideMulti, ImageResizeKJv2
-- [ComfyUI-MelBandRoFormer](https://github.com/DrJKL/ComfyUI-MelBandRoFormer) -- vocal separation for improved lip sync
-
-## Quick start
-
-The example workflows come with all scheduling and blending nodes pre-wired.
-To use prompt scheduling:
-
-1. Run audio analysis:
-   ```bash
-   cd custom_nodes/ComfyUI-AudioLoopHelper
-   uv sync --group analysis
-   uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
-     --subject "your scene description" --trim 5
-   ```
-2. Paste the **Node 169** output into node 169 (CLIPTextEncode)
-3. Paste the schedule text into the **TimestampPromptScheduleBatchEncode** node's
-   `schedule` widget. (In older workflow copies from before 2026-04-22 this
-   was node 1558 `TimestampPromptSchedule`; the 2026-04-22 offload fix
-   replaced that chain with a single batch encoder that runs CLIP once
-   outside the loop. See [CLAUDE.md](CLAUDE.md) "CLIP must not enter the
-   loop body" for why. Run
-   `uv run --group dev python scripts/apply_batch_encode_fix.py` to
-   migrate an older copy.)
-4. Leave `snap_boundaries=True` (default). The batch encoder hard-cuts
-   between schedule entries at the iteration grid; as long as subject
-   strings are consistent across entries (see
-   [`docs/guides/prompt_creation_guide.md`](docs/guides/prompt_creation_guide.md)),
-   hard cuts are visually clean.
-5. Run. The loop auto-stops when it reaches the end of the audio.
-
-## Telemetry and tracing (opt-in, off by default)
-
-This plugin ships two opt-in tracers and one outside-ComfyUI aggregator
-script. All three default to off; no data leaves your machine; output
-files land under the gitignored `internal/` directory.
-
-- `AUDIOLOOPHELPER_SAGE_TRACE` — per-attention-call JSONL (kernel mode,
-  tensor shapes, timing). No prompt text. Set before launching ComfyUI.
-- `COMFYUI_EXEC_LOG` — per-node JSONL (class, shapes, duration). Can
-  capture short prompt strings (≤120 chars) as part of node-input
-  snapshots; see the doc below for the full privacy story. Set before
-  launching ComfyUI.
-- `scripts/sage_telemetry_summary.py` — runs **outside** ComfyUI;
-  reads the JSONL files the tracers wrote and prints a per-(kernel,
-  mask) summary. Read-only.
-
-Full reference (what's captured and what isn't, where files land,
-retention, on/off, end-to-end workflow with order of operations):
-[`docs/reference/telemetry_and_tracing.md`](docs/reference/telemetry_and_tracing.md).
-
-## Workflow validation and debugging
-
-When a workflow fails to validate (e.g. "Dependency cycle detected"),
-fails to convert an INT input, or crashes mid-sample with an unexpected
-TypeError, run the canonical first-pass before going inline-orjson:
+For (4) + (5), generate copy-paste-ready text from `scripts/analyze_audio_features.py`:
 
 ```bash
-# 1. Tail ComfyUI's log (validation errors fire before any node runs)
-tail -200 <comfyui>/user/comfyui_<port>.log
+uv sync --group analysis
+uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
+  --subject "your scene description" --trim 5
+```
 
-# 2. Audit (8 named pattern checks + 3 generic invariants)
+Run.
+
+LoRAs and IC-LoRA scaffolding ship bypassed-by-default — un-bypass when
+you need them. Layout, defaults, and bypass-toggle annotations are all in
+the workflow itself.
+
+## Dependencies
+
+**Required custom nodes:**
+
+| Repo | Provides |
+|---|---|
+| [ComfyUI-LTXVideo](https://github.com/Lightricks/ComfyUI-LTXVideo) | LTX 2.3 nodes (LTXVAddLatentGuide, LTXVCropGuides, LTXVPreprocess, IC-LoRA) |
+| [ComfyUI-NativeLooping_testing](https://github.com/kijai/ComfyUI-NativeLooping_testing) | TensorLoopOpen / TensorLoopClose |
+| [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes) | Set/Get nodes, LTX2_NAG, LTXVImgToVideoInplaceKJ, ImageResizeKJv2, GetImageRangeFromBatch, SimpleCalculatorKJ |
+| [ComfyUI-VideoHelperSuite](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite) | VHS_LoadVideo, VHS_VideoCombine |
+
+**Recommended if you have a 4090/Ada architecture:**
+
+[fblissjr/SageAttention-ada](https://github.com/fblissjr/SageAttention-ada)
+— our SageAttention fork. The shipped workflows wire
+`AudioLoopHelperSageAttention` (`auto_mask_aware`, ~1.22× e2e speedup
+on production iclora workload) which expects this build. **No build, or
+incompatible hardware?** Bypass `AudioLoopHelperSageAttention` (set
+`mode=4`) and either run with default attention or use KJNodes sage in its place.
+
+**Optional:**
+
+[ComfyUI-MelBandRoFormer](https://github.com/DrJKL/ComfyUI-MelBandRoFormer)
+— vocal separation. Bypassed by default in shipped workflows. Tons of different model variations out on HF for this depending on your use case.
+
+## Workflow variants
+
+| File | Use when |
+|---|---|
+| `audio-loop-music-video_latent_intro.json` | **Default. Start here.** Pre-encoded audio, IC-LoRA bypassed, two LoRA loaders bypassed, layout grouped + Note-annotated. |
+| `audio-loop-music-video_latent.json` | Same pipeline, no LoRA / IC-LoRA scaffolding. |
+| `audio-loop-music-video_latent_iclora.json` | IC-LoRA enabled by default. |
+| `audio-loop-music-video_latent_iclora_audio_pre_encode.json` | IC-LoRA + pre-encoded audio (~12.8s/render saved). |
+| `audio-loop-music-video_latent_keyframe.json` | Per-section reference images. |
+| `audio-loop-music-video_latent_validator.json` | Adds `LoopConfigValidator` + `PreviewAny`. |
+| `audio-loop-music-video_latent_stg.json` | A/B target — Spatial-Temporal Guidance instead of CFG. |
+| `audio-loop-music-video_image_adain_perstep.json` | Per-step AdaIN, per-iter VAE round-trip. Color-drift prevention. |
+| `audio-loop-music-video_retake.json` | Regenerate a `[start, end]` window of an existing render. |
+
+Experimental forks live in `example_workflows/experimental/` paired with
+`docs/experiments/` run logs. Not on the shipped-promotion path.
+
+## Audio feature analysis
+
+`scripts/analyze_audio_features.py` extracts BPM, key, structure, F0, and
+emits LTX-2.3-ready prompt schedules. Output has two clearly labeled
+sections — the initial-render prompt (paste into Node 169) and the
+per-iteration schedule (paste into `TimestampPromptScheduleBatchEncode`).
+
+Common invocations:
+
+```bash
+# Subject-driven schedule generation
+uv run --group analysis python scripts/analyze_audio_features.py song.wav \
+  --subject "a woman in her 30s with dark hair singing in a basement workshop" --trim 5
+
+# Pick an ambition tier (default 2a). All tiers in audio_analysis_guide.md.
+uv run --group analysis python scripts/analyze_audio_features.py song.wav \
+  --subject "..." --scene-diversity 3b
+
+# JSON export for LLM-assisted schedule generation
+uv run --group analysis python scripts/analyze_audio_features.py song.wav \
+  --subject "..." -j analysis.json
+```
+
+Full reference: [`docs/guides/audio_analysis_guide.md`](docs/guides/audio_analysis_guide.md).
+End-to-end LLM workflow: [`docs/guides/prompt_workflow_end_to_end.md`](docs/guides/prompt_workflow_end_to_end.md).
+Prompt-authoring rules: [`docs/guides/prompt_creation_guide.md`](docs/guides/prompt_creation_guide.md).
+
+## Validation + debugging
+
+When a workflow fails to validate or produces wrong output:
+
+```bash
+# Audit shipped workflows (named topology checks + generic invariants)
 uv run --group dev python scripts/audit_workflows.py
 
-# 3. Topo-sort the workflow if step 2 is clean but it still fails
+# Audit one file
+uv run --group dev python scripts/audit_workflows.py example_workflows/audio-loop-music-video_latent_intro.json
+
+# DAG topo-sort if audit is clean but it still fails
 uv run --group dev python scripts/analyze_workflow_dag.py \
-  example_workflows/audio-loop-music-video_latent.json \
-  --format ascii --save-run
+  example_workflows/audio-loop-music-video_latent.json --format ascii
 ```
 
-Output for `--save-run` lands at `data/runs/${RUN_ID}/dag_<slug>.<ext>`
-(correlating with sibling exec/sage logs from the same render) or
-`data/runs/dag/dag_<slug>_<ts>.<ext>` if `RUN_ID` is unset.
+Or invoke `/diagnose-workflow` for the canonical first-pass.
 
-Audit invariants:
+Full reference: [`docs/reference/debug_tools.md`](docs/reference/debug_tools.md).
+Symptom-first quality troubleshooting: [`docs/guides/debugging_guide.md`](docs/guides/debugging_guide.md).
 
-- **Named pattern checks** — F2 (preprocess symmetry), F3 (loop cropguides
-  symmetry), F4 (`base_seed` rename), F5 (iterations auto-wired), F6
-  (no leftover `randomize` widget on AudioLoopController), F7
-  (AudioLoopPlanner derives stride internally — no edge from controller).
-  Each ERR has a remediation pointer to a `scripts/apply_*.py` migration.
-- **Generic invariants** — `graph_acyclic` (top-level cycle detection),
-  `widget_shape` (stray `control_after_generate` strings on nodes that
-  don't have the dropdown), `link_integrity` (link records vs node-level
-  references). Plus a fourth check at AST level
-  (`tests/test_node_schemas.py::test_keyframe_idxs_cleared_to_none_not_empty_list`).
+## Local logging + profiling (off by default)
 
-Full reference: [`docs/reference/debug_tools.md`](docs/reference/debug_tools.md)
-— inspection scripts, audit invariant table, apply-script three-tier
-staging, runtime telemetry paths, RUN_ID artifact correlation.
-Symptom-first quality troubleshooting (when output looks wrong but the
-workflow ran): [`docs/guides/debugging_guide.md`](docs/guides/debugging_guide.md).
+These are local-only debugging instruments that **this plugin** ships. Both
+default to off, both write only to plain JSONL files on your own disk
+(under gitignored `data/runs/${RUN_ID}/` when launched via
+`start_experiment.sh`; under gitignored `internal/analysis/runs/` as a
+legacy fallback when `RUN_ID` is unset), and **none of this code makes
+any network call or sends data anywhere**. There is no telemetry endpoint,
+no analytics service, no "anonymous usage data." It's local file I/O for
+your own profiling and bench-analysis. Anything ComfyUI itself does at
+runtime is upstream behavior unrelated to this plugin.
 
-## Using LoRAs
+Two opt-in instruments + one offline aggregator:
 
-The latent workflow ships with three bypassed-by-default LoRA loaders
-inserted between `LTX2SamplingPreviewOverride(503)` and `SetNode("model")(572)`.
-When all three are bypassed (`mode: 4`), the model passes through unchanged.
-Un-bypass any one of them in the ComfyUI UI to enable that LoRA.
+- `AUDIOLOOPHELPER_SAGE_TRACE` — our writer in `nodes_sage.py`. Per-attention-call JSONL when set.
+- `COMFYUI_EXEC_LOG` — **our** monkey-patch on ComfyUI's `execute()` (defined in `exec_logger.py`); installs only when the env var is set, no-op otherwise. The env var name has the `COMFYUI_` prefix because it controls our patch on a ComfyUI internal — the patch itself is plugin code.
+- `scripts/sage_telemetry_summary.py` — offline aggregator. Reads JSONL files; never writes anything; runs outside ComfyUI.
 
-| Loader              | Node type                   | Use for |
-|---------------------|-----------------------------|---------|
-| **ID-LoRA File**    | `LoraLoaderModelOnly`       | Audio-conditioned identity transfer (e.g. [`AviadDahan/LTX-2.3-ID-LoRA-CelebVHQ-3K`](https://huggingface.co/AviadDahan/LTX-2.3-ID-LoRA-CelebVHQ-3K), paper [arxiv:2603.10256](https://arxiv.org/abs/2603.10256)). LoRA weights only — pair with the runtime nodes added by `scripts/apply_id_lora_runtime.py` (see "ID-LoRA full pipeline" below) for the complete identity-guidance mechanism. |
-| **IC-LoRA File**    | `LTXICLoRALoaderModelOnly`  | Visual reference adapters (MergeGreen, Outpaint, Cameraman, Motion-Track). For the full effect, also run [`scripts/apply_iclora_initial_render.py`](scripts/apply_iclora_initial_render.py) to add `LTXAddVideoICLoRAGuide` on the conditioning side. |
-| **Style/Generic**   | `LoraLoaderModelOnly`       | Any standard LTX 2.3-compatible LoRA. |
+All three off when env vars are unset. What gets captured + the privacy posture: [`docs/reference/telemetry_and_tracing.md`](docs/reference/telemetry_and_tracing.md).
 
-To enable a single LoRA:
-1. Open the workflow in ComfyUI.
-2. Right-click the loader node → "Bypass" (toggle off).
-3. Set `lora_name` to the `.safetensors` filename under `ComfyUI/models/loras/`.
-4. Set `strength_model` (default 1.0).
+## Layout
 
-Multiple LoRAs stack — un-bypass several loaders and they apply in chain
-order (ID-LoRA → IC-LoRA → Style). Order matters when LoRAs touch
-overlapping weight blocks; experiment per LoRA pair.
-
-To rebuild from scratch (e.g. on a new workflow variant):
-```bash
-uv run --group dev python scripts/apply_lora_chain_bypassed.py
-# --revert to remove, --dry-run to preview
+```
+nodes*.py             runtime nodes (entry: comfy_entrypoint() in nodes.py)
+scripts/              apply scripts + audit + analysis utilities
+docs/                 public docs — task-first nav at docs/README.md
+example_workflows/    shipped workflow variants
+internal/             gitignored design + analysis + experiment notes
+.claude/              shared Claude Code harness (subagents, skills, hooks)
 ```
 
-### ID-LoRA full pipeline (LoRA weights + runtime reference audio)
+Architecture overview: [`docs/architecture_overview.md`](docs/architecture_overview.md).
+Per-node API + wiring: each runtime class's docstring + [`docs/reference/ltx23_model_reference.md`](docs/reference/ltx23_model_reference.md).
+Project conventions for editing this repo: [`CLAUDE.md`](CLAUDE.md).
 
-ID-LoRA needs both the LoRA-weights file AND a runtime mechanism that
-injects a 5-second reference-audio clip + identity-guidance forward pass
-per sampling step. The LoRA chain above provides the weights side; the
-runtime side is shipped via a separate apply script:
+## License
 
-```bash
-uv run --group dev python scripts/apply_id_lora_runtime.py
-```
-
-This adds three more bypassed-by-default nodes to the latent workflow:
-
-| Node | Type | Role |
-|------|------|------|
-| **ID-LoRA Reference Slice** | `TrimAudioDuration` | Slices a 5-second reference window from `Get_orig_audio` (default: start_index=30s, duration=5s — adjust to land in a vocal-rich section of the song). |
-| **LTXV Reference Audio (ID-LoRA initial render)** | `LTXVReferenceAudio` | Splices on the initial render's model + conditioning paths. Adds `ref_audio` tokens + identity-guidance post_cfg_function that fires per sampling step. |
-| **LTXV Reference Audio (ID-LoRA loop body)** | `LTXVReferenceAudio` | Parallel splice on the loop body's per-iter conditioning + model branch. Required because initial-render-only ID-LoRA produces identity drift after iter 0. |
-
-To enable the full ID-LoRA pipeline:
-1. Un-bypass the **ID-LoRA File** loader (from the LoRA chain above) and set its `lora_name` to your `.safetensors` (e.g. `LTX-2.3-ID-LoRA-CelebVHQ-3K/lora_weights.safetensors`).
-2. Un-bypass **ID-LoRA Reference Slice**. Adjust `start_index` and `duration` if your song's first vocals start later than 30s.
-3. Un-bypass **both** LTXVReferenceAudio nodes (initial AND loop). Audit warns if only one is active — the other half causes inconsistent identity across iter 0 vs the loop body.
-
-Cost when enabled: 2× sampling forward passes per step (the identity-guidance "without-reference" pass), comparable to a regular CFG=3 run. Bypassed = zero overhead.
-
-## Nodes
-
-### Audio Loop Controller
-
-The core node. Computes loop timing, stop signal, seed, and stride from
-just the audio tensor + window/overlap settings.
-
-**Inputs:**
-
-| Input | Type | Description |
-|-------|------|-------------|
-| current_iteration | INT | From TensorLoopOpen (1-based) |
-| window_seconds | FLOAT | Video generation window duration (default 19.88) |
-| overlap_seconds | FLOAT | Overlap between consecutive windows (default 1.0). Stride = window - overlap. Match to overlap_frames/fps in the extension component. |
-| audio | AUDIO | The audio track |
-| base_seed | INT | Base seed. Output `iteration_seed = base_seed + current_iteration`. Renamed from `seed` 2026-04-26 to suppress ComfyUI's auto-attached `control_after_generate` dropdown that would silently mutate the saved widget value across runs. |
-| fps | INT | Video frame rate (default 25). Used to compute overlap_frames output. |
-
-**Outputs:**
-
-| Output | Type | Wire to |
-|--------|------|---------|
-| start_index | FLOAT | Extension component's start_index input |
-| should_stop | BOOLEAN | TensorLoopClose's stop input |
-| audio_duration | FLOAT | Informational (total audio length) |
-| iteration_seed | INT | Extension component's noise_seed input |
-| stride_seconds | FLOAT | `TimestampPromptScheduleBatchEncode` (and the legacy `TimestampPromptSchedule`). AudioLoopPlanner derives stride internally post-2026-04-27 cycle break — no longer takes this wire. |
-| overlap_frames | INT | Extension component's overlap_frames input (pixel space) |
-| overlap_latent_frames | INT | LatentContextExtract / LatentOverlapTrim in latent-space subgraph |
-| overlap_seconds | FLOAT | Extension subgraph's LTXVAudioVideoMask video_start_time |
-
-Changing `overlap_seconds` automatically adjusts stride, stop timing,
-start indices, iteration count, overlap_frames, overlap_latent_frames,
-and the subgraph's video_start_time mask. One value, one place.
-
-### Timestamp Prompt Schedule (Batch Encode)
-
-**Primary schedule-handling node after 2026-04-22.** Pre-encodes every
-per-iteration prompt ONCE, outside the loop. Pair with
-`ConditioningSelectByIteration` inside the loop. Keeps CLIP out of the
-per-iteration path entirely — see [CLAUDE.md](CLAUDE.md) "CLIP must not
-enter the loop body" for why this matters (previously, per-iteration
-CLIP loading evicted the DiT, which in turn corrupted LTX2_NAG's
-captured negative-conditioning tensor, which caused items from the
-negative prompt to reappear starting at iteration 2).
-
-**Inputs:**
-
-| Input | Type | Description |
-|-------|------|-------------|
-| clip | CLIP | CLIP model (Gemma 3 for LTX 2.3) |
-| schedule | STRING | Timestamp-based schedule (same format as `TimestampPromptSchedule`) |
-| stride_seconds | FLOAT | From `AudioLoopController.stride_seconds` |
-| audio_duration | FLOAT | From `AudioLoopController.audio_duration` |
-| snap_boundaries | BOOLEAN | Default True. Rounds schedule boundaries to the iteration grid so every iteration runs on one pure prompt. |
-
-**Outputs:**
-
-| Output | Type | Wire to |
-|--------|------|---------|
-| conditioning_list | * (opaque) | `ConditioningSelectByIteration.conditioning_list` |
-| iteration_count | INT | Informational; has +1 headroom beyond the expected loop length |
-
-Dedup: identical prompt strings across iterations are encoded once.
-CLIP load count per run = number of unique prompts in the schedule.
-
-### Conditioning Select (by Iteration)
-
-In-loop companion to `TimestampPromptScheduleBatchEncode`. Indexes the
-pre-encoded conditioning list by current iteration. No CLIP input —
-safe to place anywhere in the loop body.
-
-**Inputs:**
-
-| Input | Type | Description |
-|-------|------|-------------|
-| conditioning_list | * | From `TimestampPromptScheduleBatchEncode.conditioning_list` |
-| current_iteration | INT | From `TensorLoopOpen.current_iteration` |
-
-**Outputs:** `conditioning` (CONDITIONING) — wire to the extension subgraph's `positive` input.
-
-Clamp semantics: `current_iteration >= len(list)` returns the last
-entry (absorbs the encoder's +1 headroom). `current_iteration < 0`
-returns the first entry. Empty list raises `ValueError` (wiring bug).
-
-### Timestamp Prompt Schedule (legacy)
-
-Per-iteration prompt variation based on song timestamps; emits
-`prompt` / `next_prompt` / `blend_factor` STRING/FLOAT triples to feed
-a `CLIPTextEncode → ConditioningBlend` chain.
-
-**Not wired in shipped workflows since 2026-04-22.** Superseded by
-`TimestampPromptScheduleBatchEncode` + `ConditioningSelectByIteration`
-(see "CLIP must not enter the loop body" in [CLAUDE.md](CLAUDE.md) for
-the mechanism). Kept for workflows that genuinely need per-iter re-encode
-(the batch path requires schedule + audio duration + stride to be known
-at graph build time).
-
-Schedule format: [`docs/guides/prompt_creation_guide.md`](docs/guides/prompt_creation_guide.md) §9.
-
-### Audio Loop Planner
-
-Shows the iteration timeline so you know what timestamps to use in your
-prompt schedule. Leave it in the workflow -- it auto-updates when you
-change audio or overlap settings.
-
-**Inputs:**
-
-| Input | Type | Description |
-|-------|------|-------------|
-| audio | AUDIO | The audio track |
-| window_seconds | FLOAT | Same as AudioLoopController |
-| overlap_seconds | FLOAT | Same as AudioLoopController. Quantized to integer latents internally. |
-| fps | INT | Same as AudioLoopController. |
-
-Stride is derived internally from `(window_seconds, overlap_seconds, fps)`
-via the same `_compute_loop_geometry` formula AudioLoopController uses, so
-both nodes always agree on stride without an edge between them. Earlier
-versions took `stride_seconds` directly from AudioLoopController; that
-edge plus the auto-wire `total_iterations -> TensorLoopOpen.iterations_in`
-plus the existing `current_iteration -> AudioLoopController` closed a
-3-node cycle that the prompt validator rejected.
-
-**Outputs:**
-
-| Output | Type | Description |
-|--------|------|-------------|
-| summary | STRING | Wire to PreviewAny/ShowText to see on canvas |
-| total_iterations | INT | Estimated iteration count |
-
-**Example summary output:**
-```
-Audio: 143.0s (2:23)
-Stride: 18.88s | Window: 19.88s
-Overlap: 1.00s
-Estimated 7 iterations:
-
-  Iter 1:  0:18 - 0:38  (18.9s - 38.8s)
-  Iter 2:  0:37 - 0:57  (37.8s - 57.6s)
-  Iter 3:  0:56 - 1:16  (56.6s - 76.5s)
-  ...
-```
-
-### Conditioning Blend (legacy)
-
-Blends two conditionings with a factor. Handles sequence-length
-alignment (zero-pads shorter tensor), attention-mask combining (OR of
-both masks), and pooled-output blending when present. Works with LTX
-2.3 Gemma 3 (no `pooled_output` required) despite ComfyUI's CLIP-named
-wrapper. `blend_factor=0.0` passthroughs `conditioning_a` (no compute).
-
-**Not wired in shipped workflows after 2026-04-22.** The batch-encode
-path hard-cuts between schedule entries at the iteration grid rather
-than cross-fading. Kept for workflows that still wire
-`TimestampPromptSchedule` in-loop.
-
-### Audio Duration
-
-Simple utility. Returns duration, sample rate, and total samples from
-an audio tensor.
-
-**Inputs:** `audio` (AUDIO)
-**Outputs:** `duration_seconds` (FLOAT), `sample_rate` (INT), `total_samples` (INT)
-
-### Latent Context Extract
-
-Extracts the last N latent frames as context for the next loop iteration.
-Replaces LTXVSelectLatents + StripLatentNoiseMask in the latent-space
-subgraph (latent workflow). Strips noise_mask so LTXVAudioVideoMask creates a
-fresh mask (matching VAEEncode behavior from the IMAGE workflow).
-
-**Inputs:**
-
-| Input | Type | Description |
-|-------|------|-------------|
-| latent | LATENT | Previous iteration's video latent (from TensorLoopOpen) |
-| overlap_latent_frames | INT | Number of tail latent frames to extract (default 4). Wire from AudioLoopController. |
-
-**Outputs:**
-
-| Output | Type | Wire to |
-|--------|------|---------|
-| context | LATENT | LTXVAudioVideoMask video_latent input |
-
-### Latent Overlap Trim
-
-Trims the first N latent frames (overlap region) from a sampler's output.
-Keeps new content only, strips noise_mask. Used in the latent-space
-subgraph (latent workflow) to avoid duplicating overlap frames across iterations.
-
-**Inputs:**
-
-| Input | Type | Description |
-|-------|------|-------------|
-| latent | LATENT | Sampler output video latent (after CropGuides) |
-| overlap_latent_frames | INT | Number of leading latent frames to trim (default 4). Wire from AudioLoopController. |
-
-**Outputs:**
-
-| Output | Type | Wire to |
-|--------|------|---------|
-| trimmed | LATENT | Subgraph output / TensorLoopClose |
-
-### Strip Latent Noise Mask
-
-Low-level utility that removes noise_mask from a latent dict. Prefer
-LatentContextExtract or LatentOverlapTrim which handle this automatically.
-
-**Inputs:** `latent` (LATENT)
-**Outputs:** `latent` (LATENT, noise_mask removed)
-
-### Keyframe Image Schedule
-
-Per-iteration keyframe image selection from a timestamp schedule. Like
-TimestampPromptSchedule but for images. Use a batch of keyframe images
-and a schedule mapping timestamps to image indices — the node picks
-the right image each iteration so different song sections can be
-visually grounded in different reference images.
-
-**Inputs:**
-
-| Input | Type | Description |
-|-------|------|-------------|
-| images | IMAGE | Batch of keyframe images. Index 0 = first image. |
-| current_iteration | INT | From TensorLoopOpen (0 = initial render) |
-| stride_seconds | FLOAT | From AudioLoopController |
-| schedule | STRING | Timestamp-to-image-index schedule (see below) |
-| blend_seconds | FLOAT | Transition duration (default 0 = hard cut). Uses the legacy spike-blend path — setting values smaller than `stride_seconds` produces per-iteration jitter (same failure mode that `TimestampPromptSchedule` solves via `snap_boundaries`). For smooth cross-fading, set to ≥ `stride_seconds` (~18). `KeyframeImageSchedule` parity with `snap_boundaries` is tracked as a Phase 1.5 follow-up. |
-
-**Outputs:**
-
-| Output | Type | Wire to |
-|--------|------|---------|
-| image | IMAGE | Subgraph init_image input (directly, or via ImageBlend) |
-| next_image | IMAGE | ImageBlend image_b |
-| blend_factor | FLOAT | ImageBlend blend_factor |
-| current_time | FLOAT | Informational |
-| image_index | INT | Informational (debug which index was selected) |
-
-**Schedule format** (same as TimestampPromptSchedule but integer values):
-```
-0:00-0:38: 0
-0:38-1:15: 1
-1:15+: 2
-```
-
-With a single-image batch and schedule `0:00+: 0`, behavior is identical
-to the constant `Get_input_image` wiring in the base latent workflow.
-
-### Video Frame Extract
-
-Extracts a single frame from a reference video/image batch at the
-current iteration's timestamp. Enables video-to-video style transfer
-across full songs.
-
-**Inputs:**
-
-| Input | Type | Description |
-|-------|------|-------------|
-| images | IMAGE | Reference video as an image batch |
-| current_iteration | INT | From TensorLoopOpen |
-| stride_seconds | FLOAT | From AudioLoopController |
-| source_fps | FLOAT | FPS of the source video (default 25.0) |
-
-**Outputs:**
-
-| Output | Type | Description |
-|--------|------|-------------|
-| image | IMAGE | Single frame at matching timestamp |
-| frame_index | INT | Which frame was extracted |
-
-### Image Blend
-
-Pixel-space lerp of two images. Pairs with KeyframeImageSchedule for
-smooth visual transitions between keyframes.
-
-**Inputs:**
-
-| Input | Type | Description |
-|-------|------|-------------|
-| image_a | IMAGE | Current keyframe |
-| image_b | IMAGE | Next keyframe |
-| blend_factor | FLOAT | 0.0 = all A, 1.0 = all B |
-
-**Outputs:** `image` (IMAGE, blended)
-
-When `blend_factor = 0.0`, passes image_a through unchanged (no computation).
-When `blend_factor = 1.0`, passes image_b through unchanged.
-
-### Cached Text Encode (legacy)
-
-Drop-in replacement for `CLIPTextEncode` with a module-level LRU cache
-(max 20 entries, ~16MB each) keyed on `(id(clip), text)`. Skips Gemma 3
-re-encoding when the same prompt is reused across iterations.
-
-**Not wired in shipped workflows after 2026-04-22.** The batch-encode
-path encodes the whole schedule ONCE outside the loop and never re-enters
-CLIP — strictly better than per-iter caching, even on cache hits (see
-"CLIP must not enter the loop body" in [CLAUDE.md](CLAUDE.md)). Kept for
-workflows that genuinely need per-iter CLIP access.
-
-### Iteration Cleanup
-
-LATENT passthrough that calls `gc.collect()` and `torch.cuda.empty_cache()`
-as a side effect. Place in the subgraph output path so every iteration ends
-with a clean allocator state. Reduces PyTorch caching allocator fragmentation
-in long-running loops.
-
-**Inputs:**
-
-| Input | Type | Description |
-|-------|------|-------------|
-| latent | LATENT | Latent to pass through unchanged |
-| mode | COMBO | `always` (gc + empty_cache), `gpu_only` (empty_cache only), `never` (passthrough) |
-
-**Outputs:** `latent` (LATENT, unchanged)
-
-**Default mode `always`** matches what the `comfy-aimdo` README recommends
-for allocator hygiene between model runs. Set to `never` to bypass without
-removing the node from the workflow.
-
-### Audio Pitch Detect
-
-Per-iteration vocal pitch detection using torchaudio. Best results when
-wired to MelBandRoFormer's separated vocals output (already in the workflow).
-
-**Inputs:**
-
-| Input | Type | Description |
-|-------|------|-------------|
-| audio | AUDIO | Audio track (wire to MelBandRoFormer vocals output for clean signal) |
-| start_seconds | FLOAT | From AudioLoopController.start_index |
-| window_seconds | FLOAT | Same value as AudioLoopController.window_seconds |
-| freq_low | FLOAT | Min detection frequency (default 85 Hz, low male vocals) |
-| freq_high | FLOAT | Max detection frequency (default 400 Hz, high female vocals) |
-
-**Outputs:**
-
-| Output | Type | Use |
-|--------|------|-----|
-| median_f0 | FLOAT | Median fundamental frequency in Hz (0.0 if unvoiced) |
-| has_vocals | BOOLEAN | True if pitched content detected in window |
-| is_male_range | BOOLEAN | True if median F0 < 160 Hz |
-| is_female_range | BOOLEAN | True if median F0 > 160 Hz |
-| vocal_fraction | FLOAT | Ratio of voiced frames (0.0-1.0) |
-
-**Example wiring for vocal/instrumental prompt switching:**
-```
-MelBandRoFormerSampler (vocals output)
-  └→ AudioPitchDetect.audio
-
-AudioLoopController
-  └→ start_index → AudioPitchDetect.start_seconds
-
-AudioPitchDetect
-  └→ has_vocals → Switch node → select vocal vs instrumental prompt
-```
-
-Note: requires a Switch/Mux node (from ComfyUI-KJNodes or similar) to
-conditionally select between prompt paths based on the BOOLEAN output.
-
-### LTX Video EasyCache (experimental)
-
-Training-free step-skipping cache for LTX-2.3 denoising. Patches via
-ComfyUI's supported `WrappersMP.DIFFUSION_MODEL` hook (not a monkey
-patch). Wire it between the LTX checkpoint loader and KSampler.
-
-Tunables:
-
-- `easycache_thresh` (default `0.015`, the wan-video reference value).
-  Higher = more aggressive caching, faster gens, lower fidelity. Sweep
-  `{0.015, 0.02, 0.03, 0.05}` on real prompts to find the largest value
-  that holds quality on motion + static + text-heavy scenes.
-- `start_step` (default `10`). Steps before this index always compute
-  (no caching, no state update). Lets the model establish structure
-  before caching kicks in.
-- `end_step` (default `-1` for "no upper bound").
-- `cache_device` (`"main"` / `"cpu"`). `"main"` keeps the retained
-  cache tensors wherever the model runs (typically GPU). `"cpu"`
-  offloads them to host RAM at the cost of a one-time HtoD copy on
-  each cache hit -- pick this if VRAM is tight.
-
-Negative or zero `easycache_thresh` disables caching (strict-never-skip
-sentinel). Ships as experimental until a project-side threshold sweep
-lands a shipping default. Algorithm: arxiv 2507.02860 ("Less is Enough:
-Training-Free Video Diffusion Acceleration via Runtime-Adaptive
-Caching").
-
-## Tuning guide
-
-### overlap_seconds (AudioLoopController)
-
-Controls how much context the model sees from the previous iteration.
-
-| Value | Frames at 25fps | Effect |
-|-------|-----------------|--------|
-| 0.5 | 12-13 | Minimal context. Faster coverage but transitions may be jarring. |
-| **1.0** | **25** | **Default. Good balance of coherence and speed.** |
-| 2.0 | 50 | More context. Smoother transitions, better coherence, but each iteration covers less new ground (more total iterations needed). |
-| 3.0+ | 75+ | Diminishing returns. Much slower progress per iteration. Only useful if coherence is very poor. |
-
-When you change overlap, the stride auto-adjusts, the stop signal auto-adjusts,
-and the planner output updates. Nothing else to touch.
-
-The `overlap_frames` output from AudioLoopController feeds directly into
-the extension subgraph -- no manual sync needed. Changing overlap_seconds
-automatically propagates to the frame extraction and trimming logic.
-
-### window_seconds
-
-How many seconds of video each generation window produces. Tied to the
-LTX 2.3 model's video_end_time parameter.
-
-| Value | Effect |
-|-------|--------|
-| 10-15 | Shorter windows. Faster per-iteration but more iterations needed. May reduce quality. |
-| **19.88** | **Default for LTX 2.3. Recommended.** |
-| 25-30 | Longer windows. Fewer iterations but heavier VRAM and slower per-iteration. Quality may degrade at edges. |
-
-Changing this also requires updating the `window_size_seconds` FloatConstant
-(node 688) that feeds the extension component's video_end_time.
-
-### Audio trim offset (Node 567 TrimAudioDuration)
-
-The `start_index` on the global audio trim is song-dependent. It skips
-instrumental intro that doesn't contribute to lip sync. Set to 0 for songs
-that start with vocals, or skip a few seconds for instrumental intros.
-
-### base_seed
-
-Base seed for generation. Each iteration gets `base_seed + iteration_number`.
-
-(Renamed from `seed` 2026-04-26 — see the Audio Loop Controller node entry
-for why.)
-
-| Approach | Effect |
-|----------|--------|
-| Fixed seed (e.g., 42) | Reproducible results. Same seed + same audio = same video. |
-| Random seed | Different results each run. Good for exploration. |
-
-The per-iteration increment prevents the "infinite loop of nothingness"
-where DiT models generate degenerate/repetitive content with identical
-seeds across loop iterations.
-
-### Prompt schedule timing
-
-Match your prompt schedule timestamps to your song structure, not to
-iteration boundaries. The node handles the mapping.
-
-Tips:
-- Use the **Audio Loop Planner** output to see exactly what time range
-  each iteration covers, then align your prompts to the song.
-- **Keep the core subject consistent** across all schedule entries. Only
-  vary framing, lighting, and energy. Different subjects = different text
-  embeddings = style drift even at CFG 1.0.
-- With `snap_boundaries=True` (default) + identical subject across entries,
-  hard switches at iteration boundaries are visually clean — cross-fading
-  typically isn't needed. If you do see a visible seam at a prompt
-  transition, enable cross-fade by setting `blend_seconds >= stride_seconds`.
-- The init_image anchors the first frame of the first pass via
-  LTXVImgToVideoInplaceKJ. The extension subgraph also uses the
-  init_image as a guide at frame -1 each loop iteration via
-  LTXVAddLatentGuide for continuity.
-
-### Prompt-transition behavior
-
-The shipped `TimestampPromptScheduleBatchEncode` hard-cuts between
-schedule entries at the iteration grid (`snap_boundaries=True` default
-+ no per-iter blend). With consistent subject across entries, this
-reads as visually clean. If you see a visible seam at a transition, the
-fix is on the prompt-authoring side (keep subject + framing consistent
-across adjacent entries) — see [`docs/guides/prompt_creation_guide.md`](docs/guides/prompt_creation_guide.md).
-
-For workflows that genuinely need cross-fading, the legacy
-`TimestampPromptSchedule` + `ConditioningBlend` chain still ships:
-`blend_seconds=0` = hard switch; `blend_seconds >= stride_seconds`
-(≈18) = raised-cosine ramp spanning one iteration on each side;
-`2 * stride_seconds` (≈36) = wider cross-fade across multiple
-iterations. Sub-stride `blend_seconds` is auto-clamped up to
-`stride_seconds` with a one-time warning — smaller values can't
-produce smooth ramps at iteration resolution.
-
-## Audio feature analysis (offline)
-
-Analyze your audio track before building your prompt schedule. Extracts
-musical features that help you write better, music-aware prompts.
-
-**Setup** (one time):
-```bash
-cd custom_nodes/ComfyUI-AudioLoopHelper
-uv sync --group analysis
-```
-
-**Usage:**
-```bash
-# Full analysis with markdown report
-uv run --group analysis python scripts/analyze_audio_features.py your_song.wav
-
-# Write report to file
-uv run --group analysis python scripts/analyze_audio_features.py your_song.wav -o analysis.md
-
-# Export JSON (for LLM-assisted schedule generation)
-uv run --group analysis python scripts/analyze_audio_features.py your_song.wav -j analysis.json
-
-# PNG visualizations (spectrogram, chromagram, onset envelope)
-uv run --group analysis python scripts/analyze_audio_features.py your_song.wav --png-dir ./viz
-
-# With trim offset and separated vocal track for F0 analysis
-uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
-  --trim 10 --vocal-track vocals_only.wav
-
-# Generate full LTX 2.3 prompt templates (copy-paste ready)
-uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
-  --subject "a woman in her 30s with dark hair singing in a basement workshop" \
-  --trim 10
-
-# Pick an ambition tier (default 2a performance-dynamic).
-# See docs/guides/audio_analysis_guide.md#scene-diversity-taxonomy for all tiers.
-uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
-  --subject "a woman singing in a workshop" --scene-diversity 3b
-
-# Arcane-style montage: ~12s dwell, emotional-arc language.
-# Works with any tier 2-6.
-uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
-  --subject "a young woman walking through a snowy alley" \
-  --scene-diversity 4a --montage
-```
-
-**What it extracts:**
-
-| Feature | Description | Use for scheduling |
-|---------|-------------|-------------------|
-| BPM | Tempo and beat grid timestamps | Align prompt transitions to beats |
-| Key | Musical key (e.g., "G Major") | Annotate mood shifts |
-| Chromagram | 12-pitch-class heatmap (PNG) | Visual harmonic review |
-| Mel spectrogram | Frequency x time heatmap (PNG) | Visual BPM/vocal review |
-| Vocal F0 | Fundamental frequency + male/female classification | Choose appropriate prompts |
-| Structure | Labeled sections (intro, verse, chorus, bridge, outro) | Scaffold your TimestampPromptSchedule |
-
-**Output with `--subject`:**
-
-The script outputs two clearly labeled sections:
-
-1. **Node 169 (initial render prompt)** -- paste into the CLIPTextEncode
-   for the first ~20 seconds
-2. **TimestampPromptScheduleBatchEncode** -- paste into the `schedule`
-   widget on the batch encoder node
-
-The node 169 prompt automatically matches the first schedule entry to
-avoid visual discontinuity at the ~20-second boundary.
-
-**Using with an LLM for schedule generation:**
-
-```bash
-uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
-  --trim 5 -j analysis.json \
-  --image-desc "Man with acoustic guitar, dim room, warm lighting, brick wall" \
-  --subject "a man playing acoustic guitar in a dim room"
-```
-
-The JSON export includes `workflow_context` (timing, subject, image description)
-and a complete `llm_system_prompt` with all 17 prompt engineering rules baked in.
-Paste the JSON into Claude or Gemini -- the LLM outputs both `node_169_prompt`
-and `schedule` ready to paste. See `docs/guides/prompt_workflow_end_to_end.md`
-for the full workflow.
-
-## Prompt writing
-
-See [`docs/guides/prompt_creation_guide.md`](docs/guides/prompt_creation_guide.md)
-for the canonical guide covering frozen-audio + image-init prompting,
-schedule format, camera-motion keywords, negative-prompt templates,
-and the seven-step authoring process.
-
-For action content with more cut density, halve `window_seconds` (and
-`length`) to get ~20 iterations on a 2:30 track. See
-[`docs/guides/debugging_guide.md`](docs/guides/debugging_guide.md) for
-the window/length math.
+See [LICENSE](LICENSE).
