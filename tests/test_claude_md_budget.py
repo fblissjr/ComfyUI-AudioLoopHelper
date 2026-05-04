@@ -70,6 +70,11 @@ def _extract_repo_relative_paths(text: str) -> set[str]:
     return out
 
 
+def _fail_if_any(failures: list[str], header: str) -> None:
+    if failures:
+        pytest.fail(f"{header}\n  " + "\n  ".join(failures))
+
+
 def test_root_claude_md_within_budget() -> None:
     """Hard cap: 200 lines AND 30 KB on root CLAUDE.md."""
     text = ROOT_CLAUDE_MD.read_text()
@@ -79,16 +84,16 @@ def test_root_claude_md_within_budget() -> None:
     failures: list[str] = []
     if line_count > ROOT_LINE_BUDGET:
         failures.append(
-            f"root CLAUDE.md = {line_count} lines (budget {ROOT_LINE_BUDGET}). "
-            f"Compress or move rules to subtree CLAUDE.md / docs/."
+            f"{line_count} lines (budget {ROOT_LINE_BUDGET})"
         )
     if byte_count > ROOT_BYTE_BUDGET:
         failures.append(
-            f"root CLAUDE.md = {byte_count} bytes (budget {ROOT_BYTE_BUDGET}). "
-            f"Compress or move rules to subtree CLAUDE.md / docs/."
+            f"{byte_count} bytes (budget {ROOT_BYTE_BUDGET})"
         )
-    if failures:
-        pytest.fail("\n".join(failures))
+    _fail_if_any(
+        failures,
+        "root CLAUDE.md over budget — compress or move rules to subtree CLAUDE.md / docs/:",
+    )
 
 
 def test_subtree_claude_md_soft_budget() -> None:
@@ -102,12 +107,11 @@ def test_subtree_claude_md_soft_budget() -> None:
         line_count = text.count("\n") + (0 if text.endswith("\n") else 1)
         if line_count > SUBTREE_LINE_SOFT_WARN:
             rel = path.relative_to(REPO_ROOT)
-            failures.append(
-                f"{rel} = {line_count} lines (soft cap {SUBTREE_LINE_SOFT_WARN}). "
-                f"Compress or split."
-            )
-    if failures:
-        pytest.fail("\n".join(failures))
+            failures.append(f"{rel} = {line_count} lines")
+    _fail_if_any(
+        failures,
+        f"Subtree CLAUDE.md over soft cap {SUBTREE_LINE_SOFT_WARN} — compress or split:",
+    )
 
 
 def test_pointer_targets_exist() -> None:
@@ -127,12 +131,8 @@ def test_pointer_targets_exist() -> None:
             target = REPO_ROOT / relpath
             if not target.exists():
                 rel_md = claude_md.relative_to(REPO_ROOT)
-                misses.append(f"{rel_md} -> {relpath} (does not exist)")
-    if misses:
-        pytest.fail(
-            "Stale pointers in CLAUDE.md files:\n  "
-            + "\n  ".join(sorted(misses))
-        )
+                misses.append(f"{rel_md} -> {relpath}")
+    _fail_if_any(sorted(misses), "Stale pointers in CLAUDE.md files:")
 
 
 def test_no_orphan_reference_notes() -> None:
@@ -143,31 +143,23 @@ def test_no_orphan_reference_notes() -> None:
     if not ref_dir.is_dir():
         return
 
-    citation_corpus_paths: list[Path] = list(_all_claude_md_files())
-    docs_readme = REPO_ROOT / "docs" / "README.md"
-    if docs_readme.exists():
-        citation_corpus_paths.append(docs_readme)
-    for doc in (REPO_ROOT / "docs").rglob("*.md"):
-        if doc == docs_readme:
-            continue
-        if doc.is_relative_to(ref_dir):
-            citation_corpus_paths.append(doc)
-        else:
-            citation_corpus_paths.append(doc)
-
+    citation_corpus_paths = list(_all_claude_md_files())
+    citation_corpus_paths.extend((REPO_ROOT / "docs").rglob("*.md"))
     corpus = "\n".join(p.read_text() for p in citation_corpus_paths if p.exists())
 
     orphans: list[str] = []
     for note in ref_dir.glob("*.md"):
         rel = note.relative_to(REPO_ROOT).as_posix()
-        bare = note.name
-        if rel not in corpus and bare not in corpus:
+        # A note can match itself (its own filename appears in its body) — to
+        # count as cited, the citation must come from another file. Strip the
+        # note's own contents from the corpus before checking.
+        cited_corpus = corpus.replace(note.read_text(), "", 1)
+        if rel not in cited_corpus and note.name not in cited_corpus:
             orphans.append(rel)
-    if orphans:
-        pytest.fail(
-            "Orphan reference notes (not cited from CLAUDE.md / docs/README.md "
-            "/ other docs):\n  " + "\n  ".join(sorted(orphans))
-        )
+    _fail_if_any(
+        sorted(orphans),
+        "Orphan reference notes (not cited from CLAUDE.md / docs/README.md / other docs):",
+    )
 
 
 def test_extract_repo_relative_paths_picks_up_common_shapes() -> None:

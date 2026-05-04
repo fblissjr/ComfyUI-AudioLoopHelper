@@ -93,19 +93,13 @@ When an extractor handles a degenerate case (e.g. n=1 frame in `subject_consiste
 
 ## CLAUDE.md hygiene tests
 
-`tests/test_claude_md_budget.py` enforces:
+`tests/test_claude_md_budget.py` enforces the budget + lint rules from `../.claude/CLAUDE.md` "CLAUDE.md governance" (size budget, pointer-target integrity, orphan check on `docs/reference/`). When a test fails, the failure message names the offending file and the rule violated. Fixes:
 
-1. Root `CLAUDE.md` ≤ 200 lines AND ≤ 30 KB. Soft-warn subtree CLAUDE.md > 500 lines.
-2. **Pointer-target check** — every `docs/X.md` / `scripts/X.py` / `tests/X.py` reference in any CLAUDE.md resolves to an existing file. Gitignored prefixes (`internal/`, `coderef/`, `data/`) exempted.
-3. **Orphan check** — every `docs/reference/*.md` is referenced from at least one CLAUDE.md, `docs/README.md`, or another `docs/` file.
-
-Failure modes (for fixers):
-
-- *Budget*: compress / move to subtree / move to `docs/`.
-- *Pointer*: rename target file to match, or update pointer, or remove if no longer relevant.
+- *Budget*: compress / move to subtree CLAUDE.md / move to `docs/`.
+- *Pointer*: rename target, update pointer, or remove if no longer relevant.
 - *Orphan*: add a citation in `docs/README.md`'s task-first index, or delete the orphan note.
 
-Policy lives in `../.claude/CLAUDE.md` "CLAUDE.md governance".
+Numeric thresholds (line / byte caps) live in the policy doc — read it before adjusting them.
 
 ## References
 
