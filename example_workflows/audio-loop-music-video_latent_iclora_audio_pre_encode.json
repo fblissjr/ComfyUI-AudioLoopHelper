@@ -1,8 +1,8 @@
 {
   "id": "3db70343-fd10-483b-8d66-6be2395b9681",
   "revision": 0,
-  "last_node_id": 2012,
-  "last_link_id": 3178,
+  "last_node_id": 2013,
+  "last_link_id": 3180,
   "nodes": [
     {
       "id": 252,
@@ -2262,6 +2262,14 @@
             "name": "fps"
           },
           "link": 3138
+        },
+        {
+          "name": "overlap_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "overlap_seconds"
+          },
+          "link": 3180
         }
       ],
       "outputs": [
@@ -2874,6 +2882,14 @@
             "name": "fps"
           },
           "link": 3136
+        },
+        {
+          "name": "overlap_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "overlap_seconds"
+          },
+          "link": 3179
         }
       ],
       "outputs": [
@@ -4293,6 +4309,40 @@
       "title": "Get_full_audio_latent",
       "color": "#322",
       "bgcolor": "#533"
+    },
+    {
+      "id": 2013,
+      "type": "FloatConstant",
+      "pos": [
+        2104.5863316089612,
+        4308.137286185389
+      ],
+      "size": [
+        220,
+        58
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "value",
+          "type": "FLOAT",
+          "links": [
+            3179,
+            3180
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-kjnodes",
+        "Node name for S&R": "FloatConstant"
+      },
+      "widgets_values": [
+        2.0
+      ],
+      "title": "overlap_seconds"
     }
   ],
   "links": [
@@ -5310,6 +5360,22 @@
       3,
       601,
       1,
+      "FLOAT"
+    ],
+    [
+      3179,
+      2013,
+      0,
+      1582,
+      5,
+      "FLOAT"
+    ],
+    [
+      3180,
+      2013,
+      0,
+      1560,
+      3,
       "FLOAT"
     ]
   ],

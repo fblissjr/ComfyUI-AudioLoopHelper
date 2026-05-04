@@ -1,8 +1,8 @@
 {
   "id": "3db70343-fd10-483b-8d66-6be2395b9681",
   "revision": 0,
-  "last_node_id": 2019,
-  "last_link_id": 3181,
+  "last_node_id": 2020,
+  "last_link_id": 3183,
   "nodes": [
     {
       "id": 252,
@@ -84,7 +84,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            3179
+            3181
           ]
         }
       ],
@@ -2263,6 +2263,14 @@
             "name": "fps"
           },
           "link": 3138
+        },
+        {
+          "name": "overlap_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "overlap_seconds"
+          },
+          "link": 3180
         }
       ],
       "outputs": [
@@ -2876,6 +2884,14 @@
             "name": "fps"
           },
           "link": 3136
+        },
+        {
+          "name": "overlap_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "overlap_seconds"
+          },
+          "link": 3179
         }
       ],
       "outputs": [
@@ -3787,7 +3803,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 3181
+          "link": 3183
         }
       ],
       "outputs": [
@@ -4298,6 +4314,40 @@
     },
     {
       "id": 2013,
+      "type": "FloatConstant",
+      "pos": [
+        2104.5863316089612,
+        4308.137286185389
+      ],
+      "size": [
+        220,
+        58
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "value",
+          "type": "FLOAT",
+          "links": [
+            3179,
+            3180
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-kjnodes",
+        "Node name for S&R": "FloatConstant"
+      },
+      "widgets_values": [
+        2.0
+      ],
+      "title": "overlap_seconds"
+    },
+    {
+      "id": 2014,
       "type": "LoraLoaderModelOnly",
       "pos": [
         1430,
@@ -4314,7 +4364,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 3179
+          "link": 3181
         }
       ],
       "outputs": [
@@ -4322,7 +4372,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            3180
+            3182
           ]
         }
       ],
@@ -4339,7 +4389,7 @@
       "title": "Distill LoRA (enable for base ltx-2.3 dev model)"
     },
     {
-      "id": 2014,
+      "id": 2015,
       "type": "LoraLoaderModelOnly",
       "pos": [
         1430,
@@ -4356,7 +4406,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 3180
+          "link": 3182
         }
       ],
       "outputs": [
@@ -4364,7 +4414,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            3181
+            3183
           ]
         }
       ],
@@ -4381,7 +4431,7 @@
       "title": "Style or ID LoRA (optional)"
     },
     {
-      "id": 2015,
+      "id": 2016,
       "type": "Note",
       "pos": [
         0,
@@ -4407,7 +4457,7 @@
       "bgcolor": "#653"
     },
     {
-      "id": 2016,
+      "id": 2017,
       "type": "Note",
       "pos": [
         1400,
@@ -4433,7 +4483,7 @@
       "bgcolor": "#653"
     },
     {
-      "id": 2017,
+      "id": 2018,
       "type": "Note",
       "pos": [
         2700,
@@ -4459,7 +4509,7 @@
       "bgcolor": "#653"
     },
     {
-      "id": 2018,
+      "id": 2019,
       "type": "Note",
       "pos": [
         2700,
@@ -4485,7 +4535,7 @@
       "bgcolor": "#653"
     },
     {
-      "id": 2019,
+      "id": 2020,
       "type": "Note",
       "pos": [
         1500,
@@ -5522,23 +5572,39 @@
     ],
     [
       3179,
-      503,
-      0,
       2013,
       0,
-      "MODEL"
+      1582,
+      5,
+      "FLOAT"
     ],
     [
       3180,
       2013,
       0,
+      1560,
+      3,
+      "FLOAT"
+    ],
+    [
+      3181,
+      503,
+      0,
       2014,
       0,
       "MODEL"
     ],
     [
-      3181,
+      3182,
       2014,
+      0,
+      2015,
+      0,
+      "MODEL"
+    ],
+    [
+      3183,
+      2015,
       0,
       1635,
       0,

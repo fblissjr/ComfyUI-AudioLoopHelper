@@ -607,6 +607,8 @@ def _audit_one(wf_path: Path) -> list[Finding]:
     _check_audio_latent_slice_source_seconds_wired(wf, by_type, record)
     _check_audio_latent_slice_iter_wiring(wf, by_type, record)
     _check_initial_render_audio_duration_wired(wf, by_type, record)
+    _check_overlap_seconds_single_source(wf, by_type, record)
+    _check_vhs_video_combine_frame_rate_parity(wf, by_type, record)
     _check_no_sd3_shift_node(wf, by_type, record)
     _check_graph_acyclic(wf, by_id, record)
     _check_link_integrity(wf, by_id, links_by_id, record)
@@ -1320,6 +1322,108 @@ def _check_initial_render_audio_duration_wired(wf, by_type, record) -> None:
             "OK", "initial_render_audio_duration_wired",
             f"TrimAudioDuration(#{trim.get('id')}).duration is wired",
         )
+
+
+def _check_overlap_seconds_single_source(wf, by_type, record) -> None:
+    """ERR if AudioLoopController.overlap_seconds and AudioLoopPlanner.
+    overlap_seconds aren't sourced from the same node.
+
+    Both nodes shipped with widget-only `overlap_seconds` defaulting to
+    2. If a user updates one but not the other, the controller drives
+    the loop (correctly) while the planner's iteration-count summary
+    silently shows the wrong value. F7 prevents wiring controller →
+    planner directly (cycle), so the canonical fix is a shared
+    FloatConstant feeding both. Migration:
+    `scripts/apply_overlap_seconds_single_source.py`.
+    """
+    controllers = by_type.get("AudioLoopController", [])
+    planners = by_type.get("AudioLoopPlanner", [])
+    if not controllers or not planners:
+        return  # not a loop workflow
+    controller = controllers[0]
+    planner = planners[0]
+
+    links_by_id: dict[int, list] = {
+        l[0]: l for l in wf.get("links") or [] if isinstance(l, list)
+    }
+
+    def _overlap_link_source(node):
+        for inp in node.get("inputs", []):
+            if inp.get("name") == "overlap_seconds":
+                link = links_by_id.get(inp.get("link"))
+                return link[1] if link else None
+        return None
+
+    c_src = _overlap_link_source(controller)
+    p_src = _overlap_link_source(planner)
+
+    if c_src is None or p_src is None:
+        record(
+            "ERR", "overlap_seconds_single_source",
+            f"AudioLoopController.overlap_seconds wired={c_src is not None}, "
+            f"AudioLoopPlanner.overlap_seconds wired={p_src is not None}; "
+            "both must come from the same source node (typically a shared "
+            "FloatConstant titled 'overlap_seconds'). Run "
+            "scripts/apply_overlap_seconds_single_source.py.",
+        )
+    elif c_src != p_src:
+        record(
+            "ERR", "overlap_seconds_single_source",
+            f"controller.overlap_seconds ← #{c_src}, planner.overlap_seconds ← #{p_src}. "
+            "Different sources will silently diverge. Run "
+            "scripts/apply_overlap_seconds_single_source.py.",
+        )
+    else:
+        record(
+            "OK", "overlap_seconds_single_source",
+            f"both consumers sourced from #{c_src}",
+        )
+
+
+def _check_vhs_video_combine_frame_rate_parity(wf, by_type, record) -> None:
+    """ERR if VHS_VideoCombine.frame_rate diverges from LTXFramePlanner.fps.
+
+    VHS_VideoCombine's `frame_rate` lives in its dict-shaped
+    `widgets_values` (not a converted input slot), so it can't be
+    auto-wired the way other FramePlanner consumers are. Without a
+    wire, a user who changes FramePlanner's fps but forgets to update
+    VHS_VideoCombine produces an mp4 tagged at the wrong rate — audio
+    drifts against video on playback. Audit-only enforcement: verify
+    the two values match. Manual remediation: edit VHS_VideoCombine's
+    `widgets_values.frame_rate` to match.
+    """
+    del wf
+    planners = by_type.get("LTXFramePlanner", [])
+    vhs_combines = by_type.get("VHS_VideoCombine", [])
+    if not planners or not vhs_combines:
+        return
+    planner = planners[0]
+    # FramePlanner widgets_values = [target_width, target_height, target_seconds, fps]
+    fp_widgets = planner.get("widgets_values") or []
+    if len(fp_widgets) < 4:
+        return
+    fp_fps = fp_widgets[3]
+    for vhs in vhs_combines:
+        wv = vhs.get("widgets_values")
+        if not isinstance(wv, dict):
+            continue
+        vhs_fps = wv.get("frame_rate")
+        if vhs_fps is None:
+            continue
+        if int(vhs_fps) != int(fp_fps):
+            record(
+                "ERR", "vhs_frame_rate_matches_planner",
+                f"VHS_VideoCombine(#{vhs.get('id')}).frame_rate={vhs_fps} "
+                f"diverges from LTXFramePlanner(#{planner.get('id')}).fps={fp_fps}. "
+                "Saved mp4 will be tagged at the wrong rate. "
+                f"Edit VHS_VideoCombine.widgets_values.frame_rate to {fp_fps}.",
+            )
+        else:
+            record(
+                "OK", "vhs_frame_rate_matches_planner",
+                f"VHS_VideoCombine(#{vhs.get('id')}).frame_rate={vhs_fps} "
+                f"matches LTXFramePlanner.fps",
+            )
 
 
 def main() -> int:

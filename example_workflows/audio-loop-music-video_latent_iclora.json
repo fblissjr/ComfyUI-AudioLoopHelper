@@ -1,8 +1,8 @@
 {
   "id": "3db70343-fd10-483b-8d66-6be2395b9681",
   "revision": 0,
-  "last_node_id": 2008,
-  "last_link_id": 3159,
+  "last_node_id": 2009,
+  "last_link_id": 3161,
   "nodes": [
     {
       "id": 252,
@@ -2261,6 +2261,14 @@
             "name": "fps"
           },
           "link": 3138
+        },
+        {
+          "name": "overlap_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "overlap_seconds"
+          },
+          "link": 3161
         }
       ],
       "outputs": [
@@ -2862,6 +2870,14 @@
             "name": "fps"
           },
           "link": 3136
+        },
+        {
+          "name": "overlap_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "overlap_seconds"
+          },
+          "link": 3160
         }
       ],
       "outputs": [
@@ -4159,6 +4175,40 @@
         null,
         null
       ]
+    },
+    {
+      "id": 2009,
+      "type": "FloatConstant",
+      "pos": [
+        2104.5863316089612,
+        4308.137286185389
+      ],
+      "size": [
+        220,
+        58
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "value",
+          "type": "FLOAT",
+          "links": [
+            3160,
+            3161
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-kjnodes",
+        "Node name for S&R": "FloatConstant"
+      },
+      "widgets_values": [
+        2.0
+      ],
+      "title": "overlap_seconds"
     }
   ],
   "links": [
@@ -5136,6 +5186,22 @@
       3,
       601,
       1,
+      "FLOAT"
+    ],
+    [
+      3160,
+      2009,
+      0,
+      1582,
+      5,
+      "FLOAT"
+    ],
+    [
+      3161,
+      2009,
+      0,
+      1560,
+      3,
       "FLOAT"
     ]
   ],

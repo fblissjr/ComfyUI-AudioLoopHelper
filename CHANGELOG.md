@@ -7,6 +7,23 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- **`overlap_seconds` divergence footgun across workflows.** Both
+  `AudioLoopController.overlap_seconds` and
+  `AudioLoopPlanner.overlap_seconds` shipped as widget-only with default
+  2. Direct controller→planner wiring re-introduces F7's cycle. Fix:
+  shared `FloatConstant("overlap_seconds")` with no upstream inputs,
+  wired to both. Apply script:
+  `apply_overlap_seconds_single_source.py`. Audit pair:
+  `overlap_seconds_single_source` (ERR if both consumers don't share a
+  source). Applied to 8 shipped workflows + 1 experimental POC.
+
+- **Audit-only enforcement: `VHS_VideoCombine.frame_rate` parity with
+  `LTXFramePlanner.fps`.** `VHS_VideoCombine.frame_rate` lives in a
+  dict-shaped `widgets_values` (not a converted input), so it can't be
+  cleanly auto-wired. Audit check `vhs_frame_rate_matches_planner` ERRs
+  when the two values diverge. Manual remediation only — edit the
+  widget value to match the planner.
+
 - **Lip-sync drift in pre-encode workflows.** Three `AudioLatentSlice`
   widgets (`source_seconds`, `start_seconds`, `duration_seconds`) and
   `#601 TrimAudioDuration.duration` were widget-driven defaults that

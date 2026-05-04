@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1634,
-  "last_link_id": 3141,
+  "last_node_id": 1637,
+  "last_link_id": 3147,
   "nodes": [
     {
       "id": 252,
@@ -2336,20 +2336,20 @@
           "link": 3137
         },
         {
-          "name": "overlap_seconds",
-          "type": "FLOAT",
-          "widget": {
-            "name": "overlap_seconds"
-          },
-          "link": null
-        },
-        {
           "name": "fps",
           "type": "INT",
           "widget": {
             "name": "fps"
           },
           "link": 3138
+        },
+        {
+          "name": "overlap_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "overlap_seconds"
+          },
+          "link": 3147
         }
       ],
       "outputs": [
@@ -3024,6 +3024,14 @@
             "name": "fps"
           },
           "link": 3136
+        },
+        {
+          "name": "overlap_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "overlap_seconds"
+          },
+          "link": 3146
         }
       ],
       "outputs": [
@@ -3966,8 +3974,7 @@
           "name": "fps_int",
           "type": "INT",
           "links": [
-            3136,
-            3138
+            3136
           ]
         },
         {
@@ -4003,6 +4010,40 @@
         25
       ],
       "title": "LTX Frame Planner (single source for dimension config)"
+    },
+    {
+      "id": 1637,
+      "type": "FloatConstant",
+      "pos": [
+        2104.5863316089612,
+        4308.137286185389
+      ],
+      "size": [
+        220,
+        58
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "value",
+          "type": "FLOAT",
+          "links": [
+            3146,
+            3147
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-kjnodes",
+        "Node name for S&R": "FloatConstant"
+      },
+      "widgets_values": [
+        2.0
+      ],
+      "title": "overlap_seconds"
     }
   ],
   "links": [
@@ -4903,14 +4944,6 @@
       "FLOAT"
     ],
     [
-      3138,
-      1634,
-      4,
-      1560,
-      3,
-      "INT"
-    ],
-    [
       3139,
       1634,
       3,
@@ -4932,6 +4965,22 @@
       3,
       601,
       1,
+      "FLOAT"
+    ],
+    [
+      3146,
+      1637,
+      0,
+      1582,
+      5,
+      "FLOAT"
+    ],
+    [
+      3147,
+      1637,
+      0,
+      1560,
+      3,
       "FLOAT"
     ]
   ],

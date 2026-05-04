@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1622,
-  "last_link_id": 3088,
+  "last_node_id": 1623,
+  "last_link_id": 3090,
   "nodes": [
     {
       "id": 252,
@@ -2598,7 +2598,7 @@
           "widget": {
             "name": "overlap_seconds"
           },
-          "link": null
+          "link": 3090
         },
         {
           "name": "fps",
@@ -3281,6 +3281,14 @@
             "name": "fps"
           },
           "link": 3084
+        },
+        {
+          "name": "overlap_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "overlap_seconds"
+          },
+          "link": 3089
         }
       ],
       "outputs": [
@@ -4181,6 +4189,40 @@
         25
       ],
       "title": "LTX Frame Planner (single source for dimension config)"
+    },
+    {
+      "id": 1623,
+      "type": "FloatConstant",
+      "pos": [
+        2104.5863316089612,
+        4308.137286185389
+      ],
+      "size": [
+        220,
+        58
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "value",
+          "type": "FLOAT",
+          "links": [
+            3089,
+            3090
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-kjnodes",
+        "Node name for S&R": "FloatConstant"
+      },
+      "widgets_values": [
+        2.0
+      ],
+      "title": "overlap_seconds"
     }
   ],
   "links": [
@@ -5078,6 +5120,22 @@
       3,
       601,
       1,
+      "FLOAT"
+    ],
+    [
+      3089,
+      1623,
+      0,
+      1582,
+      5,
+      "FLOAT"
+    ],
+    [
+      3090,
+      1623,
+      0,
+      1560,
+      2,
       "FLOAT"
     ]
   ],
