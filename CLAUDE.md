@@ -130,7 +130,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **Initial render**: `#531 LTXVImgToVideoInplaceKJ` writes encoded init into frame 0; `noise_mask=0` locks it.
 - **Loop iterations**: top-level `VAEEncode → subgraph slot 8 → #1519 LTXVAddLatentGuide latent_idx=-1`. Init encoded ONCE.
 - **F2 + F3 are MANDATORY symmetry rules** for the init-image path: both initial and loop branches share the same `LTXVPreprocess(img_compression=18)` output (F2); loop `CFGGuider` positive/negative flow through `LTXVCropGuides` (F3). Skipping either is the photoreal-drift / identity-drift footgun. Full trace + apply scripts: `docs/reference/pipeline_flow_latent.md`.
-- **F12 video-reference IC-LoRA** (companion to F2/F3): IC-LoRA guide inside the subgraph between `#1519` and the F3 cropguides chain; F2/F3 symmetry rules extend to the ref-video chain. F2/F3 background: `docs/reference/pipeline_flow_latent.md`. Apply: `scripts/apply_iclora_video_reference.py`. Decisions: `internal/ic_lora_assessment.md` D19–D23 (private clone only).
+- **F12 video-reference IC-LoRA** (companion to F2/F3): IC-LoRA guide inside the subgraph between `#1519` and the F3 cropguides chain; F2/F3 symmetry rules extend to the ref-video chain. F2/F3 background: `docs/reference/pipeline_flow_latent.md`. Baked into the canonical latent.json (bypassed by default; un-bypass loader + guide + ref-video to enable). Design record: `scripts/archive/apply_iclora_video_reference.py`. Decisions: `internal/ic_lora_assessment.md` D19–D23 (private clone only).
 
 ## Working with Claude across sessions
 

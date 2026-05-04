@@ -34,7 +34,6 @@ slots (11, 5). No UI re-add needed.
 
 Targets:
   - example_workflows/audio-loop-music-video_latent.json
-    downstream by apply_intro_workflow.py from the fixed source).
 
 Usage:
     uv run --group dev python scripts/apply_audio_latent_slice_iter_wiring_fix.py

@@ -89,6 +89,17 @@ Three rules whose details belong here even though the rule itself is in root:
 
 Full inventory + the canonical first-pass-when-a-workflow-won't-run flow: `docs/reference/debug_tools.md`. Or invoke `/diagnose-workflow`.
 
+## Retired apply scripts
+
+`scripts/archive/` holds apply scripts whose migration is baked into the
+canonical workflow permanently and whose source/output files are no
+longer in tree (`apply_audio_latent_pre_encode.py`,
+`apply_iclora_video_reference.py` as of 2026-05-04). Kept as design
+records of the topology each migration introduced; not for re-running.
+Audit remediation pointers reference `scripts/archive/...` paths so
+they're recoverable if a reader needs to inspect the original migration.
+See `scripts/archive/README.md`.
+
 ## When `WorkflowEditor` itself is suspect
 
 Rare but possible: a bug in the editor that produces malformed output the audit doesn't catch. In that case fall back to `_apply_helpers.py`'s RAW-orjson fork-and-strip primitives. Don't paper over by writing a hand-rolled traversal in a feature apply-script — fix the editor.

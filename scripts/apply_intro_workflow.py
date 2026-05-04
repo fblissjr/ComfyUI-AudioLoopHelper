@@ -33,8 +33,9 @@ Usage:
     uv run --group dev python scripts/apply_intro_workflow.py --revert
     uv run --group dev python scripts/apply_intro_workflow.py --dry-run
 
-Idempotent. `--revert` deletes the OUTPUT file (which is the canonical
-latent — only run revert if you intend to rebuild from `--input`).
+Idempotent. `--revert` is only valid in staging mode (input != output);
+when self-targeting the canonical it refuses with a `git checkout`
+hint rather than deleting the shipped workflow.
 """
 
 from __future__ import annotations
@@ -611,8 +612,9 @@ def _migrate(input_path: Path, output_path: Path, *, dry_run: bool) -> None:
         return
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(input_path, output_path)
-    print(f"  copied {input_path} -> {output_path}")
+    if input_path != output_path:
+        shutil.copy2(input_path, output_path)
+        print(f"  copied {input_path} -> {output_path}")
 
     ed = WorkflowEditor(output_path)
     err = _preflight(ed)
@@ -645,7 +647,17 @@ def _migrate(input_path: Path, output_path: Path, *, dry_run: bool) -> None:
     print(f"  3. Load in ComfyUI: open {output_path}")
 
 
-def _revert(output_path: Path) -> None:
+def _revert(input_path: Path, output_path: Path) -> None:
+    """Revert is only meaningful when input != output (staging mode).
+    With self-targeting defaults, --revert would delete the canonical;
+    refuse instead and tell the user to git-restore."""
+    if input_path == output_path:
+        raise SystemExit(
+            "--revert refused: input == output (self-targeting on the "
+            "canonical). Deleting would lose the shipped workflow. "
+            "Use `git checkout HEAD -- {0}` to restore from history "
+            "instead.".format(output_path)
+        )
     if output_path.exists():
         output_path.unlink()
         print(f"removed {output_path}")
@@ -676,7 +688,7 @@ def main() -> None:
         input_path = REPO_ROOT / input_path
 
     if args.revert:
-        _revert(output_path)
+        _revert(input_path, output_path)
         return
 
     _migrate(input_path, output_path, dry_run=args.dry_run)

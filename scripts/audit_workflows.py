@@ -1091,7 +1091,7 @@ def _check_iclora_video_reference_wiring(wf, by_type, record) -> None:
             "ERR", "iclora_video_reference_guide_in_loop_with_cropguides",
             f"LTXAddVideoICLoRAGuide({gid}).out[{gslot}] feeds CFGGuider({cfg_id}) "
             f"directly. Must pass through LTXVCropGuides or LTXVCropGuidesNoLatent. "
-            f"Re-run scripts/apply_iclora_video_reference.py.",
+            f"Re-run scripts/archive/apply_iclora_video_reference.py.",
         )
     else:
         record(
@@ -1106,7 +1106,7 @@ def _check_iclora_video_reference_wiring(wf, by_type, record) -> None:
         record(
             "ERR", "iclora_loader_present_when_guide_present",
             "LTXAddVideoICLoRAGuide present in subgraph but no LTXICLoRALoaderModelOnly "
-            "on the top-level MODEL chain. Re-run scripts/apply_iclora_video_reference.py.",
+            "on the top-level MODEL chain. Re-run scripts/archive/apply_iclora_video_reference.py.",
         )
     else:
         record(
@@ -1139,7 +1139,7 @@ def _check_iclora_video_reference_wiring(wf, by_type, record) -> None:
             record(
                 "ERR", "iclora_ref_video_preprocess_symmetry",
                 "no LTXVPreprocess(val=18) found — ref-video path may not match "
-                "init-image preprocessing. Re-run scripts/apply_iclora_video_reference.py.",
+                "init-image preprocessing. Re-run scripts/archive/apply_iclora_video_reference.py.",
             )
 
 
@@ -1180,7 +1180,7 @@ def _check_audio_latent_slice_source_seconds_wired(wf, by_type, record) -> None:
             record(
                 "ERR", "audio_latent_slice_source_seconds_wired",
                 f"AudioLatentSlice(#{slicer.get('id')}) missing 'source_seconds' input. "
-                "Re-run scripts/apply_audio_latent_pre_encode.py.",
+                "Re-run scripts/archive/apply_audio_latent_pre_encode.py.",
             )
             continue
         link_id = source_input.get("link")

@@ -94,7 +94,7 @@ def _preflight(ed: WorkflowEditor) -> str | None:
     if not any(n.get("id") == AUDIO_LATENT_SLICE_ID for n in sg.get("nodes", [])):
         return (f"missing subgraph AudioLatentSlice #{AUDIO_LATENT_SLICE_ID} — "
                 "this script targets workflows produced by "
-                "apply_audio_latent_pre_encode.py")
+                "archive/apply_audio_latent_pre_encode.py")
     return None
 
 
