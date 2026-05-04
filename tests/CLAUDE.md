@@ -85,7 +85,9 @@ Read these BEFORE rewriting the system prompt. A substring you remove silently b
 
 ## Apply-script tests need pre-migration state
 
-Have the fixture `shutil.copy2(CANONICAL, dst)` then invoke the apply script's own `--revert` to restore. Keeps fixture state in lockstep with the script's understanding of "before"; avoids a separate fixture-baseline file that drifts when the canonical changes. Reference: `tests/test_apply_strip_dead_lora_loaders.py::canonical_copy`.
+Have the fixture `shutil.copy2(CANONICAL, dst)` then invoke the apply script's own `--revert` to restore. Keeps fixture state in lockstep with the script's understanding of "before"; avoids a separate fixture-baseline file that drifts when the canonical changes.
+
+When a migration is retired (e.g. baked into the canonical permanently), drop its tests too — the audit pair is the durable invariant; tests against a moving canonical become noise.
 
 ## Degenerate-input metric branches need a distinct status
 

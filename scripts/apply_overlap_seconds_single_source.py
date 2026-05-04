@@ -60,9 +60,6 @@ OVERLAP_DEFAULT = 2.0
 
 DEFAULT_TARGETS = [
     "example_workflows/audio-loop-music-video_latent.json",
-    "example_workflows/audio-loop-music-video_latent_iclora.json",
-    "example_workflows/audio-loop-music-video_latent_iclora_audio_pre_encode.json",
-    "example_workflows/audio-loop-music-video_latent_intro.json",
     "example_workflows/audio-loop-music-video_latent_keyframe.json",
     "example_workflows/audio-loop-music-video_latent_stg.json",
     "example_workflows/audio-loop-music-video_latent_validator.json",

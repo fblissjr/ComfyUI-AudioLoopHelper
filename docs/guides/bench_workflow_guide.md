@@ -17,15 +17,15 @@ Optional fifth piece for kernel-level granularity: wire `ProfileBegin` / `Profil
 
 ## Quickstart (no workflow edits needed)
 
-The shipped `audio-loop-music-video_latent_iclora.json` already has Sage attention active — just launching via `start_experiment.sh` instead of plain `start.sh` captures everything you need.
+The shipped `audio-loop-music-video_latent.json` already has Sage attention active — just launching via `start_experiment.sh` instead of plain `start.sh` captures everything you need. To bench the IC-LoRA path specifically, un-bypass the IC-LoRA chain (loader, VHS_LoadVideo, in-loop guide) before queuing the prompt.
 
 ```bash
 # 1. Launch ComfyUI with telemetry on
 ./start_experiment.sh
 
-# (in the ComfyUI UI: load audio-loop-music-video_latent_iclora.json,
-#  set your reference video + IC-LoRA path, queue the prompt, wait for it
-#  to finish)
+# (in the ComfyUI UI: load audio-loop-music-video_latent.json,
+#  un-bypass IC-LoRA chain if benching that path, set your reference video
+#  + IC-LoRA path, queue the prompt, wait for it to finish)
 
 # 2. Note the RUN_ID printed at startup, e.g.:
 #    [start_experiment.sh] RUN_ID=20260501T103045Z_a3f1

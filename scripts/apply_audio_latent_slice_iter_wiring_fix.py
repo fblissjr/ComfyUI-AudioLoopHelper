@@ -33,8 +33,7 @@ No subgraph schema change — both fixes use existing subgraph input
 slots (11, 5). No UI re-add needed.
 
 Targets:
-  - example_workflows/audio-loop-music-video_latent_iclora_audio_pre_encode.json
-  - example_workflows/audio-loop-music-video_latent_intro.json (rebuilt
+  - example_workflows/audio-loop-music-video_latent.json
     downstream by apply_intro_workflow.py from the fixed source).
 
 Usage:
@@ -72,7 +71,7 @@ SG_SLOT_START_INDEX = 11       # ← AudioLoopController.start_index (post-trim 
 SG_SLOT_VIDEO_START_TIME = 16  # ← AudioLoopController.overlap_seconds (BUGGY source for slicer)
 
 DEFAULT_TARGETS = [
-    "example_workflows/audio-loop-music-video_latent_iclora_audio_pre_encode.json",
+    "example_workflows/audio-loop-music-video_latent.json",
 ]
 
 

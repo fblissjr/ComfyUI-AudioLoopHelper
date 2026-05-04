@@ -1,6 +1,13 @@
 """apply_audio_latent_pre_encode.
 
-Last updated: 2026-05-01
+Last updated: 2026-05-04
+
+RETIRED: the migration this script performs is baked into the canonical
+`example_workflows/audio-loop-music-video_latent.json` as of the
+2026-05-04 consolidation pass. The original input
+(`audio-loop-music-video_latent_iclora.json`) and the staged output
+(`internal/scratch/...`) are no longer in tree. Kept for reference + as
+the design record for the pre-encode topology. Don't run.
 
 Stages a workflow variant that encodes the full song's audio latent
 ONCE outside the loop and slices it per-iter in latent space, replacing

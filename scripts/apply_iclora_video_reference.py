@@ -1,6 +1,13 @@
 """apply_iclora_video_reference.
 
-Last updated: 2026-04-30
+Last updated: 2026-05-04
+
+RETIRED: the IC-LoRA scaffolding this script splices is baked into the
+canonical `example_workflows/audio-loop-music-video_latent.json`
+(bypassed by default) as of the 2026-05-04 consolidation pass. The
+sibling output (`audio-loop-music-video_latent_iclora.json`) is no
+longer in tree. Kept for reference + as the design record for the
+video-reference IC-LoRA topology. Don't run.
 
 Wires video-reference IC-LoRA into the audio-loop pipeline. Forks
 `example_workflows/audio-loop-music-video_latent.json` (post-Step-0,

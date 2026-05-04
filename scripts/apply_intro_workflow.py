@@ -2,45 +2,39 @@
 
 Last updated: 2026-05-04
 
-Stages the shipped "intro" variant: a pre-wired workflow that opens with
-sensible defaults (audio pre-encoded, IC-LoRA bypassed, two LoRA loaders
-bypassed-by-default, layout grouped + Note-annotated for self-documenting
-discovery). Power-user audience — minimal prose, the workflow itself
-explains the knobs that matter.
+Layout-maintenance script for the canonical
+`example_workflows/audio-loop-music-video_latent.json`. The migrations
+this script originally performed (LoRA chain splice, IC-LoRA bypass,
+Notes, 9-group two-row layout) are baked into the canonical workflow
+as of the 2026-05-04 consolidation pass that retired the
+`_intro` / `_iclora` / `_iclora_audio_pre_encode` variants.
 
-Source: example_workflows/audio-loop-music-video_latent_iclora_audio_pre_encode.json
-Output: example_workflows/audio-loop-music-video_latent_intro.json
+What's still useful here: the **layout pass** (`_layout_workflow`) and
+the node-id → group classifier. If the canonical layout drifts (manual
+edits, accidental coordinate changes), `--revert` then re-apply
+restores the shipped layout.
 
-Edits applied (in order):
-  1. Splice two `LoraLoaderModelOnly` nodes between #503
-     (LTX2SamplingPreviewOverride) and #1635 (LTXICLoRALoaderModelOnly).
-     Both `mode=4`. Pre-fill widget values matching Lightricks's reference
-     workflow (distill LoRA at strength 0.5).
-  2. Bypass IC-LoRA chain: #1635 (loader), #1636 (VHS_LoadVideo), and
-     subgraph #1640 (LTXAddVideoICLoRAGuide). All `mode=4`.
-  3. Add 5 `Note` nodes annotating: top-of-canvas README, Node 169 prompt,
-     schedule, LoRA chain, IC-LoRA chain.
-  4. Add 2 `Group` rectangles around the new LoRA chain and IC-LoRA cluster.
-     Existing "Extend" + "Audio" groups preserved.
+For completely fresh builds (e.g. a new variant that wants to inherit
+the intro shape), re-target via `--input` / `--output`.
 
 Dependencies introduced: zero new node types. `LoraLoaderModelOnly` is
-comfy-core. Same set Lightricks's own LTX-2.3 distilled examples use.
+comfy-core.
 
 Compatibility:
   - F11 (`dead_lora_loader_scaffolding_absent`) is keyed on specific
-    legacy IDs (1625/1626/1627) + titles; new chain uses fresh IDs +
+    legacy IDs (1625/1626/1627) + titles; the chain uses fresh IDs +
     different titles, so F11 won't fire on it.
   - F12 (IC-LoRA checks) doesn't filter by `mode`, so passes with the
     chain bypassed (loader still present in JSON; cropguides path intact).
-  - Audio path untouched — pre-encoded audio chain from
-    `apply_audio_latent_pre_encode.py` carried through verbatim.
+  - Audio path untouched.
 
 Usage:
     uv run --group dev python scripts/apply_intro_workflow.py
     uv run --group dev python scripts/apply_intro_workflow.py --revert
     uv run --group dev python scripts/apply_intro_workflow.py --dry-run
 
-Idempotent on the OUTPUT path. `--revert` deletes the staged file.
+Idempotent. `--revert` deletes the OUTPUT file (which is the canonical
+latent — only run revert if you intend to rebuild from `--input`).
 """
 
 from __future__ import annotations
@@ -56,7 +50,7 @@ from workflow_utils import WorkflowEditor  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# --- Anchor node IDs (in the source iclora_audio_pre_encode workflow) ---
+# --- Anchor node IDs (canonical latent workflow shape) ---
 SPLICE_UPSTREAM_ID = 503        # LTX2SamplingPreviewOverride (MODEL upstream of LoRAs)
 ICLORA_LOADER_ID = 1635         # LTXICLoRALoaderModelOnly
 ICLORA_VHS_LOAD_ID = 1636       # VHS_LoadVideo (reference video)
@@ -64,8 +58,10 @@ ICLORA_GUIDE_SG_ID = 1640       # LTXAddVideoICLoRAGuide (inside subgraph)
 
 REQUIRED_SOURCE_NODES = (SPLICE_UPSTREAM_ID, ICLORA_LOADER_ID, ICLORA_VHS_LOAD_ID)
 
-DEFAULT_INPUT = "example_workflows/audio-loop-music-video_latent_iclora_audio_pre_encode.json"
-DEFAULT_OUTPUT = "example_workflows/audio-loop-music-video_latent_intro.json"
+# Self-targeting: the canonical latent IS the post-intro shape since the
+# 2026-05-04 consolidation. Re-running rebuilds the layout idempotently.
+DEFAULT_INPUT = "example_workflows/audio-loop-music-video_latent.json"
+DEFAULT_OUTPUT = "example_workflows/audio-loop-music-video_latent.json"
 
 DISTILL_LORA_DEFAULT = "ltx-2.3-22b-distilled-1.1_lora-dynamic_fro09_avg_rank_111_bf16.safetensors"
 DISTILL_LORA_STRENGTH = 0.5  # matches Lightricks's reference distilled workflow

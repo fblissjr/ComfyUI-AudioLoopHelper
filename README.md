@@ -14,9 +14,9 @@ Drives loop timing from integer-latent counts, freezes audio via
 > Power-user repo. Assumes you know ComfyUI. Architecture nuance lives in
 > `docs/architecture_overview.md`
 
-## Quick start — the intro workflow
+## Quick start
 
-Open `example_workflows/audio-loop-music-video_latent_intro.json` in ComfyUI.
+Open `example_workflows/audio-loop-music-video_latent.json` in ComfyUI.
 The workflow itself documents what to change via group titles, node titles,
 and Note nodes. Five things to set:
 
@@ -79,10 +79,7 @@ incompatible hardware?** Bypass `AudioLoopHelperSageAttention` (set
 
 | File | Use when |
 |---|---|
-| `audio-loop-music-video_latent_intro.json` | **Default. Start here.** Pre-encoded audio, IC-LoRA bypassed, two LoRA loaders bypassed, layout grouped + Note-annotated. |
-| `audio-loop-music-video_latent.json` | Same pipeline, no LoRA / IC-LoRA scaffolding. |
-| `audio-loop-music-video_latent_iclora.json` | IC-LoRA enabled by default. |
-| `audio-loop-music-video_latent_iclora_audio_pre_encode.json` | IC-LoRA + pre-encoded audio (~12.8s/render saved). |
+| `audio-loop-music-video_latent.json` | **Default. Start here.** Pre-encoded audio, IC-LoRA scaffolding bypassed, two LoRA loaders bypassed, 9-group two-row layout, Note-annotated. Un-bypass IC-LoRA chain to enable visual reference adapters; un-bypass distill LoRA when running base ltx-2.3 dev. |
 | `audio-loop-music-video_latent_keyframe.json` | Per-section reference images. |
 | `audio-loop-music-video_latent_validator.json` | Adds `LoopConfigValidator` + `PreviewAny`. |
 | `audio-loop-music-video_latent_stg.json` | A/B target — Spatial-Temporal Guidance instead of CFG. |
@@ -128,7 +125,7 @@ When a workflow fails to validate or produces wrong output:
 uv run --group dev python scripts/audit_workflows.py
 
 # Audit one file
-uv run --group dev python scripts/audit_workflows.py example_workflows/audio-loop-music-video_latent_intro.json
+uv run --group dev python scripts/audit_workflows.py example_workflows/audio-loop-music-video_latent.json
 
 # DAG topo-sort if audit is clean but it still fails
 uv run --group dev python scripts/analyze_workflow_dag.py \

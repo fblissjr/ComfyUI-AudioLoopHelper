@@ -41,8 +41,7 @@ re-add (slot indices baked at save time)". User must delete and re-add
 the loop subgraph node in ComfyUI after applying.
 
 Targets:
-  - example_workflows/audio-loop-music-video_latent_iclora_audio_pre_encode.json
-  - example_workflows/audio-loop-music-video_latent_intro.json
+  - example_workflows/audio-loop-music-video_latent.json
     (rebuilt downstream by `apply_intro_workflow.py` from the fixed
     source — re-run that script after this one)
 
@@ -78,7 +77,7 @@ NEW_SUBGRAPH_INPUT_NAME = "source_seconds"
 NEW_SUBGRAPH_INPUT_LABEL = "actual audio duration (auto from controller)"
 
 DEFAULT_TARGETS = [
-    "example_workflows/audio-loop-music-video_latent_iclora_audio_pre_encode.json",
+    "example_workflows/audio-loop-music-video_latent.json",
 ]
 
 
@@ -268,7 +267,7 @@ def main() -> None:
         print()
         print("Next steps:")
         print("  1. Validate: uv run --group dev python scripts/audit_workflows.py "
-              "example_workflows/audio-loop-music-video_latent_iclora_audio_pre_encode.json")
+              "example_workflows/audio-loop-music-video_latent.json")
         print("  2. Rebuild intro: uv run --group dev python scripts/apply_intro_workflow.py "
               "--revert && uv run --group dev python scripts/apply_intro_workflow.py")
         print("  3. In ComfyUI: delete + re-add the loop subgraph node "

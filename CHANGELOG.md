@@ -6,6 +6,24 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **Workflow consolidation.** Three shipped variants merged into one:
+  `audio-loop-music-video_latent_intro.json`,
+  `audio-loop-music-video_latent_iclora.json`, and
+  `audio-loop-music-video_latent_iclora_audio_pre_encode.json` were all
+  strict-subset shapes of the intro variant. Renamed intro →
+  `audio-loop-music-video_latent.json` (the new canonical default) and
+  removed the other two. The new default ships with pre-encoded audio,
+  IC-LoRA scaffolding bypassed (un-bypass to enable visual reference
+  adapters), two LoRA loaders bypassed (un-bypass distill LoRA when
+  running base ltx-2.3 dev), and the 9-group two-row layout. Apply
+  scripts whose source/output workflows were removed
+  (`apply_audio_latent_pre_encode.py`, `apply_iclora_video_reference.py`)
+  retired with a "baked into canonical" docstring note. Apply scripts
+  whose `DEFAULT_TARGETS` referenced the removed files updated to point
+  at the new default. Tests for the retired scripts removed (audit pairs
+  cover the topology invariants).
+
 ### Fixed
 - **`overlap_seconds` divergence footgun across workflows.** Both
   `AudioLoopController.overlap_seconds` and

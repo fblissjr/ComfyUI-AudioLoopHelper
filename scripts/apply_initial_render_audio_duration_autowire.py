@@ -35,14 +35,10 @@ Behavior post-fix:
     (matches EmptyLTXVLatentVideo.length / fps), so #601's audio context
     always matches the initial render's video length.
 
-Targets:
-  - example_workflows/audio-loop-music-video_latent_iclora_audio_pre_encode.json
-  - example_workflows/audio-loop-music-video_latent_intro.json (rebuilt
-    downstream by apply_intro_workflow.py from the fixed source).
-
-Other workflows have a similar #601 with widget=10. They'll remain
-broken until ported — likely via a generalized version of this script,
-or until they're consolidated into the intro variant.
+Targets: every shipped workflow that has both LTXFramePlanner and
+TrimAudioDuration #601 (the canonical latent + its variants). Apply
+across all targets with the default invocation; pass `--target` to
+narrow.
 
 Usage:
     uv run --group dev python scripts/apply_initial_render_audio_duration_autowire.py
@@ -79,9 +75,6 @@ def _find_frame_planner_id(ed: WorkflowEditor) -> int | None:
 
 DEFAULT_TARGETS = [
     "example_workflows/audio-loop-music-video_latent.json",
-    "example_workflows/audio-loop-music-video_latent_iclora.json",
-    "example_workflows/audio-loop-music-video_latent_iclora_audio_pre_encode.json",
-    "example_workflows/audio-loop-music-video_latent_intro.json",
     "example_workflows/audio-loop-music-video_latent_keyframe.json",
     "example_workflows/audio-loop-music-video_latent_stg.json",
     "example_workflows/audio-loop-music-video_latent_validator.json",
@@ -237,7 +230,7 @@ def main() -> None:
         print()
         print("Next steps:")
         print("  1. Audit: uv run --group dev python scripts/audit_workflows.py "
-              "example_workflows/audio-loop-music-video_latent_iclora_audio_pre_encode.json")
+              "example_workflows/audio-loop-music-video_latent.json")
         print("  2. Rebuild intro: uv run --group dev python scripts/apply_intro_workflow.py "
               "--revert && uv run --group dev python scripts/apply_intro_workflow.py")
 
