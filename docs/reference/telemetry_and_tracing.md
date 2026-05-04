@@ -1,32 +1,51 @@
-last updated: 2026-04-26
+Last updated: 2026-05-04
 
-# Telemetry and tracing
+# Local logging and profiling
 
-This plugin ships **two opt-in tracers**. Both default to off, are enabled
-only by setting an environment variable, write only to local files under
-the plugin directory, and never send data anywhere off your machine.
+> **What this is.** Two opt-in local logging/profiling instruments that
+> **this plugin** ships, plus an offline aggregator that reads the files
+> they produce. All three default to off. **No code in this plugin makes
+> any network call.** There is no telemetry endpoint, no analytics service,
+> no "phone home." Everything is plain JSONL written to gitignored local
+> files for debugging, profiling, and bench analysis on your own machine.
+
+> **Scope.** This document covers only this plugin's instruments
+> (`AUDIOLOOPHELPER_SAGE_TRACE`, `COMFYUI_EXEC_LOG`,
+> `scripts/sage_telemetry_summary.py`). Anything ComfyUI itself does at
+> runtime is upstream behavior we don't speak for here.
+
+> **What "ours" means.** Both env-var-gated instruments are this plugin's
+> own code. `AUDIOLOOPHELPER_SAGE_TRACE` writes from `nodes_sage.py`.
+> `COMFYUI_EXEC_LOG` is our runtime monkey-patch on ComfyUI's `execute()`,
+> installed by `exec_logger.py` only when the env var is set; otherwise it's
+> a single attribute check at import time and that's it. The env-var name
+> uses the `COMFYUI_` prefix because it controls our patch on a ComfyUI
+> internal — the patch itself is plugin code.
 
 This document is the single source of truth for what gets captured, where
 it lands, how to control it, and what the privacy posture is.
 
 ## TLDR
 
-| | sage tracer | exec logger |
+| | sage logger | exec logger |
 |---|---|---|
+| Code home | `nodes_sage.py` (this plugin) | `exec_logger.py` (this plugin; runtime monkey-patch on ComfyUI's `execute()`) |
 | Env var | `AUDIOLOOPHELPER_SAGE_TRACE` | `COMFYUI_EXEC_LOG` |
 | Default | off (zero overhead) | off (zero overhead) |
 | Activation | env var must be set **before launching ComfyUI** | env var must be set **before launching ComfyUI** |
 | Granularity | one record per attention call | one record per ComfyUI node execution |
 | Captures | tensor shapes, kernel mode, timing | node class, tensor shapes, **truncated input snapshot** (see below), timing |
 | Captures user prompt text? | no | yes, truncated to 120 chars |
-| Default sink | `internal/analysis/runs/sage/sage_<timestamp>.jsonl` | `internal/analysis/runs/exec_log/exec_<timestamp>.jsonl` |
+| Default sink (with `RUN_ID`) | `data/runs/${RUN_ID}/sage.jsonl` (gitignored) | `data/runs/${RUN_ID}/exec.jsonl` (gitignored) |
+| Legacy fallback (no `RUN_ID`) | `internal/analysis/runs/sage/sage_<TS>.jsonl` (gitignored) | `internal/analysis/runs/exec_log/exec_<TS>.jsonl` (gitignored) |
 | Auto-cleanup | none | none |
-| Network access | none | none |
+| Network access | **none** | **none** |
+| Data leaves machine? | **no** | **no** |
 
 ## How it splits: in-ComfyUI capture vs. outside-ComfyUI analysis
 
 There are three distinct steps. Two of them run **inside** ComfyUI (the
-two tracers); the third runs **outside** ComfyUI as a standalone Python
+two loggers); the third runs **outside** ComfyUI as a standalone Python
 script that reads the files the first two wrote.
 
 ```
@@ -36,7 +55,7 @@ script that reads the files the first two wrote.
   │  AUDIOLOOPHELPER_SAGE_TRACE=auto ─┐  │
   │  COMFYUI_EXEC_LOG=auto ───────────┤  │      ┌──────────────────────────┐
   │                                   ▼  │      │  outside ComfyUI         │
-  │  user runs workflow ─► tracers append│      │                          │
+  │  user runs workflow ─► loggers append│      │                          │
   │                        to JSONL files│  ──► │  scripts/                │
   │                                      │      │  sage_telemetry_summary  │
   │  internal/analysis/runs/             │      │  reads JSONL, prints     │
@@ -45,19 +64,19 @@ script that reads the files the first two wrote.
   └──────────────────────────────────────┘      └──────────────────────────┘
 ```
 
-The two tracers and the aggregator never run together in the same
-process. Tracers capture; aggregator analyzes. You can run the
-aggregator any time after the tracer files exist, even months later.
+The two loggers and the aggregator never run together in the same
+process. Loggers capture; aggregator analyzes. You can run the
+aggregator any time after the logger files exist, even months later.
 
 ## End-to-end workflow
 
 ### 1. Set env vars BEFORE launching ComfyUI
 
-The tracers install themselves at Python module import time
-(`exec_logger.install()` runs at the bottom of the module; `SageTracer`
-opens its file handle when the sage node first executes). Setting
-either env var after ComfyUI is already running has no effect — restart
-ComfyUI to pick up the change.
+The loggers install themselves at Python module import time
+(`exec_logger.install()` runs at the bottom of the module and is a no-op
+when the env var is unset; `SageTracer` opens its file handle when the
+sage node first executes). Setting either env var after ComfyUI is already
+running has no effect — restart ComfyUI to pick up the change.
 
 ```bash
 # in the same shell that will launch ComfyUI:
@@ -76,12 +95,12 @@ persistent on-disk toggle.
 **Recommended**: launch via `start_experiment.sh` at this plugin's
 repo root rather than setting the env vars by hand. That wrapper
 exports `RUN_ID` (a fresh `${ISO8601_UTC}_${rand4}` per launch) plus
-the two tracer vars defaulted to `auto`, then exec's the underlying
+the two logger vars defaulted to `auto`, then exec's the underlying
 ComfyUI launcher. With `RUN_ID` set, every artifact for one render
 correlates via a single directory key — see the path layout below.
 Plain `<comfyui>/start.sh` (post-2026-04-26 minimization) is back to a
-vanilla ComfyUI launcher with no plugin-specific telemetry; nothing is
-wired unless you set the env vars yourself or use `start_experiment.sh`.
+vanilla ComfyUI launcher with no plugin-specific instrumentation; nothing
+is wired unless you set the env vars yourself or use `start_experiment.sh`.
 
 **Path layout** (post-RUN_ID propagation):
 - With `RUN_ID` set: `data/runs/${RUN_ID}/{exec.jsonl, sage.jsonl, profiler/}`.
@@ -96,12 +115,12 @@ the most recent by mtime. Full env-var registry at
 
 Each attention call appends one line to the sage JSONL. Each node
 execution appends two lines (`start` + `end`) to the exec JSONL. No
-extra UI, no progress bars, no popups. The files are line-buffered, so
-even a mid-run crash leaves a useful partial trace.
+extra UI, no progress bars, no popups, no network calls. The files are
+line-buffered, so even a mid-run crash leaves a useful partial log.
 
 ### 3. Stop ComfyUI cleanly
 
-The sage tracer writes a `{"event": "summary", ...}` line on model
+The sage logger writes a `{"event": "summary", ...}` line on model
 cleanup (the `ON_CLEANUP` callback in `nodes_sage.py`). A clean
 shutdown gives you the summary; a hard kill loses only the summary
 line, not the per-call records.
@@ -128,10 +147,11 @@ file as many times as you want.
 
 | Data | Captured by | Used for | Used where |
 |------|-------------|----------|------------|
-| Per-attention-call tensor shape, kernel mode, timing | sage tracer (in ComfyUI) | Kernel routing audit + per-mode timing breakdown | Aggregator (outside ComfyUI) |
+| Per-attention-call tensor shape, kernel mode, timing | sage logger (in ComfyUI) | Kernel routing audit + per-mode timing breakdown | Aggregator (outside ComfyUI) |
 | Per-node class type, input shape snapshot, duration | exec logger (in ComfyUI) | Pin total wall-clock time on the sampler nodes (the denominator for "% of gen time spent in masked-triton") | Aggregator (outside ComfyUI), `--exec-log` flag |
 | Free text prompt strings ≤120 chars | exec logger (in ComfyUI) | Debugging which workflow path ran with which prompt | None automated; surfaces only if you read the JSONL by hand |
 | Tensor values, model weights | NEITHER | n/a | n/a |
+| Anything sent over the network | NEITHER | n/a | n/a |
 
 The aggregator only consumes `class_type` and `duration_s` from the exec
 log. It does not parse or display the `inputs` snapshot. So even with
@@ -147,7 +167,7 @@ visible if you open the JSONL file directly.
 - Drive optimization decisions with numbers, not vibes (see
   `docs/reference/sage_attention.md` and the optimization-plan workflow)
 
-## Sage tracer: `AUDIOLOOPHELPER_SAGE_TRACE`
+## Sage logger: `AUDIOLOOPHELPER_SAGE_TRACE`
 
 ### Turning it on
 
@@ -280,41 +300,44 @@ having the same sensitivity as your prompt history.
 
 ## Retention and cleanup
 
-**Neither tracer auto-deletes its output.** Both append to JSONL files
-under `internal/analysis/runs/{sage,exec_log}/`. The files accumulate
-until you manually delete them.
+**Neither logger auto-deletes its output.** Files accumulate at the active
+sink until you manually delete them.
 
-A separate startup cleanup runs only on `internal/analysis/runs/profiler/`
-(see `__init__.py`); the sage and exec_log directories are NOT touched.
+`start_experiment.sh` auto-cleans prior `trace.json` profiler files (~1.8GB
+each) at startup; sage/exec JSONL are NOT touched.
 
 ### Manual cleanup
 
 ```bash
-# wipe all sage traces
-rm -rf <plugin>/internal/analysis/runs/sage/
+# wipe all per-run dirs (RUN_ID layout)
+rm -rf data/runs/
 
-# wipe all exec logs
-rm -rf <plugin>/internal/analysis/runs/exec_log/
+# legacy fallback layout (when RUN_ID unset)
+rm -rf internal/analysis/runs/sage/
+rm -rf internal/analysis/runs/exec_log/
 
-# or be selective
-rm <plugin>/internal/analysis/runs/sage/sage_2026-04-2*.jsonl
+# selective
+rm data/runs/2026-05-04_*/sage.jsonl
 ```
 
 ### Where the files actually live
 
-The plugin's `internal/` directory is **gitignored** (see
-`.gitignore` line listing `internal/`). This means tracer output is
-never accidentally pushed to a public repo.
+Both default sinks are **gitignored**:
+- `data/` is gitignored via the `data/*` rule with `.gitkeep` exception.
+- `internal/` is gitignored entirely.
 
-If you specify an explicit path via the env var, the file lands wherever
-you point it. Whether THAT path is gitignored is on you.
+Either way, logger output is never accidentally pushed to a public repo.
+
+If you specify an explicit path via the env var (e.g. `=/tmp/sage.jsonl`),
+the file lands wherever you point it. Whether that path is gitignored is
+on you.
 
 ## Phase 0 aggregator
 
-`scripts/sage_telemetry_summary.py` reads sage tracer JSONL (and
+`scripts/sage_telemetry_summary.py` reads sage-logger JSONL (and
 optionally exec-logger JSONL) and prints a per-(kernel, mask) summary.
 Used to gate kernel-side optimization decisions in the upstream sage
-fork.
+fork. Reads only; never writes; never makes network calls.
 
 ```bash
 # basic: sage trace only, no % of total available
@@ -341,20 +364,13 @@ JSONL and prints to stdout.
 
 ## Privacy guarantees, in plain language
 
-1. **Nothing is captured by default.** Both tracers require an explicit
-   env var to activate.
-2. **Nothing leaves your machine.** No HTTP calls, no analytics, no
-   "anonymous usage data" in either tracer. Local file writes only.
-3. **The plugin's `internal/` directory is gitignored**, so anything
-   landing under it cannot be accidentally committed to a public repo.
-4. **The sage tracer never sees prompt text.** It only records tensor
-   shapes, kernel names, and timing.
-5. **The exec logger CAN see short prompt strings** (≤120 chars) as
-   part of its node-input snapshot. If your prompts are sensitive,
-   either keep the exec logger off or redact your traces before
-   sharing them.
-6. **No automatic retention policy.** The trace files persist until
-   you delete them. There is no daily/weekly/monthly cleanup.
+1. **Nothing is captured by default.** Both loggers require an explicit env var to activate. Unset = zero overhead, zero output, no install.
+2. **Nothing leaves your machine.** **This plugin makes no HTTP calls, no analytics, no "anonymous usage data," no network I/O of any kind in either logger or in the aggregator.** Local file writes only. (For ComfyUI's own behavior, refer to ComfyUI documentation — that's outside this plugin's scope.)
+3. **`internal/` is gitignored**, so anything landing under it cannot be accidentally committed.
+4. **The sage logger never sees prompt text.** It only records tensor shapes, kernel names, and timing.
+5. **The exec logger CAN see short prompt strings** (≤120 chars) as part of its node-input snapshot. If your prompts are sensitive, either keep the exec logger off or redact log files before sharing them.
+6. **No automatic retention policy.** Log files persist until you delete them. There is no daily/weekly/monthly cleanup.
+7. **Both loggers are part of this plugin's source.** `nodes_sage.py` (sage logger) and `exec_logger.py` (exec logger monkey-patch). Audit by reading the files; both are short and stdlib-only-plus-orjson.
 
 ## Quick on/off cheat sheet
 
@@ -367,7 +383,7 @@ unset COMFYUI_EXEC_LOG
 export AUDIOLOOPHELPER_SAGE_TRACE=auto
 export COMFYUI_EXEC_LOG=auto
 
-# enable just the sage tracer to a specific file
+# enable just the sage logger to a specific file
 export AUDIOLOOPHELPER_SAGE_TRACE=/tmp/sage.jsonl
 
 # disable mid-session: just unset and restart ComfyUI
@@ -377,6 +393,6 @@ unset AUDIOLOOPHELPER_SAGE_TRACE
 ## Related
 
 - `docs/reference/sage_attention.md` — sage kernel routing, modes, fallback
-- `scripts/sage_telemetry_summary.py` — Phase 0 aggregator
-- `nodes_sage.py` — the `SageTracer` class definition
-- `exec_logger.py` — the `COMFYUI_EXEC_LOG` monkey-patch implementation
+- `scripts/sage_telemetry_summary.py` — Phase 0 aggregator (offline, reads only)
+- `nodes_sage.py` — the `SageTracer` class (sage logger) — this plugin's code
+- `exec_logger.py` — the `COMFYUI_EXEC_LOG` monkey-patch (exec logger) — this plugin's code
