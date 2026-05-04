@@ -163,16 +163,17 @@ def test_no_orphan_reference_notes() -> None:
 
 
 _INTERNAL_PATH_PATTERN = re.compile(r"`(internal/[\w/.-]+\.md)`")
+_HTML_COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
 
 
 def test_internal_citations_marked() -> None:
     """Specific-file citations to internal/X.md from public docs must be
-    marked with '(private clone only)' on the same line, OR live inside an
-    HTML comment block. Catches the dead-link UX issue for public-clone
-    readers who follow a citation and find nothing.
+    marked with '(private clone only)' or 'gitignored' on the same line,
+    OR live inside an HTML comment block. Catches the dead-link UX issue
+    for public-clone readers who follow a citation and find nothing.
 
-    Skipped: meta-references to internal/ as a directory concept (e.g.
-    `internal/postmortem_*.md`) — only specific .md filenames trigger.
+    Skipped: meta-references with glob/brace shapes (`internal/postmortem_*.md`,
+    `internal/{design,analysis}/X.md`) — only specific .md filenames trigger.
     """
     public_paths: list[Path] = []
     public_paths.extend(_all_claude_md_files())
@@ -188,23 +189,14 @@ def test_internal_citations_marked() -> None:
         rel = path.relative_to(REPO_ROOT)
         if rel.parts and rel.parts[0] == "internal":
             continue
-        text = path.read_text()
-        in_html_comment = False
+        text = _HTML_COMMENT_PATTERN.sub("", path.read_text())
         for lineno, line in enumerate(text.splitlines(), start=1):
-            if "<!--" in line:
-                in_html_comment = True
-            if in_html_comment:
-                if "-->" in line:
-                    in_html_comment = False
-                continue
             for m in _INTERNAL_PATH_PATTERN.finditer(line):
                 cited = m.group(1)
-                # Skip glob-shape and meta-references (e.g. internal/postmortem_*.md)
-                if "*" in cited:
+                if "*" in cited or "{" in cited:
                     continue
-                if "private clone" in line.lower():
-                    continue
-                if "gitignored" in line.lower():
+                lower = line.lower()
+                if "private clone" in lower or "gitignored" in lower:
                     continue
                 misses.append(f"{rel}:{lineno} cites `{cited}`")
     _fail_if_any(
