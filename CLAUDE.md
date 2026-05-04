@@ -1,8 +1,36 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-05-03
+Last updated: 2026-05-04
 
 ComfyUI nodes that automate loop timing + audio analysis for full-length music video generation with LTX 2.3. Core pattern: `AudioLoopController` drives stride from integer latent counts, audio is frozen via `noise_mask=0`, prompts pre-encoded once outside the loop (CLIP must never enter the loop body). **Start here:** `docs/architecture_overview.md`; task-first nav at `docs/README.md`.
+
+## Contents
+
+1. [Commands](#commands) — pytest, audit, common apply-script invocation
+2. [Architecture](#architecture) — files, nodes, entry points
+3. [Critical constraints](#critical-constraints) — split by topic
+4. [ComfyUI gotchas](#comfyui-gotchas)
+5. [Init image conditioning + IC-LoRA paths](#init-image-conditioning--ic-lora-paths)
+6. [Working with Claude across sessions](#working-with-claude-across-sessions)
+7. [Documentation conventions](#documentation-conventions)
+8. [Pending review](#pending-review) — capture-then-review staging
+
+## Commands
+
+```bash
+# Full test suite
+uv run --group dev --group analysis python -m pytest tests/ -v --rootdir=.
+
+# Workflow audit (sweeps example_workflows/ + audited subset of experimental/)
+uv run --group dev python scripts/audit_workflows.py
+
+# Apply script — typical shape (every apply_*.py supports these)
+uv run --group dev python scripts/apply_<X>.py            # apply
+uv run --group dev python scripts/apply_<X>.py --dry-run  # show changes
+uv run --group dev python scripts/apply_<X>.py --revert   # undo
+```
+
+Add `--group experiments` for autoresearch contract tests (`tests/test_autoresearch.py`); they skip on clones without duckdb. Subtree CLAUDE.md files cover deeper conventions: working in `scripts/`, `tests/`, or `internal/autoresearch/` loads the matching subtree CLAUDE.md automatically.
 
 ## Architecture
 
@@ -14,224 +42,149 @@ Core nodes (per-node role + wiring in each class's docstring; full reference at 
 - **Prompt schedule**: `TimestampPromptScheduleBatchEncode` + `ConditioningSelectByIteration` (current) / `TimestampPromptSchedule` + `CachedTextEncode` (legacy; don't wire in loop body)
 - **Keyframe schedule**: `KeyframeLatentScheduleBatchEncode` + `LatentSelectByIteration` (current — VAE-encodes once outside loop) / `KeyframeImageSchedule` + `ImageBlend` (legacy; per-iter VAE)
 - **Latent ops**: `LatentContextExtract`, `LatentOverlapTrim`, `StripLatentNoiseMask`, `LatentTemporalMask` (retake)
-- **Image path**: `KeyframeImageSchedule`, `ImageBlend`, `VideoFrameExtract`
 - **Conditioning blend**: `ConditioningBlend` (works with Gemma 3 + CLIP)
 - **Attention + profiling**: `AudioLoopHelperSageAttention` (default `auto_mask_aware`), `ProfileBegin`/`IterStep`/`End`
-- **Step-skipping cache**: `LTXVideoEasyCache` (experimental, default off). Patches LTX denoiser via `WrappersMP.DIFFUSION_MODEL`. Single threshold knob; `cache_device` offload to CPU optional. Reference: `nodes_easycache.py`. Telemetry/privacy story: `docs/reference/telemetry_and_tracing.md`.
+- **Step-skipping cache**: `LTXVideoEasyCache` (experimental, default off)
+- **Dimension SSoT**: `LTXFramePlanner` — see `docs/reference/frame_planner_reference.md`
 
-Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + vocal-fraction; pairs directly with `ConditioningBlend.blend_factor`.
+Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + vocal-fraction; pairs with `ConditioningBlend.blend_factor`.
 
 ## Key patterns
 
 - `AUDIO = {"waveform": Tensor, "sample_rate": int}`. Duration = `waveform.shape[-1] / sample_rate`.
-- **Stride derived from integer-latent counts**, not widget seconds: `stride_seconds = (window_latents - overlap_latents) * 8 / fps`. The `overlap_seconds` widget is a TARGET; node emits EFFECTIVE quantized overlap. Eliminates lip-sync drift across overlap values. Tests: `tests/test_audio_loop_controller.py`.
-- `start_index` clamps so ≥0.5s audio remains on final iter (prevents mel crash).
+- **Stride from integer-latent counts**, not widget seconds: `stride_seconds = (window_latents - overlap_latents) * 8 / fps`. `overlap_seconds` widget is a TARGET; node emits EFFECTIVE quantized overlap. Eliminates lip-sync drift. Tests: `tests/test_audio_loop_controller.py`.
 - LTX 2.3 text encoder is Gemma 3, NOT CLIP. Format: `[tensor, {"attention_mask": mask}]`, no pooled.
-- **Audio path is sacred.** `LTXVAudioVAEEncode → LTXVConcatAVLatent`; never feed visualizations into the video latent.
 - Video VAE formula: `latent = (pixel - 1) // 8 + 1`. Not `pixel // 8`.
 - `noise_mask=0` = fixed context; `mask=1` = regenerate. Audio is 0; video is 1.
 - Guide chaining: multiple `LTXVAddLatentGuide` / `LTXVAddGuideMulti` (up to 20) accumulate via `keyframe_idxs`; `LTXVCropGuides` strips them.
-- **CFG-analog amplification of any conditional contribution**: feed `(positive_with_X, positive_without_X)` to `CFGGuider` as `(positive, negative)`. Existing sampler computes `eps = eps_without + cfg * (eps_with - eps_without)` per step. Zero new sampler code; generalizes beyond IC-LoRA to any conditional (style LoRAs, identity LoRAs, per-reference ablation). Distinct from control-vector / concept-slider techniques (static directions) — this is dynamic per-step differential. Canonical POC: `scripts/apply_ttc_iclora_amplification_poc.py`. Landscape: `internal/analysis/iclora_landscape_analysis.md` §TTC.
+- **CFG-analog amplification of any conditional**: feed `(positive_with_X, positive_without_X)` to `CFGGuider` as `(positive, negative)`. Sampler computes `eps = eps_without + cfg * (eps_with - eps_without)` per step. Generalizes to style LoRAs, identity LoRAs, per-reference ablation. POC: `scripts/apply_ttc_iclora_amplification_poc.py`. Landscape: `internal/analysis/iclora_landscape_analysis.md`.
 
 ## Critical constraints
 
-- **Never feed audio visualizations into video latent** — heatmap frames result.
+### Audio + latent topology
+
+- **Audio path is sacred.** `LTXVAudioVAEEncode → LTXVConcatAVLatent`; never feed visualizations into the video latent (heatmap frames result).
 - **`LTXVAudioVideoMask` (Node 606) wiring is intentional** — `audio_start_time = audio_end_time = window_size` (empty range keeps audio fixed). Don't change.
+- **Audio is FROZEN.** Strip music/instrumentation references from schedule prompts; keep diegetic sounds only. Rationale: `docs/analysis/audio_in_prompt_research.md`.
 - **Use `LatentContextExtract` / `LatentOverlapTrim`**, not raw `LTXVSelectLatents` — they strip `noise_mask` automatically.
-- **Node 169 prompt matches schedule 0:00 entry** structurally (`_build_prompt_for_section` via shared `_prepare_sections`; byte-exact).
+
+### Sampler + sigma chain
+
+- **Distilled 8-step path.** `ManualSigmas "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"` + `KSamplerSelect euler` + `CFGGuider cfg=1`. **No flow-matching shift node** (no `ModelSamplingSD3`). **No `euler_ancestral*`.** Full walkthrough + Lightricks evidence: `docs/reference/sampler_reference.md`. Migration: `scripts/apply_canonical_sigmas.py`, `scripts/apply_strip_sd3_shift_node.py`.
+- **VAE decode**: `LTXVTiledVAEDecode [1,1,1,true,"auto","auto"]` on **24GB+** (single-tile, ~3× faster cold-pass than [2,2,1]); fall back to [2,2,1] on ≤16GB. Apply: `scripts/apply_no_tile_vae_decode.py`. Empirical timings + audit details in `docs/reference/sampler_reference.md`.
+- **Don't copy upstream's 15-step sampling** from `LTX-2.3_T2V_I2V_Single_Stage_Distilled_Full.json`. Authoritative distilled path: 8 fixed sigmas.
+
+### Conditioning + prompts
+
 - **Every prompt must contain "singing"** (or "are singing together"). LTX 2.3 audio-video cross-attention binds lip sync to the action verb.
-- **Use `In a [shot], [camera]` continuation framing for non-first entries — NOT `Cut to a ...`.** Lightricks's official LTX 2.3 system prompt explicitly trains the model to treat scene-cut language as a discontinuation directive, fighting the loop's continuity mechanisms (`LTXVAddLatentGuide latent_idx=-1` + `LatentContextExtract` 1s overlap). Convention retracted 2026-04-25. Canonical guide: `docs/guides/prompt_creation_guide.md` §5.1.
-- **Always use `WorkflowEditor`** (`scripts/workflow_utils.py`) for JSON edits.
-- **Distilled 8-step sigmas**: `ManualSigmas "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"` + `KSamplerSelect euler` + `CFGGuider cfg=1`. **No flow-matching shift node** — Lightricks's distilled inference applies no shift between sigma scheduling and denoising (`coderef/ID-LoRA/ID-LoRA-2.3/packages/ltx-pipelines/src/ltx_pipelines/distilled.py:106-112` feeds `DISTILLED_SIGMA_VALUES` directly to `euler_denoising_loop`; their official 2.3 distilled example workflows have no `ModelSampling*` node either). Pre-2026-04-30 we shipped `ModelSamplingSD3 shift=13` in 8 of our workflows — borrowed-from-SD3 holdover that distorted the sigma-to-timestep mapping (`t' = 13t / (1 + 12t)` per `comfy/model_sampling.py:278-281`). Verdict + evidence: `internal/analysis/ltx23_sigma_shift_audit.md`. Migration: `scripts/apply_strip_sd3_shift_node.py`. Audit: `model_sampling_shift` (WARN if `ModelSamplingSD3` present). Decoder: `LTXVTiledVAEDecode [1,1,1,true,"auto","auto"]` on **24GB+** (single-tile, ~3× faster cold-pass than [2,2,1]); fall back to [2,2,1] on ≤16GB. The 9 sigma values are Lightricks's hand-tuned `DISTILLED_SIGMA_VALUES` from `coderef/ID-LoRA/ID-LoRA-2.3/packages/ltx-pipelines/src/ltx_pipelines/utils/constants.py:13-15` — what their distilled checkpoint was trained to denoise. Pre-2026-04-27 we used `BasicScheduler linear_quadratic 8 1` which approximated this curve parametrically; migration: `scripts/apply_canonical_sigmas.py`. **Don't use `euler_ancestral*`** — Lightricks's own distilled inference uses plain `EulerDiffusionStep` (`coderef/ID-LoRA-2.3/.../diffusion_steps.py`), and the 4-step plateau near σ≈0.99 amplifies ancestral re-noise enough to bleed across our TensorLoop iteration boundaries. Full walkthrough: `docs/reference/sampler_reference.md`.
-- **Illustrated inits drift toward photoreal across iterations** (cross-attention is photoreal-trained). Match init-image style family; or re-anchor via `LTXVAddGuideMulti` per iteration.
-- **LTX2_NAG widgets** `[nag_scale, nag_alpha, nag_tau, inplace]`. KJNodes default `scale=11` is aggressive for distilled — dial to 3-7 if initial render freezes. Always verify schema via `scripts/trace_node_source.py <wf> 508`. Reference: `docs/reference/nag_technical_reference.md`.
-- **Don't copy upstream's 15-step sampling** from `LTX-2.3_T2V_I2V_Single_Stage_Distilled_Full.json`. Authoritative distilled path: 8 fixed sigmas per `coderef/LTX-2/.../distilled.py`.
-- **Resolution div-by-32** (single-stage) or **div-by-64** (two-stage). `scripts/audit_workflows.py` checks.
-- **Audio is FROZEN in our workflow.** Strip music/instrumentation references from schedule prompts; keep diegetic sounds only. Rationale: `docs/analysis/audio_in_prompt_research.md`; case studies in `internal/prompts/` (gitignored).
-- **Dimension config flows from `LTXFramePlanner` (single source of truth).** It snaps `target_width`/`target_height` to div-32, `target_seconds` to `(frames - 1) % 8 == 0`, computes latent volume vs the artifact ceiling, and emits matched `frame_rate` / `window_seconds` / `fps` outputs. All shipped workflows wire it to `EmptyLTXVLatentVideo` (width/height/length), `ImageResizeKJv2` (width/height), `LTXVConditioning` (frame_rate), `AudioLoopController`/`AudioLoopPlanner` (window_seconds, fps), and the subgraph (`video_end_time`). Migration: `scripts/apply_frame_planner_consolidation.py`. Audit: `frame_planner_present` (ERR if missing on production workflows; WARN on experimental forks). The previous manual rule "match `window_size_seconds = length / fps` exactly" is now machine-enforced.
-- **`snap_boundaries=True`** (default) lets `overlap_seconds` change without schedule re-authoring.
+- **Use `In a [shot], [camera]` continuation framing for non-first entries — NOT `Cut to a ...`.** Lightricks's official LTX 2.3 system prompt explicitly trains the model to treat scene-cut language as a discontinuation directive. Convention retracted 2026-04-25. Guide: `docs/guides/prompt_creation_guide.md`. Evidence: `docs/reference/ltx23_prompt_system_prompts.md`.
+- **Node 169 prompt matches schedule 0:00 entry** structurally (`_build_prompt_for_section` via shared `_prepare_sections`; byte-exact).
 - **CLIP must not enter the loop body.** Pre-encode via `TimestampPromptScheduleBatchEncode`; `object_patches` don't survive the offload/reload → silent NAG disengagement iter 2+. Mechanism: `docs/analysis/nag_object_patches_offload_asymmetry.md`.
 - **Loop-body CONDITIONING must carry `frame_rate`** (default 25.0). Batch encoder stamps it; any new CONDITIONING-producing loop-body node must too (via `node_helpers.conditioning_set_values`). Missing → identity drift + hallucinated objects iter-over-iter.
-- **Bake new topology constraints into `scripts/audit_workflows.py`.** Every fix that ships an apply script should ship a matching audit check (ERR status with a `Run scripts/apply_X.py` remediation pointer). Canonical pairs: F2 (`preprocess_symmetry`), F3 (`loop_cropguides_symmetry`), F4 (`alc_seed_legacy_name`), F5 (`iterations_autowired`), F6 (`alc_widget_drift`), F7 (`planner_no_stride_input`), F8 (`frame_planner_present`), F9 (`ltx2_nag_reaches_loop`), F10 (`vae_decode_no_tile` — WARN-level since [2,2,1] is safe fallback for ≤16GB), F11 (`dead_lora_loader_scaffolding_absent` — strips bypassed `#1625/#1626/#1627` LoRA placeholders from canonical), F12 (`iclora_video_reference_guide_in_loop_with_cropguides` + `iclora_loader_present_when_guide_present` + `iclora_ref_video_preprocess_symmetry` — paired with `apply_iclora_video_reference.py` for in-loop video-reference IC-LoRA wiring; mirrors F2/F3 patterns onto the ref-video chain), F13 (`model_sampling_shift` — WARN if `ModelSamplingSD3` PRESENT; the audit semantic flipped 2026-04-30 after Lightricks's distilled.py was confirmed to apply no shift; migration: `apply_strip_sd3_shift_node.py`). Prevents silent regression of fixes a sibling branch might revert.
-- **VAE decode is single-tile `[1,1,1]` on 24GB cards.** Tiled decode pays per-tile prepare/stage overhead (`Model VideoVAE prepared for dynamic VRAM loading.`) that exceeds activation savings on large-VRAM cards. Empirical (832×448×497, 24GB sm89, 2026-04-27): `[2,2,1]` cold = 143s, `[1,1,1]` cold = 47s, `LTXVSpatioTemporalTiledVAEDecode` cold = 61s. Single-tile wins on cold AND warm. Apply: `scripts/apply_no_tile_vae_decode.py` (idempotent + reversible). Audit: `vae_decode_no_tile`. **Revert if on ≤16GB** — single-tile decode of 832×448×497 may OOM there.
-- **A schema rename is not enough — strip leftover widget values too.** When `apply_alc_seed_rename.py` (1f6b830) renamed `seed` → `base_seed` to defuse the `control_after_generate` dropdown trap, it updated `inputs[].name` but did NOT prune the leftover `'randomize'` string at `widgets_values[4]` that the old dropdown had baked in. The frontend stops re-attaching the dropdown (no input named `seed`/`noise_seed` anymore) so nothing rewrites the widget — but ComfyUI's backend still pops widgets positionally from the saved list, and 6 saved values into 5 schema slots shifts `'randomize'` into the `fps` slot, INT-parse fails. Companion strip migration: `scripts/apply_strip_alc_control_after_generate.py`. Audit: `alc_widget_drift`. Diagnosed 2026-04-27.
-- **Don't ship two schema changes that both touch the same iteration-state plane in one session.** The 2026-04-26 `apply_iterations_autowire.py` (`AudioLoopPlanner.total_iterations → TensorLoopOpen.iterations_in`) created a back-edge against the existing `AudioLoopController.stride_seconds → AudioLoopPlanner.stride_seconds` and `TensorLoopOpen.current_iteration → AudioLoopController.current_iteration` edges. ComfyUI's prompt validator rejected the workflow with "Dependency cycle detected" before any node ran. Fix: `AudioLoopPlanner` now derives stride internally via `_compute_loop_geometry` (matching controller), eliminating the controller→planner edge. Migration: `scripts/apply_planner_break_stride_cycle.py`. Audit: `planner_no_stride_input`. Lesson: when adding an auto-wire that closes a control loop, walk every existing edge between the involved nodes and confirm none of them produces a cycle. Diagnosed 2026-04-27.
-- **Authoritative LTX 2.3 prompting evidence**: `docs/reference/ltx23_prompt_system_prompts.md:44, 56, 93` (Lightricks's own i2v + t2v system prompts: "DO NOT describe scene cuts", "Inaccurate descriptions may cause scene cuts"). What retracted our `Cut to` convention 2026-04-25. Check before relitigating any prompt-rule debate.
-- **Never name an INT widget exactly `"seed"` or `"noise_seed"`.** ComfyUI's frontend auto-attaches a `control_after_generate` dropdown to those literal names, which silently mutates the saved widget value across runs even when the input is wired (link supersedes widget at execute time, but the mutated widget still gets serialized — saved JSONs drift across renders despite reproducible runtime seeds). Use `base_seed`, `seed_in`, etc. Guard: `tests/test_node_schemas.py::test_no_seed_or_noise_seed_named_inputs` AST-walks every `io.*.Input(...)` call. Diagnosed 2026-04-26 in `internal/analysis/id_lora_ablation_and_seed_widget_audit.md`.
-- **Iterations auto-track audio length.** `AudioLoopPlanner.total_iterations → TensorLoopOpen.iterations_in` is wired in every shipped workflow (added 2026-04-26 via `scripts/apply_iterations_autowire.py` + an upstream `ComfyUI-NativeLooping_testing` schema patch that made `iterations_in` a wireable optional input). User puts in any audio, loop runs exactly the iterations needed. For short tests, drag in an `INTConstant` and rewire — recipe in `docs/guides/debugging_guide.md`. Audit: `audit_workflows.py::iterations_autowired` (ERR if unwired in shipped workflows).
+- **Illustrated inits drift toward photoreal across iterations** (cross-attention is photoreal-trained). Match init-image style family; or re-anchor via `LTXVAddGuideMulti` per iteration.
+- **LTX2_NAG widgets** `[nag_scale, nag_alpha, nag_tau, inplace]`. KJNodes default `scale=11` is aggressive for distilled — dial to 3-7 if initial render freezes. Reference: `docs/reference/nag_technical_reference.md`.
+
+### Resolution + dimensions
+
+- **Dimension config flows from `LTXFramePlanner` (single source of truth).** All shipped workflows wire its outputs to consumers. See `docs/reference/frame_planner_reference.md` for snap rules, latent-volume ceiling, wiring map, migration. Audit: `frame_planner_present` (F8).
+- **Resolution div-by-32** (single-stage) or **div-by-64** (two-stage). `scripts/audit_workflows.py` checks.
+- **`snap_boundaries=True`** (default) lets `overlap_seconds` change without schedule re-authoring.
+- **Iterations auto-track audio length.** `AudioLoopPlanner.total_iterations → TensorLoopOpen.iterations_in` is wired in every shipped workflow. For short tests, drag in an `INTConstant` and rewire — recipe in `docs/guides/debugging_guide.md`. Audit: `iterations_autowired` (F5).
+
+### Workflow JSON discipline
+
+- **Always use `WorkflowEditor`** (`scripts/workflow_utils.py`) for JSON edits. Apply-script + audit-pair conventions: see `scripts/CLAUDE.md`.
+- **Never name an INT widget exactly `"seed"` or `"noise_seed"`.** ComfyUI's frontend auto-attaches a `control_after_generate` dropdown to those literal names, which silently mutates the saved widget value across runs even when the input is wired. Use `base_seed`, `seed_in`, etc. Guard: `tests/test_node_schemas.py::test_no_seed_or_noise_seed_named_inputs`.
+- **A schema rename is not enough — strip leftover widget values too.** Example: F4 `seed`→`base_seed` rename also stripped a leftover `'randomize'` that ComfyUI's positional widget pop would otherwise have shifted into the `fps` slot. Companion: `scripts/apply_strip_alc_control_after_generate.py`. Audit: `alc_widget_drift` (F6).
+- **Don't ship two schema changes that touch the same iteration-state plane in one session.** When adding an auto-wire that closes a control loop, walk every existing edge between the involved nodes and confirm none of them produces a cycle. Audit: `planner_no_stride_input` (F7).
+- **Bake new topology constraints into `audit_workflows.py`.** Every fix that ships an apply script ships a matching audit check. F-pair inventory + remediation pointers: `docs/reference/debug_tools.md`.
 
 ## ComfyUI gotchas
 
-- **LTX 2.3 cross-attn passes `mask=None`.** `BasicTransformerBlock.attn2` at `comfy/ldm/lightricks/model.py:482` calls with `attention_mask=None`; sage's `auto_mask_aware` mask-routing thus never fires on current LTX workflows (defensive only). Empirically verified 2026-05-01: 0 masked calls across iclora init + loop iters in sage telemetry.
-- **`nn.Module.__setattr__` auto-registers Module-typed attributes as submodules.** Doing `setattr(wrapper, '_my_sentinel', original_module)` on an `nn.Module` puts `original_module` into `wrapper._modules['_my_sentinel']`, which `state_dict()` then walks. If wrapper already has `original_module` as another child (e.g. `_orig_mod` on `OptimizedModule`), `state_dict()` recurses on the same tensor twice — and on `OptimizedModule` specifically this hit Python's recursion limit (~975 levels) before aborting. Caused `RecursionError` against `LTXICLoRALoaderModelOnly.load_lora_for_models()` 2026-05-01. **Don't store sentinels via setattr on Module wrappers.** Use the official wrapper API (`OptimizedModule._orig_mod`) or stash in a non-Module dict.
-- **`CallbacksMP.ON_CLEANUP` fires after EVERY model invocation, not at model-unload.** So it's safe for per-call state RESET (easycache stat counters), but DESTROYS per-load state (compile caches, residency tunes). Diagnosed 2026-05-01 when `LTXVideoRegionalCompile`'s ON_CLEANUP-registered cleanup trashed the torch.compile cache between samplers, paying cold-compile per sampler (+6% slower than baseline). For state that should persist across invocations within the same loaded model: don't register cleanup; let the model's natural lifecycle handle it.
-- **Nodes that call `model.state_dict()` constrain model-mutation order.** `LTXICLoRALoaderModelOnly` walks the diffusion model's state_dict during execute (to map LoRA keys onto model parameters). Any node that wraps `transformer_blocks[i].ff` (or other module surfaces) with a wrapper that changes the state_dict key namespace MUST come AFTER the state_dict-walker, or the walker sees prefixed/different keys and fails to match. Canonical order for compile-style patches: `UNETLoader → ... → LTXICLoRALoaderModelOnly → <module-mutating node> → SetNode "model"`.
-- **`WARNING: type NoneType doesn't define __round__ method`** in console at "got prompt" time is benign third-party noise — `round(None)` from a Float widget's optional input that wasn't wired, caught + logged as warning by ComfyUI's input-coercion path. Present in every render this session including all successful ones. **Don't investigate.**
-- Workflow JSON has two link representations: node-body `"link"` fields AND top-level `"links"` array. Both must sync.
-- Link array: `[link_id, src, src_slot, tgt, tgt_slot, type]`.
-- **Workflow JSON references inputs by NAME, not slot index.** Each node's `inputs[]` entry stores `{"name": ..., "type": ..., "widget": {"name": ...}, "link": ...}`; ComfyUI matches the saved name to the schema's input list when reattaching wires. So a bare schema rename (e.g. `"seed"` → `"base_seed"`) without a paired migration script that rewrites `inputs[].name` and `widget.name` in every saved JSON will dangle every existing wire on the renamed input. Canonical migration: `scripts/apply_alc_seed_rename.py`.
-- `"mode": 0` = active, `"mode": 4` = bypassed. **Bypass passes inputs to outputs of same TYPE only**; inputs with no matching-type output dead-end silently. E.g., bypassing `LTXAddVideoICLoRAGuide` leaves its `image` input unconsumed. Verify truly-inert bypass by swapping the upstream input and byte-diffing outputs (`md5sum` on sampled frames, `wave` on decoded audio).
-- **`workflow_utils.is_active(node)`** is the canonical bypass check (`mode != 4`). Use it instead of inline `node.get("mode", 0) != 4` — 5 call sites across `audit_workflows.py`, `apply_no_tile_vae_decode.py`, `apply_melband_default_off.py`. The bare integer obscures that `4` means bypass.
-- **Dead-node detection requires live-consumer check, not link-count check.** A node with output links can still be runtime-dead if every consumer is `mode=4` (bypassed). Pattern: walk consumer ids, return True only if at least one consumer satisfies `is_active`. Inline `any(o.get("links") for o in n.get("outputs"))` misses bypassed-consumer chains (e.g. `#1318 → bypassed-#560` was effectively dead despite having a link). See `apply_no_tile_vae_decode.py::_has_live_consumer`.
-- **ComfyUI exposes the active prompt's id via `comfy_execution.utils.get_executing_context().prompt_id`** (a contextvar, not `transformer_options`). For per-prompt telemetry / routing, lazy-import in the call path (try/except ImportError so non-ComfyUI test environments don't break). Pattern at `nodes_sage.py:541-559`.
+- **LTX 2.3 cross-attn passes `mask=None`.** `BasicTransformerBlock.attn2` calls with `attention_mask=None`; sage's `auto_mask_aware` mask-routing is defensive only on current LTX workflows.
+- **`nn.Module.__setattr__` auto-registers Module-typed attributes as submodules.** Don't store sentinels via setattr on Module wrappers — `state_dict()` recurses on the same tensor twice. Use the official wrapper API or stash in a non-Module dict.
+- **`CallbacksMP.ON_CLEANUP` fires after EVERY model invocation, not at model-unload.** Safe for per-call state RESET, destroys per-load state (compile caches, residency tunes).
+- **Nodes that call `model.state_dict()` constrain model-mutation order.** Canonical order for compile-style patches: `UNETLoader → ... → LTXICLoRALoaderModelOnly → <module-mutating node> → SetNode "model"`.
+- **Workflow JSON has two link representations:** node-body `"link"` fields AND top-level `"links"` array. Both must sync. Link array: `[link_id, src, src_slot, tgt, tgt_slot, type]`.
+- **Workflow JSON references inputs by NAME, not slot index.** A bare schema rename without a paired migration script that rewrites `inputs[].name` and `widget.name` will dangle every existing wire.
+- `"mode": 0` = active, `"mode": 4` = bypassed. Bypass passes inputs to outputs of same TYPE only; non-matching inputs dead-end silently. Use `workflow_utils.is_active(node)` (canonical bypass check). Dead-node detection requires live-consumer check, not link-count check.
+- **ComfyUI exposes the active prompt's id via `comfy_execution.utils.get_executing_context().prompt_id`** (a contextvar, not `transformer_options`). Lazy-import in the call path. Pattern at `nodes_sage.py:541-559`.
 - `PrimitiveNode` can't feed `DynamicCombo` sub-inputs — set on the widget directly.
 - `TensorLoopClose` checks `should_stop` AFTER the body; handle edge inputs.
-- **Subgraph schema changes force a UI re-add** (slot indices baked at save time). Same for any `define_schema()` change.
-- Removing a subgraph input shifts higher slot indices — decrement `origin_slot` refs.
+- **Subgraph schema changes force a UI re-add** (slot indices baked at save time). Removing a subgraph input shifts higher slot indices.
 - ComfyUI evaluates downstream conditioning before upstream sampling → extra nodes in conditioning path can corrupt initial render.
-- **`CLIPTextEncode(169) → ConditioningZeroOut(420) → LTXVConditioning(164).negative → CFGGuider(153).negative` chain is wired-correctly but runtime-inert at `CFG=1`** (sampler computes `eps = eps_positive` only). Don't try to remove it — `CFGGuider` validates both `positive` and `negative` input slots; removing 169 or 420 unwires CFGGuider and breaks the workflow.
+- **`CLIPTextEncode(169) → ConditioningZeroOut(420) → LTXVConditioning(164).negative → CFGGuider(153).negative` chain is wired-correctly but runtime-inert at `CFG=1`.** Don't try to remove it — `CFGGuider` validates both slots.
 - `torchaudio.detect_pitch_frequency` on silence → false positives. Gate with RMS > 0.005.
 - `LTXVPreprocess img_compression=0` SKIPS preprocessing (frozen first frames). Use 18 (Lightricks) or 35 (core).
-- Pyright `reportIncompatibleMethodOverride` on `execute()` is a false positive.
-- **`LTXVConcatAVLatent` isn't buggy.** `output.update(video); output.update(audio)` gets overwritten by a proper `NestedTensor` assignment on the next line. Don't chase.
+- **`LTXVConcatAVLatent` isn't buggy.** Two `output.update(...)` lines are dead writes; the `NestedTensor` assignment that follows is load-bearing. Don't chase. Full investigation: `internal/postmortem_concat_av_latent_investigation.md`.
 - Validate after edits: `python3 -c "import json; json.load(open('file.json'))"`.
-- **`Path.glob()` returns `[]` cleanly on a missing directory.** Drop the `if not source_dir.is_dir(): return False` pre-check before `source_dir.glob(...)` — the empty-result guard a few lines down already covers both "dir absent" and "dir present, no match." TOCTOU + extra stat for nothing. Caught 2026-04-26 in `harness.py::_locate_and_link_output_mp4`.
-- **New node modules** that need `comfy_api` / `comfy.patcher_extension` imports define inline `_Passthrough` / `_IOStub` / `override` fallbacks under a `try: from comfy_api.latest import io / except ImportError:` block. See `nodes_sage.py` and `nodes_easycache.py`. Two consumers is the minimum threshold for extracting to a shared helper; factor out only if a third node needs the same stubs.
-- **LTX denoiser-level wrapping** uses `model.add_wrapper_with_key(WrappersMP.DIFFUSION_MODEL, key, fn)`. Supported wrapper API; not a monkey patch. Reference: `nodes_easycache.py`. Cleaner than patching `BasicTransformerBlock.forward` directly.
-- **Always `git status --short` before `git commit`**. Pre-staged files (privacy_guard hook, linter mutations, half-finished prior work) get swept into your commit otherwise; the commit title then misrepresents the content.
-- Scrub workflows before open-sourcing: filenames, paths, UUIDs, previews, creative prompts.
-- **TensorLoop framework-cache invalidation is transitive.** Any node downstream of `current_iteration` re-executes per iter. Memoize via `id()`-keyed LRU + `IS_CHANGED` (see `TimestampPromptScheduleBatchEncode`). Module-level caches (`_BATCH_ENCODE_CACHE`, `_COND_CACHE`) die on ComfyUI restart — they're plain dicts, no persistence.
-- **LTX has no image VAE encode node.** Decode variants exist (`LTXVTiledVAEDecode`, `LTXVSpatioTemporalTiledVAEDecode`); audio has `LTXVAudioVAEEncode`. For image→latent, use core `VAEEncode` — even Lightricks' reference workflows do.
-- **KJNodes ships `GetImageRangeFromBatch` (batch slicer: `start_index`, `num_frames`, `images` → IMAGE) and `SimpleCalculatorKJ` (expression-string math, Int/Float/Bool outputs).** Compose these before building custom slicer or math nodes — `apply_iclora_video_reference.py` uses `GetImageRangeFromBatch` inside the loop subgraph for IC-LoRA reference window selection. Grep `ComfyUI-KJNodes/__init__.py` registry before designing new utility nodes.
+- **TensorLoop framework-cache invalidation is transitive.** Any node downstream of `current_iteration` re-executes per iter. Memoize via `id()`-keyed LRU + `IS_CHANGED`.
+- **LTX has no image VAE encode node.** For image→latent, use core `VAEEncode`.
+- **KJNodes ships `GetImageRangeFromBatch` and `SimpleCalculatorKJ`.** Compose these before building custom slicer or math nodes. Grep `ComfyUI-KJNodes/__init__.py` registry before designing new utility nodes.
+- **No `.py` edits to ANY file in this package while a render is in flight.** ComfyUI-HotReloadHack reloads the entire package on any `.py` change, invalidating Inductor autotune state. CPU-only edits to docs / scripts / `internal/scratch/*.json` / non-package files are safe.
+- **Always `git status --short` before `git commit`.** Pre-staged files get swept into your commit otherwise. Scrub workflows before open-sourcing.
 
-## Init image conditioning path
+## Init image conditioning + IC-LoRA paths
 
 - **Initial render**: `#531 LTXVImgToVideoInplaceKJ` writes encoded init into frame 0; `noise_mask=0` locks it.
-- **Loop iterations**: top-level `VAEEncode → subgraph slot 8 (guide_latent) → #1519 LTXVAddLatentGuide` with `latent_idx=-1` (conditioning on the frame BEFORE the window). Init encoded ONCE.
-- **F2 — Preprocess symmetry (MANDATORY)**: both paths consume `#446 LTXVPreprocess(img_compression=18)` output. Wiring: `#445 ImageResizeKJv2 → #446 → { #531 (initial), #650 Set_input_image (loop guide) }`. Skipping `#446` on the loop branch is the photoreal-drift footgun — cross-attention reasserts its "singing woman with microphone" prior iter-over-iter. Apply: `scripts/apply_loop_guide_preprocess_symmetry.py`. Audit: `audit_workflows.py::preprocess_symmetry`.
-- **F3 — Cropguides symmetry (MANDATORY)**: loop `#644 CFGGuider` positive/negative CONDITIONING must come from `#655 LTXVCropGuides`, NOT `#1519 LTXVAddLatentGuide` directly — mirrors initial path's `#164 → #381 → #153`. Bypassing `#655` leaves guide-keyframe metadata to accumulate iter-over-iter, producing subtle identity drift even after F2 is fixed. Apply: `scripts/apply_loop_cropguides_symmetry.py`. Audit: `audit_workflows.py::loop_cropguides_symmetry`. Recipes for both in `docs/guides/debugging_guide.md`.
-- Full trace: `docs/reference/pipeline_flow_latent.md`.
-
-## Video-reference IC-LoRA path (F12)
-
-- **Companion to F2/F3**, not a replacement. Adds an IC-LoRA guide (cameraman, outpaint, union-control, etc.) **inside the subgraph**, downstream of `#1519 LTXVAddLatentGuide` and upstream of the F3 cropguides chain. Every iteration sees the IC-LoRA effect; sidesteps the Phase-0a MODEL-fork question (no iters with patched MODEL but no attached guide).
-- **Topology**: top-level `VHS_LoadVideo → ImageResizeKJv2 → LTXVPreprocess(val=18) → SetNode "ref-video-frames" → subgraph IMAGE input slot`; subgraph `[reference_video] → GetImageRangeFromBatch (KJNodes) → LTXAddVideoICLoRAGuide.image`. Guide CONDITIONING outputs flow through the existing F3 cropguides chain.
-- **F2 ref-video symmetry**: ref-video chain MUST include `LTXVPreprocess(val=18)` — same val as init image. Without it, ref-video frames hit different edge statistics than init image → cross-attention drift across iters. Audit: `iclora_ref_video_preprocess_symmetry`.
-- **F3 ref-video symmetry**: guide CONDITIONING outputs MUST reach `CFGGuider` via `LTXVCropGuides[NoLatent]`. Audit: `iclora_video_reference_guide_in_loop_with_cropguides`.
-- **`--ref-mode {static,sliding}` flag on the apply script.** Sliding splices a `SimpleCalculatorKJ` in the subgraph computing `round(video_start_time * ref_fps)` and rewires `GetImageRangeFromBatch.start_index` from widget to a wired INT. `--ref-fps` (default 25) is the single source of truth — baked into BOTH `VHS_LoadVideo.force_rate` AND the calculator expression. To switch modes after applying, `--revert` then re-apply.
-- **Use upstream `LTXAddVideoICLoRAGuide` unchanged** — per-iter VAE encode of the sliced ref-video (~25 frames at output resolution) is acceptable until profiling shows otherwise. Don't fork.
-- **`iclora.py` constraint**: `frame_idx` must be 0 (single-frame special case) or 1 mod 8 — otherwise rounded down. Default: 1.
-- **`GetImageRangeFromBatch` (KJNodes)** = `(start_index, num_frames, images) → IMAGE`. Used inside the loop subgraph for IC-LoRA reference-window selection.
-- **`SimpleCalculatorKJ` JSON shape**: 5 inputs (`a`, `b`, `expression`, `variables.a`, `variables.b`) with hand-rolled `localized_name`/`shape`/`type` fields per upstream KJNodes layout. **Bake constants into the expression string** (`f"round(a * {n})"`) instead of using the `variables.b` autogrow widget — simpler + self-documenting. Reference: `_splice_sliding_calculator` in `apply_iclora_video_reference.py`.
-- Apply: `scripts/apply_iclora_video_reference.py`. Pre-flight refuses if Step 0 (`apply_strip_dead_lora_loaders.py`) hasn't run. Decisions: `internal/ic_lora_assessment.md` D19–D23. Reference workflow that inspired the pattern: `internal/ref_workflows/ltx2.3-ic-lora-cameraman.json` (single-pass, not looped).
-
-## Subgraph editing
-
-- ALWAYS use `WorkflowEditor`. Top-level helpers: `find_node`, `has_node`, `require_nodes`, `find_link_to_slot(tgt, slot)`, `add_link`, `remove_link`, `rewire_input(tgt, slot, new_src, new_src_slot, dtype)`, `find_links_to/from`. Subgraph: `find_subgraph_invoker`, `find_subgraph_node`, `find_subgraph_link`, `find_subgraph_link_to_slot(tgt, slot)`, `add_subgraph_link`, `remove_subgraph_link`, `rewire_subgraph_input` (mirrors top-level rewire). `find_input_slot` works on both. **Don't hand-roll link lookups or rewires** — `find_link_to_slot` replaces the `next(lk for lk in ed.wf["links"] if lk[0] == link_id)` pattern; `rewire_input` / `rewire_subgraph_input` replace the `remove_link` + `add_link` splice.
-- **Scaffold new apply scripts from `scripts/templates/`**. Two templates (`apply_script_all_workflows.py` for in-place edits, `apply_script_staged_variant.py` for experimental staging). Both include the canonical `--revert`, `--dry-run`, idempotence, and `require_nodes` guards. HyDE pattern: `apply_X.py --dry-run | audit_workflows.py` verifies a hypothetical state before committing to it.
-- **`remove_link` rebinds the target list** via filter — locals holding `ed.wf["links"]` go stale. Use editor methods or re-fetch.
-- Top-level links are array `[id, src, src_slot, tgt, tgt_slot, type]`; subgraph internal links are dict `{id, origin_id, origin_slot, target_id, target_slot, type}`. Subgraph def at `wf['definitions']['subgraphs'][0]`.
-- Distributor `-10` / output collector `-20` are virtual — not in `sg["nodes"]`. Their slot indices map 1-to-1 with `sg["inputs"]` / `sg["outputs"]` order — useful when rewiring `CFGGuider` slots to/from the subgraph boundary (e.g. TTC1 init-guide POC: `CFGGuider.negative <- (-10, slot 6)` = "positive" raw, before `LTXVAddLatentGuide`).
-- Output slots use `"links"` (plural list); subgraph boundary entries use `"linkIds"`. Don't conflate.
-- DynamicCombo widgets: `[num, strength_1..N, index_1..N]` — strengths FIRST, not interleaved.
-- **Apply-script pre-flight chaining**: when one migration logically depends on another, the dependent script's pre-flight should detect the pre-requisite's signature and refuse with an actionable message ("Run scripts/apply_X.py first"). Reference: `apply_iclora_video_reference.py` refuses if `#1625/#1626/#1627` are still present (Step 0 strip unrun).
-- **`scripts/_apply_helpers.py` is for RAW-orjson fork-and-strip scripts only** (debug-tool stability when `WorkflowEditor` itself is suspect) — NOT a general utility module. Apply scripts that use `WorkflowEditor` (the canonical path) don't import from it. Confirm by reading its docstring before extracting helpers there.
-
-## Testing
-
-```bash
-uv run --group dev --group analysis python -m pytest tests/ -v --rootdir=.
-```
-
-Add `--group experiments` if running the autoresearch contract tests
-locally (`tests/test_autoresearch.py`); they gracefully skip without it
-on fresh public clones that don't have duckdb installed.
-
-- CI runs on push/PR to main (`.github/workflows/ci.yml`): pytest + `scripts/audit_workflows.py` + docs-consistency tests.
-- `__init__.py` guards ComfyUI imports for pytest; `nodes.py` has `_IOStub`/`_Passthrough` fallback.
-- `tests/conftest.py` adds `scripts/` + `tests/` to `sys.path`. Shared fakes: `tests/_fakes.py` (`FakeModelPatcher`, `FakeModelWithCallbacks`). Root `./conftest.py` has `collect_ignore` — shadows `tests/conftest.py` for `from conftest import X`.
-- **Memoization fixes need REPEATED-call tests.** Single-call tests can't detect framework-cache-invalidation. Canonical shape: `tests/test_batch_encode.py::TestBatchEncoderCaching`.
-- **Schema invariant tests need AST parsing, not runtime introspection.** When ComfyUI isn't loaded (pytest), `define_schema()` returns `_Passthrough` stubs and `schema.inputs` isn't iterable. Walk `io.*.Input(...)` calls via `ast` instead. Canonical: `tests/test_node_schemas.py::test_no_seed_or_noise_seed_named_inputs`.
-- **`id()`-keyed caches need autouse clear-fixtures.** `FakeCLIP` gets GC'd rapidly; Python address recycling produces ghost hits. Production cache keys now include `type(clip).__name__` as cheap cross-class insurance; test fixtures still required.
-- **`_LLM_SYSTEM_PROMPT` rewrites need test-invariant check first.** 8 tests in `tests/test_audio_features.py::TestFormatJsonReport::test_llm_system_prompt_*` assert specific load-bearing substrings: `is singing` / `are singing together`, `verbatim`/`identical`/`exactly`, all 6 tier names, `montage` + `emotional`, `dolly out`, `present progressive`, `frozen`, `init image` + `do not re-describe`, style-family examples (`comic` / `graphic-novel` / `animated` / `live-action`). Read these before rewriting the system prompt — a substring you remove silently breaks the test.
-- **Degenerate-input metric branches need a distinct status, not sentinel "ok" values.** When an extractor handles a degenerate case (e.g. n=1 frame in `subject_consistency` → no comparisons possible → all sims trivially 1.0), returning `status: "ok"` with sentinel numbers pollutes downstream `WHERE status = 'ok'` aggregations — a degenerate render scores identically to a perfect one. Add a distinct `Literal` status (e.g. `single_frame`) so queries can exclude. Caught 2026-04-26 in `subject_consistency.py` simplify pass; same shape as the `trace_empty` / `trace_missing` / `decode_failed` distinctions that already exist in `sage_summary.py`.
-- **Apply-script tests that need pre-migration state**: have the fixture `shutil.copy2(CANONICAL, dst)` then invoke the apply script's own `--revert` to restore. Keeps fixture state in lockstep with the script's own understanding of "before"; avoids a separate fixture-baseline file that drifts when the canonical changes. Reference: `tests/test_apply_strip_dead_lora_loaders.py::canonical_copy`.
-
-## Dependencies
-
-- **Runtime nodes** (`nodes*.py`): torchaudio only. All outputs FLOAT or INT.
-- **Offline scripts** (`scripts/`): `analysis` optional group (librosa, scipy, Pillow).
-- **Experiment runner** (`internal/autoresearch/`): `experiments` optional group (`duckdb`, `httpx`).
-- **Phase 2.1 perceptual metrics** (`internal/autoresearch/metrics/`): `metrics` optional group (`torchvision`, `transformers>=4.46`, `opencv-python-headless`, `numpy`, `scipy`). Each metric module gates its heavy imports under try/except so the module loads cleanly on a public clone without the group; missing-deps path returns `*_status: "model_unavailable"`. Active metrics: `wall_time` (placeholder), `sage_summary`, `subject_consistency` (DINOv3, gated on HF), `av_consistency` (PE-AV-16-frame, Apache-2.0). Originally-planned `lip_sync` (AV-HuBERT) + `seam_continuity` (STREAM) subsumed by `av_consistency`. Reference codebases under `coderef/` (read-only): `dinov3/`, `perception_models/`, `sam-audio/`.
-
-Companion custom nodes (used alongside, not imported):
-- `<sage_fork_repo>/` — our SageAttention fork. Cross-repo state: `internal/design/sage_backlog.md`.
-- `ComfyUI-NativeLooping_testing` (TensorLoopOpen/Close), `ComfyUI-LTXVideo`, `ComfyUI-KJNodes`, `ComfyUI-VideoHelperSuite`, `ComfyUI-MelBandRoFormer` (bypassed by default in shipped workflows; re-enable via two-step manual edit per `scripts/apply_melband_default_off.py`).
-
-## Audio analysis scripts
-
-- `scripts/analyze_audio.py` — ffmpeg-only energy/structure detection, zero Python deps.
-- `scripts/analyze_audio_features.py` — librosa: BPM, key, F0, structure, JSON export for LLM (`--scene-diversity`, `--montage`, `--style`). Full guide: `docs/guides/audio_analysis_guide.md`; end-to-end: `docs/guides/prompt_workflow_end_to_end.md`. **Works on generated audio too**: extract via `ffmpeg -i <mp4> -vn -acodec pcm_s16le <wav>` then analyze — primary tool for comparing source vs. generated audio features.
-- `scripts/spectrogram_to_reference.py` — Mel spectrogram → PNG frame sequence for IC-LoRA spectrogram-as-reference (Phase 2.0 PoC). **Global normalization runs ONCE in `prepare_mel_for_render`** (do NOT switch to per-frame — washes out beat-amplitude). **Dual-use**: primary use is reference rendering; diagnostic use is visualizing generated audio via `--audio <wav>` (Claude can't hear mp4 streams; spectrograms of the output make audio behavior reviewable). Supports `--colormap {gray,viridis,spectrum}`; B&W triggers vintage-broadcast audio priors in LTX 2.3 — use color for V2A experiments. Design + iteration ladder: `internal/design/spectrogram_reference_design.md`.
-
-## Debug & migration tooling
-
-Full reference: **`docs/reference/debug_tools.md`** — inspection scripts (`audit_workflows.py`, `analyze_workflow_dag.py`, `trace_node_source.py`, sage telemetry), apply-script conventions (three-tier staging, idempotence, scratch-build pattern, `_apply_helpers.py`), runtime telemetry paths, RUN_ID artifact correlation, and the **canonical first-pass when a workflow won't run** (tail comfyui log → audit → DAG → trace node → exec log). Symptom-first quality troubleshooting: `docs/guides/debugging_guide.md`. Or invoke `/diagnose-workflow` for the canonical first-pass as a single command.
-
-- **`scripts/audit_workflows.py [path...]`** — default sweeps `example_workflows/` (+ audited subset of `experimental/`); pass paths to audit a staged scratch file or any other JSON. Use this when validating an apply-script-produced file in `internal/scratch/`.
-
-Two non-negotiable rules from that reference:
-- **Bake new topology constraints into `audit_workflows.py`.** Every apply script ships a matching audit check (ERR + remediation pointer). Canonical pairs list: see "Critical constraints" above. Plus three generic invariants (`graph_acyclic`, `widget_shape`, `link_integrity`) and one AST test (`tests/test_node_schemas.py::test_keyframe_idxs_cleared_to_none_not_empty_list`) that catch CLASSES of drift without per-bug rules.
-- **Iter-over-iter drift** → trace CONDITIONING paths in parallel (initial vs loop). Asymmetries (missing `LTXVConditioning`, `frame_rate` mismatch, CLIP in subgraph) are load-bearing bugs.
+- **Loop iterations**: top-level `VAEEncode → subgraph slot 8 → #1519 LTXVAddLatentGuide latent_idx=-1`. Init encoded ONCE.
+- **F2 + F3 are MANDATORY symmetry rules** for the init-image path: both initial and loop branches consume the SAME `LTXVPreprocess(img_compression=18)` output (F2); loop CFGGuider positive/negative come from `LTXVCropGuides`, not `LTXVAddLatentGuide` directly (F3). Skipping either is the photoreal-drift / identity-drift footgun. Apply: `scripts/apply_loop_guide_preprocess_symmetry.py` + `scripts/apply_loop_cropguides_symmetry.py`. Full trace: `docs/reference/pipeline_flow_latent.md`.
+- **F12 video-reference IC-LoRA**: companion to F2/F3, adds an IC-LoRA guide inside the subgraph between `#1519` and the F3 cropguides chain. F2 + F3 ref-video symmetry rules apply to the ref-video chain too. Apply + decisions + flag reference: `scripts/apply_iclora_video_reference.py` + `internal/ic_lora_assessment.md` D19–D23.
 
 ## Working with Claude across sessions
 
-- **GPU contention check before any bench/render.** `mtime` of `data/runs/*/sage.jsonl` within last few minutes ⇒ a sibling-repo render is likely active. Ask before starting GPU work. Same rule applies to sage-fork claude on their side. Established 2026-05-01 after a measurable contamination incident (sage's bench overlapped our chrome-trace capture window). Note: under per-prompt routing (default since 2026-05-01), check `data/runs/*/*/sage.jsonl` glob instead.
-- **`AUDIOLOOPHELPER_PER_PROMPT=1` is the default in `start_experiment.sh`** (since 2026-05-01). Artifacts route under `data/runs/${RUN_ID}/${prompt_id}/` rather than flat. All reader scripts auto-detect both layouts (flat checked first, then per-prompt fallback). Enables warm-cache benches without ComfyUI restart.
-- **`start_experiment.sh` auto-cleans prior `trace.json` files at startup** (~1.8GB each). Keeps `summary.txt` + `memory_timeline.html`. Use perfetto.dev only when you need kernel-level detail.
-- **No `.py` edits to ANY file in this package while a render is in flight.** ComfyUI-HotReloadHack reloads the entire `ComfyUI-AudioLoopHelper` package on any `.py` change, even if the in-flight workflow doesn't import the edited file. Each reload invalidates Inductor autotune state and adds a brief CPU stall per sampler iteration. Symptom in console: `[ComfyUI-HotReloadHack] Reloaded module ComfyUI-AudioLoopHelper`. CPU-only edits to docs / scripts / `internal/scratch/*.json` / non-package files are safe. Established 2026-05-01 after `ab_chunk_only` bench contamination from a mid-render `nodes.py` edit (registering a new node).
-- **Sage v0.5.x is NOT torch.compileable end-to-end on torch 2.11.** Pybind kernels (`transpose_pad_permute_cuda`, `scale_fuse_quant_cuda`) aren't `torch.library.custom_op`-registered → Dynamo graph-breaks at every sage call AND output drifts past rtol budget (0.0276 > 0.01 on `default` and `reduce-overhead` modes per 2026-05-01 spike). Path 2 (torch.compile) is dead until sage registers kernels. Re-test: `coderef/sage-fork/tests/spike_torch_compile.py` (~30s). Path 1 (CUDA graphs) is the consumer-side route forward.
-- **Iclora workflow's launch-overhead dominance (durable).** Clean chrome trace 2026-05-01 (n=6, contention-free): 42% of GPU time is `cudaLaunchKernel + cudaLaunchKernelExC + sync`, 27% matmul (fp8), only 11% attention, 8% memcpy. Sage perf work is on a hard ceiling for this workflow (1.22× e2e fully accounted for). Further wall-time wins live in launch-rate reduction, not kernel tuning.
-- **NAG empirical cost on iclora ≈ 5% of wall (~12s on 560s).** Adds 1 attention call per LTX block per step (48 extra calls/step × 8 steps × 6 samplers = 2304 extra calls), NOT a forward-pass doubler as we initially assumed. Bypassing NAG (`#508 LTX2_NAG mode=4`) measured -4.7% sampler / -4.3% wall on `ab_chunk_off_nag_off` 2026-05-01 vs `bench_profile2`. Implication: FasterCache-port for NAG is not worth the 4-6 hr investment — too small a target. Keep NAG enabled for output-quality reasons; the 5% cost earns its space.
-- **Regional torch.compile per-block FFN (sage attention excluded) is the canonical Diffusers pattern** for diffusion DiTs. Compile `transformer_blocks[i].ff` only — sage's pybind kernels graph-break Inductor (N5 spike rtol drift), but `BasicTransformerBlock`'s FFN is static-shape and compile-friendly. Ref: `pytorch.org/blog/torch-compile-and-diffusers-a-hands-on-guide-to-peak-performance/`. Implementation: `nodes_regional_compile.py::LTXVideoRegionalCompile`. Splice AFTER `LTXICLoRALoaderModelOnly` (state_dict ordering — see ComfyUI gotchas).
-- **Check sibling-session backlogs (`internal/design/*_backlog.md`) before executing stale PLAN items** that touch defaults. Stale items can silently regress decisions another session has since made.
+- **GPU contention check before any bench/render.** `mtime` of `data/runs/*/*/sage.jsonl` (per-prompt routing) within last few minutes ⇒ a sibling-repo render is likely active. Ask before starting GPU work.
+- **`AUDIOLOOPHELPER_PER_PROMPT=1` is default in `start_experiment.sh`** (since 2026-05-01). Artifacts route under `data/runs/${RUN_ID}/${prompt_id}/`. Reader scripts auto-detect both layouts.
 - **Run `/simplify` after non-trivial code changes.** Three-agent review (reuse / quality / efficiency) catches data-flow correctness bugs that shape-only tests miss.
-- **Verify a new model via its paper, not its name.** SAM-Audio reads as "audio-conditioned visual segmentation" but is actually audio source separation (arxiv:2512.18099). Run `paper_search` or fetch the README before designing a metric/feature around it. Cost ~30s; saves an entire session of building against the wrong assumption. Caught 2026-04-26 during Phase 2.1 SAM-Audio evaluation.
-- **Promote helpers at the 3rd call site, not the 2nd.** Reviewer consensus across multiple `/simplify` passes. Prevents premature extraction: two sites can share a short inline pattern without paying the abstraction cost; by the third, the pattern is load-bearing and the name-plus-tests earn their keep.
+- **Verify a new model via its paper, not its name.** Run `paper_search` / fetch README before designing around assumptions. Cost ~30s; saves entire sessions.
+- **Promote helpers at the 3rd call site, not the 2nd.** Two sites can share inline; the third earns the abstraction.
 - **`PLAN.md` (or feature design doc) is the spec.** When red TDD tests disagree with the spec formula, fix the test — the spec wins unless you explicitly update PLAN first.
-- **Decisions-index pattern**: DECISION / WHY / CONTEXT triples, grouped by feature. Template at `internal/ic_lora_assessment.md §6.5`. Roll up any feature >3 commits to avoid re-deriving rationale from git log.
-- **LTX 2.3 audio-feature seed variance is ~±20 BPM** for equivalent electronic-genre conditioning. Single-seed comparisons between configs are noise; multi-seed (3-5 per config) needed to detect audio-effect changes. Ref: `docs/experiments/exp_2026-04-24_spectrogram_iclora_v2a.md` §Inferences.
-- **Record the prior in writing BEFORE the measurement.** Even a rough Amdahl derivation ("attention is ~30% of step time × 2.62× kernel speedup ≈ 1.24× gen speedup") commits a prediction the result can grade against. "Did the prior hold?" is more useful than "what was the number?" when the measurement lands. Canonical: bilateral pre-bench briefs at `internal/brief_for_*.md` (gitignored).
-- **Measure the boundary you actually patch, not the boundary your model predicts.** Sage's per-call timing exposes the attention row (8.2% of wall on production audio-loop), but sage's int8 amortization reaches into FFN-adjacent sampler work too — empirical e2e is **1.22×**, +17 points above the strict-attention Amdahl prediction (~1.05×). Both priors (sage-claude's 1.05-1.10×, mine 1.05-1.10× revised) were wrong same direction; we anchored on attention-fraction × kernel-speedup without measuring the sampler-fraction empirically first. Lesson: when an optimization patches a chunk of an inner loop, measure the inner loop's wall time, not just the patched call's elapsed time. Caught 2026-04-27 post-bench. Canonical e2e number lives in sage-fork `CHANGELOG.md` v0.5.1 + `VISION.md` item-3 status.
-- **Sage e2e is shape-invariant relative to VAE-decode choice.** Sage doesn't patch VAE. When testing alternate VAE decoders (`LTXVTiledVAEDecode` vs `LTXVSpatioTemporalTiledVAEDecode` vs single-tile), the per-arm wall-time ratio in sage-fork's bench is confounded by VAE cold-start; only the per-node `exec.jsonl` aggregate of the decoder row is the load-bearing read. Don't chase a sage_off/sage_on wall ratio change across decoder variants — that's measuring decoder, not sage.
-- **Project-level `settings.json` hook config is loaded once at session start** — deleting a hook script mid-session leaves the cached config trying to run a now-missing file, blocking every Write/Edit until session restart. Workaround: use Bash (not Write/Edit) to make any post-deletion edits; `/reload-plugins` doesn't clear the cached project settings, only marketplace plugin contents. Caught 2026-04-30 during the home-grown-`privacy_guard.py` retirement.
-- **Marketplace plugin cache lags behind merged plugin changes**, even after `/reload-plugins`. The plugin's `install-git-hooks.sh` bakes the script path into the wrapper at install time; that path points at the cached version (`<HOME>/.claude/plugins/cache/<marketplace>/<plugin>/<version>/...`) which won't change until the cache refreshes. To pick up freshly-merged plugin changes immediately, re-run `install-git-hooks.sh` from a workspace clone of the plugin repo — the wrapper then points at the workspace source, no cache dance needed. Tradeoff: workspace deletion breaks the hook. Caught 2026-04-30 when the path-privacy 0.1.4 false-positive fix was blocked by a 0.1.1-cache hook.
+- **Decisions-index pattern**: DECISION / WHY / CONTEXT triples, grouped by feature. Template at `internal/ic_lora_assessment.md`. Roll up any feature >3 commits.
+- **LTX 2.3 audio-feature seed variance is ~±20 BPM** for equivalent electronic-genre conditioning. Single-seed comparisons are noise; multi-seed (3-5 per config) needed.
+- **Record the prior in writing BEFORE the measurement.** A rough Amdahl derivation commits a prediction the result can grade against. "Did the prior hold?" is more useful than "what was the number?"
+- **Measure the boundary you actually patch**, not the boundary your model predicts. Sage e2e was +17 points above the strict-attention Amdahl prediction because int8 amortization reaches into FFN-adjacent sampler work. Specific bench numbers: `internal/analysis/empirical_bench_findings.md`.
+- **Check sibling-session backlogs (`internal/design/*_backlog.md`) before executing stale PLAN items** that touch defaults.
+- **Project-level `settings.json` hook config is loaded once at session start** — deleting a hook script mid-session leaves the cached config trying to run a missing file, blocking every Write/Edit until session restart. Workaround: use Bash for post-deletion edits.
+- **Marketplace plugin cache lags behind merged plugin changes.** To pick up freshly-merged plugin changes immediately, re-run the plugin's `install-git-hooks.sh` from a workspace clone of the plugin repo.
+- **Cross-repo coordination**: when an optimization target lives in a sister repo (current: sage-fork), use the `cross-repo-handoff` skill (bilateral memo files, seen-marker discipline). Pattern reusable for any future sister-repo co-optimization.
 
 ## Documentation conventions
 
+Generic doc rules (last-updated dates, lowercase filenames, document the "why", session-log location) live in the `/dev-conventions:doc-conventions` skill. Project-specific rules below.
+
 - **Active planning lives in gitignored `internal/`.** Promote to `docs/` only when feature ships AND stabilizes.
-- **Don't reference `internal/log/` from public-facing docs** — session logs are timestamped/personal. Other `internal/` subdirs (`analysis/`, `design/`, `ic_lora_assessment.md`, `action_items_for_*.md`) are fine to reference from `docs/` if no private prompts/paths leak.
-- **Case studies live in `internal/prompts/` (gitignored, unscrubbed).** Public guides distill patterns inline rather than linking out — the parallel scrubbed-copy convention was retired 2026-04-25 (parallel maintenance burden, scrub-leak risk, no confirmed external readership). Reference internal prompt runs from `docs/` only via paraphrase, never via filename.
-- **Public docs written for GitHub readers, not our local state.** No "already on disk" / "we use X locally" framing; use `<comfyui_models>` / `/path/to/model` placeholders and list file sources (Hugging Face slugs, upstream repos). `internal/` docs can assume our local state.
+- **Don't reference `internal/log/` from public-facing docs** — session logs are timestamped/personal. Other `internal/` subdirs are fine to reference if no private prompts/paths leak.
+- **Case studies live in `internal/prompts/` (gitignored, unscrubbed).** Public guides distill patterns inline. Reference internal prompt runs from `docs/` only via paraphrase, never via filename.
+- **Public docs written for GitHub readers, not local state.** Use `<comfyui_models>` / `/path/to/model` placeholders.
 - **Breaking changes trigger docs sweep** — add stale phrase to `scripts/validate_docs_consistency.py::STALE_PATTERNS`; `tests/test_docs_consistency.py` fails until fixed.
-- **Last-updated date at top of every doc** (`Last updated: YYYY-MM-DD`).
-- **Trim public + archive full** for reference docs >1000 lines. Public in `docs/reference/` → summary; full → `internal/archive/` (gitignored).
-- **`.claude/` harness is tracked, NOT gitignored.** Agents/skills/hooks/`settings.json` are shared via git so contributors get the same automation. Per-user state lives in `*.local.*` files (`settings.local.json`, `<repo-root>/.path-privacy.local.json`, `skills/cross-repo-handoff/`) which ARE gitignored. Full conventions for editing the harness: **`.claude/CLAUDE.md`**. Audit baseline (when present): `internal/analysis/harness_analysis.md` (gitignored). Drift protection: schedule a periodic re-audit via `/schedule` — routine IDs are per-account.
-- **Path-privacy enforcement comes from the `path-privacy` plugin** (in the `fb-claude-skills` marketplace), not from in-repo hooks. Plugin provides PreToolUse Write/Edit blocking + git pre-commit/commit-msg hooks + SessionStart directive + `find-external-paths.sh` (audit) + `scrub-paths.sh` (apply fixes with diff preview). Per-repo suggestion config lives at `<repo-root>/.path-privacy.local.json` (gitignored). Install the plugin's git hooks once per clone via `bash <plugin-root>/skills/path-privacy/skills/path-privacy/scripts/install-git-hooks.sh`.
+- **Trim public + archive full** for reference docs >1000 lines. Public summary in `docs/reference/`; full → `internal/archive/` (gitignored).
+- **Path-privacy enforcement comes from the `path-privacy` plugin** (in the `fb-claude-skills` marketplace). Per-repo suggestion config lives at `<repo-root>/.path-privacy.local.json` (gitignored). Install hooks once per clone.
+- **Wiki direction**: `docs/reference/` is evolving toward Karpathy-style atomic notes (uniform shape per `docs/reference/frame_planner_reference.md`). Lint mode: `tests/test_claude_md_budget.py` catches orphans + broken pointers.
 
 ## Documentation layout
 
-Public docs: `docs/README.md` (task-first nav) → `docs/guides/` (how-to), `docs/reference/` (deep-dive — incl. `docs/reference/environment.md`, the env-var registry), `docs/analysis/` (research/postmortems on shipped code), `docs/experimental/` (scaffolded-but-not-validated features paired with workflows in `example_workflows/experimental/`), `docs/experiments/` (per-experiment logs: hypothesis → setup → observations → inferences → next; convention in `docs/experiments/README.md`). `docs/architecture_overview.md` is the single-entry-point architecture reference.
+Public: `docs/README.md` (task-first nav) → `docs/guides/` (how-to), `docs/reference/` (deep-dive — incl. `docs/reference/environment.md`, the env-var registry; `docs/reference/frame_planner_reference.md`), `docs/analysis/` (research/postmortems on shipped code), `docs/experimental/`, `docs/experiments/`. Architecture entry point: `docs/architecture_overview.md`.
 
-Reference codebases (read-only): `coderef/LTX-2/` (LTX-2 native), `coderef/LTX-Desktop/` (Lightricks Desktop), `<comfyui_custom_nodes>/ComfyUI-LTXVideo/` (ComfyUI LTX integration).
+Reference codebases (read-only): `coderef/LTX-2/`, `coderef/LTX-Desktop/`, ComfyUI-LTXVideo upstream.
 
-Example workflows (`example_workflows/`): eight shipped — `_image_adain_perstep.json`, `_latent.json` (primary), `_latent_iclora.json`, `_latent_iclora_audio_pre_encode.json`, `_latent_keyframe.json`, `_latent_stg.json`, `_latent_validator.json`, `_retake.json`. The plain `_image.json` was retired 2026-04-27. All on `AudioLoopHelperSageAttention auto_mask_aware`. Validate via `scripts/audit_workflows.py`.
+Example workflows: eight shipped on `AudioLoopHelperSageAttention auto_mask_aware`. Validate via `scripts/audit_workflows.py`.
 
-Claude Code harness (`.claude/`, mostly tracked):
-- `.claude/CLAUDE.md` — conventions for editing harness contents (hook authoring, agent/skill rules, privacy abstraction, settings split). Read before adding/modifying anything under `.claude/`.
-- `.claude/README.md` — human-oriented contributor overview.
-- `.claude/agents/` — 3 subagents (`workflow-validator`, `conditioning-path-auditor`, `ltx-constraints-auditor`). Privacy-scrubbing now comes from the `path-privacy` plugin.
-- `.claude/skills/` — 10 user-invokable workflows. (Privacy scrub now via the plugin's `scrub-paths.sh`.)
-- `.claude/hooks/` — `doc_date_check.py` (PostToolUse), `check_memo_inbox.sh` (SessionStart). Privacy enforcement now via the `path-privacy` plugin's hooks.
-- `.claude/settings.json` — shared hook wiring; uses `${CLAUDE_PROJECT_DIR}` for portability.
-- `.claude/settings.local.json` (gitignored) — per-user permissions + ComfyUI-loader smoke test.
-- `<repo-root>/.path-privacy.local.json` (gitignored) — literal-substring suggestion config consumed by the `path-privacy` plugin.
+Subtree CLAUDE.md files (auto-loaded when working in that subtree):
+- `scripts/CLAUDE.md` — apply-script conventions, audit invariants, WorkflowEditor patterns.
+- `tests/CLAUDE.md` — pytest invocation, AST patterns, fakes hierarchy.
+- `internal/autoresearch/CLAUDE.md` — experiment-runner framework (target-agnostic).
+- `.claude/CLAUDE.md` — harness conventions + CLAUDE.md governance policy.
 
-Internal (gitignored):
-- `internal/PLAN.md` — active roadmap.
-- `internal/TODO.md` — step-by-step "what to do next" with checkbox sections, when present. Updated by Claude on demand.
-- `internal/ic_lora_assessment.md` — IC-LoRA phases + decisions index (D1–D23).
-- `internal/design/*.md` — long-term designs (`spectrogram_reference_design`, `sage_backlog`, `upscale_workflow_design`).
-- `internal/autoresearch/` — Karpathy-autoresearch-style experiment-runner framework adapted for LTX video. Agent edits `apply.py`; harness orchestrates; tracker is DuckDB; metric extractors live under `metrics/`. Brief: `internal/autoresearch/program.md`. Public-facing test contract: `tests/test_autoresearch.py`.
-- `internal/scripts/` — canonical sources for files that deploy out-of-repo (`start.sh` → `<comfyui>/start.sh`; `sage_fork_build.sh` → `<sage-fork>/build.sh`). Edit here, push via `internal/scripts/sync_to_deployed.sh`. README at `internal/scripts/README.md`.
-- `internal/postmortem_*.md`, `internal/prompts/`, `internal/analysis/` — debugging history, unscrubbed case studies, deep dives.
+Internal (gitignored): `internal/PLAN.md`, `internal/TODO.md`, `internal/ic_lora_assessment.md`, `internal/design/*.md` (long-term designs), `internal/autoresearch/`, `internal/scripts/` (out-of-repo deploy sources), `internal/postmortem_*.md`, `internal/prompts/`, `internal/analysis/`, `internal/log/log_YYYY-MM-DD.md` (session logs).
+
+## Pending review
+
+<!--
+Capture-then-review staging area. New findings (via `#`-key or otherwise)
+land HERE, not inline above. Drained on each curation pass: most demote
+to internal/ archive, some promote to scripts/audit_workflows.py or a
+test, few earn a slot in the curated body. Policy: .claude/CLAUDE.md
+"CLAUDE.md governance".
+-->
+
+(empty)

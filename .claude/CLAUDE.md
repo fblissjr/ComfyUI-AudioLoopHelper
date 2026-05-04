@@ -1,4 +1,4 @@
-Last updated: 2026-04-30
+Last updated: 2026-05-04
 
 <!-- path-privacy: skip-file — this file is about the harness's privacy + path conventions, so example placeholders necessarily appear -->
 
@@ -130,6 +130,129 @@ any new `*.local.*` file you introduce.
 5. **Update root CLAUDE.md** if a convention changed (where the root file
    talks about hooks/skills/agents/settings).
 
+## CLAUDE.md governance
+
+This is the policy that keeps root and subtree CLAUDE.md files load-bearing
+without growing monotonically. Established 2026-05-04 after a curation pass
+brought root CLAUDE.md from 51 KB / 237 lines back under budget.
+
+### The four layers
+
+Knowledge in this repo lives in one of four layers, in order of reliability:
+
+| Layer | Where | What lives here | Reliability |
+|---|---|---|---|
+| 1. Rules-as-code | `scripts/audit_workflows.py`, `tests/test_*.py`, hooks | Mechanically enforceable invariants (F-checks, schema AST tests, link integrity) | Highest — can't drift |
+| 2. Wiki / canonical docs | `docs/reference/`, `docs/guides/`, `docs/analysis/` | The "why" + atomic-note deep dives | Medium — humans must update |
+| 3. CLAUDE.md (root + subtree) | `./CLAUDE.md`, subtree CLAUDE.md files | Rules a fresh session must know on turn 1 + pointers down to layers 1–2 | Variable — depends on discipline |
+| 4. Findings ledger | `internal/findings_ledger.md`, `internal/log/`, `internal/postmortem_*.md` | Raw findings before they earn promotion; investigation narratives | Transient |
+
+The trap: findings naturally land in layer 3 (easiest place to write) and
+never get promoted down to 1–2 or demoted to 4. The lifecycle below is the
+counter-pressure.
+
+### Rule lifecycle
+
+```
+[experimental finding]                layer 4 (findings_ledger / log / postmortem)
+        ↓ stabilizes after N reproductions
+[stable rule]                         layer 1 (audit/test) + layer 2 (atomic note)
+        ↓ load-bearing on turn 1?
+[CLAUDE.md rule]                      layer 3 (one-line rule + pointer down)
+```
+
+Promotion criteria — layer 4 → layer 1+2:
+- Reproduced at least twice, OR
+- Has a one-line audit/test that catches it, OR
+- Has a paired apply-script (the F-pair convention).
+
+Promotion to layer 3 requires **all three**:
+- A fresh Claude session would silently get it wrong without this rule.
+- The cost of getting it wrong exceeds the cost of carrying the line.
+- It can't be expressed as a runnable check in layer 1.
+
+### Budget (root CLAUDE.md)
+
+Hard cap: **200 lines / 30 KB**. Enforced by `tests/test_claude_md_budget.py`.
+New rule in = old rule earns its way out (down to layer 1/2/4) or compresses
+to a one-line pointer. Subtree CLAUDE.md files soft-warn at 500 lines.
+
+### Pointer discipline
+
+1. **Each fact has exactly one canonical home.** No restatement. If
+   `docs/reference/sampler_reference.md` is canonical for sigma-chain rules,
+   root CLAUDE.md says "Sigma chain: see `docs/reference/sampler_reference.md`."
+   That's it — the long prose lives in the canonical doc.
+2. **Pointers are repo-relative paths**, not section names. Section names
+   drift; paths break loudly when files move (the budget test catches this).
+3. **`docs/README.md` is the master index.** Root CLAUDE.md points there for
+   anything that's not a turn-1 must-know.
+
+### Subtree CLAUDE.md
+
+Threshold for creating one: **≥ 5 substantive subtree-specific rules** that
+don't apply elsewhere. Below that bar, rules stay in root.
+
+Active subtree files:
+- `./scripts/CLAUDE.md` — apply-script conventions, audit invariants, WorkflowEditor patterns.
+- `./tests/CLAUDE.md` — pytest invocation, AST patterns, fakes hierarchy.
+- `./internal/autoresearch/CLAUDE.md` — experiment-runner framework (target-agnostic).
+
+Loading: Claude Code auto-discovers CLAUDE.md files along the directory walk.
+A session working in `scripts/` loads `./CLAUDE.md` + `./scripts/CLAUDE.md`
+and does NOT load tests or autoresearch conventions. This is the progressive-
+disclosure mechanism.
+
+Cross-link rule: when a subtree rule could plausibly apply outside its
+subtree (e.g. someone editing from project root who'd benefit from knowing a
+scripts/ rule), root CLAUDE.md adds a one-line pointer ("Working in
+`scripts/`? See `scripts/CLAUDE.md`.") so the gotcha doesn't bite.
+
+### Capture-then-review
+
+When you (or a `#`-key capture) wants to land a new rule, drop it in the
+**"Pending review"** section at the bottom of root CLAUDE.md instead of
+inserting inline into the curated body. The pending section gets drained on
+the next curation pass — most pending entries demote to layer 4 (archive),
+some promote to layer 1 (audit/test), few earn a slot in the curated body.
+
+This separation prevents the curation discipline from being slowly eroded by
+in-the-moment additions.
+
+### Wiki direction (Karpathy LLM wiki pattern)
+
+Layer 2 is evolving toward Karpathy's LLM-wiki shape (gist:
+`https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f`). Three
+implications for how new docs are written:
+
+1. **Atomic notes with uniform shape.** Each `docs/reference/X.md` follows
+   the template seeded by `docs/reference/frame_planner_reference.md`:
+   Last-updated date → Role → Key facts → Mechanism / Wiring → Gotchas →
+   Migration → Audit + tests → References (in + out). New reference docs
+   match this shape.
+2. **Strong cross-linking.** Every atomic note ends with a References
+   section listing both outgoing pointers (other docs/scripts cited) and
+   the upstream `docs/README.md` index entry. The lint mode in
+   `tests/test_claude_md_budget.py` fails on orphan reference docs.
+3. **Three operational modes** (informal, no skill yet):
+   - *Ingest*: when a new finding stabilizes, write the atomic note → update
+     `docs/README.md` index → update related notes that should cross-link →
+     append to `internal/log/`.
+   - *Query*: read the index → traverse cross-links → synthesize.
+   - *Lint*: `audit_workflows.py` (rules-as-code), budget test (size +
+     orphans + broken pointers), `validate_docs_consistency.py` (stale
+     phrases). Together these are the wiki's lint pass.
+
+A formal ingest skill is a P5 follow-up; for now the convention is in your
+hands.
+
+### Curation cadence
+
+- **Per-feature ship**: drain "Pending review" section. ~5 min.
+- **Quarterly**: full pass via `claude-md-improver` skill. Scheduled via
+  `/schedule` (per-account routine ID; the maintainer of this clone owns it).
+- **Whenever the budget test fails**: fix immediately, don't paper over.
+
 ## Drift protection
 
 The harness rots when CLAUDE.md changes faster than `.claude/` does. Two
@@ -144,8 +267,8 @@ mechanisms in place:
    readers won't see it). Read it before authoring a new audit doc, and
    update it when fixes ship.
 
-Add a third mechanism (`scripts/validate_skills_consistency.py`) when the
-maintenance load justifies it. Today the audit routine is enough.
+Add a third mechanism (a skills-consistency validator under `scripts/`) when
+the maintenance load justifies it. Today the audit routine is enough.
 
 ## Pointers
 
