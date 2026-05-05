@@ -39,6 +39,16 @@ Every `apply_*.py` script ships with:
 
 Both templates include the canonical `--revert`, `--dry-run`, idempotence, and `require_nodes` patterns.
 
+## Before archiving an apply script
+
+Ref-counting (grep across docs/tests/CLAUDE.md) is necessary but **not sufficient** — it misses three failure modes:
+
+1. **Unapplied emergency fallback** — script never ran on canonical (e.g. `apply_audio_vae_fix.py`), so canonical state diverges from the script's "after" state. Verify by inspecting node types in `example_workflows/*.json`.
+2. **Active CLI tool driven from `internal/`** — script has zero refs in public surface but is the documented invocation path in a private action-item ladder. Grep `internal/` before deciding.
+3. **Superseded but re-runnable** — script's output shape conflicts with the current canonical (e.g. produces a removed node type); re-running breaks the workflow. Check what node types the script adds vs what the canonical now has.
+
+Verdict rule: archive only if (a) the migration is baked AND idempotent on current canonical, OR (b) the migration is superseded AND re-running would break shape, OR (c) the script generates a now-shipped variant whose JSON is the source of truth.
+
 ## Audit + apply F-pair convention
 
 Every fix that ships an apply script ships a matching audit check in `audit_workflows.py`. The check returns ERR with a `Run scripts/apply_<X>.py` remediation pointer when the invariant is violated. This prevents silent regression of fixes a sibling branch might revert.
