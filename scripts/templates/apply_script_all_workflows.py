@@ -9,7 +9,7 @@ Root cause: <ROOT_CAUSE>
 Fix: <FIX>
 
 Compatibility with other apply scripts:
-  - <COMPATIBILITY_NOTES — reference apply_sage_mode, apply_iclora_initial_render,
+  - <COMPATIBILITY_NOTES — reference apply_sage_mode (archived), apply_iclora_initial_render,
      apply_melband_default_off, apply_vae_and_cleanup, apply_loop_guide_preprocess_symmetry
      as relevant>
 

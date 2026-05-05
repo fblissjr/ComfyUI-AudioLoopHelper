@@ -7,6 +7,12 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- **`scripts/` cleanup pass.** Moved 10 baked-in / superseded apply
+  scripts to `scripts/archive/`. Added `scripts/archive/CLAUDE.md`
+  (per-script inventory: original purpose + reason archived) and an
+  inventory section to `scripts/CLAUDE.md` (what each remaining
+  script does today, who calls it, dedup analysis). Audit + budget
+  + docs-consistency suites pass; no remediation pointers broken.
 - **`scripts/audit_workflows.py` calibration for non-loop workflows.**
   Added `_is_loop_workflow(by_type)` helper that detects loop topology
   by presence of any `TensorLoopOpen` / `TensorLoopClose` /

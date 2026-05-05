@@ -10,7 +10,7 @@ consistent (idempotent, `--revert`, `--dry-run`, WorkflowEditor-only).
 
 | Scope | File | Canonical example |
 |---|---|---|
-| Mutate all `example_workflows/*.json` in place | `apply_script_all_workflows.py` | `apply_sage_mode.py`, `apply_loop_guide_preprocess_symmetry.py` |
+| Mutate all `example_workflows/*.json` in place | `apply_script_all_workflows.py` | `apply_sage_mode.py` (archived), `apply_loop_guide_preprocess_symmetry.py` |
 | Stage experimental variant to `internal/scratch/<base>_<feature>_<phase>.json` | `apply_script_staged_variant.py` | `apply_iclora_initial_render.py` |
 
 **Bug fix → all-workflows. Experimental variant → staged.** Per `internal/PLAN.md`,

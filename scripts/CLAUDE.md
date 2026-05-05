@@ -1,6 +1,6 @@
 # scripts/ — apply scripts, audit, utilities
 
-Last updated: 2026-05-04
+Last updated: 2026-05-05
 
 This subtree holds workflow-mutation scripts (`apply_*.py`), workflow validators (`audit_workflows.py`, `validate_docs_consistency.py`, `analyze_workflow_dag.py`, `trace_node_source.py`), the canonical edit utility (`workflow_utils.py`), audio analysis tools, and templates. Loads only when Claude is operating inside `scripts/`. Root project rules: `../CLAUDE.md`. Governance policy: `../.claude/CLAUDE.md`.
 
@@ -94,13 +94,203 @@ Full inventory + the canonical first-pass-when-a-workflow-won't-run flow: `docs/
 ## Retired apply scripts
 
 `scripts/archive/` holds apply scripts whose migration is baked into the
-canonical workflow permanently and whose source/output files are no
-longer in tree (`apply_audio_latent_pre_encode.py`,
-`apply_iclora_video_reference.py` as of 2026-05-04). Kept as design
-records of the topology each migration introduced; not for re-running.
-Audit remediation pointers reference `scripts/archive/...` paths so
-they're recoverable if a reader needs to inspect the original migration.
-See `scripts/archive/README.md`.
+canonical workflow permanently, was superseded by a different pattern,
+or generated a now-shipped variant whose JSON is the source of truth.
+Kept as design records; **not for re-running** (would conflict with
+current canonical for several entries). Audit remediation pointers
+reference `scripts/archive/...` paths so they're recoverable if a
+reader needs to inspect the original migration. **Per-script inventory
+with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
+
+## Inventory (current scripts/, post-2026-05-05 cleanup)
+
+63 scripts grouped by purpose. Each row: **script** — purpose · *primary callers*. Scripts with **no callers** are leaf utilities (CLI-invoked directly or emergency fallbacks). Archive entries: `scripts/archive/CLAUDE.md`.
+
+### Core editing + audit (always-live foundations)
+
+| Script | Purpose · callers |
+|---|---|
+| `workflow_utils.py` | Canonical `WorkflowEditor` API for JSON edits · imported by ~all `apply_*.py` |
+| `_apply_helpers.py` | Raw-orjson primitives for fork-and-strip scripts when `WorkflowEditor` is suspect · `apply_audio_loop_retake.py`, `apply_spectrogram_iclora_minimal.py`, `apply_keyframe_batch_encode.py` |
+| `audit_workflows.py` | Health audit (F-pair invariants + generic checks) · CI, README, `/diagnose-workflow` |
+| `validate_docs_consistency.py` | STALE_PATTERNS scan · CI, root CLAUDE.md |
+| `test_workflow_integrity.py` | Structural integrity + widget consistency check · `.claude/settings.json` smoke test |
+
+### Workflow inspection / diagnostics
+
+| Script | Purpose · callers |
+|---|---|
+| `analyze_workflow_dag.py` | Static DAG + execution-order view · README, `apply_keyframe_batch_encode.py` |
+| `trace_node_source.py` | Show node Python source from a workflow + node_id · `analyze_workflow_dag.py`, `debug_tools.md` |
+| `validate_workflow_decoder.py` | Decoder-config check across example workflows · `debugging_guide.md`, `ltx-constraints-auditor` agent, `tests/test_decoder_validator.py` |
+| `validate_workflow_resolution.py` | LTX-2.3 resolution-compliance check · `debugging_guide.md`, `ltx-constraints-auditor` agent |
+| `extract_workflow_from_png.py` | Dump embedded workflow JSON from PNG · `debugging_guide.md` |
+| `diagnose_overlap_seams.py` | Detect seam-zone artifacts in assembled loop output · `build_seam_refinement_workflow.py` |
+| `calc_ltx_resolution.py` | Offline companion to `LTXResolutionFromAspect` — resolve aspect+long-edge to LTX-valid dims · CLI-only (no callers) |
+
+### From-scratch workflow builders (output: new variant JSON)
+
+| Script | Purpose · callers |
+|---|---|
+| `build_keyframe_workflow.py` | Build keyframe-conditioned workflow from latent base · `debug_tools.md` |
+| `build_seam_refinement_workflow.py` | Build post-loop seam-zone refinement workflow · CLI-only (just shipped 2026-05-05) |
+| `build_upscale_workflow.py` | Build post-loop spatial-upscale workflow · `docs/README.md`, `debug_tools.md` |
+
+### Apply scripts — sigma chain + sampler (4)
+
+| Script | Purpose · callers |
+|---|---|
+| `apply_canonical_sigmas.py` | Replace `BasicScheduler` w/ `ManualSigmas` (canonical 8-step distilled values) · root CLAUDE.md, `audit_workflows.py`, `sampler_reference.md` |
+| `apply_strip_sd3_shift_node.py` | Strip dead `ModelSamplingSD3` (orphaned post-sigma-migration) · root CLAUDE.md, `debug_tools.md`, `audit_workflows.py` |
+| `apply_no_tile_vae_decode.py` | Set `LTXVTiledVAEDecode` to `[1,1,1]` (24GB+ optimization) · root CLAUDE.md, `audit_workflows.py` |
+| `apply_ltx_decoder.py` | Swap generic `VAEDecodeTiled` → `LTXVTiledVAEDecode` · `validate_workflow_decoder.py`, `debugging_guide.md` |
+
+### Apply scripts — audio + planner topology (7)
+
+| Script | Purpose · callers |
+|---|---|
+| `apply_audio_latent_slice_iter_wiring_fix.py` | Fix two long-standing AudioLatentSlice wiring bugs · `audit_workflows.py` |
+| `apply_audio_latent_slice_source_seconds_autowire.py` | Replace hardcoded `source_seconds=300` widget with autowire · `apply_audio_latent_slice_iter_wiring_fix.py`, `audit_workflows.py` |
+| `apply_initial_render_audio_duration_autowire.py` | Wire `LTXFramePlanner.actual_seconds` → `TrimAudioDuration.duration` · `audit_workflows.py` |
+| `apply_overlap_seconds_single_source.py` | Eliminate AudioLoopController ↔ AudioLoopPlanner overlap_seconds drift · `audit_workflows.py` |
+| `apply_iterations_autowire.py` | Wire `AudioLoopPlanner.total_iterations` → `TensorLoopOpen.iterations_in` · `debug_tools.md`, `audit_workflows.py` |
+| `apply_planner_break_stride_cycle.py` | Break planner-stride dependency cycle · `audit_workflows.py`, `f_pair_convention.md` |
+| `apply_audio_vae_fix.py` | **Emergency fallback**: swap `VAELoaderKJ` → core `VAELoader` if KJ breaks · CLI-only, unapplied to canonical |
+
+### Apply scripts — controller + frame planner schema (4)
+
+| Script | Purpose · callers |
+|---|---|
+| `apply_alc_seed_rename.py` | Rename `seed` → `base_seed` (avoids ComfyUI's auto-`control_after_generate`) · `audit_workflows.py`, `apply_strip_alc_control_after_generate.py` |
+| `apply_strip_alc_control_after_generate.py` | Strip leftover `randomize` widget value post-rename · `audit_workflows.py`, `audio_loop_controller.md` |
+| `apply_frame_planner_consolidation.py` | Migrate to `LTXFramePlanner` as single dim source · `apply_skip_under_seq_len.py`, `apply_initial_render_audio_duration_autowire.py` |
+| `apply_canonical_resolution_fix.py` | Bring `EmptyLTXVLatentVideo` widgets to LTX-valid resolution · `audit_workflows.py` |
+
+### Apply scripts — conditioning + prompt schedule (2)
+
+| Script | Purpose · callers |
+|---|---|
+| `apply_batch_encode_fix.py` | Migrate per-iter `CachedTextEncode + ConditioningBlend` → `TimestampPromptScheduleBatchEncode` (CLIP outside loop) · `apply_keyframe_batch_encode.py`, `nag_technical_reference.md`, `debugging_guide.md` |
+| `apply_keyframe_batch_encode.py` | Migrate keyframe `KeyframeImageSchedule + per-iter VAEEncode` → `KeyframeLatentScheduleBatchEncode` · `_apply_helpers.py`, `internal/PLAN.md` (private clone only) |
+
+### Apply scripts — guide / cropguides / preprocess symmetry (4)
+
+| Script | Purpose · callers |
+|---|---|
+| `apply_loop_cropguides_symmetry.py` | Wire loop-body `CFGGuider` through `LTXVCropGuides` (F3) · `debug_tools.md`, `debugging_guide.md`, `audit_workflows.py` |
+| `apply_loop_guide_preprocess_symmetry.py` | Match init + loop `LTXVPreprocess(img_compression=18)` (F2) · `apply_loop_cropguides_symmetry.py`, `templates/README.md`, `debug_tools.md` |
+| `apply_split_cropguides.py` | Split `LTXVCropGuides` into two instances to break loop cycle · `audit_workflows.py` |
+| `apply_lanczos_init_preprocess.py` | Two-stage lanczos init preprocess · `debug_tools.md` |
+
+### Apply scripts — IC-LoRA / ID-LoRA / amplification (5)
+
+| Script | Purpose · callers |
+|---|---|
+| `apply_iclora_initial_render.py` | Phase 0a: wire IC-LoRA on initial-render path · `apply_loop_cropguides_symmetry.py`, `apply_strip_dead_lora_loaders.py`, `apply_loop_guide_preprocess_symmetry.py` |
+| `apply_id_lora_initial_render.py` | Stage ID-LoRA / style-LoRA variant (single LoraLoaderModelOnly splice) · CLI; cited from private per-render action-item ladders (`internal/` only) |
+| `apply_strip_dead_lora_loaders.py` | Strip dead LoRA loaders from canonical · `debug_tools.md`, `audit_workflows.py`, `f_pair_convention.md` |
+| `apply_ttc_iclora_amplification_poc.py` | POC: amplify IC-LoRA contribution at inference (CFG-analog) · root CLAUDE.md, `cfg_analog_amplification.md`, `apply_ttc_init_guide_amplification_poc.py` |
+| `apply_ttc_init_guide_amplification_poc.py` | Stage non-IC-LoRA variant of TTC amplification · `experiments/`, `debug_tools.md` |
+
+### Apply scripts — sage / attention (1)
+
+| Script | Purpose · callers |
+|---|---|
+| `apply_skip_under_seq_len.py` | Wire `skip_under_seq_len=1024` on `AudioLoopHelperSageAttention` (skip int8 quant overhead on short-Q) · CLI-only |
+
+### Apply scripts — retake (2)
+
+| Script | Purpose · callers |
+|---|---|
+| `apply_audio_loop_retake.py` | Build retake workflow by forking production · `retake_guide.md`, `_apply_helpers.py`, `audit_workflows.py` |
+| `apply_p3_retake_edit_lora.py` | Wire IC-LoRA edit-anything pattern into retake · `debug_tools.md` |
+
+### Apply scripts — other / one-off (5)
+
+| Script | Purpose · callers |
+|---|---|
+| `apply_intro_workflow.py` | Layout-maintenance for canonical intro variant · `apply_initial_render_audio_duration_autowire.py`, `apply_audio_latent_slice_*` |
+| `apply_melband_default_off.py` | Disable MelBand vocal separation by default across workflows · scripts/CLAUDE.md, `architecture_overview.md` |
+| `apply_prompt_relay_initial_render.py` | Phase 1: wire `PromptRelayEncode` on initial-render path · `audit_workflows.py`, `tests/test_apply_prompt_relay_initial_render.py` |
+| `apply_spectrogram_iclora_minimal.py` | Build experimental spectrogram-IC-LoRA workflow · `_apply_helpers.py`, `debug_tools.md`, `spectrogram_iclora_tutorial.md` |
+| `apply_vae_and_cleanup.py` | One-shot VAE cleanup applied to LATENT-variant workflows (2026-04-23) · `compare-workflows` skill |
+
+### Apply scripts — bench / IC-LoRA bench (2)
+
+| Script | Purpose · callers |
+|---|---|
+| `apply_iclora_bench_profiling.py` | Wire `Profile*` nodes around audio loop in bench workflow · `apply_iclora_bench_sage_arm.py`, `bench_workflow_guide.md` |
+| `apply_iclora_bench_sage_arm.py` | Sage-attention arm variant of iclora bench · `bench_compare_runs.py`, `bench_workflow_guide.md` |
+
+### Profiling tools (3 — insert / remove / summarize triplet)
+
+| Script | Purpose · callers |
+|---|---|
+| `apply_profiling_nodes.py` | Insert `ProfileBegin` / `ProfileIterStep` / `ProfileEnd` · `remove_profiling_nodes.py`, `profiling_guide.md` |
+| `remove_profiling_nodes.py` | Remove same nodes · `profiling_guide.md` |
+| `profile_summary.py` | Categorized text summary from torch.profiler chrome trace · `profiling_guide.md` |
+
+### Bench / telemetry summary (3)
+
+| Script | Purpose · callers |
+|---|---|
+| `bench_compare_runs.py` | Side-by-side run comparator · `bench_workflow_guide.md`, `apply_iclora_bench_sage_arm.py` |
+| `exec_log_summary.py` | Aggregate ComfyUI `exec.jsonl` into per-node-class bottleneck report · `bench_compare_runs.py`, `bench_workflow_guide.md` |
+| `sage_telemetry_summary.py` | Aggregate sage tracer JSONL into per-mode summary · `exec_log_summary.py`, `debug_tools.md`, README |
+
+### Audio analysis (3)
+
+| Script | Purpose · callers |
+|---|---|
+| `analyze_audio.py` | ffmpeg-only energy/structure detection (zero Python deps) · `audio_analysis_guide.md`, `prompt-schedule` skill |
+| `analyze_audio_features.py` | librosa: BPM, key, F0, structure, JSON for LLM · README, `spectrogram_to_reference.py`, `apply_ttc_init_guide_amplification_poc.py` |
+| `preprocess_audio_for_ltx.py` | Audio preprocessing for LTX 2.3 V2A · `debugging_guide.md` |
+
+### IC-LoRA reference asset prep (2)
+
+| Script | Purpose · callers |
+|---|---|
+| `align_ref_video.py` | Align driving reference video to audio-loop IC-LoRA workflow params (F12) · CLI-only |
+| `spectrogram_to_reference.py` | Render Mel spectrogram as PNG frame sequence (IC-LoRA spectrogram-as-reference, Phase 2.0) · scripts/CLAUDE.md, `spectrogram_iclora_tutorial.md` |
+
+### Sage trace verification (1)
+
+| Script | Purpose · callers |
+|---|---|
+| `verify_sage_iteration_trace.sh` | Verify sage override is firing on every loop iteration · `debug_tools.md`, `bench_workflow_guide.md` |
+
+## Duplication & merge opportunities
+
+Reviewed during the 2026-05-05 cleanup; recording here so future curation passes don't re-derive.
+
+### Worth considering
+
+- **Profiling triplet** (`apply_profiling_nodes.py` / `remove_profiling_nodes.py` / `profile_summary.py`) could collapse into a single `profile.py` with `--insert` / `--remove` / `--summarize` subcommands. Net win: one entry-point, smaller mental surface for `profiling_guide.md`. Net cost: subcommand parsing + the existing scripts already work. **Verdict: defer** — value is cosmetic, not load-bearing.
+- **Slot-dict `from-scratch` builders** (`build_keyframe_workflow.py` / `build_seam_refinement_workflow.py` / `build_upscale_workflow.py`) already share `WorkflowEditor.io_in/widget_in/out` helpers per the §"WorkflowEditor" note. Duplication is minimal; further factoring would create premature abstractions.
+- **Audio analysis pair** (`analyze_audio.py` zero-dep + `analyze_audio_features.py` librosa): **keep separate**. The zero-dep version is the fast-path for environments without librosa; merging would force the full dependency chain on simple energy queries.
+
+### Confirmed not worth merging
+
+- **Strip-dead-node trio** (`apply_strip_alc_control_after_generate.py` / `apply_strip_dead_lora_loaders.py` / `apply_strip_sd3_shift_node.py`): different node types, different signatures, all tied to specific F-pair audits. A generic `apply_strip_dead.py --type X` would obscure the audit-pair coupling that makes these scripts traceable.
+- **Symmetry pair** (`apply_loop_guide_preprocess_symmetry.py` F2 + `apply_loop_cropguides_symmetry.py` F3): adjacent rules, but each maps to its own audit invariant. Splitting matches the F-pair convention.
+- **Autowire scripts** (`apply_iterations_autowire.py` / `apply_initial_render_audio_duration_autowire.py` / `apply_audio_latent_slice_source_seconds_autowire.py`): all "wire X to Y", but X and Y differ per script and each pairs with its own audit-check. Pattern is uniform; subjects are not.
+
+### Naming irregularities (low-priority cosmetic)
+
+- `_apply_helpers.py` (leading underscore) signals "not a CLI script" — distinct from peers. Convention is good; flagged here for visibility.
+- `apply_canonical_resolution_fix.py` is a *fixer*, not a *generator* — name pattern matches other `apply_*` scripts, no change needed.
+- Some apply scripts include a docstring `Last updated:` line; others don't. Not enforced; the file mtime is authoritative.
+
+### Scripts with no callers (CLI-only utilities — by design)
+
+- `align_ref_video.py` — F12 IC-LoRA video-ref user tool
+- `apply_audio_vae_fix.py` — emergency fallback
+- `apply_id_lora_initial_render.py` — staging tool, driven from private per-render action-item ladders
+- `apply_skip_under_seq_len.py` — sage perf knob
+- `build_seam_refinement_workflow.py` — just shipped (2026-05-05)
+- `calc_ltx_resolution.py` — offline aspect-ratio CLI
+
+These are intentionally leaf-only — invoked by humans via uv, not chained. Don't add fake callers.
 
 ## When `WorkflowEditor` itself is suspect
 

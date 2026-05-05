@@ -148,7 +148,7 @@ routing isn't firing — file a bug.
 `iter` is pulled from `transformer_options.get("iteration")` with a
 fallback to `.get("step")`. The stamp comes from `LoopIterationStamp`
 (see `nodes.py`), auto-inserted into shipping workflows by
-`scripts/apply_iteration_stamp.py`. For workflows without the stamp
+`scripts/archive/apply_iteration_stamp.py`. For workflows without the stamp
 (e.g. a custom build), `iter` falls back to sampler step, so traces are
 still groupable — just by step, not loop pass.
 

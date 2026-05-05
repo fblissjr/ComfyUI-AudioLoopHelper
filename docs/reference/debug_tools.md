@@ -36,8 +36,8 @@ paired with their apply scripts. Two flavors:
 
 | Check | Pairs with apply script | What it ERRs on |
 |---|---|---|
-| `sage` / `sage_mode` / `sage_active` | `apply_sage_mode.py` | Missing or non-`auto_mask_aware` AudioLoopHelperSageAttention |
-| `iteration_stamp` | `apply_loop_iteration_stamp.py` | Missing LoopIterationStamp |
+| `sage` / `sage_mode` / `sage_active` | `scripts/archive/apply_sage_mode.py` | Missing or non-`auto_mask_aware` AudioLoopHelperSageAttention |
+| `iteration_stamp` | `scripts/archive/apply_iteration_stamp.py` | Missing LoopIterationStamp |
 | `preprocess_symmetry` (F2) | `apply_loop_guide_preprocess_symmetry.py` | Loop guide branch skips LTXVPreprocess |
 | `loop_cropguides_symmetry` (F3) | `apply_loop_cropguides_symmetry.py` | Loop CFGGuider not via LTXVCropGuides |
 | `alc_seed_legacy_name` (F4) | `apply_alc_seed_rename.py` | AudioLoopController has legacy `seed`/`noise_seed` input |

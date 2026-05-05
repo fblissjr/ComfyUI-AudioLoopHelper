@@ -35,7 +35,7 @@ Compatibility:
     saved JSONs that lack the widget value default to 0 = no
     behavior change. ComfyUI deserializes positionally; this
     script appends to widgets_values rather than inserting.
-  - No interaction with apply_audioloophelper_sage.py (that script
+  - No interaction with apply_audioloophelper_sage.py (archived; that script
     only handles the legacy node-type rename).
   - No interaction with apply_frame_planner_consolidation.py.
 

@@ -27,7 +27,7 @@ so a stale `"seed"` would dangle the wire.
 
 Compatibility with other apply scripts: orthogonal — touches only the
 `AudioLoopController` node's `seed` input. Does not interact with
-apply_sage_mode, apply_iclora_initial_render, F2 (preprocess symmetry), or
+apply_sage_mode (archived), apply_iclora_initial_render, F2 (preprocess symmetry), or
 F3 (cropguides symmetry).
 
 Usage:

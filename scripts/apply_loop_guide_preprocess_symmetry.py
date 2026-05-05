@@ -26,7 +26,7 @@ guide now share the same preprocessed image. No new nodes; single link
 swap per workflow.
 
 Compatibility with other apply scripts:
-  - `apply_sage_mode.py`: touches node 268 only. Orthogonal.
+  - `apply_sage_mode.py` (archived): touches node 268 only. Orthogonal.
   - `apply_iclora_initial_render.py`: adds a NEW outbound link from
     #446 to the IC-LoRA guide without removing existing ones. After
     this fix, #446 has outbound links to #531, #650, and (post-IC-LoRA)

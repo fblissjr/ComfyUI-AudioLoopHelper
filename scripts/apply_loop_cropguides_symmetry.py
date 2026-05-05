@@ -33,7 +33,7 @@ Compatibility with other apply scripts:
     top-level, not subgraph).
   - `apply_iclora_initial_render.py`: touches `#164 LTXVConditioning` outputs
     on the top-level initial-render path; does NOT touch subgraph. Orthogonal.
-  - `apply_sage_mode.py`: touches node 268 only. Orthogonal.
+  - `apply_sage_mode.py` (archived): touches node 268 only. Orthogonal.
 
 Usage:
     uv run --group dev python scripts/apply_loop_cropguides_symmetry.py
