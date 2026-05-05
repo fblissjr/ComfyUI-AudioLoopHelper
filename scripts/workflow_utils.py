@@ -284,6 +284,31 @@ class WorkflowEditor:
                 self.remove_link(lid)
         self.wf["nodes"] = [n for n in self.wf["nodes"] if n["id"] != node_id]
 
+    @staticmethod
+    def io_in(name: str, dtype: str, link: int | None = None) -> dict:
+        """Build a non-widget input slot dict in the shape ComfyUI expects.
+
+        Centralizes the slot shape so workflow builders don't open-code it.
+        Pair with `widget_in` for inputs that also surface as widgets, and
+        `out` for output slots.
+        """
+        d: dict = {"name": name, "type": dtype}
+        if link is not None:
+            d["link"] = link
+        return d
+
+    @staticmethod
+    def widget_in(name: str, dtype: str, link: int | None = None) -> dict:
+        """Build an input slot that is also surfaced as a widget on the node."""
+        d = WorkflowEditor.io_in(name, dtype, link)
+        d["widget"] = {"name": name}
+        return d
+
+    @staticmethod
+    def out(name: str, dtype: str) -> dict:
+        """Build an output slot dict in the shape ComfyUI expects."""
+        return {"name": name, "type": dtype, "links": []}
+
     def add_top_level_node(
         self,
         node_type: str,

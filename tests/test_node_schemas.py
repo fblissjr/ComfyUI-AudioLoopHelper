@@ -137,6 +137,34 @@ def test_no_seed_or_noise_seed_named_inputs():
     )
 
 
+def _scan_io_input_records_in_class(path: Path, class_name: str):
+    """Yield (lineno, name, defaults_dict) for every `io.<Type>.Input(...)`
+    call defined INSIDE the body of the named class.
+
+    Useful for class-scoped schema invariants like "LatentTemporalMask's
+    edge_taper_seconds default must be 0.0" — without this, the same input
+    name on another node would false-positive against the invariant.
+
+    Implementation: locate the class definition by source-text search,
+    then bound its body by the next top-level `\\nclass ` line; filter
+    `_scan_io_input_records` results by lineno against that range.
+    """
+    src = path.read_text()
+    needle = f"class {class_name}"
+    if needle not in src:
+        return
+    cls_start = src.index(needle)
+    cls_start_line = src.count("\n", 0, cls_start) + 1
+    next_cls_offset = src.find("\nclass ", cls_start + len(needle))
+    cls_end_line = (
+        src.count("\n", 0, next_cls_offset) + 1
+        if next_cls_offset != -1 else float("inf")
+    )
+    for lineno, name, kwargs in _scan_io_input_records(path):
+        if cls_start_line <= lineno < cls_end_line:
+            yield (lineno, name, kwargs)
+
+
 def _scan_io_input_records(path: Path):
     """Yield (lineno, name, defaults_dict) for every `io.<Type>.Input(...)` call.
 
@@ -199,19 +227,8 @@ def test_latent_temporal_mask_edge_taper_default_is_zero():
         path = REPO_ROOT / module
         if not path.exists():
             continue
-        src = path.read_text()
-        if "class LatentTemporalMask" not in src:
-            continue
-        cls_start = src.index("class LatentTemporalMask")
-        cls_start_line = src.count("\n", 0, cls_start) + 1
-        # Bound the LatentTemporalMask class body by the next class definition.
-        next_cls_offset = src.find("\nclass ", cls_start + len("class LatentTemporalMask"))
-        cls_end_line = (
-            src.count("\n", 0, next_cls_offset) + 1
-            if next_cls_offset != -1 else float("inf")
-        )
-        for lineno, name, kwargs in _scan_io_input_records(path):
-            if name == "edge_taper_seconds" and cls_start_line <= lineno < cls_end_line:
+        for lineno, name, kwargs in _scan_io_input_records_in_class(path, "LatentTemporalMask"):
+            if name == "edge_taper_seconds":
                 matches.append((module, lineno, kwargs))
     assert len(matches) == 1, (
         f"Expected exactly one io.Float.Input('edge_taper_seconds', ...) inside "
@@ -242,21 +259,9 @@ def test_latent_seam_zone_mask_iteration_count_default_is_one():
         path = REPO_ROOT / module
         if not path.exists():
             continue
-        # Find the io.Int.Input("iteration_count", ...) inside LatentSeamZoneMask's schema.
-        src = path.read_text()
-        if "class LatentSeamZoneMask" not in src:
-            continue
-        for lineno, name, kwargs in _scan_io_input_records(path):
+        for lineno, name, kwargs in _scan_io_input_records_in_class(path, "LatentSeamZoneMask"):
             if name == "iteration_count":
-                # Filter to occurrences inside LatentSeamZoneMask's class body
-                # by lineno bracket — find the class definition line and the
-                # next class line, accept iteration_count records in between.
-                cls_start = src.index("class LatentSeamZoneMask")
-                cls_start_line = src.count("\n", 0, cls_start) + 1
-                # Heuristic: any io.Int.Input named iteration_count below the
-                # class definition is ours (no other node uses this name).
-                if lineno >= cls_start_line:
-                    matches.append((module, lineno, kwargs))
+                matches.append((module, lineno, kwargs))
     assert len(matches) == 1, (
         f"Expected exactly one io.Int.Input('iteration_count', ...) inside "
         f"LatentSeamZoneMask; found {len(matches)}: {matches}"

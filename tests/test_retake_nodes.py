@@ -309,12 +309,12 @@ class TestLatentTemporalMask:
 class TestLatentSeamZoneMask:
     """Multi-band soft noise_mask centered on iteration boundaries.
 
-    Phase B of the seam-zone refinement design (see
-    `internal/design/polish_passes_design.md §P5`). Operates on an
-    assembled loop output latent; writes a `noise_mask` that is 1.0 in
-    bands centered on each internal iteration boundary and 0.0
-    elsewhere. With `edge_taper_seconds > 0`, the band edges cosine-ramp
-    to blend smoothly into frozen context.
+    Operates on an assembled loop output latent; writes a `noise_mask`
+    that is 1.0 in bands centered on each internal iteration boundary
+    and 0.0 elsewhere. With `edge_taper_seconds > 0`, the band edges
+    cosine-ramp to blend smoothly into frozen context. Pairs with a
+    downstream low-σ corrective sampler — the mask tells the sampler
+    which frames to regenerate and which to leave frozen.
 
     Latent-frame math (matches `AudioLoopController` integer-latent emissions):
       stride_latents = window_latents - overlap_latents

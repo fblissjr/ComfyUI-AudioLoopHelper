@@ -64,23 +64,12 @@ REFINE_SIGMAS = "0.85, 0.7250, 0.4219, 0.0"
 FRAME_RATE = 25
 
 
-def _basic_io_in(name: str, dtype: str, link: int | None = None) -> dict:
-    """Build a generic input slot dict (no widget binding)."""
-    d: dict = {"name": name, "type": dtype}
-    if link is not None:
-        d["link"] = link
-    return d
-
-
-def _widget_in(name: str, dtype: str, link: int | None = None) -> dict:
-    """Input slot that is also surfaced as a widget on the node."""
-    d = _basic_io_in(name, dtype, link)
-    d["widget"] = {"name": name}
-    return d
-
-
-def _out(name: str, dtype: str) -> dict:
-    return {"name": name, "type": dtype, "links": []}
+# Slot-dict helpers live on WorkflowEditor as static methods. Locally aliased
+# here for call-site readability (the original `_basic_io_in` etc. names made
+# the build() function easier to scan).
+_basic_io_in = WorkflowEditor.io_in
+_widget_in = WorkflowEditor.widget_in
+_out = WorkflowEditor.out
 
 
 def build(ed: WorkflowEditor) -> dict[str, int]:

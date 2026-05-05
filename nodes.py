@@ -48,6 +48,39 @@ except ImportError:
 LTX_TEMPORAL_SCALE = 8  # LTX 2.3 VAE temporal compression factor (pixel_frames // 8 = latent_frames)
 
 
+def _make_cosine_taper_pair(
+    taper_latents: int, samples: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor] | tuple[None, None]:
+    """Return (ramp_up_b, ramp_down_b) broadcast to `samples.shape` along all
+    non-temporal dims, with `taper_latents` along the temporal axis.
+
+    Cosine ease 0 -> 1 (rising) and 1 -> 0 (falling). Endpoints excluded so
+    the taper region itself is strictly partial — the literal 0 and 1 sit
+    just outside the returned slice. Returns (None, None) when taper_latents
+    is non-positive so callers can treat this as a no-op signal.
+
+    Used by `LatentTemporalMask` (single retake band) and `LatentSeamZoneMask`
+    (multi-band centered on iteration boundaries) to write soft mask edges.
+    Centralized so the broadcast invariant — shape `[B, C, taper_latents, H, W]`
+    suitable for direct slice assignment — has one home.
+    """
+    if taper_latents <= 0:
+        return None, None
+    ramp_up = 0.5 * (1.0 - torch.cos(
+        torch.linspace(
+            0.0, math.pi, taper_latents + 2,
+            device=samples.device, dtype=samples.dtype,
+        )[1:-1]
+    ))
+    ramp_down = ramp_up.flip(0)
+    shape = (1, 1, taper_latents, 1, 1)
+    expand_dims = (
+        samples.shape[0], samples.shape[1], -1,
+        samples.shape[3], samples.shape[4],
+    )
+    return ramp_up.view(shape).expand(*expand_dims), ramp_down.view(shape).expand(*expand_dims)
+
+
 class LoopGeometry(NamedTuple):
     """Integer-latent loop geometry derived from user widget values."""
     window_pixel_frames: int
@@ -1918,22 +1951,8 @@ class LatentTemporalMask(io.ComfyNode):
                         range_latents = end_latent - start_latent
                         taper_latents = max(1, int(edge_taper_seconds * fps / LTX_TEMPORAL_SCALE))
                         taper_latents = min(taper_latents, range_latents // 2)
-                        if taper_latents > 0:
-                            # Cosine ease 0 -> 1 across taper_latents frames; endpoints
-                            # excluded so the taper region itself is strictly partial.
-                            ramp_up = 0.5 * (1.0 - torch.cos(
-                                torch.linspace(
-                                    0.0, math.pi, taper_latents + 2,
-                                    device=samples.device, dtype=samples.dtype,
-                                )[1:-1]
-                            ))
-                            ramp_down = ramp_up.flip(0)
-                            shape = (1, 1, taper_latents, 1, 1)
-                            ramp_up_b = ramp_up.view(shape).expand(
-                                samples.shape[0], samples.shape[1], -1,
-                                samples.shape[3], samples.shape[4],
-                            )
-                            ramp_down_b = ramp_down.view(shape).expand_as(ramp_up_b)
+                        ramp_up_b, ramp_down_b = _make_cosine_taper_pair(taper_latents, samples)
+                        if ramp_up_b is not None:
                             mask[:, :, start_latent:start_latent + taper_latents] = ramp_up_b
                             mask[:, :, end_latent - taper_latents:end_latent] = ramp_down_b
             out["noise_mask"] = mask
@@ -2036,15 +2055,9 @@ class LatentSeamZoneMask(io.ComfyNode):
                 if edge_taper_seconds > 0.0 else 0
             )
             taper_latents = min(taper_latents, half_band)
-
-            ramp_up = None
-            if taper_latents > 0:
-                ramp_up = 0.5 * (1.0 - torch.cos(
-                    torch.linspace(
-                        0.0, math.pi, taper_latents + 2,
-                        device=samples.device, dtype=samples.dtype,
-                    )[1:-1]
-                ))
+            # Loop-invariant: taper tensors depend only on taper_latents +
+            # samples.shape, so build once and reuse for every seam.
+            ramp_up_b, ramp_down_b = _make_cosine_taper_pair(taper_latents, samples)
 
             for i in range(1, iteration_count):
                 seam = stride * i
@@ -2053,18 +2066,15 @@ class LatentSeamZoneMask(io.ComfyNode):
                 if hi <= lo:
                     continue
                 mask[:, :, lo:hi] = 1.0
-                if ramp_up is not None:
-                    ramp_down = ramp_up.flip(0)
-                    shape = (1, 1, taper_latents, 1, 1)
-                    ramp_up_b = ramp_up.view(shape).expand(
-                        samples.shape[0], samples.shape[1], -1,
-                        samples.shape[3], samples.shape[4],
-                    )
-                    ramp_down_b = ramp_down.view(shape).expand_as(ramp_up_b)
+                if ramp_up_b is not None:
                     lead_lo = seam - half_band
                     lead_hi = lead_lo + taper_latents
                     trail_hi = seam + half_band
                     trail_lo = trail_hi - taper_latents
+                    # Skip ramp at edges where it doesn't fit; the hard band
+                    # write above leaves those frames at 1.0, which is a
+                    # reasonable default at a latent boundary (no frozen
+                    # context on the other side to blend with).
                     if lead_lo >= 0 and lead_hi <= total_frames:
                         mask[:, :, lead_lo:lead_hi] = ramp_up_b
                     if trail_lo >= 0 and trail_hi <= total_frames:
