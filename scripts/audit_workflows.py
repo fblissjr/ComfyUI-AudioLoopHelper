@@ -7,6 +7,15 @@ cfg=1, with STG-variant exception), resolution div-32, (L-1)%8==0,
 LTXVPreprocess img_compression >= 18, LTXVTiledVAEDecode preferred,
 preprocess symmetry (F2), and loop-body cropguides symmetry (F3).
 
+Loop-only invariants (frame planner SSoT, iteration stamp, prompt
+schedule, audio pre-encode wiring, F2/F3/F12 init-image symmetry,
+sage tracer iter grouping) are gated on `_is_loop_workflow`: workflows
+with no `TensorLoopOpen` / `TensorLoopClose` / `AudioLoopController`
+nodes (e.g. post-loop upscale or polish passes) silently skip them.
+Generic invariants (graph_acyclic, widget_shape, link_integrity,
+no_sd3_shift_node, resolution/length/volume, preprocess_compression)
+still run on every workflow.
+
 Exits 0 all-green; 1 on any ERR. WARNs don't fail.
 
 Usage:
@@ -78,6 +87,23 @@ def _is_retake(name: str) -> bool:
     return "retake" in name
 
 
+def _is_loop_workflow(by_type: dict[str, list[dict]]) -> bool:
+    """Heuristic: a workflow is "loop-shaped" if it has any of the loop
+    spine nodes. Drives gating of loop-only invariants so single-pass
+    workflows (e.g. post-loop upscale/polish) don't get false-positive
+    ERR / WARN hits from checks that have no semantic meaning outside
+    a tensor-loop topology.
+
+    Detection is structural — no user-facing flag, no JSON marker. Keep
+    in sync with the loop-spine node list in CLAUDE.md (Architecture →
+    Loop spine).
+    """
+    return any(
+        by_type.get(t)
+        for t in ("TensorLoopOpen", "TensorLoopClose", "AudioLoopController")
+    )
+
+
 def _audit_one(wf_path: Path) -> list[Finding]:
     findings: list[Finding] = []
     name = wf_path.name
@@ -94,14 +120,28 @@ def _audit_one(wf_path: Path) -> list[Finding]:
     def record(status: str, check: str, msg: str = "") -> None:
         findings.append(Finding(status, name, check, msg))
 
-    # Sage node
+    # Detect loop-shaped vs single-pass topology. Loop-only invariants
+    # (frame planner SSoT, iteration stamp, prompt schedule, audio
+    # pre-encode wiring, F2/F3/F12 init-image symmetry) are silently
+    # skipped on single-pass workflows — they have no semantic role
+    # there and would emit false-positive ERR / WARN otherwise. Generic
+    # invariants (graph_acyclic, widget_shape, link_integrity,
+    # no_sd3_shift_node) still run on all workflows.
+    is_loop = _is_loop_workflow(by_type)
+
+    # Sage node. Gated on loop topology: sage helps any sampler, but the
+    # `AudioLoopHelperSageAttention` tracer-iter-grouping path is the
+    # specific reason this WARN ships — single-pass workflows have no
+    # iter axis to group on, so a missing sage node there is noise.
+    # Legacy `PathchSageAttentionKJ` ERR also gates with loop because
+    # the migration target is the loop-specific replacement.
     sage = by_type.get("AudioLoopHelperSageAttention", [])
-    if not sage:
+    if not sage and is_loop:
         if by_type.get("PathchSageAttentionKJ"):
             record("ERR", "sage_node", "uses legacy PathchSageAttentionKJ instead of AudioLoopHelperSageAttention")
         else:
             record("WARN", "sage_node", "no sage node present")
-    else:
+    elif sage:
         all_good = True
         for n in sage:
             wv = n.get("widgets_values", [])
@@ -288,20 +328,22 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         record("OK", "dead_lora_loader_scaffolding_absent",
                "no dead scaffolding (canonical post-strip shape)")
 
-    # LoopIterationStamp
+    # LoopIterationStamp (loop-only — only meaningful inside the
+    # tensor-loop body for sage tracer iter grouping).
     if by_type.get("LoopIterationStamp"):
         record("OK", "iteration_stamp", "present")
     elif _is_retake(name):
         record("OK", "iteration_stamp", "n/a (retake workflow, no loop)")
-    else:
+    elif is_loop:
         record("WARN", "iteration_stamp", "missing (sage tracer iter grouping will be blank)")
 
     # LTXFramePlanner is the SSoT for dim/fps config; without it widget
     # values scatter across EmptyLTXVLatentVideo, ImageResizeKJv2,
-    # AudioLoopController, AudioLoopPlanner, and the subgraph. Retake is
-    # exempt (no loop spine); experimental forks downgrade to WARN.
+    # AudioLoopController, AudioLoopPlanner, and the subgraph. Retake
+    # and non-loop workflows are exempt (no loop spine to scatter
+    # across); experimental forks downgrade to WARN.
     is_experimental = wf_path.parent.name == EXPERIMENTAL_DIR_NAME
-    if not _is_retake(name):
+    if not _is_retake(name) and is_loop:
         if not by_type.get("LTXFramePlanner"):
             status = "WARN" if is_experimental else "ERR"
             record(
@@ -357,8 +399,9 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         record("OK", "prompt_schedule", "n/a (validator workflow)")
     elif _is_retake(name):
         record("OK", "prompt_schedule", "n/a (retake uses single CLIPTextEncode)")
-    else:
+    elif is_loop:
         record("WARN", "prompt_schedule", "no prompt schedule node")
+    # else: non-loop workflow — per-iteration prompts are loop-only
 
     # Sampler chain (skip validator; STG workflow has its own guider below)
     for t, (expected_wv, check_name) in EXPECTED_CHAIN.items():
@@ -373,7 +416,15 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         ]
         if mismatches:
             for n in mismatches:
-                record("WARN", check_name, f"{t}(id={n['id']}) widgets={n.get('widgets_values', [])}")
+                # Non-canonical schedule — informational. Some workflows
+                # (e.g. post-loop upscale/polish) deliberately use a
+                # shorter sigma profile; this WARN flags divergence from
+                # the distilled 8-step canonical, not a defect.
+                record(
+                    "WARN", check_name,
+                    f"{t}(id={n['id']}) non-canonical sigma profile: "
+                    f"widgets={n.get('widgets_values', [])}",
+                )
         else:
             record("OK", check_name, f"{t}={expected_wv}")
 
@@ -452,7 +503,9 @@ def _audit_one(wf_path: Path) -> list[Finding]:
     # #446 LTXVPreprocess, not #445 ImageResizeKJv2 directly. Skipping
     # preprocess on the loop branch reintroduces the microphone/subject-
     # replacement drift. See scripts/apply_loop_guide_preprocess_symmetry.py.
-    set_input_image = next((n for n in wf["nodes"] if n["id"] == 650), None)
+    # Loop-only: F2/F3/F12 are about the per-iter init-image path; on
+    # single-pass workflows there's no loop branch to keep symmetric.
+    set_input_image = next((n for n in wf["nodes"] if n["id"] == 650), None) if is_loop else None
     preprocess_node = next((n for n in wf["nodes"] if n["id"] == 446), None)
     if set_input_image and preprocess_node:
         link_id = set_input_image.get("inputs", [{}])[0].get("link") if set_input_image.get("inputs") else None
@@ -479,7 +532,7 @@ def _audit_one(wf_path: Path) -> list[Finding]:
     # #164 -> #381 -> #153. See scripts/apply_loop_cropguides_symmetry.py.
     defs = wf.get("definitions") or {}
     sgs = defs.get("subgraphs", []) if isinstance(defs, dict) else []
-    if sgs:
+    if sgs and is_loop:
         sg = sgs[0]
         sg_node_ids = {n["id"] for n in sg.get("nodes", [])}
         if {644, 655, 1519}.issubset(sg_node_ids):
@@ -601,14 +654,21 @@ def _audit_one(wf_path: Path) -> list[Finding]:
                         "Run scripts/apply_split_cropguides.py --revert and re-apply.",
                     )
 
-    _check_prompt_relay_wiring(wf, by_type, record)
-    _check_ltx2_nag_reaches_loop(wf, by_type, record)
-    _check_iclora_video_reference_wiring(wf, by_type, record)
-    _check_audio_latent_slice_source_seconds_wired(wf, by_type, record)
-    _check_audio_latent_slice_iter_wiring(wf, by_type, record)
-    _check_initial_render_audio_duration_wired(wf, by_type, record)
-    _check_overlap_seconds_single_source(wf, by_type, record)
-    _check_vhs_video_combine_frame_rate_parity(wf, by_type, record)
+    # Loop-only checks: audio pre-encode topology, init-image symmetry,
+    # planner-driven wiring. Single-pass workflows (e.g. post-loop
+    # upscale/polish) skip these silently — the invariants describe loop
+    # body wiring that doesn't exist there.
+    if is_loop:
+        _check_prompt_relay_wiring(wf, by_type, record)
+        _check_ltx2_nag_reaches_loop(wf, by_type, record)
+        _check_iclora_video_reference_wiring(wf, by_type, record)
+        _check_audio_latent_slice_source_seconds_wired(wf, by_type, record)
+        _check_audio_latent_slice_iter_wiring(wf, by_type, record)
+        _check_initial_render_audio_duration_wired(wf, by_type, record)
+        _check_overlap_seconds_single_source(wf, by_type, record)
+        _check_vhs_video_combine_frame_rate_parity(wf, by_type, record)
+
+    # Generic invariants — apply to all workflows regardless of topology.
     _check_no_sd3_shift_node(wf, by_type, record)
     _check_graph_acyclic(wf, by_id, record)
     _check_link_integrity(wf, by_id, links_by_id, record)

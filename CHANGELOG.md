@@ -7,6 +7,28 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- **`scripts/audit_workflows.py` calibration for non-loop workflows.**
+  Added `_is_loop_workflow(by_type)` helper that detects loop topology
+  by presence of any `TensorLoopOpen` / `TensorLoopClose` /
+  `AudioLoopController` node. Loop-only invariants (`sage_node`,
+  `iteration_stamp`, `frame_planner_present`, `prompt_schedule`, F2/F3
+  init-image symmetry, `_check_prompt_relay_wiring`,
+  `_check_ltx2_nag_reaches_loop`, `_check_iclora_video_reference_wiring`,
+  `_check_audio_latent_slice_*`, `_check_initial_render_audio_duration_wired`,
+  `_check_overlap_seconds_single_source`,
+  `_check_vhs_video_combine_frame_rate_parity`) silently skip on
+  workflows without that topology. Generic invariants
+  (`graph_acyclic`, `link_integrity`, `widget_shape`, resolution /
+  length / volume checks, `_check_no_sd3_shift_node`) and the retake
+  check stay ungated. The `manual_sigmas` warning message reworded
+  from a raw widget dump to "non-canonical sigma profile" so a
+  deliberately-low-σ tail (e.g. the 3-step refine in upscale and
+  seam-refinement workflows) reads as informational rather than
+  broken. Effect: the new post-loop polish workflows
+  (`internal/workflows/upscale_loop_output.draft.json`,
+  `seam_zone_refinement.draft.json`) audit clean (0 ERR). Existing
+  loop workflows unchanged.
+
 - **Workflow consolidation.** Three shipped variants merged into one:
   `audio-loop-music-video_latent_intro.json`,
   `audio-loop-music-video_latent_iclora.json`, and
@@ -127,6 +149,21 @@ This project uses [Semantic Versioning](https://semver.org/).
   use the diagnostic to decide whether seam-zone refinement is needed
   on a given render before wiring this node into a corrective
   workflow.
+
+- **`scripts/build_seam_refinement_workflow.py`** — builds the
+  post-loop seam-zone refinement workflow from scratch (22 nodes, 27
+  links) at `internal/workflows/seam_zone_refinement.draft.json`.
+  Topology: `VHS_LoadVideo → VAEEncode → LatentSeamZoneMask →
+  LTXVConcatAVLatent (empty audio) → SamplerCustomAdvanced (3-step
+  σ-tail [0.85, 0.7250, 0.4219, 0.0], euler, CFG=1) →
+  LTXVSeparateAVLatent → LTXVCropGuides → LTXVTiledVAEDecode →
+  VHS_VideoCombine`. Original audio passes through to combine without
+  re-encoding. Idempotent; `--dry-run` prints node table, `--revert`
+  deletes the output. Loader names + sigma profile + frame rate
+  centralized as constants at the top of the script. Pairs with
+  `scripts/diagnose_overlap_seams.py`: run the diagnostic on a real
+  render first to confirm boundary-zone artifacts exist above the
+  noise floor before configuring this workflow.
 
 - **`docs/reference/debug_tools.md`** — adds rows for
   `diagnose_overlap_seams.py` (Inspection scripts), a new "Workflow
