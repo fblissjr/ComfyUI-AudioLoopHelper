@@ -38,6 +38,8 @@ When ComfyUI isn't loaded, `define_schema()` returns `_Passthrough` stubs and `s
 
 When adding a new schema invariant, copy the AST-walk pattern. Don't try `from nodes import X; X.define_schema()` — it will work locally with ComfyUI installed and silently no-op on CI.
 
+**Class-scoped invariants** (e.g. "LatentTemporalMask's `edge_taper_seconds` default must be 0.0", where the same input name might appear on a sibling node) use `_scan_io_input_records_in_class(path, class_name)` — locates `class X` in source text, bounds the body by the next top-level `\nclass `, filters records by lineno. Copy the pattern at `tests/test_node_schemas.py::test_latent_temporal_mask_edge_taper_default_is_zero` when adding a per-class default-value guard.
+
 ## Shared fakes (`tests/_fakes.py`)
 
 Three-layer hierarchy. Each layer adds the surface a class of tests needs:

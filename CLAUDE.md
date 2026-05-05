@@ -41,7 +41,7 @@ Core nodes (per-node role + wiring in each class's docstring; full reference at 
 - **Loop spine**: `AudioLoopController`, `LoopIterationStamp`, `IterationCleanup`, `AudioLoopPlanner`, `AudioDuration`
 - **Prompt schedule**: `TimestampPromptScheduleBatchEncode` + `ConditioningSelectByIteration` (current) / `TimestampPromptSchedule` + `CachedTextEncode` (legacy; don't wire in loop body)
 - **Keyframe schedule**: `KeyframeLatentScheduleBatchEncode` + `LatentSelectByIteration` (current — VAE-encodes once outside loop) / `KeyframeImageSchedule` + `ImageBlend` (legacy; per-iter VAE)
-- **Latent ops**: `LatentContextExtract`, `LatentOverlapTrim`, `StripLatentNoiseMask`, `LatentTemporalMask` (retake)
+- **Latent ops**: `LatentContextExtract`, `LatentOverlapTrim`, `LatentTemporalMask` (retake; `edge_taper_seconds` for soft boundary), `LatentSeamZoneMask` (multi-band mask centered on iteration boundaries — pairs with `scripts/diagnose_overlap_seams.py`)
 - **Conditioning blend**: `ConditioningBlend` (works with Gemma 3 + CLIP)
 - **Attention + profiling**: `AudioLoopHelperSageAttention` (default `auto_mask_aware`), `ProfileBegin`/`IterStep`/`End`
 - **Step-skipping cache**: `LTXVideoEasyCache` (experimental, default off)

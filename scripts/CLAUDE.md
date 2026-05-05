@@ -10,6 +10,8 @@ This subtree holds workflow-mutation scripts (`apply_*.py`), workflow validators
 
 Top-level helpers: `find_node`, `has_node`, `require_nodes`, `find_link_to_slot(tgt, slot)`, `add_link`, `remove_link`, `rewire_input(tgt, slot, new_src, new_src_slot, dtype)`, `find_links_to/from`. Subgraph helpers (mirror naming): `find_subgraph_invoker`, `find_subgraph_node`, `find_subgraph_link`, `find_subgraph_link_to_slot(tgt, slot)`, `add_subgraph_link`, `remove_subgraph_link`, `rewire_subgraph_input`. `find_input_slot` works on both. **Don't hand-roll link lookups or rewires** — `find_link_to_slot` replaces the `next(lk for lk in ed.wf["links"] if lk[0] == link_id)` pattern; `rewire_input` / `rewire_subgraph_input` replace the `remove_link` + `add_link` splice.
 
+Slot-dict shape helpers (static methods): `WorkflowEditor.io_in(name, dtype, link=None)`, `widget_in(name, dtype, link=None)`, `out(name, dtype)`. Use these in `from_scratch` builders (`scripts/build_*_workflow.py`) instead of open-coding the `{"name": ..., "type": ..., "link": ...}` dict literals. The helpers preserve the slot-dict contract that `add_top_level_node` consumes.
+
 `scripts/_apply_helpers.py` is for **RAW-orjson fork-and-strip scripts only** (debug-tool stability when `WorkflowEditor` itself is suspect) — NOT a general utility module. Apply scripts that use `WorkflowEditor` (the canonical path) don't import from it. Confirm by reading its docstring before extracting helpers there.
 
 ## Subgraph editing mechanics
