@@ -62,6 +62,60 @@ This project uses [Semantic Versioning](https://semver.org/).
   `initial_render_audio_duration_wired`).
 
 ### Added
+- **`LatentTemporalMask.edge_taper_seconds`** — optional cosine taper at
+  retake-section boundaries. Default `0.0` keeps the historical
+  hard-mask output bit-identical (regression guard); non-zero values
+  ramp the noise_mask `0 → 1` over the taper window at the leading
+  edge and `1 → 0` at the trailing edge so a downstream inpainting
+  sampler blends the regenerated region into surrounding context
+  instead of hitting a hard step. Taper width is clamped to half the
+  retake range so leading and trailing ramps never overlap. Existing
+  retake workflows pick up the new input slot transparently
+  (ComfyUI's loader fills missing widget values from the schema
+  default). Behavioral coverage: `tests/test_retake_nodes.py` (5 new
+  tests). AST guard: `tests/test_node_schemas.py::test_latent_temporal_mask_edge_taper_default_is_zero`
+  catches rename, removal, default change, and accidental duplication
+  across node modules.
+
+- **`scripts/apply_lanczos_init_preprocess.py`** — applies a
+  supersample-then-decimate two-stage lanczos preprocess in front of
+  the init-image resize node. With a single-pass downscale from a
+  much-larger source, residual aliasing on faces, text, and fine
+  textures shows in the encoded latent. The two-stage pass —
+  supersample to 2× target via lanczos, then decimate via the existing
+  target-dim resize — gives the second pass's anti-alias kernel
+  enough samples to integrate properly. No-op when source ≤ target.
+  Stages the variant to `internal/workflows/loop_with_lanczos_preprocess.draft.json`;
+  does not mutate shipped workflows. Idempotent (signature-checked
+  via node title), `--revert`, `--dry-run`. Drift-sync flow:
+  `--revert && apply` regenerates the draft from the current source,
+  picking up any upstream bug fixes automatically.
+
+- **`scripts/build_upscale_workflow.py`** — builds the post-loop
+  spatial-upscale workflow from scratch (24 nodes, 32 links) at
+  `internal/workflows/upscale_loop_output.draft.json`. Topology:
+  `VHS_LoadVideo → VAEEncode → LTXVLatentUpsampler (2×) →
+  LTXVImgToVideoConditionOnly → LTXVConcatAVLatent → SamplerCustomAdvanced
+  (3-step σ-tail [0.85, 0.7250, 0.4219, 0.0], euler, CFG=1) →
+  LTXVSeparateAVLatent → LTXVCropGuides → LTXVTiledVAEDecode →
+  VHS_VideoCombine`. Original audio passes through directly to
+  combine without re-encoding. Idempotent; `--dry-run` prints the
+  node table without writing, `--revert` deletes the output. Loader
+  names + sigma profile + frame rate centralized as constants at the
+  top of the script.
+
+- **`scripts/diagnose_overlap_seams.py`** — Phase A diagnostic for
+  iteration-boundary artifacts in assembled loop output latents. Runs
+  the per-frame ghost-residual `|f[t] - (f[t-1] + f[t+1]) / 2|`,
+  inverts and normalizes to a ghost score (HIGH = ghost-like), and
+  reports top-K frames plus per-seam-band scores derived from
+  `--iteration-count`, `--window-latents`, and `--overlap-latents`.
+  Includes a noise-floor baseline (median ghost score) so boundary-
+  zone scores read against it. Pure CPU analysis on a saved latent
+  tensor; gating evidence for Phase B (a `LatentSeamZoneMask` node +
+  experimental corrective workflow). If real renders show
+  boundary-zone scores well above the noise floor, build Phase B.
+
 - **`example_workflows/audio-loop-music-video_latent_intro.json`** —
   shipped "intro" variant built atop the pre-encode workflow. Two
   `LoraLoaderModelOnly` nodes bypassed-by-default (Distill + Style;
