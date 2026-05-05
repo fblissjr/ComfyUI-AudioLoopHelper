@@ -41,7 +41,7 @@ Both templates include the canonical `--revert`, `--dry-run`, idempotence, and `
 
 ## Before archiving an apply script
 
-Ref-counting (grep across docs/tests/CLAUDE.md) is necessary but **not sufficient** — it misses three failure modes:
+Ref-counting (grep across `docs/`, `tests/`, and CLAUDE.md files) is necessary but **not sufficient** — it misses three failure modes:
 
 1. **Unapplied emergency fallback** — script never ran on canonical (e.g. `apply_audio_vae_fix.py`), so canonical state diverges from the script's "after" state. Verify by inspecting node types in `example_workflows/*.json`.
 2. **Active CLI tool driven from `internal/`** — script has zero refs in public surface but is the documented invocation path in a private action-item ladder. Grep `internal/` before deciding.
