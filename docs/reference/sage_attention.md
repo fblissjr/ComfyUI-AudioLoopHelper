@@ -1,4 +1,4 @@
-Last updated: 2026-04-23 (mask-aware routing shipped as default)
+Last updated: 2026-05-05
 
 # AudioLoopHelperSageAttention -- Reference
 
