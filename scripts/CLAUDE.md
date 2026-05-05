@@ -53,6 +53,8 @@ Verdict rule: archive only if (a) the migration is baked AND idempotent on curre
 
 Every fix that ships an apply script ships a matching audit check in `audit_workflows.py`. The check returns ERR with a `Run scripts/apply_<X>.py` remediation pointer when the invariant is violated. This prevents silent regression of fixes a sibling branch might revert.
 
+**Carve-out for staged-variant scripts:** apply scripts that stage drafts into `internal/workflows/` (don't mutate `example_workflows/`) skip the F-pair audit-invariant requirement. F-pair applies at promotion time — when a draft graduates to `example_workflows/` and a regression-protection invariant earns its keep on the shipped surface. Reference: `apply_lanczos_init_preprocess.py`, `apply_p3_retake_edit_lora.py` ship without paired audits because their outputs are gitignored drafts.
+
 Inventory (canonical list + remediation pointers): **`docs/reference/debug_tools.md`**. Pairs are referenced by F-number throughout root CLAUDE.md and elsewhere. The audit IS the rule — when in doubt, look at the live `record(...)` call sites in `audit_workflows.py` rather than re-deriving from prose.
 
 In addition to F-pairs, three **generic invariants** run unconditionally: `graph_acyclic`, `widget_shape`, `link_integrity`. Plus one AST-shaped test: `tests/test_node_schemas.py::test_keyframe_idxs_cleared_to_none_not_empty_list`. Together these catch CLASSES of drift without per-bug rules.

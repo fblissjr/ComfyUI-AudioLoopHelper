@@ -40,6 +40,8 @@ When adding a new schema invariant, copy the AST-walk pattern. Don't try `from n
 
 **Class-scoped invariants** (e.g. "LatentTemporalMask's `edge_taper_seconds` default must be 0.0", where the same input name might appear on a sibling node) use `_scan_io_input_records_in_class(path, class_name)` — locates `class X` in source text, bounds the body by the next top-level `\nclass `, filters records by lineno. Copy the pattern at `tests/test_node_schemas.py::test_latent_temporal_mask_edge_taper_default_is_zero` when adding a per-class default-value guard.
 
+**Red-then-green even for AST tests added post-hoc.** When the implementation already exists and you're back-filling a schema guard, temporarily mutate the asserted invariant (e.g. flip the default to `0.5`) and confirm the new test fails for the right reason; restore. Avoids tests that pass only because the implementation happened to be correct — independent verification of the test logic itself. Same discipline as the red phase of behavioral TDD; cheap (~30s) and catches AST-walk bugs that would otherwise lurk until the implementation drifts.
+
 ## Shared fakes (`tests/_fakes.py`)
 
 Three-layer hierarchy. Each layer adds the surface a class of tests needs:
