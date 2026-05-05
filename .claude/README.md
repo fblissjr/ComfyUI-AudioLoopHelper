@@ -13,7 +13,7 @@ stay per-user (see "Local-only files" below).
 .claude/
 ├── README.md                       (this file)
 ├── settings.json                   (committed — portable hooks)
-├── settings.local.json             (gitignored — per-user permissions + ComfyUI loader test)
+├── settings.local.json             (gitignored — per-user permissions)
 ├── agents/
 │   ├── conditioning-path-auditor.md
 │   ├── ltx-constraints-auditor.md
