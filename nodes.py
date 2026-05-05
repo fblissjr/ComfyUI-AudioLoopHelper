@@ -1941,6 +1941,140 @@ class LatentTemporalMask(io.ComfyNode):
         return io.NodeOutput(out)
 
 
+class LatentSeamZoneMask(io.ComfyNode):
+    """Writes a multi-band noise_mask centered on iteration boundaries.
+
+    Companion to `LatentTemporalMask`: where the temporal mask retakes a
+    user-specified `[start_time, end_time]` section, this one targets
+    every internal iteration boundary in an assembled loop output. The
+    boundaries are derived from the same integer-latent counts that
+    `AudioLoopController` runs the loop with — `stride = window - overlap`,
+    seams at `[stride, 2*stride, ..., (N-1)*stride]`.
+
+    `edge_taper_seconds > 0` cosine-ramps the outer edges of each band so
+    the corrective sampler blends seam-zone regenerations into frozen
+    context. Default 0.0 = hard band edges.
+
+    Use case: after a loop renders, run this node + a low-σ corrective
+    sampler to refine just the seam zones if the diagnostic shows
+    boundary-aligned artifacts above the noise floor.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="LatentSeamZoneMask",
+            display_name="Latent Seam-Zone Mask",
+            category="looping/audio",
+            description=(
+                "Writes a multi-band noise_mask: 1.0 in bands centered on each internal "
+                "iteration boundary, 0.0 elsewhere. Optional cosine taper at band edges."
+            ),
+            inputs=[
+                io.Latent.Input("latent", tooltip="Assembled loop output latent."),
+                io.Int.Input(
+                    "iteration_count", default=1, min=1, max=10_000,
+                    tooltip="Total iterations stitched (from AudioLoopController.total_iterations).",
+                ),
+                io.Int.Input(
+                    "window_latents", default=8, min=1, max=10_000,
+                    tooltip="Latents per window (from AudioLoopController.window_latents).",
+                ),
+                io.Int.Input(
+                    "overlap_latents", default=2, min=0, max=10_000,
+                    tooltip="Overlap latents per window (from AudioLoopController.overlap_latents). Must be < window_latents.",
+                ),
+                io.Float.Input(
+                    "seam_band_seconds", default=0.96, min=0.0, max=10.0, step=0.01,
+                    tooltip="Full width of the band centered on each seam, in seconds.",
+                ),
+                io.Float.Input(
+                    "edge_taper_seconds", default=0.0, min=0.0, max=2.0, step=0.01,
+                    tooltip=(
+                        "Cosine taper width at each end of each band. "
+                        "0.0 (default) = hard band edges. >0 ramps 0->1 at the leading "
+                        "edge of each band and 1->0 at the trailing edge."
+                    ),
+                ),
+                io.Float.Input(
+                    "fps", default=25.0, min=1.0, max=120.0, step=0.01,
+                    tooltip="Video frame rate. LTX 2.3 pipeline default is 25.",
+                ),
+            ],
+            outputs=[
+                io.Latent.Output(tooltip="Latent with multi-band noise_mask set."),
+            ],
+        )
+
+    @classmethod
+    def execute(
+        cls,
+        latent: dict,
+        iteration_count: int,
+        window_latents: int,
+        overlap_latents: int,
+        seam_band_seconds: float,
+        fps: float,
+        edge_taper_seconds: float = 0.0,
+    ) -> io.NodeOutput:
+        with _profile_span("LatentSeamZoneMask"):
+            stride = window_latents - overlap_latents
+            if stride <= 0:
+                raise ValueError(
+                    f"window_latents ({window_latents}) must exceed overlap_latents "
+                    f"({overlap_latents}); stride={stride} would yield no valid seams."
+                )
+
+            out = latent.copy()
+            samples = out["samples"]
+            total_frames = samples.shape[2]
+            mask = torch.zeros_like(samples)
+
+            half_band = max(1, int(seam_band_seconds * fps / LTX_TEMPORAL_SCALE / 2))
+            taper_latents = (
+                max(1, int(edge_taper_seconds * fps / LTX_TEMPORAL_SCALE))
+                if edge_taper_seconds > 0.0 else 0
+            )
+            taper_latents = min(taper_latents, half_band)
+
+            ramp_up = None
+            if taper_latents > 0:
+                ramp_up = 0.5 * (1.0 - torch.cos(
+                    torch.linspace(
+                        0.0, math.pi, taper_latents + 2,
+                        device=samples.device, dtype=samples.dtype,
+                    )[1:-1]
+                ))
+
+            for i in range(1, iteration_count):
+                seam = stride * i
+                lo = max(0, seam - half_band)
+                hi = min(total_frames, seam + half_band)
+                if hi <= lo:
+                    continue
+                mask[:, :, lo:hi] = 1.0
+                if ramp_up is not None:
+                    ramp_down = ramp_up.flip(0)
+                    shape = (1, 1, taper_latents, 1, 1)
+                    ramp_up_b = ramp_up.view(shape).expand(
+                        samples.shape[0], samples.shape[1], -1,
+                        samples.shape[3], samples.shape[4],
+                    )
+                    ramp_down_b = ramp_down.view(shape).expand_as(ramp_up_b)
+                    lead_lo = seam - half_band
+                    lead_hi = lead_lo + taper_latents
+                    trail_hi = seam + half_band
+                    trail_lo = trail_hi - taper_latents
+                    if lead_lo >= 0 and lead_hi <= total_frames:
+                        mask[:, :, lead_lo:lead_hi] = ramp_up_b
+                    if trail_lo >= 0 and trail_hi <= total_frames:
+                        mask[:, :, trail_lo:trail_hi] = ramp_down_b
+
+            out["noise_mask"] = mask
+
+        return io.NodeOutput(out)
+
+
 class KeyframeLatentScheduleBatchEncode(io.ComfyNode):
     """Pre-encodes every per-iteration keyframe LATENT up front, OUTSIDE the loop.
 
@@ -2989,6 +3123,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LatentContextExtract,
             LatentOverlapTrim,
             LatentTemporalMask,
+            LatentSeamZoneMask,
             AudioPitchDetect,
             LTXResolutionFromAspect,
             LTXFramePlanner,

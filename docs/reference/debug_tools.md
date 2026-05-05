@@ -1,4 +1,4 @@
-Last updated: 2026-04-30
+Last updated: 2026-05-05
 
 # Debug & Workflow Tooling Reference
 
@@ -19,6 +19,7 @@ Read-only against any workflow JSON; none mutate state.
 | `scripts/trace_node_source.py <wf> <id> --include-inputs` | Resolve any node to AST-extracted source + wiring. Flags `object_patches`, captured tensors, bypasses, widget overrides. | Before trusting any widget annotation, before assuming bypass is inert. |
 | `scripts/sage_telemetry_summary.py --sage-log <path> [--exec-log <path>]` | Outside-ComfyUI aggregator. Per-(kernel, mask) median/p90/count + Phase 0 gate verdict. Reads only; does not write. | After a traced render, when comparing kernel routing. |
 | `scripts/verify_sage_iteration_trace.sh` | Diff per-iter sage kernel counts. | Suspecting per-iter kernel-routing drift. |
+| `scripts/diagnose_overlap_seams.py --latent <path> --iteration-count N --window-latents W --overlap-latents O` | Per-frame ghost-residual scan `\|f[t] - (f[t-1] + f[t+1]) / 2\|` (inverted, normalized) on an assembled loop output latent. Reports top-K ghost-scoring frames, per-seam-band scores at each iteration-boundary, and a noise-floor baseline. CPU-only; reads saved latent tensors or video files. | Investigating iteration-boundary artifacts (seam ghosting, blend-flicker). Gating evidence before building a corrective seam-zone pass. |
 
 `audit_workflows.py` is **intentionally `WorkflowEditor`-independent** —
 raw `orjson.loads` + inline link scans. Debug tools must stay usable when
@@ -115,6 +116,32 @@ Templates: `scripts/templates/apply_script_all_workflows.py` (in-place
 edits) and `scripts/templates/apply_script_staged_variant.py`
 (experimental staging). Both include the canonical `--revert`,
 `--dry-run`, idempotence, and `require_nodes` guards.
+
+**Selected staged-variant apply scripts** (stage drafts under
+`internal/workflows/`; promote to `example_workflows/experimental/` after
+A/B validation):
+
+| Script | Stages to | What it does |
+|---|---|---|
+| `apply_lanczos_init_preprocess.py` | `loop_with_lanczos_preprocess.draft.json` | Inserts a supersample-then-decimate `ImageResizeKJv2` pair in front of the init-image resize. Targets residual aliasing on faces / fine textures when the source image is much larger than the schedule target dims. Idempotent, `--revert`, `--dry-run`. |
+| `apply_p3_retake_edit_lora.py` | `retake_edit.draft.json` | Wires the section-targeted retake-edit pattern into a copy of the canonical retake workflow: `LTXICLoRALoaderModelOnly` (edit-anything LoRA — ADD / REMOVE / REPLACE / RESTYLE) into the MODEL chain, plus `LTXVAddGuideMulti` (strength=1, frame_idx=0) between `LatentTemporalMask` and `SamplerCustomAdvanced`. Existing positive `CLIPTextEncode` becomes the edit instruction. Idempotent, `--revert`, `--dry-run`. |
+
+---
+
+## Workflow build scripts
+
+Scratch-build new workflows from constants — distinct from apply scripts
+(which mutate or stage variants of an existing canonical workflow).
+
+| Script | Builds | Topology |
+|---|---|---|
+| `scripts/build_keyframe_workflow.py` | (per script) | Keyframe-schedule baseline. |
+| `scripts/build_upscale_workflow.py` | `internal/workflows/upscale_loop_output.draft.json` | Post-loop spatial upscale: `VHS_LoadVideo → VAEEncode → LTXVLatentUpsampler (2×) → LTXVImgToVideoConditionOnly → LTXVConcatAVLatent → SamplerCustomAdvanced (3-step σ-tail `[0.85, 0.7250, 0.4219, 0.0]`, euler, CFG=1) → LTXVSeparateAVLatent → LTXVCropGuides → LTXVTiledVAEDecode → VHS_VideoCombine` (with original audio re-attached). 24 nodes, 32 links; constants centralized at the top of the script. `--dry-run`, `--revert`. |
+
+Build scripts share apply-script conventions for `--dry-run` / `--revert`
+/ idempotence, but produce a deterministic file from constants rather
+than editing an existing one. Re-running overwrites with byte-identical
+output (constant node ids, deterministic link order).
 
 ---
 

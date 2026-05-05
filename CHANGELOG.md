@@ -104,6 +104,42 @@ This project uses [Semantic Versioning](https://semver.org/).
   names + sigma profile + frame rate centralized as constants at the
   top of the script.
 
+- **`LatentSeamZoneMask`** — node companion to `LatentTemporalMask`.
+  Writes a multi-band `noise_mask` centered on each internal iteration
+  boundary in an assembled loop output latent. Boundaries derive from
+  the same integer-latent counts the loop ran with: `stride =
+  window_latents - overlap_latents`, seams at `[stride, 2*stride, ...,
+  (N-1)*stride]`. Optional `edge_taper_seconds > 0` cosine-ramps the
+  outer edges of each band so a downstream low-σ corrective sampler
+  blends seam-zone regenerations into frozen context. Default
+  `iteration_count=1` writes an all-zero mask (no-op) so the node is
+  safe to drop onto a workflow before configuration. Coverage:
+  8 behavioral tests in `tests/test_retake_nodes.py::TestLatentSeamZoneMask`
+  (single-iteration no-op, multi-band shape, taper ramps, half-band
+  clamp, default-is-hard, samples-preservation, zero-stride raises,
+  band-clipped-at-edges). AST guard:
+  `tests/test_node_schemas.py::test_latent_seam_zone_mask_iteration_count_default_is_one`
+  asserts the `iteration_count` default stays at 1 inside the
+  `LatentSeamZoneMask` class body — catches a default change that
+  would surprise users by writing a non-zero mask on first drop.
+  Registered in `comfy_entrypoint()` so it appears in the ComfyUI
+  category browser. Pairs with `scripts/diagnose_overlap_seams.py` —
+  use the diagnostic to decide whether seam-zone refinement is needed
+  on a given render before wiring this node into a corrective
+  workflow.
+
+- **`docs/reference/debug_tools.md`** — adds rows for
+  `diagnose_overlap_seams.py` (Inspection scripts), a new "Workflow
+  build scripts" section covering `build_upscale_workflow.py`, and a
+  "Selected staged-variant apply scripts" subsection covering
+  `apply_lanczos_init_preprocess.py` + `apply_p3_retake_edit_lora.py`.
+  Pre-existing apply-script conventions section unchanged.
+
+- **`docs/README.md`** — task-first nav adds a pointer to
+  `build_upscale_workflow.py` and a seam-artifact entry under "My
+  output looks wrong / workflow won't run" pointing at
+  `diagnose_overlap_seams.py`.
+
 - **`scripts/apply_p3_retake_edit_lora.py`** — wires the section-targeted
   retake-edit pattern into a copy of the canonical retake workflow.
   Adds `LTXICLoRALoaderModelOnly` patching MODEL with the edit-anything

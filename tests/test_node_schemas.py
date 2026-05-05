@@ -199,12 +199,23 @@ def test_latent_temporal_mask_edge_taper_default_is_zero():
         path = REPO_ROOT / module
         if not path.exists():
             continue
+        src = path.read_text()
+        if "class LatentTemporalMask" not in src:
+            continue
+        cls_start = src.index("class LatentTemporalMask")
+        cls_start_line = src.count("\n", 0, cls_start) + 1
+        # Bound the LatentTemporalMask class body by the next class definition.
+        next_cls_offset = src.find("\nclass ", cls_start + len("class LatentTemporalMask"))
+        cls_end_line = (
+            src.count("\n", 0, next_cls_offset) + 1
+            if next_cls_offset != -1 else float("inf")
+        )
         for lineno, name, kwargs in _scan_io_input_records(path):
-            if name == "edge_taper_seconds":
+            if name == "edge_taper_seconds" and cls_start_line <= lineno < cls_end_line:
                 matches.append((module, lineno, kwargs))
     assert len(matches) == 1, (
-        f"Expected exactly one input named 'edge_taper_seconds'; found "
-        f"{len(matches)}: {matches}"
+        f"Expected exactly one io.Float.Input('edge_taper_seconds', ...) inside "
+        f"LatentTemporalMask; found {len(matches)}: {matches}"
     )
     module, lineno, kwargs = matches[0]
     default = kwargs.get("default")
@@ -212,4 +223,47 @@ def test_latent_temporal_mask_edge_taper_default_is_zero():
         f"{module}:{lineno} -> io.Float.Input('edge_taper_seconds', "
         f"default={default!r}, ...) — default must be 0.0 (saved workflows "
         f"that lack the widget value would silently change behavior)."
+    )
+
+
+def test_latent_seam_zone_mask_iteration_count_default_is_one():
+    """`LatentSeamZoneMask.iteration_count` must default to 1 (no seams).
+
+    A default of 2+ would write a non-zero mask the first time the node
+    is dropped onto a workflow, surprising users. Default 1 = single
+    iteration = no internal seams = all-zero mask (no-op). The user
+    sets iteration_count to match their actual loop run.
+
+    Companion to `test_latent_temporal_mask_edge_taper_default_is_zero`:
+    same default-must-be-zero-effect contract for the seam-zone family.
+    """
+    matches: list[tuple[str, int, dict]] = []
+    for module in _NODE_FILES:
+        path = REPO_ROOT / module
+        if not path.exists():
+            continue
+        # Find the io.Int.Input("iteration_count", ...) inside LatentSeamZoneMask's schema.
+        src = path.read_text()
+        if "class LatentSeamZoneMask" not in src:
+            continue
+        for lineno, name, kwargs in _scan_io_input_records(path):
+            if name == "iteration_count":
+                # Filter to occurrences inside LatentSeamZoneMask's class body
+                # by lineno bracket — find the class definition line and the
+                # next class line, accept iteration_count records in between.
+                cls_start = src.index("class LatentSeamZoneMask")
+                cls_start_line = src.count("\n", 0, cls_start) + 1
+                # Heuristic: any io.Int.Input named iteration_count below the
+                # class definition is ours (no other node uses this name).
+                if lineno >= cls_start_line:
+                    matches.append((module, lineno, kwargs))
+    assert len(matches) == 1, (
+        f"Expected exactly one io.Int.Input('iteration_count', ...) inside "
+        f"LatentSeamZoneMask; found {len(matches)}: {matches}"
+    )
+    module, lineno, kwargs = matches[0]
+    default = kwargs.get("default")
+    assert default == 1, (
+        f"{module}:{lineno} -> io.Int.Input('iteration_count', default={default!r}, ...) "
+        f"— default must be 1 (single iteration = no seams = all-zero mask = no-op)."
     )

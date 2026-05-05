@@ -1,4 +1,4 @@
-"""Tests for LatentTemporalMask — retake support.
+"""Tests for LatentTemporalMask + LatentSeamZoneMask — retake / seam refinement support.
 
 Latent-frame math (per CLAUDE.md "Key patterns"):
   start_latent = int(start_time * fps / 8)
@@ -304,3 +304,197 @@ class TestLatentTemporalMask:
             edge_taper_seconds=0.32,
         )
         assert result[0]["noise_mask"].sum().item() == 0.0
+
+
+class TestLatentSeamZoneMask:
+    """Multi-band soft noise_mask centered on iteration boundaries.
+
+    Phase B of the seam-zone refinement design (see
+    `internal/design/polish_passes_design.md §P5`). Operates on an
+    assembled loop output latent; writes a `noise_mask` that is 1.0 in
+    bands centered on each internal iteration boundary and 0.0
+    elsewhere. With `edge_taper_seconds > 0`, the band edges cosine-ramp
+    to blend smoothly into frozen context.
+
+    Latent-frame math (matches `AudioLoopController` integer-latent emissions):
+      stride_latents = window_latents - overlap_latents
+      seams at multiples of stride: [stride, 2*stride, ..., (N-1)*stride]
+      half_band_latents = max(1, int(seam_band_seconds * fps / 8 / 2))
+      band per seam s = [s - half_band, s + half_band)
+    """
+
+    def test_single_iteration_no_seams(self):
+        """iteration_count=1 → no internal boundaries → mask all zeros (no-op)."""
+        from nodes import LatentSeamZoneMask
+
+        latent = _make_latent(frames=16)
+        result = LatentSeamZoneMask.execute(
+            latent=latent,
+            iteration_count=1,
+            window_latents=8,
+            overlap_latents=2,
+            seam_band_seconds=0.96,
+            fps=25.0,
+        )
+        assert result[0]["noise_mask"].sum().item() == 0.0
+
+    def test_two_iterations_one_seam_hard_band(self):
+        """2 iterations, no taper → one band of 1.0 around the single internal seam.
+
+        window=8, overlap=2 → stride=6 → seam at latent 6.
+        seam_band_seconds=0.96 @ fps=25 → half_band = max(1, int(0.96*25/8/2)) = 1.
+        Band [5, 7) → frames 5 and 6 = 1.0.
+        """
+        from nodes import LatentSeamZoneMask
+
+        latent = _make_latent(frames=16)
+        result = LatentSeamZoneMask.execute(
+            latent=latent,
+            iteration_count=2,
+            window_latents=8,
+            overlap_latents=2,
+            seam_band_seconds=0.96,
+            fps=25.0,
+        )
+        frames = result[0]["noise_mask"][0, 0, :, 0, 0]
+        assert frames[4].item() == 0.0
+        assert frames[5].item() == 1.0
+        assert frames[6].item() == 1.0
+        assert frames[7].item() == 0.0
+        assert frames[15].item() == 0.0
+
+    def test_three_iterations_two_seams_no_overlap(self):
+        """3 iterations → 2 internal seams; bands separate, mask is union of both."""
+        from nodes import LatentSeamZoneMask
+
+        latent = _make_latent(frames=24)
+        # stride=6 → seams at 6 and 12. half_band=1 → bands [5,7) and [11,13).
+        result = LatentSeamZoneMask.execute(
+            latent=latent,
+            iteration_count=3,
+            window_latents=8,
+            overlap_latents=2,
+            seam_band_seconds=0.96,
+            fps=25.0,
+        )
+        frames = result[0]["noise_mask"][0, 0, :, 0, 0]
+        # First seam band [5, 7)
+        assert frames[5].item() == 1.0
+        assert frames[6].item() == 1.0
+        # Gap between bands — frames 7..10 are all zero
+        for i in range(7, 11):
+            assert frames[i].item() == 0.0
+        # Second seam band [11, 13)
+        assert frames[11].item() == 1.0
+        assert frames[12].item() == 1.0
+        # Outside both
+        assert frames[4].item() == 0.0
+        assert frames[13].item() == 0.0
+
+    def test_edge_taper_ramps_band_edges(self):
+        """edge_taper_seconds > 0 cosine-ramps the outer edges of each band; plateau stays 1.0."""
+        from nodes import LatentSeamZoneMask
+
+        latent = _make_latent(frames=32)
+        # window=12, overlap=2 → stride=10 → seams at 10, 20.
+        # seam_band_seconds=2.56 @ fps=25 → half_band = max(1, int(2.56*25/8/2)) = 4.
+        # Band1 = [6, 14), Band2 = [16, 24). edge_taper_seconds=0.96 → taper_latents=3.
+        result = LatentSeamZoneMask.execute(
+            latent=latent,
+            iteration_count=3,
+            window_latents=12,
+            overlap_latents=2,
+            seam_band_seconds=2.56,
+            edge_taper_seconds=0.96,
+            fps=25.0,
+        )
+        frames = result[0]["noise_mask"][0, 0, :, 0, 0]
+        # Band1 = [6, 14). Leading-edge ramp [6:9), plateau [9:11), trailing-edge ramp [11:14).
+        # Strictly partial values at the ramp positions.
+        assert 0.0 < frames[6].item() < frames[7].item() < frames[8].item() < 1.0
+        assert frames[9].item() == 1.0  # plateau
+        assert 1.0 > frames[11].item() > frames[12].item() > frames[13].item() > 0.0
+        # Outside band1 but before band2: zero
+        assert frames[14].item() == 0.0
+        assert frames[15].item() == 0.0
+
+    def test_default_taper_is_hard_band(self):
+        """Default edge_taper_seconds=0.0 → mask values are exactly {0.0, 1.0}."""
+        from nodes import LatentSeamZoneMask
+
+        latent = _make_latent(frames=16)
+        result = LatentSeamZoneMask.execute(
+            latent=latent,
+            iteration_count=2,
+            window_latents=8,
+            overlap_latents=2,
+            seam_band_seconds=0.96,
+            fps=25.0,
+        )
+        unique = set(torch.unique(result[0]["noise_mask"]).tolist())
+        assert unique.issubset({0.0, 1.0})
+
+    def test_band_clipped_at_latent_boundaries(self):
+        """When a seam is closer to the latent edge than half_band, the band clips
+        without crashing. Not a degenerate-mask case — the clipped portion is just
+        outside the latent.
+        """
+        from nodes import LatentSeamZoneMask
+
+        latent = _make_latent(frames=8)
+        # iteration_count=2, window=4, overlap=0 → stride=4 → seam at 4.
+        # half_band = max(1, int(2.56*25/8/2)) = 4 → band would be [0, 8).
+        # Same shape as the latent; should NOT crash.
+        result = LatentSeamZoneMask.execute(
+            latent=latent,
+            iteration_count=2,
+            window_latents=4,
+            overlap_latents=0,
+            seam_band_seconds=2.56,
+            fps=25.0,
+        )
+        mask = result[0]["noise_mask"]
+        assert mask.shape == latent["samples"].shape
+        # Every frame in [0, 8) should be 1.0 (band fully covers latent)
+        frames = mask[0, 0, :, 0, 0]
+        assert (frames == 1.0).all()
+
+    def test_preserves_samples_and_other_keys(self):
+        """Samples + other dict keys pass through untouched."""
+        from nodes import LatentSeamZoneMask
+
+        latent = _make_latent(frames=16)
+        latent["samples"] = torch.randn_like(latent["samples"])
+        latent["batch_index"] = 9
+        samples_before = latent["samples"].clone()
+
+        result = LatentSeamZoneMask.execute(
+            latent=latent,
+            iteration_count=2,
+            window_latents=8,
+            overlap_latents=2,
+            seam_band_seconds=0.96,
+            fps=25.0,
+        )
+        assert torch.equal(result[0]["samples"], samples_before)
+        assert result[0]["batch_index"] == 9
+
+    def test_zero_stride_raises(self):
+        """window_latents <= overlap_latents would imply zero or negative stride;
+        no valid seam positions can be computed. Surface as error.
+        """
+        from nodes import LatentSeamZoneMask
+
+        latent = _make_latent(frames=16)
+        try:
+            LatentSeamZoneMask.execute(
+                latent=latent,
+                iteration_count=2,
+                window_latents=4,
+                overlap_latents=4,
+                seam_band_seconds=0.96,
+                fps=25.0,
+            )
+        except (ValueError, RuntimeError, AssertionError):
+            return
+        raise AssertionError("Expected an error for stride=0 (window == overlap).")

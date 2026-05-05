@@ -1,4 +1,4 @@
-Last updated: 2026-05-04
+Last updated: 2026-05-05
 
 # docs/ — ComfyUI-AudioLoopHelper documentation
 
@@ -49,7 +49,7 @@ linking out (parallel-scrubbed-copy convention retired 2026-04-25).
 - LTXVLoopingSampler structural reference (video-only; NOT for music video): [`reference/ltxv_looping_sampler_reference.md`](reference/ltxv_looping_sampler_reference.md)
 - Fix one section of a previously generated video (retake): [`guides/retake_guide.md`](guides/retake_guide.md)
 - Bench / A-B procedure (sage variants, profiling arms): [`guides/bench_workflow_guide.md`](guides/bench_workflow_guide.md)
-- Upscale workflow: not yet shipped; design doc at `internal/design/upscale_workflow_design.md`
+- Post-loop spatial upscale (2×, 3-step σ-tail refine; staged draft): `scripts/build_upscale_workflow.py` — see `reference/debug_tools.md` "Workflow build scripts"
 
 ### "I want to write a prompt schedule"
 - Project-specific rules + variation patterns: [`guides/prompt_creation_guide.md`](guides/prompt_creation_guide.md)
@@ -64,6 +64,7 @@ linking out (parallel-scrubbed-copy convention retired 2026-04-25).
 ### "My output looks wrong / workflow won't run"
 - **First stop**: [`guides/debugging_guide.md`](guides/debugging_guide.md) — symptom → first-check table
 - Canonical first-pass when validation fails: [`reference/debug_tools.md`](reference/debug_tools.md) (or invoke `/diagnose-workflow`)
+- Iteration-boundary seam artifacts (per-frame ghost residual scan): `scripts/diagnose_overlap_seams.py` — see `reference/debug_tools.md` "Inspection scripts"
 - Iter-over-iter drift / heatmap frames / lost continuity (`noise_mask` semantics): [`reference/noise_mask_semantics.md`](reference/noise_mask_semantics.md)
 - ModelPatcher offload asymmetry (why CLIP cannot enter the loop body): [`analysis/nag_object_patches_offload_asymmetry.md`](analysis/nag_object_patches_offload_asymmetry.md)
 - Sampler choice (why `euler` is mandatory): [`reference/sampler_reference.md`](reference/sampler_reference.md)
