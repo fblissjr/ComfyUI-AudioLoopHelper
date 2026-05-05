@@ -186,3 +186,121 @@ class TestLatentTemporalMask:
             latent=latent, start_time=0.0, end_time=1.0, fps=25.0,
         )
         assert result[0]["noise_mask"].shape == (2, 64, 12, 16, 24)
+
+    def test_default_yields_hard_mask(self):
+        """Without `edge_taper_seconds` the mask is exactly {0.0, 1.0}.
+
+        Regression guard: the soft-taper feature must not change the
+        default-call output. Existing retake workflows that don't wire
+        the new input must produce bit-identical masks.
+        """
+        from nodes import LatentTemporalMask
+
+        latent = _make_latent(frames=16)
+        result = LatentTemporalMask.execute(
+            latent=latent, start_time=0.32, end_time=0.96, fps=25.0,
+        )
+        unique = set(torch.unique(result[0]["noise_mask"]).tolist())
+        assert unique.issubset({0.0, 1.0})
+
+    def test_explicit_zero_taper_yields_hard_mask(self):
+        """edge_taper_seconds=0.0 explicitly is also a hard mask."""
+        from nodes import LatentTemporalMask
+
+        latent = _make_latent(frames=16)
+        result = LatentTemporalMask.execute(
+            latent=latent, start_time=0.32, end_time=0.96, fps=25.0,
+            edge_taper_seconds=0.0,
+        )
+        unique = set(torch.unique(result[0]["noise_mask"]).tolist())
+        assert unique.issubset({0.0, 1.0})
+
+    def test_taper_produces_smooth_ramps(self):
+        """edge_taper_seconds > 0 ramps the mask 0->1 at the leading edge,
+        1->0 at the trailing edge, with a 1.0 plateau in between.
+
+        fps=25, scale=8 → 1 latent ≈ 0.32s.
+        start=0.0, end=8.32 → start_latent=0, end_latent=int(8.32*25/8)+1=27.
+        edge_taper_seconds=0.96 → taper_latents = int(0.96*25/8) = 3.
+
+        Expected mask shape (per-frame, broadcast over [B,C,H,W]):
+          frames [0, 1, 2]   = strictly increasing values in (0, 1)  (leading ramp)
+          frames [3 .. 23]   = 1.0                                   (plateau)
+          frames [24, 25, 26]= strictly decreasing values in (0, 1)  (trailing ramp)
+          frames [27 .. 31]  = 0.0
+        """
+        from nodes import LatentTemporalMask
+
+        latent = _make_latent(frames=32)
+        result = LatentTemporalMask.execute(
+            latent=latent, start_time=0.0, end_time=8.32, fps=25.0,
+            edge_taper_seconds=0.96,
+        )
+        frames = result[0]["noise_mask"][0, 0, :, 0, 0]
+
+        # Outside retake: zero
+        assert frames[27].item() == 0.0
+        assert frames[31].item() == 0.0
+        # Plateau: full
+        assert frames[10].item() == 1.0
+        assert frames[20].item() == 1.0
+        # Leading ramp: strictly monotone increasing in open (0, 1)
+        assert 0.0 < frames[0].item() < frames[1].item() < frames[2].item() < 1.0
+        # Trailing ramp: strictly monotone decreasing in open (0, 1)
+        assert 1.0 > frames[24].item() > frames[25].item() > frames[26].item() > 0.0
+
+    def test_taper_clamped_to_half_range(self):
+        """Excessive taper is clamped so leading and trailing ramps don't overlap.
+
+        retake range = end_latent - start_latent = 6 latents (start=0.32, end=1.92,
+        fps=25 → start_latent=1, end_latent=7).
+        edge_taper_seconds=10.0 → would compute 31 latents but must clamp to 3
+        (= range // 2). With taper=3 the ramps cover [1:4] (leading) and [4:7]
+        (trailing) — no overlap, no plateau.
+        """
+        from nodes import LatentTemporalMask
+
+        latent = _make_latent(frames=16)
+        result = LatentTemporalMask.execute(
+            latent=latent, start_time=0.32, end_time=1.92, fps=25.0,
+            edge_taper_seconds=10.0,
+        )
+        mask = result[0]["noise_mask"]
+        # Valid range
+        assert (mask >= 0.0).all()
+        assert (mask <= 1.0).all()
+        # Frames outside the retake range stay zero
+        assert mask[0, 0, 0, 0, 0].item() == 0.0
+        assert mask[0, 0, 7, 0, 0].item() == 0.0
+        # Entire retake range [1, 7) is taper (3 leading + 3 trailing, no plateau).
+        # Strictly partial values: every frame is in the open interval (0, 1).
+        retake_slice = mask[0, 0, 1:7, 0, 0]
+        assert (retake_slice > 0.0).all()
+        assert (retake_slice < 1.0).all()
+
+    def test_taper_preserves_samples_and_other_keys(self):
+        """Soft taper does not modify samples and preserves other dict keys."""
+        from nodes import LatentTemporalMask
+
+        latent = _make_latent(frames=16)
+        latent["samples"] = torch.randn_like(latent["samples"])
+        latent["batch_index"] = 11
+        samples_before = latent["samples"].clone()
+
+        result = LatentTemporalMask.execute(
+            latent=latent, start_time=0.32, end_time=2.56, fps=25.0,
+            edge_taper_seconds=0.32,
+        )
+        assert torch.equal(result[0]["samples"], samples_before)
+        assert result[0]["batch_index"] == 11
+
+    def test_taper_zero_width_range_still_zero(self):
+        """Zero-width range stays all-zero even when taper requested."""
+        from nodes import LatentTemporalMask
+
+        latent = _make_latent(frames=8)
+        result = LatentTemporalMask.execute(
+            latent=latent, start_time=0.5, end_time=0.5, fps=25.0,
+            edge_taper_seconds=0.32,
+        )
+        assert result[0]["noise_mask"].sum().item() == 0.0

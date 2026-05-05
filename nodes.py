@@ -1843,6 +1843,12 @@ class LatentTemporalMask(io.ComfyNode):
     Reversed or zero-width ranges yield an all-zero mask (no-op) rather
     than raising — safer for UI widget drift.
 
+    `edge_taper_seconds > 0` ramps the mask 0->1 at the leading boundary
+    and 1->0 at the trailing boundary using a cosine ease, so a downstream
+    inpainting sampler blends the regenerated region into surrounding
+    context instead of hitting a hard step. Default 0.0 preserves the
+    historical hard-mask output bit-identically.
+
     Port of `TemporalRegionMask.apply_to` from
     `coderef/LTX-2/packages/ltx-pipelines/src/ltx_pipelines/retake.py`.
     """
@@ -1871,9 +1877,17 @@ class LatentTemporalMask(io.ComfyNode):
                     "fps", default=25.0, min=1.0, max=120.0, step=0.01,
                     tooltip="Video frame rate. LTX 2.3 pipeline default is 25.",
                 ),
+                io.Float.Input(
+                    "edge_taper_seconds", default=0.0, min=0.0, max=2.0, step=0.01,
+                    tooltip=(
+                        "Cosine taper width in seconds at each end of the retake range. "
+                        "0.0 (default) = hard mask. >0 ramps 0->1 over taper window at "
+                        "start, 1->0 at end. Reduces seam artifacts at section boundaries."
+                    ),
+                ),
             ],
             outputs=[
-                io.Latent.Output(tooltip="Latent with noise_mask set: 1.0 inside [start,end], 0.0 outside."),
+                io.Latent.Output(tooltip="Latent with noise_mask set: 1.0 inside [start,end], 0.0 outside; cosine ramps at boundaries when taper > 0."),
             ],
         )
 
@@ -1884,6 +1898,7 @@ class LatentTemporalMask(io.ComfyNode):
         start_time: float,
         end_time: float,
         fps: float,
+        edge_taper_seconds: float = 0.0,
     ) -> io.NodeOutput:
         with _profile_span("LatentTemporalMask"):
             out = latent.copy()
@@ -1899,6 +1914,28 @@ class LatentTemporalMask(io.ComfyNode):
                 )
                 if end_latent > start_latent:
                     mask[:, :, start_latent:end_latent] = 1.0
+                    if edge_taper_seconds > 0.0:
+                        range_latents = end_latent - start_latent
+                        taper_latents = max(1, int(edge_taper_seconds * fps / LTX_TEMPORAL_SCALE))
+                        taper_latents = min(taper_latents, range_latents // 2)
+                        if taper_latents > 0:
+                            # Cosine ease 0 -> 1 across taper_latents frames; endpoints
+                            # excluded so the taper region itself is strictly partial.
+                            ramp_up = 0.5 * (1.0 - torch.cos(
+                                torch.linspace(
+                                    0.0, math.pi, taper_latents + 2,
+                                    device=samples.device, dtype=samples.dtype,
+                                )[1:-1]
+                            ))
+                            ramp_down = ramp_up.flip(0)
+                            shape = (1, 1, taper_latents, 1, 1)
+                            ramp_up_b = ramp_up.view(shape).expand(
+                                samples.shape[0], samples.shape[1], -1,
+                                samples.shape[3], samples.shape[4],
+                            )
+                            ramp_down_b = ramp_down.view(shape).expand_as(ramp_up_b)
+                            mask[:, :, start_latent:start_latent + taper_latents] = ramp_up_b
+                            mask[:, :, end_latent - taper_latents:end_latent] = ramp_down_b
             out["noise_mask"] = mask
 
         return io.NodeOutput(out)

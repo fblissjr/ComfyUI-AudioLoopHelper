@@ -157,3 +157,81 @@ def test_no_seed_or_noise_seed_named_inputs():
         "Rename to e.g. 'base_seed'. See "
         "internal/analysis/id_lora_ablation_and_seed_widget_audit.md."
     )
+
+
+def _scan_io_input_records(path: Path):
+    """Yield (lineno, name, defaults_dict) for every `io.<Type>.Input(...)` call.
+
+    `defaults_dict` carries any literal kwargs (default, min, max, step) that
+    are simple constants. Used for invariants that need to inspect the schema
+    default, not just the name.
+    """
+    src = path.read_text()
+    tree = ast.parse(src, filename=str(path))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        f = node.func
+        if not (
+            isinstance(f, ast.Attribute)
+            and f.attr == "Input"
+            and isinstance(f.value, ast.Attribute)
+            and isinstance(f.value.value, ast.Name)
+            and f.value.value.id == "io"
+        ):
+            continue
+        name_value = None
+        if node.args and isinstance(node.args[0], ast.Constant):
+            name_value = node.args[0].value
+        else:
+            for kw in node.keywords:
+                if kw.arg == "name" and isinstance(kw.value, ast.Constant):
+                    name_value = kw.value.value
+                    break
+        if not isinstance(name_value, str):
+            continue
+        kwargs: dict = {}
+        for kw in node.keywords:
+            if kw.arg and isinstance(kw.value, ast.Constant):
+                kwargs[kw.arg] = kw.value.value
+        yield (node.lineno, name_value, kwargs)
+
+
+def test_latent_temporal_mask_edge_taper_default_is_zero():
+    """`LatentTemporalMask.edge_taper_seconds` must default to 0.0.
+
+    Saved retake workflows that predate this input carry no widget value
+    for it; ComfyUI fills the slot from the schema default at load time.
+    A non-zero default would silently change the noise_mask written by
+    every existing retake render — invisible regression. The default
+    must remain 0.0; opt-in soft-mask is the contract.
+
+    The test also catches:
+      - rename (e.g. `edge_taper_seconds` → `edge_taper`): the named slot
+        disappears entirely; ComfyUI's positional widget pop would shift
+        saved widget values into adjacent slots, corrupting fps / start /
+        end widget values.
+      - removal: zero occurrences left; the test fails so the deletion
+        is at least deliberate (update the test to reflect the change).
+      - accidental duplication across modules: > 1 occurrence; flags a
+        copy-paste of the schema into another node without renaming.
+    """
+    matches: list[tuple[str, int, dict]] = []
+    for module in _NODE_FILES:
+        path = REPO_ROOT / module
+        if not path.exists():
+            continue
+        for lineno, name, kwargs in _scan_io_input_records(path):
+            if name == "edge_taper_seconds":
+                matches.append((module, lineno, kwargs))
+    assert len(matches) == 1, (
+        f"Expected exactly one input named 'edge_taper_seconds'; found "
+        f"{len(matches)}: {matches}"
+    )
+    module, lineno, kwargs = matches[0]
+    default = kwargs.get("default")
+    assert default == 0.0, (
+        f"{module}:{lineno} -> io.Float.Input('edge_taper_seconds', "
+        f"default={default!r}, ...) — default must be 0.0 (saved workflows "
+        f"that lack the widget value would silently change behavior)."
+    )
