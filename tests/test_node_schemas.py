@@ -25,34 +25,12 @@ _NODE_FILES = (
 def _scan_io_input_names(path: Path):
     """Find every `io.<Type>.Input(...)` call and yield (lineno, name).
 
-    Recognizes both positional name (`io.Int.Input("seed", ...)`) and the
-    explicit kwarg form (`io.Int.Input(name="seed", ...)`).
+    Thin projection over `_scan_io_input_records` — kept as a separate
+    helper because most schema invariants only need the name, and the
+    name-only signature reads more clearly at the call site.
     """
-    src = path.read_text()
-    tree = ast.parse(src, filename=str(path))
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        f = node.func
-        # Match io.<SomeType>.Input(...)
-        if not (
-            isinstance(f, ast.Attribute)
-            and f.attr == "Input"
-            and isinstance(f.value, ast.Attribute)
-            and isinstance(f.value.value, ast.Name)
-            and f.value.value.id == "io"
-        ):
-            continue
-        name_value = None
-        if node.args and isinstance(node.args[0], ast.Constant):
-            name_value = node.args[0].value
-        else:
-            for kw in node.keywords:
-                if kw.arg == "name" and isinstance(kw.value, ast.Constant):
-                    name_value = kw.value.value
-                    break
-        if isinstance(name_value, str):
-            yield (node.lineno, name_value)
+    for lineno, name, _ in _scan_io_input_records(path):
+        yield (lineno, name)
 
 
 def _scan_conditioning_set_values(path: Path):

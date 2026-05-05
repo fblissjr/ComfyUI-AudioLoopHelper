@@ -27,18 +27,13 @@ stays parked.
 
 Usage:
 
-    # Decode a finished MP4 to latent and scan
-    uv run --group dev python scripts/diagnose_overlap_seams.py \\
-        --video output/loop_render.mp4 \\
-        --iteration-count 5 --window-latents 16 --overlap-latents 4
-
-    # Or scan a pre-encoded latent tensor (.pt or .safetensors)
     uv run --group dev python scripts/diagnose_overlap_seams.py \\
         --latent /tmp/loop.latent.pt \\
         --iteration-count 5 --window-latents 16 --overlap-latents 4
 
-Cheap to run (CPU, ~seconds per minute of video). No GPU required for
-the residual computation; only the optional VAE-encode path needs GPU.
+To capture a latent for the diagnostic, hook your render workflow to
+`torch.save` the dict at the `LTXVSeparateAVLatent.video_latent`
+output. Cheap to run on CPU (~seconds per minute of video).
 """
 
 from __future__ import annotations
@@ -82,20 +77,6 @@ def _load_latent(latent_path: Path) -> torch.Tensor:
             f"No samples/latent/video_latent key in safetensors; saw {list(obj.keys())}."
         )
     raise SystemExit(f"Unrecognized latent extension: {latent_path.suffix}")
-
-
-def _video_to_latent(video_path: Path) -> torch.Tensor:
-    """Decode an MP4 to pixels then VAE-encode to latent. Requires GPU
-    + ComfyUI's environment. For initial diagnostics, prefer a saved
-    `--latent` to avoid this dependency.
-    """
-    del video_path  # intentionally unused — placeholder API for future implementation
-    raise SystemExit(
-        "VAE-encode path not implemented in the diagnostic script. "
-        "Save the assembled latent to disk during a render and pass --latent. "
-        "Pattern: hook into your workflow to torch.save the latent dict at "
-        "the LTXVSeparateAVLatent.video_latent output."
-    )
 
 
 def _ghost_residual(samples: torch.Tensor) -> torch.Tensor:
@@ -252,9 +233,10 @@ def main() -> int:
         description=(__doc__ or "").split("\n\n")[0],
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    src = ap.add_mutually_exclusive_group(required=True)
-    src.add_argument("--video", type=Path, help="MP4 to decode + encode (requires GPU + ComfyUI env).")
-    src.add_argument("--latent", type=Path, help="Saved latent tensor (.pt or .safetensors).")
+    ap.add_argument("--latent", type=Path, required=True,
+                    help="Saved latent tensor (.pt or .safetensors). To capture one from a "
+                         "render, hook the workflow to torch.save the dict at the "
+                         "LTXVSeparateAVLatent.video_latent output.")
 
     ap.add_argument("--iteration-count", type=int, required=True,
                     help="Number of loop iterations stitched.")
@@ -268,7 +250,7 @@ def main() -> int:
                     help="Number of top-ghost frames to print (default: 20).")
     args = ap.parse_args()
 
-    samples = _load_latent(args.latent) if args.latent else _video_to_latent(args.video)
+    samples = _load_latent(args.latent)
     if samples.dim() != 5:
         if samples.dim() == 4:
             samples = samples.unsqueeze(0)

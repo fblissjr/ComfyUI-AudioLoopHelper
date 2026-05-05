@@ -114,17 +114,14 @@ def _apply(ed: WorkflowEditor, dry_run: bool) -> None:
 
     # Find the IMAGE link feeding the existing #445.image input.
     orig = ed.find_node(INIT_RESIZE_NODE_ID)
-    image_input = next((i for i in orig["inputs"] if i.get("name") == "image"), None)
-    if image_input is None or image_input.get("link") is None:
+    image_slot = WorkflowEditor.find_input_slot(orig, "image")
+    src_link = ed.find_link_to_slot(INIT_RESIZE_NODE_ID, image_slot)
+    if src_link is None:
         raise SystemExit(
             f"Node #{INIT_RESIZE_NODE_ID} has no wired 'image' input. "
             "Source workflow may have already been mutated."
         )
-    src_link_id = image_input["link"]
-    src_link = next((l for l in ed.wf["links"] if isinstance(l, list) and l[0] == src_link_id), None)
-    if src_link is None:
-        raise SystemExit(f"Link {src_link_id} (image into #{INIT_RESIZE_NODE_ID}) not found.")
-    src_node_id, src_slot = src_link[1], src_link[2]
+    src_link_id, src_node_id, src_slot = src_link[0], src_link[1], src_link[2]
 
     if dry_run:
         print(f"  {ed.path.name}:")
