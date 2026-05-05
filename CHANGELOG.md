@@ -104,6 +104,25 @@ This project uses [Semantic Versioning](https://semver.org/).
   names + sigma profile + frame rate centralized as constants at the
   top of the script.
 
+- **`scripts/apply_p3_retake_edit_lora.py`** — wires the section-targeted
+  retake-edit pattern into a copy of the canonical retake workflow.
+  Adds `LTXICLoRALoaderModelOnly` patching MODEL with the edit-anything
+  LoRA (4-verb training: add / remove / replace / restyle), inserted
+  between `AudioLoopHelperSageAttention` and `LTXVChunkFeedForward` per
+  the canonical compile-style-patch order (LoRA loader must precede
+  module-mutating nodes that call `model.state_dict()`). Adds
+  `LTXVAddGuideMulti` (strength=1, frame_idx=0, num_guides=1) between
+  `LatentTemporalMask` and `SamplerCustomAdvanced` so the sampler sees
+  a guide-baked latent re-conditioned against the source pixels, and
+  pulls positive/negative CONDITIONING through the same multi-guide
+  node. Adds a Note node documenting that the existing positive
+  CLIPTextEncode becomes the edit instruction. Stages output to
+  `internal/workflows/retake_edit.draft.json`; does not mutate shipped
+  workflows. Idempotent (signature-checked via the LoRA filename in
+  the loader's first widget value), `--revert`, `--dry-run`. Promotion
+  gated on a user cfg=1 A/B render confirming the four edit verbs
+  land at distilled CFG=1.
+
 - **`scripts/diagnose_overlap_seams.py`** — Phase A diagnostic for
   iteration-boundary artifacts in assembled loop output latents. Runs
   the per-frame ghost-residual `|f[t] - (f[t-1] + f[t+1]) / 2|`,
