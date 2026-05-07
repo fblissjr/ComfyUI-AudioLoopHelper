@@ -1,6 +1,6 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-05-04
+Last updated: 2026-05-07
 
 ComfyUI nodes that automate loop timing + audio analysis for full-length music video generation with LTX 2.3. Core pattern: `AudioLoopController` drives stride from integer latent counts, audio is frozen via `noise_mask=0`, prompts pre-encoded once outside the loop (CLIP must never enter the loop body). **Start here:** `docs/architecture_overview.md`; task-first nav at `docs/README.md`.
 
@@ -67,6 +67,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **`LTXVAudioVideoMask` (Node 606) wiring is intentional** — `audio_start_time = audio_end_time = window_size` (empty range keeps audio fixed). Don't change.
 - **Audio is FROZEN.** Strip music/instrumentation references from schedule prompts; keep diegetic sounds only. Rationale: `docs/analysis/audio_in_prompt_research.md`.
 - **Use `LatentContextExtract` / `LatentOverlapTrim`**, not raw `LTXVSelectLatents` — they strip `noise_mask` automatically.
+- **`AudioLoopController` outputs are iteration-dependent in the executor DAG.** Its `current_iteration` input transitively reaches every output. Anything OUTSIDE the loop that needs `stride_seconds` / `audio_duration` (e.g. initial-render conditioning fed from `TimestampPromptScheduleBatchEncode`) must source them from `AudioLoopPlanner` — otherwise closes a cycle through `TensorLoopOpen`. Audit catches it as `graph_acyclic` ERR.
 
 ### Sampler + sigma chain
 
@@ -132,12 +133,14 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **Loop iterations**: top-level `VAEEncode → subgraph slot 8 → #1519 LTXVAddLatentGuide latent_idx=-1`. Init encoded ONCE.
 - **F2 + F3 are MANDATORY symmetry rules** for the init-image path: both initial and loop branches share the same `LTXVPreprocess(img_compression=18)` output (F2); loop `CFGGuider` positive/negative flow through `LTXVCropGuides` (F3). Skipping either is the photoreal-drift / identity-drift footgun. Full trace + apply scripts: `docs/reference/pipeline_flow_latent.md`.
 - **F12 video-reference IC-LoRA** (companion to F2/F3): IC-LoRA guide inside the subgraph between `#1519` and the F3 cropguides chain; F2/F3 symmetry rules extend to the ref-video chain. F2/F3 background: `docs/reference/pipeline_flow_latent.md`. Baked into the canonical latent.json (bypassed by default; un-bypass loader + guide + ref-video to enable). Design record: `scripts/archive/apply_iclora_video_reference.py`. Decisions: `internal/ic_lora_assessment.md` D19–D23 (private clone only).
+- **Single-pass lanczos at >2× linear reduction aliases on faces/textures.** LTX 2.3's i2v cross-attention reads aliasing as motion cues and pushes the camera in the first window — spurious zoom/dolly even with static-framing prompts. Use `LTXSmartImageResize` (auto-stages by source/target ratio) or 2× supersample preprocess for any source >2× target dims. Stage planner: `nodes._compute_resize_stages`.
 
 ## Working with Claude across sessions
 
 - **GPU contention check before any bench/render.** `mtime` of `data/runs/*/*/sage.jsonl` (per-prompt routing) within last few minutes ⇒ a sibling-repo render is likely active. Ask before starting GPU work.
 - **`AUDIOLOOPHELPER_PER_PROMPT=1` is default in `start_experiment.sh`** (since 2026-05-01). Artifacts route under `data/runs/${RUN_ID}/${prompt_id}/`. Reader scripts auto-detect both layouts.
 - **Run `/simplify` after non-trivial code changes.** Three-agent review (reuse / quality / efficiency) catches data-flow correctness bugs that shape-only tests miss.
+- **Behavioral-regression debugging starts with workflow diff, not code.** Extract embedded workflows from the working + broken PNGs via `scripts/extract_workflow_from_png.py <png> -o <json>` (positional arg, no `--workflow` flag) and structural-diff. Code-level analysis after.
 - **Magic string vs semantic literal**: extract opaque magic (`"v2"`, `"7"`) eagerly; leave semantic literals (`"DEBUG"`, `"private clone"`, `"singing"`) inline until 3rd call site or drift risk. `/simplify` reviewers flag both as "magic strings" — false-positive class on semantic literals.
 - **Grep `internal/design/`, `internal/analysis/`, and the gitignored `PLAN.md` BEFORE forming recommendations** on any topic that smells like prior territory (trigger words: upscale, retake, IC-LoRA, sigma profile, edit anything, spatial, polish, seam). Most apparent "session-1 discoveries" are previously analyzed; re-derivation costs 2-3 turns. Subagent briefs should include "check internal/ first" — agents see the filesystem but not session context.
 - **Verify a new model via its paper, not its name.** Run `paper_search` / fetch README. Cost ~30s.

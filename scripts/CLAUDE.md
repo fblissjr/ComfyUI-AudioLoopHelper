@@ -1,6 +1,6 @@
 # scripts/ — apply scripts, audit, utilities
 
-Last updated: 2026-05-05
+Last updated: 2026-05-07
 
 This subtree holds workflow-mutation scripts (`apply_*.py`), workflow validators (`audit_workflows.py`, `validate_docs_consistency.py`, `analyze_workflow_dag.py`, `trace_node_source.py`), the canonical edit utility (`workflow_utils.py`), audio analysis tools, and templates. Loads only when Claude is operating inside `scripts/`. Root project rules: `../CLAUDE.md`. Governance policy: `../.claude/CLAUDE.md`.
 
@@ -32,6 +32,7 @@ Every `apply_*.py` script ships with:
 - **Idempotence** — applying twice is a no-op. Achieved via signature checks (e.g. detecting whether the target node already exists with expected wires).
 - **`require_nodes` pre-flight guards** — refuse with an actionable message when expected upstream nodes are missing.
 - **Pre-flight chaining** — when one migration depends on another, detect the prerequisite's signature and refuse with "Run scripts/apply_<X>.py first." Reference: `apply_iclora_video_reference.py` refuses if `#1625/#1626/#1627` are still present (Step 0 strip unrun).
+- **Don't stash revert metadata as keys on workflow JSON nodes/groups** (e.g. `_X_pre`). The keys persist into shipped JSON on apply. For revert: use hardcoded canonical defaults (legacy shapes are stable across shipped variants); for non-trivial dynamic state, a sidecar at `internal/.apply_state/<script>.json`.
 
 **Scaffold new scripts from `scripts/templates/`**:
 - `apply_script_all_workflows.py` — in-place edits across `example_workflows/`.
