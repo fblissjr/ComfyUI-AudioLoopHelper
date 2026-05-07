@@ -48,6 +48,140 @@ except ImportError:
 LTX_TEMPORAL_SCALE = 8  # LTX 2.3 VAE temporal compression factor (pixel_frames // 8 = latent_frames)
 
 
+# Per-stage maximum reduction ratio kept below lanczos kernel's clean range
+# (kernel radius 3 -> ~6 input samples per output pixel). Anything above 2x
+# linear reduction in a single pass leaves visible aliasing on faces, fine
+# textures, text — content the cross-attention reads as "explorable detail"
+# and which manifests downstream as spurious camera motion in i2v renders.
+_LANCZOS_MAX_PER_STAGE_RATIO = 2.0
+
+
+def _compute_resize_stages(
+    src_w: int, src_h: int, tgt_w: int, tgt_h: int,
+) -> list[tuple[int, int]]:
+    """Plan adaptive multi-stage lanczos downscaling.
+
+    For each stage, output dims roughly halve the previous dims (down to
+    target). Each stage stays at <= 2x linear reduction so the lanczos
+    kernel sees enough input samples per output pixel to anti-alias
+    cleanly.
+
+    Returns a list of (width, height) per stage, ending at exactly
+    (tgt_w, tgt_h). Empty list = no work needed (source matches target).
+    Single-element list = direct one-pass resize (ratio <= 2x or upscale).
+
+    Pure function — easy to unit-test without torch.
+    """
+    if src_w == tgt_w and src_h == tgt_h:
+        return []
+
+    ratio_w = src_w / max(tgt_w, 1)
+    ratio_h = src_h / max(tgt_h, 1)
+    ratio = max(ratio_w, ratio_h)
+
+    if ratio <= _LANCZOS_MAX_PER_STAGE_RATIO:
+        # Either upscale (ratio < 1) or single-pass downscale within the
+        # kernel's clean range — no staging benefit.
+        return [(tgt_w, tgt_h)]
+
+    # ceil(log2(ratio)) gives the smallest N such that 2^N >= ratio,
+    # i.e. N stages of <=2x reduction can reach the target.
+    n_stages = max(1, math.ceil(math.log2(ratio)))
+
+    stages: list[tuple[int, int]] = []
+    cur_w, cur_h = src_w, src_h
+    for i in range(n_stages):
+        if i == n_stages - 1:
+            stages.append((tgt_w, tgt_h))
+        else:
+            # Geometric interpolation: each stage shrinks by the same
+            # factor so the last stage also lands within 2x of target.
+            remaining_stages = n_stages - i
+            step_ratio_w = (cur_w / tgt_w) ** (1.0 / remaining_stages)
+            step_ratio_h = (cur_h / tgt_h) ** (1.0 / remaining_stages)
+            next_w = max(tgt_w, int(round(cur_w / step_ratio_w)))
+            next_h = max(tgt_h, int(round(cur_h / step_ratio_h)))
+            stages.append((next_w, next_h))
+            cur_w, cur_h = next_w, next_h
+    return stages
+
+
+def _crop_to_aspect(
+    image: "torch.Tensor",
+    target_w: int,
+    target_h: int,
+    crop_position: str,
+) -> "torch.Tensor":
+    """Center/edge-crop a [B, H, W, C] IMAGE tensor to match target aspect.
+
+    Mirrors `ImageResizeKJv2(keep_proportion="crop")` semantics: if the
+    source aspect ratio differs from the target, crop one axis to match
+    so the subsequent resize doesn't distort. No-op if aspects already
+    match.
+    """
+    src_h, src_w = int(image.shape[1]), int(image.shape[2])
+    if src_w <= 0 or src_h <= 0 or target_w <= 0 or target_h <= 0:
+        return image
+
+    src_aspect = src_w / src_h
+    tgt_aspect = target_w / target_h
+    if abs(src_aspect - tgt_aspect) < 1e-6:
+        return image
+
+    if src_aspect > tgt_aspect:
+        # Source is too wide — crop width.
+        crop_w = int(round(src_h * tgt_aspect))
+        crop_h = src_h
+    else:
+        # Source is too tall — crop height.
+        crop_w = src_w
+        crop_h = int(round(src_w / tgt_aspect))
+
+    if crop_position == "center":
+        x = (src_w - crop_w) // 2
+        y = (src_h - crop_h) // 2
+    elif crop_position == "top":
+        x = (src_w - crop_w) // 2
+        y = 0
+    elif crop_position == "bottom":
+        x = (src_w - crop_w) // 2
+        y = src_h - crop_h
+    elif crop_position == "left":
+        x = 0
+        y = (src_h - crop_h) // 2
+    elif crop_position == "right":
+        x = src_w - crop_w
+        y = (src_h - crop_h) // 2
+    else:
+        # Defensive: unknown position falls back to center.
+        x = (src_w - crop_w) // 2
+        y = (src_h - crop_h) // 2
+
+    # View is fine — downstream resize materializes its own contiguous output.
+    return image[:, y : y + crop_h, x : x + crop_w, :]
+
+
+def _lanczos_resize_bchw(image_bchw: "torch.Tensor", width: int, height: int) -> "torch.Tensor":
+    """Single-pass lanczos resize on a [B, C, H, W] image tensor.
+
+    Operates in BCHW so the multi-stage caller can avoid round-tripping
+    through HWC/contiguous between stages — saves one full-tensor copy
+    per intermediate stage on multi-stage paths.
+
+    Uses ComfyUI's `common_upscale` when available (matches what
+    `ImageResizeKJv2` does internally). Falls back to `F.interpolate`
+    bicubic for the no-ComfyUI test path.
+    """
+    try:
+        from comfy.utils import common_upscale
+        return common_upscale(image_bchw, width, height, "lanczos", crop="disabled")
+    except ImportError:
+        return torch.nn.functional.interpolate(
+            image_bchw, size=(height, width), mode="bicubic", align_corners=False,
+        )
+
+
+
 def _make_cosine_taper_pair(
     taper_latents: int, samples: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor] | tuple[None, None]:
@@ -1179,6 +1313,26 @@ class AudioLoopPlanner(io.ComfyNode):
             outputs=[
                 io.String.Output("summary", tooltip="Iteration timeline text + snap-boundary report."),
                 io.Int.Output("total_iterations", tooltip="Iteration count (after max_iterations cap)."),
+                io.Float.Output(
+                    "stride_seconds",
+                    tooltip=(
+                        "Quantized stride per iteration (seconds). Same value "
+                        "AudioLoopController emits — both nodes share the "
+                        "_compute_loop_geometry formula. Wire to nodes that "
+                        "need stride without pulling current_iteration into "
+                        "their input closure (e.g. TimestampPromptScheduleBatchEncode "
+                        "feeding initial-render conditioning)."
+                    ),
+                ),
+                io.Float.Output(
+                    "audio_duration",
+                    tooltip=(
+                        "Total audio duration in seconds. Read from the AUDIO "
+                        "input. Cycle-free alternative to AudioLoopController."
+                        "audio_duration when downstream nodes feed back into "
+                        "the initial-render path."
+                    ),
+                ),
             ],
         )
 
@@ -1270,7 +1424,7 @@ class AudioLoopPlanner(io.ComfyNode):
             except Exception as e:  # noqa: BLE001
                 lines.append(f"  (schedule parse error: {e})")
 
-        return io.NodeOutput("\n".join(lines), iterations)
+        return io.NodeOutput("\n".join(lines), iterations, float(stride_seconds), float(audio_duration))
 
 
 # `ScheduleToMultiPrompt` removed 2026-04-27 — zero workflow + only-doc-mention
@@ -2507,6 +2661,116 @@ class VideoFrameExtract(io.ComfyNode):
         return io.NodeOutput(image, frame_index)
 
 
+class LTXSmartImageResize(io.ComfyNode):
+    """Adaptive multi-stage lanczos resize for i2v init images.
+
+    Drop-in replacement for `ImageResizeKJv2 (lanczos, single-pass)`
+    that picks the number of stages based on the source/target ratio.
+
+    Why staging matters at large reductions: the lanczos kernel
+    (radius 3) integrates ~6 input samples per output pixel. At
+    reduction ratios above ~2x linear, the kernel sees too few
+    samples and leaves residual aliasing on faces / text / fine
+    textures. LTX 2.3's cross-attention reads aliasing as
+    "high-frequency content to explore" and tends to push the camera
+    in the first window — manifesting as spurious zoom/dolly motion
+    in i2v renders even when the prompt asks for static framing.
+
+    Behavior:
+      - source <= target: single-pass upscale (no aliasing risk).
+      - source / target <= 2x: single-pass downscale.
+      - source / target > 2x: ceil(log2(ratio)) progressive 2x-ish
+        downscales, each within the kernel's clean range.
+
+    Unlike the workflow-only "two-stage lanczos preprocess"
+    (`scripts/apply_lanczos_init_preprocess.py`), this node reads
+    source dims at runtime and picks stage count adaptively. One node
+    handles 1024x576 init images and 4K+ init images correctly.
+
+    Aspect handling: when `keep_proportion=True` (default), the source
+    is center/top/bottom-cropped to the target aspect ratio BEFORE the
+    multi-stage resize, mirroring `ImageResizeKJv2(keep_proportion="crop")`.
+    Set `keep_proportion=False` to stretch (matches `crop="disabled"`).
+    """
+
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="LTXSmartImageResize",
+            display_name="LTX Smart Image Resize",
+            category="image/upscaling",
+            description=(
+                "Adaptive multi-stage lanczos. Picks stage count based "
+                "on source/target ratio so each pass stays in lanczos's "
+                "clean anti-alias range."
+            ),
+            inputs=[
+                io.Image.Input("image", tooltip="Source IMAGE."),
+                io.Int.Input(
+                    "width",
+                    default=832,
+                    min=8,
+                    max=8192,
+                    step=1,
+                    tooltip="Target width in pixels.",
+                ),
+                io.Int.Input(
+                    "height",
+                    default=448,
+                    min=8,
+                    max=8192,
+                    step=1,
+                    tooltip="Target height in pixels.",
+                ),
+                io.Boolean.Input(
+                    "keep_proportion",
+                    default=True,
+                    tooltip=(
+                        "Crop source to target aspect ratio before resize "
+                        "(matches ImageResizeKJv2 keep_proportion='crop'). "
+                        "Off = stretch."
+                    ),
+                ),
+                io.Combo.Input(
+                    "crop_position",
+                    options=["center", "top", "bottom", "left", "right"],
+                    default="top",
+                    tooltip="When keep_proportion=True, which edge to crop from.",
+                ),
+            ],
+            outputs=[
+                io.Image.Output("image", tooltip="Resized IMAGE [B, height, width, C]."),
+                io.Int.Output("width", tooltip="Output width (passthrough of input)."),
+                io.Int.Output("height", tooltip="Output height (passthrough of input)."),
+            ],
+        )
+
+    @classmethod
+    def execute(
+        cls,
+        image,
+        width: int,
+        height: int,
+        keep_proportion: bool = True,
+        crop_position: str = "top",
+    ):
+        # ComfyUI IMAGE shape is [B, H, W, C].
+        if keep_proportion:
+            image = _crop_to_aspect(image, int(width), int(height), crop_position)
+        src_h, src_w = int(image.shape[1]), int(image.shape[2])
+        stages = _compute_resize_stages(src_w, src_h, int(width), int(height))
+        if not stages:
+            return io.NodeOutput(image, int(width), int(height))
+
+        # Operate in BCHW for the inner loop so multi-stage paths skip
+        # the per-stage HWC/contiguous round-trip.
+        bchw = image.movedim(-1, 1)
+        for stage_w, stage_h in stages:
+            bchw = _lanczos_resize_bchw(bchw, stage_w, stage_h)
+        out = bchw.movedim(1, -1).contiguous()
+        return io.NodeOutput(out, int(width), int(height))
+
+
 class ImageBlend(io.ComfyNode):
     """Blends two images with a factor. Pairs with KeyframeImageSchedule
     for smooth visual transitions between keyframes.
@@ -3143,6 +3407,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LatentSelectByIteration,
             VideoFrameExtract,
             ImageBlend,
+            LTXSmartImageResize,
             CachedTextEncode,
             IterationCleanup,
             LoopIterationStamp,

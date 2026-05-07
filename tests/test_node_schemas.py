@@ -243,6 +243,78 @@ def test_latent_temporal_mask_edge_taper_default_is_zero():
     )
 
 
+def _scan_io_outputs_in_class(path: Path, class_name: str):
+    """Yield (lineno, name) for every `io.<Type>.Output(...)` call inside `class class_name`.
+
+    Class-bounded analogue of `_scan_io_input_records_in_class` for output
+    slots. Used to assert a node exposes a specific named output without
+    coupling the test to the surrounding sibling outputs.
+    """
+    src = path.read_text()
+    needle = f"class {class_name}"
+    if needle not in src:
+        return
+    cls_start = src.index(needle)
+    cls_start_line = src.count("\n", 0, cls_start) + 1
+    next_cls_offset = src.find("\nclass ", cls_start + len(needle))
+    cls_end_line = (
+        src.count("\n", 0, next_cls_offset) + 1
+        if next_cls_offset != -1 else float("inf")
+    )
+    tree = ast.parse(src, filename=str(path))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        f = node.func
+        if not (
+            isinstance(f, ast.Attribute)
+            and f.attr == "Output"
+            and isinstance(f.value, ast.Attribute)
+            and isinstance(f.value.value, ast.Name)
+            and f.value.value.id == "io"
+        ):
+            continue
+        if not (cls_start_line <= node.lineno < cls_end_line):
+            continue
+        name_value = None
+        if node.args and isinstance(node.args[0], ast.Constant):
+            name_value = node.args[0].value
+        else:
+            for kw in node.keywords:
+                if kw.arg == "name" and isinstance(kw.value, ast.Constant):
+                    name_value = kw.value.value
+                    break
+        if isinstance(name_value, str):
+            yield (node.lineno, name_value)
+
+
+def test_audio_loop_planner_exposes_stride_and_duration_outputs():
+    """`AudioLoopPlanner` must output `stride_seconds` + `audio_duration`.
+
+    These are the load-bearing outputs the batch encoder reads to break
+    the cycle introduced when initial-render conditioning is sourced
+    from `conditioning_list[0]` (Phase 1 of the workflow-organization
+    rework). Sourcing them from `AudioLoopController` instead would
+    transitively pull `current_iteration` into the encoder's input
+    closure — turning the initial-render conditioning chain into a
+    cycle through the loop. The planner is the cycle-free source.
+
+    Removing or renaming either output without a paired migration
+    would re-open the cycle on every workflow that picked up the new
+    wiring; this AST guard fails fast on either change.
+    """
+    path = REPO_ROOT / "nodes.py"
+    outputs = {name for _ln, name in _scan_io_outputs_in_class(path, "AudioLoopPlanner")}
+    assert "stride_seconds" in outputs, (
+        "AudioLoopPlanner is missing io.Float.Output('stride_seconds'). "
+        "Restore it to keep the batch-encoder rewire from re-opening the cycle."
+    )
+    assert "audio_duration" in outputs, (
+        "AudioLoopPlanner is missing io.Float.Output('audio_duration'). "
+        "Restore it to keep the batch-encoder rewire from re-opening the cycle."
+    )
+
+
 def test_latent_seam_zone_mask_iteration_count_default_is_one():
     """`LatentSeamZoneMask.iteration_count` must default to 1 (no seams).
 
