@@ -191,6 +191,14 @@ def is_active(node: dict) -> bool:
     return node.get("mode", 0) != 4
 
 
+def resolve_repo_path(p: str | Path) -> Path:
+    """Resolve a CLI-supplied path: absolute paths kept as-is, relative
+    paths re-rooted at the repo root. Used by every apply_*.py for its
+    --input / --output / --workflow flags."""
+    path = Path(p)
+    return path if path.is_absolute() else (REPO_ROOT / path).resolve()
+
+
 _EMPTY_WORKFLOW_SKELETON = {
     "revision": 0,
     "last_node_id": 0,
