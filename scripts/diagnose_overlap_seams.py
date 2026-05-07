@@ -31,9 +31,15 @@ Usage:
         --latent /tmp/loop.latent.pt \\
         --iteration-count 5 --window-latents 16 --overlap-latents 4
 
-To capture a latent for the diagnostic, hook your render workflow to
-`torch.save` the dict at the `LTXVSeparateAVLatent.video_latent`
-output. Cheap to run on CPU (~seconds per minute of video).
+To capture a latent for the diagnostic, stage the canonical loop
+workflow with `scripts/apply_save_video_latent.py` (inserts a
+`SaveLatent` node wired to `LTXVSeparateAVLatent.video_latent`),
+render once, then point `--latent` at the resulting
+`output/seam_diag/loop_video_latent_NNNNN_.latent` file.
+
+Accepted formats: `.pt` (dict with `samples` or bare Tensor),
+`.safetensors` / `.latent` (`samples`/`latent`/`video_latent`/
+`latent_tensor` keys). Cheap to run on CPU (~seconds per minute of video).
 """
 
 from __future__ import annotations
@@ -64,17 +70,20 @@ def _load_latent(latent_path: Path) -> torch.Tensor:
         raise SystemExit(
             f"Unexpected .pt content; expected dict with 'samples' or a Tensor, got {type(obj)}."
         )
-    if latent_path.suffix == ".safetensors":
+    if latent_path.suffix in (".safetensors", ".latent"):
         try:
             from safetensors.torch import load_file
         except ImportError:
             raise SystemExit("safetensors not installed; install or use a .pt file.")
         obj = load_file(latent_path)
-        for key in ("samples", "latent", "video_latent"):
+        # `latent_tensor` is the key ComfyUI core's SaveLatent node writes;
+        # `samples` / `latent` / `video_latent` cover hand-saved variants.
+        for key in ("samples", "latent", "video_latent", "latent_tensor"):
             if key in obj:
                 return obj[key]
         raise SystemExit(
-            f"No samples/latent/video_latent key in safetensors; saw {list(obj.keys())}."
+            f"No samples/latent/video_latent/latent_tensor key in {latent_path.suffix}; "
+            f"saw {list(obj.keys())}."
         )
     raise SystemExit(f"Unrecognized latent extension: {latent_path.suffix}")
 
