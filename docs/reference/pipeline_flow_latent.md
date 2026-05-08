@@ -1165,7 +1165,7 @@ The upscale chain is bypassed because per-loop VAE round-trip quality loss and V
 
 | Widget | Node | Default | What It Controls | Valid Range |
 |--------|------|---------|-----------------|-------------|
-| `first_frame_guide_strength` | #1269 FloatConstant | `1` | Init image guide strength in extension subgraph. 1.0 = frame spatially frozen (no noise added). | 0.0 -- 1.0 |
+| `first_frame_guide_strength` | #1269 FloatConstant | `1` | Init image guide strength feeding `LTXVAddLatentGuide #1519` at `latent_idx=-1` every iter. `1.0` = max identity stability (init pinned hard, minimal motion between iter-start overlap and iter-end anchor — both = init image). Lower for music-video expressivity at the cost of cross-iter identity drift: `0.5` soft anchor; `0.3` visible drift; `0.0` no anchor (free motion). | 0.0 -- 1.0 |
 
 ### Final Output
 
