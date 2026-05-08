@@ -4,7 +4,7 @@
   <img src="assets/hero.webp" alt="ComfyUI-AudioLoopHelper" width="500">
 </p>
 
-Last updated: 2026-05-04
+Last updated: 2026-05-08
 
 Custom ComfyUI nodes for full-length music video generation with LTX 2.3.
 Drives loop timing from integer-latent counts, freezes audio via
@@ -18,13 +18,14 @@ Drives loop timing from integer-latent counts, freezes audio via
 
 Open `example_workflows/audio-loop-music-video_latent.json` in ComfyUI.
 The workflow itself documents what to change via group titles, node titles,
-and Note nodes. Five things to set:
+and Note nodes. Four things to set:
 
 1. **LoadAudio** — drop your song.
-2. **LoadImage** — drop the init image (matches the first scene visually).
+2. **LoadImage** — drop the init image. Any size; auto-resized adaptively. Matches the first scene visually.
 3. **start_seed** — any int.
-4. **CLIPTextEncode (Node 169)** — initial-render prompt.
-5. **TimestampPromptScheduleBatchEncode** — paste the schedule.
+4. **TimestampPromptScheduleBatchEncode** — paste the schedule. The initial-render prompt is read from the `0:00` entry (no separate node).
+
+Optional knob: **`first_frame_guide_strength`** (`FloatConstant #1269`). Default `1.0` pins init image to every iter's last frame for max identity stability. Lower (`0.5`/`0.3`) for music-video expressivity at the cost of cross-iter identity drift.
 
 > **On prompt budget.** LTX 2.3's cross-attention has to share its
 > token budget across text, audio coherence, and (with i2v) image
@@ -36,7 +37,7 @@ and Note nodes. Five things to set:
 > longer. With i2v, text should be tight. Pick where to spend your
 > constraints.
 
-For (4) + (5), generate copy-paste-ready text from `scripts/analyze_audio_features.py`:
+For (4), generate copy-paste-ready text from `scripts/analyze_audio_features.py`:
 
 ```bash
 uv sync --group analysis
@@ -92,9 +93,9 @@ Experimental forks live in `example_workflows/experimental/` paired with
 ## Audio feature analysis
 
 `scripts/analyze_audio_features.py` extracts BPM, key, structure, F0, and
-emits LTX-2.3-ready prompt schedules. Output has two clearly labeled
-sections — the initial-render prompt (paste into Node 169) and the
-per-iteration schedule (paste into `TimestampPromptScheduleBatchEncode`).
+emits an LTX-2.3-ready timestamp-prompt schedule. Paste the whole schedule
+into `TimestampPromptScheduleBatchEncode`; the initial-render prompt comes
+from its `0:00+` entry automatically.
 
 Common invocations:
 
