@@ -1,8 +1,8 @@
 {
   "id": "3db70343-fd10-483b-8d66-6be2395b9681",
   "revision": 0,
-  "last_node_id": 2021,
-  "last_link_id": 3188,
+  "last_node_id": 2020,
+  "last_link_id": 3183,
   "nodes": [
     {
       "id": 252,
@@ -173,7 +173,7 @@
         {
           "name": "conditioning",
           "type": "CONDITIONING",
-          "link": 3186
+          "link": 1201
         }
       ],
       "outputs": [
@@ -333,7 +333,7 @@
         {
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 3185
+          "link": 379
         },
         {
           "name": "negative",
@@ -1469,6 +1469,7 @@
           "name": "CLIP",
           "type": "CLIP",
           "links": [
+            1256,
             1360,
             3043
           ]
@@ -2287,20 +2288,6 @@
           "links": [
             3069
           ]
-        },
-        {
-          "name": "stride_seconds",
-          "type": "FLOAT",
-          "links": [
-            3187
-          ]
-        },
-        {
-          "name": "audio_duration",
-          "type": "FLOAT",
-          "links": [
-            3188
-          ]
         }
       ],
       "properties": {
@@ -2927,6 +2914,7 @@
           "name": "audio_duration",
           "type": "FLOAT",
           "links": [
+            3045,
             3172
           ]
         },
@@ -2940,7 +2928,9 @@
         {
           "name": "stride_seconds",
           "type": "FLOAT",
-          "links": []
+          "links": [
+            3044
+          ]
         },
         {
           "name": "overlap_frames",
@@ -3362,7 +3352,7 @@
           ]
         }
       ],
-      "title": "VAE Encode (init image → guide latent)",
+      "title": "VAE Encode (init image \u2192 guide latent)",
       "properties": {
         "cnr_id": "comfy-core",
         "ver": "0.20.1",
@@ -4074,7 +4064,7 @@
           "widget": {
             "name": "stride_seconds"
           },
-          "link": 3187
+          "link": 3044
         },
         {
           "name": "audio_duration",
@@ -4082,7 +4072,7 @@
           "widget": {
             "name": "audio_duration"
           },
-          "link": 3188
+          "link": 3045
         }
       ],
       "outputs": [
@@ -4090,8 +4080,7 @@
           "name": "conditioning_list",
           "type": "*",
           "links": [
-            3046,
-            3184
+            3046
           ]
         },
         {
@@ -4113,6 +4102,55 @@
         180,
         true,
         25
+      ],
+      "color": "#232",
+      "bgcolor": "#353"
+    },
+    {
+      "id": 169,
+      "type": "CLIPTextEncode",
+      "pos": [
+        2080,
+        396.6666666666667
+      ],
+      "size": [
+        479.90633183546925,
+        123.0875846723493
+      ],
+      "flags": {},
+      "order": 35,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 1256
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            379,
+            1201
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.56",
+        "Node name for S&R": "CLIPTextEncode",
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65
+      },
+      "widgets_values": [
+        "video of a man dancing"
       ],
       "color": "#232",
       "bgcolor": "#353"
@@ -4520,54 +4558,6 @@
       "title": "IC-LoRA chain",
       "color": "#432",
       "bgcolor": "#653"
-    },
-    {
-      "id": 2021,
-      "type": "ConditioningSelectByIteration",
-      "pos": [
-        2080,
-        396.6666666666667
-      ],
-      "size": [
-        320,
-        80
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "conditioning_list",
-          "type": "*",
-          "link": 3184
-        },
-        {
-          "name": "current_iteration",
-          "type": "INT",
-          "widget": {
-            "name": "current_iteration"
-          }
-        }
-      ],
-      "outputs": [
-        {
-          "name": "conditioning",
-          "type": "CONDITIONING",
-          "links": [
-            3185,
-            3186
-          ]
-        }
-      ],
-      "properties": {
-        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
-        "Node name for S&R": "ConditioningSelectByIteration",
-        "cnr_id": "comfyui-audioloophelper"
-      },
-      "widgets_values": [
-        0
-      ],
-      "title": "Initial render conditioning (from schedule[0])"
     }
   ],
   "links": [
@@ -4588,6 +4578,14 @@
       "SAMPLER"
     ],
     [
+      379,
+      169,
+      0,
+      164,
+      0,
+      "CONDITIONING"
+    ],
+    [
       956,
       245,
       0,
@@ -4602,6 +4600,14 @@
       268,
       0,
       "MODEL"
+    ],
+    [
+      1201,
+      169,
+      0,
+      420,
+      0,
+      "CONDITIONING"
     ],
     [
       1202,
@@ -4634,6 +4640,14 @@
       161,
       4,
       "LATENT"
+    ],
+    [
+      1256,
+      416,
+      0,
+      169,
+      0,
+      "CLIP"
     ],
     [
       1351,
@@ -5116,6 +5130,22 @@
       "CLIP"
     ],
     [
+      3044,
+      1582,
+      4,
+      1615,
+      1,
+      "FLOAT"
+    ],
+    [
+      3045,
+      1582,
+      2,
+      1615,
+      2,
+      "FLOAT"
+    ],
+    [
       3046,
       1615,
       0,
@@ -5570,46 +5600,6 @@
       1635,
       0,
       "MODEL"
-    ],
-    [
-      3184,
-      1615,
-      0,
-      2021,
-      0,
-      "*"
-    ],
-    [
-      3185,
-      2021,
-      0,
-      164,
-      0,
-      "CONDITIONING"
-    ],
-    [
-      3186,
-      2021,
-      0,
-      420,
-      0,
-      "CONDITIONING"
-    ],
-    [
-      3187,
-      1560,
-      2,
-      1615,
-      1,
-      "FLOAT"
-    ],
-    [
-      3188,
-      1560,
-      3,
-      1615,
-      2,
-      "FLOAT"
     ]
   ],
   "groups": [
@@ -6929,7 +6919,7 @@
                 "type": "LATENT"
               }
             ],
-            "title": "CropGuides (LATENT-only — split)",
+            "title": "CropGuides (LATENT-only \u2014 split)",
             "properties": {
               "cnr_id": "comfy-core",
               "ver": "0.20.1",
@@ -7597,7 +7587,7 @@
         },
         "class_type": "LTXVGemmaCLIPModelLoader",
         "_meta": {
-          "title": "🅛🅣🅧 Gemma 3 Model Loader"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Gemma 3 Model Loader"
         }
       },
       "3": {
@@ -7683,7 +7673,7 @@
         },
         "class_type": "LTXVAudioVAELoader",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Audio VAE Loader"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Audio VAE Loader"
         }
       },
       "14": {
@@ -7699,7 +7689,7 @@
         },
         "class_type": "LTXVAudioVAEDecode",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Audio VAE Decode"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Audio VAE Decode"
         }
       },
       "15": {
@@ -7728,7 +7718,7 @@
         },
         "class_type": "VHS_VideoCombine",
         "_meta": {
-          "title": "Video Combine 🎥🅥🅗🅢"
+          "title": "Video Combine \ud83c\udfa5\ud83c\udd65\ud83c\udd57\ud83c\udd62"
         }
       },
       "17": {
@@ -7753,7 +7743,7 @@
         },
         "class_type": "MultimodalGuider",
         "_meta": {
-          "title": "🅛🅣🅧 Multimodal Guider"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Multimodal Guider"
         }
       },
       "18": {
@@ -7770,7 +7760,7 @@
         },
         "class_type": "GuiderParameters",
         "_meta": {
-          "title": "🅛🅣🅧 Guider Parameters"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Guider Parameters"
         }
       },
       "19": {
@@ -7783,7 +7773,7 @@
         },
         "class_type": "GuiderParameters",
         "_meta": {
-          "title": "🅛🅣🅧 Guider Parameters"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Guider Parameters"
         }
       },
       "21": {
@@ -7842,7 +7832,7 @@
         },
         "class_type": "LTXVEmptyLatentAudio",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Empty Latent Audio"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Empty Latent Audio"
         }
       },
       "27": {
@@ -7871,7 +7861,7 @@
         },
         "class_type": "LTXVConcatAVLatent",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Concat AV Latent"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Concat AV Latent"
         }
       },
       "29": {
@@ -7887,7 +7877,7 @@
         },
         "class_type": "LTXVSeparateAVLatent",
         "_meta": {
-          "title": "🅛🅣🅧 LTXV Separate AV Latent"
+          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Separate AV Latent"
         }
       },
       "41": {

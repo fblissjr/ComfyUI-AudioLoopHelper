@@ -140,6 +140,13 @@ def _apply(ed: WorkflowEditor, dry_run: bool) -> None:
             f"Node #{NODE_169_CLIP_TEXT_ENCODE} is type {n169.get('type')!r}, "
             "expected 'CLIPTextEncode'. Layout drift; refusing to mutate."
         )
+    n1615 = ed.find_node(NODE_1615_BATCH_ENCODER)
+    if n1615.get("type") != "TimestampPromptScheduleBatchEncode":
+        raise SystemExit(
+            f"Node #{NODE_1615_BATCH_ENCODER} is type {n1615.get('type')!r}, "
+            "expected 'TimestampPromptScheduleBatchEncode'. This script "
+            "targets only variants with the canonical batch encoder layout."
+        )
 
     if dry_run:
         print(f"  {ed.path.name}:")

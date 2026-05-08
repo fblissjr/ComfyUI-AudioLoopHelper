@@ -115,7 +115,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 3113
+          "link": 3187
         },
         {
           "name": "positive",
@@ -173,7 +173,7 @@
         {
           "name": "conditioning",
           "type": "CONDITIONING",
-          "link": 3186
+          "link": 1201
         }
       ],
       "outputs": [
@@ -333,7 +333,7 @@
         {
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 3185
+          "link": 3188
         },
         {
           "name": "negative",
@@ -639,7 +639,8 @@
           "name": "model",
           "type": "MODEL",
           "links": [
-            2849
+            2849,
+            3184
           ]
         }
       ],
@@ -1053,7 +1054,8 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            2851
+            2851,
+            3186
           ]
         }
       ],
@@ -1469,8 +1471,10 @@
           "name": "CLIP",
           "type": "CLIP",
           "links": [
+            1256,
             1360,
-            3043
+            3043,
+            3185
           ]
         }
       ],
@@ -2287,20 +2291,6 @@
           "links": [
             3069
           ]
-        },
-        {
-          "name": "stride_seconds",
-          "type": "FLOAT",
-          "links": [
-            3187
-          ]
-        },
-        {
-          "name": "audio_duration",
-          "type": "FLOAT",
-          "links": [
-            3188
-          ]
         }
       ],
       "properties": {
@@ -2927,6 +2917,7 @@
           "name": "audio_duration",
           "type": "FLOAT",
           "links": [
+            3045,
             3172
           ]
         },
@@ -2940,7 +2931,9 @@
         {
           "name": "stride_seconds",
           "type": "FLOAT",
-          "links": []
+          "links": [
+            3044
+          ]
         },
         {
           "name": "overlap_frames",
@@ -3648,9 +3641,7 @@
         {
           "name": "MODEL",
           "type": "MODEL",
-          "links": [
-            3113
-          ]
+          "links": []
         },
         {
           "name": "positive",
@@ -4074,7 +4065,7 @@
           "widget": {
             "name": "stride_seconds"
           },
-          "link": 3187
+          "link": 3044
         },
         {
           "name": "audio_duration",
@@ -4082,7 +4073,7 @@
           "widget": {
             "name": "audio_duration"
           },
-          "link": 3188
+          "link": 3045
         }
       ],
       "outputs": [
@@ -4090,8 +4081,7 @@
           "name": "conditioning_list",
           "type": "*",
           "links": [
-            3046,
-            3184
+            3046
           ]
         },
         {
@@ -4113,6 +4103,54 @@
         180,
         true,
         25
+      ],
+      "color": "#232",
+      "bgcolor": "#353"
+    },
+    {
+      "id": 169,
+      "type": "CLIPTextEncode",
+      "pos": [
+        2080,
+        396.6666666666667
+      ],
+      "size": [
+        479.90633183546925,
+        123.0875846723493
+      ],
+      "flags": {},
+      "order": 35,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 1256
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            1201
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.56",
+        "Node name for S&R": "CLIPTextEncode",
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65
+      },
+      "widgets_values": [
+        "video of a man dancing"
       ],
       "color": "#232",
       "bgcolor": "#353"
@@ -4523,51 +4561,62 @@
     },
     {
       "id": 2021,
-      "type": "ConditioningSelectByIteration",
+      "type": "PromptRelayEncode",
       "pos": [
-        2080,
-        396.6666666666667
+        -1800,
+        600
       ],
       "size": [
-        320,
-        80
+        420,
+        300
       ],
       "flags": {},
       "order": 0,
       "mode": 0,
       "inputs": [
         {
-          "name": "conditioning_list",
-          "type": "*",
+          "name": "model",
+          "type": "MODEL",
           "link": 3184
         },
         {
-          "name": "current_iteration",
-          "type": "INT",
-          "widget": {
-            "name": "current_iteration"
-          }
+          "name": "clip",
+          "type": "CLIP",
+          "link": 3185
+        },
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "link": 3186
         }
       ],
       "outputs": [
         {
-          "name": "conditioning",
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            3187
+          ]
+        },
+        {
+          "name": "positive",
           "type": "CONDITIONING",
           "links": [
-            3185,
-            3186
+            3188
           ]
         }
       ],
       "properties": {
-        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
-        "Node name for S&R": "ConditioningSelectByIteration",
-        "cnr_id": "comfyui-audioloophelper"
+        "cnr_id": "ComfyUI-PromptRelay",
+        "Node name for S&R": "PromptRelayEncode"
       },
       "widgets_values": [
-        0
+        "video of a man dancing",
+        "wide establishing shot, full-body framing | tight closeup, shallow depth of field",
+        "",
+        0.001
       ],
-      "title": "Initial render conditioning (from schedule[0])"
+      "title": "Prompt Relay (initial-render)"
     }
   ],
   "links": [
@@ -4604,6 +4653,14 @@
       "MODEL"
     ],
     [
+      1201,
+      169,
+      0,
+      420,
+      0,
+      "CONDITIONING"
+    ],
+    [
       1202,
       420,
       0,
@@ -4634,6 +4691,14 @@
       161,
       4,
       "LATENT"
+    ],
+    [
+      1256,
+      416,
+      0,
+      169,
+      0,
+      "CLIP"
     ],
     [
       1351,
@@ -5116,6 +5181,22 @@
       "CLIP"
     ],
     [
+      3044,
+      1582,
+      4,
+      1615,
+      1,
+      "FLOAT"
+    ],
+    [
+      3045,
+      1582,
+      2,
+      1615,
+      2,
+      "FLOAT"
+    ],
+    [
       3046,
       1615,
       0,
@@ -5224,14 +5305,6 @@
       572,
       0,
       1632,
-      0,
-      "MODEL"
-    ],
-    [
-      3113,
-      1632,
-      0,
-      153,
       0,
       "MODEL"
     ],
@@ -5573,43 +5646,43 @@
     ],
     [
       3184,
-      1615,
+      1523,
       0,
       2021,
       0,
-      "*"
+      "MODEL"
     ],
     [
       3185,
+      416,
+      0,
       2021,
-      0,
-      164,
-      0,
-      "CONDITIONING"
+      1,
+      "CLIP"
     ],
     [
       3186,
+      344,
+      0,
       2021,
-      0,
-      420,
-      0,
-      "CONDITIONING"
+      2,
+      "LATENT"
     ],
     [
       3187,
-      1560,
-      2,
-      1615,
-      1,
-      "FLOAT"
+      2021,
+      0,
+      153,
+      0,
+      "MODEL"
     ],
     [
       3188,
-      1560,
-      3,
-      1615,
-      2,
-      "FLOAT"
+      2021,
+      1,
+      164,
+      0,
+      "CONDITIONING"
     ]
   ],
   "groups": [

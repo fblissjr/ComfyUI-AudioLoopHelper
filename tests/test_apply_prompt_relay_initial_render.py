@@ -27,7 +27,13 @@ from workflow_utils import WorkflowEditor
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = REPO_ROOT / "scripts" / "apply_prompt_relay_initial_render.py"
-CANONICAL = REPO_ROOT / "example_workflows" / "audio-loop-music-video_latent.json"
+# Frozen pre-dedupe baseline. PromptRelay's apply script splices into
+# the post-Node-169 conditioning chain, which is mutually exclusive with
+# the dedupe migration that's now baked into the canonical
+# (apply_dedupe_initial_render_prompt.py removes Node 169). The frozen
+# baseline isolates this script's tests from canonical drift; the
+# script itself remains usable on any pre-dedupe input.
+CANONICAL = REPO_ROOT / "tests" / "fixtures" / "canonical_loop_pre_dedupe.json"
 
 
 # Node IDs the apply script keys off. Mirrors the constants in the script.
