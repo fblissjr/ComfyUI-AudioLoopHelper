@@ -74,7 +74,8 @@ There is no migration for the helper itself — it's a new module. Apply scripts
 
 ## Audit + tests
 
-No paired audit invariant yet. Layout invariants (group integrity, no overlapping non-collapsed nodes, every node has `pos != [0, 0]`) are candidates for a `group_layout_invariants` check in `audit_workflows.py` once the polish variant promotes from `internal/workflows/` to `example_workflows/`. Per `scripts/CLAUDE.md` "Carve-out for staged-variant scripts", staged variants skip F-pair until promotion.
+- **`layout_no_orphans`** (generic invariant): any non-Note node at `pos=[0, 0]` is flagged ERR. Catches the silent-failure mode where an apply script inserts a node and never runs a layout pass. Tests: `tests/test_audit_layout_no_orphans.py`.
+- **F-pair group_layout_invariants** (deferred): a per-workflow check that the expected groups exist with expected titles + tier coverage. Lands when `apply_layout_polish_audio_loop_latent.py`'s output promotes from `internal/workflows/` to `example_workflows/`. Per `scripts/CLAUDE.md` "Carve-out for staged-variant scripts", staged variants skip F-pair until promotion.
 
 ## References
 

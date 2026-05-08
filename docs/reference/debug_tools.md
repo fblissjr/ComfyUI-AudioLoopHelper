@@ -57,6 +57,7 @@ paired with their apply scripts. Two flavors:
 | `graph_acyclic` | Top-level dependency cycles. ComfyUI rejects with "Dependency cycle detected" before any node executes. |
 | `widget_shape` | Stray `randomize`/`fixed`/`increment`/`decrement` strings in `widgets_values` of nodes that don't legitimately have a `control_after_generate` dropdown. Catches partial schema migrations. |
 | `link_integrity` | Top-level link record vs node-level link references desync (slot out of range, source's `outputs[].links` doesn't list the link id, target's `inputs[].link != id`). Plus subgraph `linkIds` references to non-existent links. |
+| `layout_no_orphans` | Non-Note node at `pos=[0, 0]`. Catches the silent failure mode where an apply script inserts a node and never runs a layout pass — node lands at canvas origin and is hard to spot in a busy workflow. Allowlisted types: `Note` only. |
 | (no audit; AST test) `tests/test_node_schemas.py::test_keyframe_idxs_cleared_to_none_not_empty_list` | `conditioning_set_values({"keyframe_idxs": []})` literal-list assignments. KJNodes' OuterSampleCallbackWrapper crashes on empty-list keyframe_idxs. |
 
 **Bake new topology constraints into `audit_workflows.py`.** Every fix

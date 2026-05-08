@@ -673,6 +673,7 @@ def _audit_one(wf_path: Path) -> list[Finding]:
     _check_graph_acyclic(wf, by_id, record)
     _check_link_integrity(wf, by_id, links_by_id, record)
     _check_widget_shape(wf, record)
+    _check_layout_no_orphans(wf, record)
 
     if _is_retake(name):
         _check_retake_wiring(wf, by_type, record)
@@ -888,6 +889,46 @@ def _check_widget_shape(wf, record) -> None:
         )
     else:
         record("OK", "widget_shape", "no stray control_after_generate strings in widgets_values")
+
+
+# Node types whose pos=[0, 0] is acceptable. Notes are author-positioned and
+# may legitimately sit at canvas origin if that's where the layout pass parked
+# them. Future entries: add here, not as inline carve-outs in the check body.
+_LAYOUT_POS_ZERO_ALLOWED_TYPES = frozenset({"Note"})
+
+
+def _check_layout_no_orphans(wf, record) -> None:
+    """Any node sitting at pos=[0, 0] is almost always an apply-script that
+    inserted a node and never ran a layout pass to position it. Verified
+    against canonical example_workflows/ — no production workflow has any
+    non-Note node at canvas origin (2026-05-08).
+
+    Catches the failure mode in `docs/reference/workflow_layout_helpers.md`
+    "Failure modes": new nodes added to a workflow whose apply-script
+    classification table doesn't cover them land top-left silently.
+    """
+    orphans: list[str] = []
+    for node in wf.get("nodes") or []:
+        if node.get("type") in _LAYOUT_POS_ZERO_ALLOWED_TYPES:
+            continue
+        pos = node.get("pos") or [0, 0]
+        if len(pos) >= 2 and float(pos[0]) == 0.0 and float(pos[1]) == 0.0:
+            orphans.append(
+                f"#{node.get('id')}({node.get('type', '?')})"
+            )
+
+    if orphans:
+        head = orphans[:5]
+        more = f" ... {len(orphans) - 5} more" if len(orphans) > 5 else ""
+        record(
+            "ERR", "layout_no_orphans",
+            f"{len(orphans)} node(s) at pos=[0, 0]: {', '.join(head)}{more}. "
+            f"Re-run the layout apply script for this workflow "
+            f"(scripts/apply_layout_*.py or scripts/apply_intro_workflow.py), "
+            f"or add the new node id to that script's classification table.",
+        )
+    else:
+        record("OK", "layout_no_orphans", "no nodes at pos=[0, 0]")
 
 
 # Retake workflow checks — gated on filename match. The retake workflow
