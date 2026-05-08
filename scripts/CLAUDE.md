@@ -44,6 +44,10 @@ Both templates include the canonical `--revert`, `--dry-run`, idempotence, and `
 
 **Layout work**: extend `scripts/_helpers/_layout_grid.py` (column-grid + tier sub-groups + note anchors). Don't freelance pixel coords inline in apply scripts — `internal/design/intro_workflow_design.md` "v1 layout fix" (private clone only) records why partial-layout passes drift. Reference users: `apply_intro_workflow.py::_layout_workflow` (seed pattern), `apply_layout_polish_audio_loop_latent.py` (tier sub-groups + `--from-template` template extraction). Full reference: `docs/reference/workflow_layout_helpers.md`.
 
+**Byte-identical refactor validation**: when refactoring an apply script (extracting helpers, moving classifications), capture `md5sum` of the script's output before, re-run after, diff. Catches accidental behavior change before it ships. Used during `_layout_grid` + `_layout_classifications` extractions (2026-05-08) — both byte-identical confirmed via this loop.
+
+**Self-targeting apply scripts** (input path == output path; today: `apply_intro_workflow.py`) overwrite user manual edits on re-application. Before re-running, `git diff` the target — off-grid positions or unclassified node ids may be intentional manual edits worth preserving.
+
 ## Before archiving an apply script
 
 Ref-counting (grep across `docs/`, `tests/`, and CLAUDE.md files) is necessary but **not sufficient** — it misses three failure modes:
