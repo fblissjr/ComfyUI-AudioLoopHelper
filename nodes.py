@@ -59,12 +59,13 @@ _LANCZOS_MAX_PER_STAGE_RATIO = 2.0
 def _compute_resize_stages(
     src_w: int, src_h: int, tgt_w: int, tgt_h: int,
 ) -> list[tuple[int, int]]:
-    """Plan adaptive multi-stage lanczos downscaling.
+    """Plan adaptive multi-stage downscaling — kernel-agnostic stage layout.
 
     For each stage, output dims roughly halve the previous dims (down to
-    target). Each stage stays at <= 2x linear reduction so the lanczos
-    kernel sees enough input samples per output pixel to anti-alias
-    cleanly.
+    target). Each stage stays at <= 2x linear reduction. The 2x cap is
+    set by the final-stage lanczos kernel's clean anti-alias range
+    (kernel radius 3, ~6 samples per output pixel); intermediate stages
+    use bicubic+antialias so the bound applies uniformly.
 
     Returns a list of (width, height) per stage, ending at exactly
     (tgt_w, tgt_h). Empty list = no work needed (source matches target).
@@ -161,24 +162,41 @@ def _crop_to_aspect(
     return image[:, y : y + crop_h, x : x + crop_w, :]
 
 
-def _lanczos_resize_bchw(image_bchw: "torch.Tensor", width: int, height: int) -> "torch.Tensor":
-    """Single-pass lanczos resize on a [B, C, H, W] image tensor.
+def _resize_bchw(image_bchw: "torch.Tensor", width: int, height: int, *, final_stage: bool) -> "torch.Tensor":
+    """Resize [B, C, H, W] image. Avoids float→uint8→float quantization
+    loss on intermediate multi-stage passes.
 
-    Operates in BCHW so the multi-stage caller can avoid round-tripping
-    through HWC/contiguous between stages — saves one full-tensor copy
-    per intermediate stage on multi-stage paths.
+    `comfy.utils.lanczos` is implemented as PIL.Image.LANCZOS — it
+    converts float32 → uint8, resizes, converts back to float32. That's
+    fine for a single pass (one round of 8-bit quantization), but
+    multi-stage stacks the loss: stage 1 quantizes, stage 2 quantizes
+    the already-quantized intermediate. The accumulated banding noise
+    on real photographs (faces, textures) is exactly the kind of
+    high-frequency content LTX 2.3's i2v cross-attention reads as
+    "explorable detail" and turns into spurious motion cues.
 
-    Uses ComfyUI's `common_upscale` when available (matches what
-    `ImageResizeKJv2` does internally). Falls back to `F.interpolate`
-    bicubic for the no-ComfyUI test path.
+    Strategy:
+      - intermediate stages: `F.interpolate(mode='bicubic', antialias=True)`.
+        Stays float32 throughout. Bicubic+antialias is the standard
+        downsampling kernel in torchvision/Pillow's modern ANTIALIAS path.
+      - final stage: PIL lanczos via `comfy.utils.common_upscale` so
+        the final output has the same kernel character as a single-pass
+        canonical render.
+
+    `final_stage=True` is also the path for upscale (ratio < 1, single
+    stage) — no quantization concern there. Same-size passthrough never
+    reaches this function (planner returns an empty stage list).
     """
-    try:
-        from comfy.utils import common_upscale
-        return common_upscale(image_bchw, width, height, "lanczos", crop="disabled")
-    except ImportError:
-        return torch.nn.functional.interpolate(
-            image_bchw, size=(height, width), mode="bicubic", align_corners=False,
-        )
+    if final_stage:
+        try:
+            from comfy.utils import common_upscale
+            return common_upscale(image_bchw, width, height, "lanczos", crop="disabled")
+        except ImportError:
+            pass
+    return torch.nn.functional.interpolate(
+        image_bchw, size=(height, width), mode="bicubic",
+        align_corners=False, antialias=True,
+    )
 
 
 
@@ -2662,25 +2680,41 @@ class VideoFrameExtract(io.ComfyNode):
 
 
 class LTXSmartImageResize(io.ComfyNode):
-    """Adaptive multi-stage lanczos resize for i2v init images.
+    """Adaptive multi-stage resize for i2v init images.
 
-    Drop-in replacement for `ImageResizeKJv2 (lanczos, single-pass)`
-    that picks the number of stages based on the source/target ratio.
+    Drop-in replacement for `ImageResizeKJv2 (lanczos, single-pass)` that
+    picks the number of stages based on the source/target ratio AND the
+    per-stage kernel based on stage position to avoid stacking 8-bit
+    quantization noise.
 
-    Why staging matters at large reductions: the lanczos kernel
-    (radius 3) integrates ~6 input samples per output pixel. At
-    reduction ratios above ~2x linear, the kernel sees too few
-    samples and leaves residual aliasing on faces / text / fine
-    textures. LTX 2.3's cross-attention reads aliasing as
-    "high-frequency content to explore" and tends to push the camera
-    in the first window — manifesting as spurious zoom/dolly motion
-    in i2v renders even when the prompt asks for static framing.
+    Why staging matters at large reductions: the lanczos kernel (radius
+    3) integrates ~6 input samples per output pixel. At reduction ratios
+    above ~2x linear, the kernel sees too few samples and leaves
+    residual aliasing on faces / text / fine textures. LTX 2.3's
+    cross-attention reads aliasing as "high-frequency content to
+    explore" and pushes the camera in the first window — manifesting as
+    spurious zoom/dolly motion in i2v renders even when the prompt asks
+    for static framing.
+
+    Why per-stage kernel choice matters: ComfyUI's `comfy.utils.lanczos`
+    is implemented as PIL.Image.LANCZOS — converts float32 → uint8 →
+    resize → float32. One round of 8-bit quantization PER CALL. Single-
+    pass is fine (matches what KJv2 always did). Naive multi-stage
+    stacks rounds of quantization, accumulating banding noise that
+    LTX 2.3 reads identically to aliasing — i.e. as motion cues. So
+    intermediate stages stay in float32 throughout
+    (`F.interpolate(bicubic, antialias=True)`); only the final stage
+    uses PIL lanczos for kernel-character continuity with single-pass
+    behavior. Postmortem:
+    `internal/analysis/smart_resize_quantization_postmortem.md`.
 
     Behavior:
-      - source <= target: single-pass upscale (no aliasing risk).
-      - source / target <= 2x: single-pass downscale.
+      - source <= target: single-pass upscale.
+      - source / target <= 2x: single-pass PIL lanczos (1× quantization,
+        identical character to KJv2).
       - source / target > 2x: ceil(log2(ratio)) progressive 2x-ish
-        downscales, each within the kernel's clean range.
+        downscales — bicubic+antialias for intermediates (no PIL
+        roundtrip), PIL lanczos for the final stage.
 
     Unlike the workflow-only "two-stage lanczos preprocess"
     (`scripts/apply_lanczos_init_preprocess.py`), this node reads
@@ -2763,10 +2797,14 @@ class LTXSmartImageResize(io.ComfyNode):
             return io.NodeOutput(image, int(width), int(height))
 
         # Operate in BCHW for the inner loop so multi-stage paths skip
-        # the per-stage HWC/contiguous round-trip.
+        # the per-stage HWC/contiguous round-trip. Intermediate stages
+        # use float32 bicubic+antialias to avoid stacking 8-bit
+        # quantization rounds; final stage uses PIL lanczos to match
+        # canonical single-pass kernel character.
         bchw = image.movedim(-1, 1)
-        for stage_w, stage_h in stages:
-            bchw = _lanczos_resize_bchw(bchw, stage_w, stage_h)
+        last_idx = len(stages) - 1
+        for i, (stage_w, stage_h) in enumerate(stages):
+            bchw = _resize_bchw(bchw, stage_w, stage_h, final_stage=(i == last_idx))
         out = bchw.movedim(1, -1).contiguous()
         return io.NodeOutput(out, int(width), int(height))
 

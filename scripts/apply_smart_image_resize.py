@@ -4,17 +4,26 @@ Last updated: 2026-05-07
 
 Replaces `ImageResizeKJv2` (Node 445 in canonical loop variants) with
 `LTXSmartImageResize` across all canonical workflows. The new node
-adapts the number of lanczos stages based on the source/target ratio
-at runtime: large source images (4K+, AI-generated 2K+) get
-multi-stage downscaling that keeps each pass within lanczos's clean
-anti-alias range; small sources still single-pass.
+adapts the number of stages based on the source/target ratio at
+runtime: large source images (4K+, AI-generated 2K+) get multi-stage
+downscaling that keeps each pass within lanczos's clean anti-alias
+range; small sources still single-pass.
 
 Why: LTX 2.3's i2v cross-attention reads aliasing artifacts on faces
 / text / fine textures as "high-frequency content to explore" and
 tends to push the camera in the first window — manifesting as
 spurious zoom/dolly motion in i2v renders even when the prompt asks
 for static framing. Single-pass lanczos at >2x linear reduction
-leaves enough aliasing to trigger this; staged lanczos suppresses it.
+leaves enough aliasing to trigger this; staged downscaling suppresses
+it.
+
+Note on multi-stage kernel choice: `LTXSmartImageResize` uses
+`F.interpolate(bicubic, antialias=True)` for intermediate stages
+(float32 throughout) and PIL lanczos only for the final stage. Naive
+multi-stage PIL lanczos would stack 8-bit quantization rounds and
+re-introduce the same motion-cue noise we're trying to suppress.
+Postmortem: `internal/analysis/smart_resize_quantization_postmortem.md`
+(private clone only).
 
 Mechanics (in-place type swap; preserves Node 445 ID):
   - type:    ImageResizeKJv2 -> LTXSmartImageResize
