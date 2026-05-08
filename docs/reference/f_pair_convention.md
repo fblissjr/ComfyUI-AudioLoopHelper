@@ -68,3 +68,4 @@ Edge cases:
 - `scripts/templates/apply_script_all_workflows.py`, `apply_script_staged_variant.py` — scaffolds
 - `tests/test_claude_md_budget.py::test_cited_audit_ids_exist` — drift detection between docs and live audits
 - `docs/reference/_atomic_note_template.md` — concept-note variant template
+- `docs/reference/workflow_layout_helpers.md` — example of a staged-variant apply script that legitimately defers F-pair until promotion

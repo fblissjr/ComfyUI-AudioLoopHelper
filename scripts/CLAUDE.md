@@ -40,6 +40,8 @@ Every `apply_*.py` script ships with:
 
 Both templates include the canonical `--revert`, `--dry-run`, idempotence, and `require_nodes` patterns.
 
+**Layout work**: extend `scripts/_layout_grid.py` (column-grid + tier sub-groups + note anchors). Don't freelance pixel coords inline in apply scripts — `internal/design/intro_workflow_design.md` "v1 layout fix" (private clone only) records why partial-layout passes drift. Reference users: `apply_intro_workflow.py::_layout_workflow` (seed pattern), `apply_layout_polish_audio_loop_latent.py` (tier sub-groups + `--from-template` template extraction). Full reference: `docs/reference/workflow_layout_helpers.md`.
+
 ## Before archiving an apply script
 
 Ref-counting (grep across `docs/`, `tests/`, and CLAUDE.md files) is necessary but **not sufficient** — it misses three failure modes:
@@ -125,6 +127,7 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 |---|---|
 | `workflow_utils.py` | Canonical `WorkflowEditor` API for JSON edits · imported by ~all `apply_*.py` |
 | `_apply_helpers.py` | Raw-orjson primitives for fork-and-strip scripts when `WorkflowEditor` is suspect · `apply_audio_loop_retake.py`, `apply_spectrogram_iclora_minimal.py`, `apply_keyframe_batch_encode.py` |
+| `_layout_grid.py` | Column-grid + tier sub-group + note-anchor primitives for workflow layout · `apply_intro_workflow.py` (seed reference), `apply_layout_polish_audio_loop_latent.py` |
 | `audit_workflows.py` | Health audit (F-pair invariants + generic checks) · CI, README, `/diagnose-workflow` |
 | `validate_docs_consistency.py` | STALE_PATTERNS scan · CI, root CLAUDE.md |
 | `test_workflow_integrity.py` | Structural integrity + widget consistency check · `.claude/settings.json` smoke test |
@@ -223,6 +226,7 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 | Script | Purpose · callers |
 |---|---|
 | `apply_intro_workflow.py` | Layout-maintenance for canonical intro variant · `apply_initial_render_audio_duration_autowire.py`, `apply_audio_latent_slice_*` |
+| `apply_layout_polish_audio_loop_latent.py` | Stage polished tier-grouped layout for `audio-loop-music-video_latent.json` · CLI; uses `_layout_grid.py` |
 | `apply_melband_default_off.py` | Disable MelBand vocal separation by default across workflows · scripts/CLAUDE.md, `architecture_overview.md` |
 | `apply_prompt_relay_initial_render.py` | Phase 1: wire `PromptRelayEncode` on initial-render path · `audit_workflows.py`, `tests/test_apply_prompt_relay_initial_render.py` |
 | `apply_spectrogram_iclora_minimal.py` | Build experimental spectrogram-IC-LoRA workflow · `_apply_helpers.py`, `debug_tools.md`, `spectrogram_iclora_tutorial.md` |
