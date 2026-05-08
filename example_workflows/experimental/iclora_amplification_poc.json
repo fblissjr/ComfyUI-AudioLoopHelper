@@ -1089,8 +1089,8 @@
         "Node name for S&R": "EmptyLTXVLatentVideo"
       },
       "widgets_values": [
-        704,
-        704,
+        832,
+        448,
         497,
         1
       ]
@@ -2955,8 +2955,8 @@
         "Node name for S&R": "LTXVTiledVAEDecode"
       },
       "widgets_values": [
-        2,
-        2,
+        1,
+        1,
         1,
         true,
         "auto",
@@ -4491,9 +4491,7 @@
                 "links": [
                   2829
                 ],
-                "linkIds": [
-                  3004
-                ]
+                "linkIds": null
               }
             ],
             "properties": {
