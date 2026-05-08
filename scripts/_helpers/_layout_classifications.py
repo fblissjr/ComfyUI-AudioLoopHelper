@@ -156,6 +156,12 @@ SHARED_NODE_FUNCTIONS: dict[int, str] = {
 }
 
 
+# Derived once at import. A `function_to_group` key outside this set is
+# almost always a typo (silent node-drops in `compose()` were the failure
+# mode that motivated the validation).
+FUNCTIONAL_COLUMNS: frozenset[str] = frozenset(SHARED_NODE_FUNCTIONS.values())
+
+
 def compose(function_to_group: dict[str, str], *, overrides: dict[int, str] | None = None) -> dict[int, str]:
     """Map every shared node id to a group key via the function-to-group table,
     applying per-script overrides last.
@@ -163,10 +169,21 @@ def compose(function_to_group: dict[str, str], *, overrides: dict[int, str] | No
     Apply scripts call this with:
       - `function_to_group`: their own mapping from functional column name
         ("inputs", "models", ...) to their group keys ("1_inputs", "G_INPUTS").
+        A column the script doesn't care about can be omitted; nodes in that
+        column are left unclassified.
       - `overrides`: optional `{node_id: group_key}` dict that pins specific
         nodes to a group ignoring their functional column. Used by scripts
         with tier sub-groups inside a column (e.g. polish's REQUIRED tier).
+
+    Raises `KeyError` on unknown functional column keys (typo guard).
     """
+    unknown = set(function_to_group) - FUNCTIONAL_COLUMNS
+    if unknown:
+        raise KeyError(
+            f"Unknown functional column(s) in function_to_group: {sorted(unknown)}. "
+            f"Valid columns: {sorted(FUNCTIONAL_COLUMNS)}"
+        )
+
     overrides = overrides or {}
     out: dict[int, str] = {}
     for nid, fn in SHARED_NODE_FUNCTIONS.items():
@@ -178,4 +195,4 @@ def compose(function_to_group: dict[str, str], *, overrides: dict[int, str] | No
     return out
 
 
-__all__ = ["SHARED_NODE_FUNCTIONS", "compose"]
+__all__ = ["SHARED_NODE_FUNCTIONS", "FUNCTIONAL_COLUMNS", "compose"]
