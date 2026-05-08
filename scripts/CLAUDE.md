@@ -128,6 +128,7 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 | `workflow_utils.py` | Canonical `WorkflowEditor` API for JSON edits · imported by ~all `apply_*.py` |
 | `_apply_helpers.py` | Raw-orjson primitives for fork-and-strip scripts when `WorkflowEditor` is suspect · `apply_audio_loop_retake.py`, `apply_spectrogram_iclora_minimal.py`, `apply_keyframe_batch_encode.py` |
 | `_layout_grid.py` | Column-grid + tier sub-group + note-anchor primitives for workflow layout · `apply_intro_workflow.py` (seed reference), `apply_layout_polish_audio_loop_latent.py` |
+| `_layout_classifications.py` | Shared `node_id → functional column` table for the audio-loop family · `apply_intro_workflow.py`, `apply_layout_polish_audio_loop_latent.py` |
 | `audit_workflows.py` | Health audit (F-pair invariants + generic checks) · CI, README, `/diagnose-workflow` |
 | `validate_docs_consistency.py` | STALE_PATTERNS scan · CI, root CLAUDE.md |
 | `test_workflow_integrity.py` | Structural integrity + widget consistency check · `.claude/settings.json` smoke test |

@@ -60,6 +60,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from _layout_classifications import compose  # noqa: E402
 from _layout_grid import (  # noqa: E402
     GroupSpec,
     LayoutSpec,
@@ -146,130 +147,49 @@ ROW1_COL_X = {
 
 
 # --------------------------------------------------------------------------
-# Node-id -> group-key classification.
+# Functional column → group-key mapping.
 #
+# Default tier for inputs is COMMON; specific input nodes that change
+# every render are pinned to REQUIRED via _OVERRIDES below.
+# --------------------------------------------------------------------------
+
+_FUNCTION_TO_GROUP: dict[str, str] = {
+    "inputs":     G_COMMON,
+    "models":     G_MODELS,
+    "loras":      G_LORAS,
+    "cond":       G_COND,
+    "sampler":    G_SAMPLER,
+    "loop":       G_LOOP,
+    "output":     G_OUTPUT,
+    "preencode":  G_PREENCODE,
+    "iclora_ref": G_ICLORA_REF,
+}
+
+# Overrides + additions on top of `SHARED_NODE_FUNCTIONS`. Two roles:
+#   1. Pin inputs that change every render to REQUIRED (separating from
+#      the COMMON default).
+#   2. Move 1634/1615 from cond column to REQUIRED tier (their functional
+#      column in shared is "cond" because intro lays them out there; the
+#      polish surfaces them as user inputs).
 # Tier rationale:
 #   REQUIRED — change every render (audio, image, seed, prompts, dim plan)
 #   COMMON   — tune occasionally (trims, overlap target, image strength)
-#
-# Other groups: FROZEN-color signal carried via group color, not via tier.
-# --------------------------------------------------------------------------
-
-NODE_GROUPS: dict[int, str] = {
-    # --- 1.1 REQUIRED (change every render) ---
+_OVERRIDES: dict[int, str] = {
     565:  G_REQUIRED,        # LoadAudio
     444:  G_REQUIRED,        # LoadImage
     1527: G_REQUIRED,        # INTConstant start_seed
-    1634: G_REQUIRED,        # LTXFramePlanner (resolution + duration SSoT)
-    1615: G_REQUIRED,        # TimestampPromptScheduleBatchEncode (schedule[0] = initial render prompt)
-
-    # --- 1.2 COMMON (tune occasionally) ---
-    567:  G_COMMON,          # TrimAudioDuration (Song Trim)
-    601:  G_COMMON,          # TrimAudioDuration (Initial-Render Audio Trim, 10s)
-    1631: G_COMMON,          # TrimAudioDuration (ID-LoRA Reference Slice)
-    1269: G_COMMON,          # FloatConstant (image strength)
-    2013: G_COMMON,          # FloatConstant (overlap_seconds target)
-    # Audio reroute pills cluster at the column head.
-    581:  G_COMMON,          # SetNode Set_orig_audio (collapsed)
-    604:  G_COMMON,          # GetNode Get_orig_audio (collapsed)
-    640:  G_COMMON,          # SetNode Set_actual_audio (collapsed)
-    641:  G_COMMON,          # GetNode Get_actual_audio (collapsed)
-    1528: G_COMMON,          # SetNode Set_start_seed (collapsed)
-    # Vocal-sep nodes (BYPASSED by default) live near their consumer.
-    568:  G_COMMON,          # MelBandRoFormerModelLoader
-    569:  G_COMMON,          # MelBandRoFormerSampler
-    1533: G_COMMON,          # Note (vocal sep) -- handled as note via tag
-
-    # --- 2. Models (loaders + attention patches) — FROZEN color ---
-    414:  G_MODELS,          # UNETLoader
-    1537: G_MODELS,          # VAELoaderKJ (video)
-    228:  G_MODELS,          # SetNode Set_video_vae
-    1538: G_MODELS,          # VAELoaderKJ (audio)
-    252:  G_MODELS,          # SetNode Set_audio_vae
-    416:  G_MODELS,          # DualCLIPLoader
-    268:  G_MODELS,          # AudioLoopHelperSageAttention
-    504:  G_MODELS,          # LTXVChunkFeedForward
-    1523: G_MODELS,          # LTX2AttentionTunerPatch
-    503:  G_MODELS,          # LTX2SamplingPreviewOverride
-
-    # --- 3. LoRAs (bypassed by default) ---
-    # Distill + Style loaders are tagged at runtime via _alh_group=3_loras
-    # by apply_intro_workflow.py — resolved via the property tag at apply time.
-    1635: G_LORAS,           # LTXICLoRALoaderModelOnly
-    572:  G_LORAS,           # SetNode Set_model
-    1632: G_LORAS,           # LTXVReferenceAudio (ID-LoRA initial)
-    1633: G_LORAS,           # LTXVReferenceAudio (ID-LoRA loop)
-
-    # --- 4. Conditioning (topology + NAG + ConditioningSelectByIteration) ---
-    507:  G_COND,            # CLIPTextEncode (negative)
-    420:  G_COND,            # ConditioningZeroOut
-    508:  G_COND,            # LTX2_NAG
-    164:  G_COND,            # LTXVConditioning (initial)
-    1616: G_COND,            # ConditioningSelectByIteration
-    2021: G_COND,            # ConditioningSelectByIteration (initial render selector)
-
-    # --- 5. Sampler — FROZEN color (don't touch sigmas/sampler/cfg) ---
-    1421: G_SAMPLER,         # ManualSigmas
-    1422: G_SAMPLER,         # VisualizeSigmasKJ
-    1423: G_SAMPLER,         # PreviewImage (sigma viz)
-    579:  G_SAMPLER,         # SetNode Set_sigmas
-    154:  G_SAMPLER,         # KSamplerSelect
-    1322: G_SAMPLER,         # RandomNoise
-    153:  G_SAMPLER,         # CFGGuider
-    161:  G_SAMPLER,         # SamplerCustomAdvanced
-
-    # --- 6. Loop spine ---
-    1582: G_LOOP,            # AudioLoopController
-    1560: G_LOOP,            # AudioLoopPlanner
-    1539: G_LOOP,            # TensorLoopOpen
-    1540: G_LOOP,            # TensorLoopClose
-    843:  G_LOOP,            # subgraph invoker
-    1618: G_LOOP,            # LoopIterationStamp
-    1563: G_LOOP,            # PreviewAny (Iteration Timestamps)
-    1586: G_LOOP,            # PreviewAny
-
-    # --- 7. Output ---
-    1604: G_OUTPUT,          # LTXVTiledVAEDecode (Final)
-    1591: G_OUTPUT,          # LTXVLatentUpsampler
-    1589: G_OUTPUT,          # LatentUpscaleModelLoader
-    1605: G_OUTPUT,          # LatentConcat (Prepend Initial Render)
-    1587: G_OUTPUT,          # LTXVConditioning (Loop)
-    617:  G_OUTPUT,          # VHS_VideoCombine
-
-    # --- 8. Audio pre-encode + init render path (row 1) ---
-    2009: G_PREENCODE,       # LTXVAudioVAEEncode (full song)
-    2010: G_PREENCODE,       # SetNode Set_full_audio_latent
-    2011: G_PREENCODE,       # GetNode Get_full_audio_latent
-    566:  G_PREENCODE,       # LTXVAudioVAEEncode (initial 10s)
-    570:  G_PREENCODE,       # SetLatentNoiseMask
-    571:  G_PREENCODE,       # SolidMask
-    344:  G_PREENCODE,       # EmptyLTXVLatentVideo
-    531:  G_PREENCODE,       # LTXVImgToVideoInplaceKJ
-    1617: G_PREENCODE,       # VAEEncode (init image)
-    350:  G_PREENCODE,       # LTXVConcatAVLatent
-    245:  G_PREENCODE,       # LTXVSeparateAVLatent
-    381:  G_PREENCODE,       # LTXVCropGuides
-    445:  G_PREENCODE,       # ImageResizeKJv2 (init)
-    446:  G_PREENCODE,       # LTXVPreprocess (init)
-
-    # --- 9. IC-LoRA reference (bypassed) ---
-    1636: G_ICLORA_REF,      # VHS_LoadVideo
-    1637: G_ICLORA_REF,      # ImageResizeKJv2 (ref-video)
-    1638: G_ICLORA_REF,      # LTXVPreprocess (ref-video)
-
-    # --- Get/Set reroute pills (multiple instances per name) ---
-    254:  G_PREENCODE,       # Get_audio_vae (consumer-side: pre-encode)
-    599:  G_PREENCODE,       # Get_audio_vae
-    413:  G_PREENCODE,       # Get_video_vae
-    236:  G_PREENCODE,       # Get_video_vae
-    619:  G_OUTPUT,          # Get_video_vae (decoder side)
-    1598: G_OUTPUT,          # Get_video_vae
-    582:  G_PREENCODE,       # Get_orig_audio
-    580:  G_SAMPLER,         # Get_sigmas
-    654:  G_LOOP,            # Get_model (subgraph invoker)
-    1529: G_SAMPLER,         # Get_start_seed
-    1530: G_SAMPLER,         # Get_start_seed
+    1634: G_REQUIRED,        # LTXFramePlanner (functional: cond; surfaced as REQUIRED)
+    1615: G_REQUIRED,        # TimestampPromptScheduleBatchEncode (functional: cond; surfaced as REQUIRED)
+    1631: G_COMMON,          # TrimAudioDuration ID-LoRA Reference Slice (functional: loras; surfaced as COMMON)
 }
+
+# Additions for nodes not present in shared classifications (post-intro).
+_ADDITIONS: dict[int, str] = {
+    2013: G_COMMON,          # FloatConstant (overlap_seconds target)
+    2021: G_COND,            # ConditioningSelectByIteration (initial render selector)
+}
+
+NODE_GROUPS: dict[int, str] = compose(_FUNCTION_TO_GROUP, overrides=_OVERRIDES) | _ADDITIONS
 
 
 # --------------------------------------------------------------------------

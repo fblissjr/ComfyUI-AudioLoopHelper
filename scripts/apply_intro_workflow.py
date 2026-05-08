@@ -47,6 +47,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from _layout_classifications import compose  # noqa: E402
 from workflow_utils import WorkflowEditor  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -363,120 +364,25 @@ COLOR_SAMPLER = "#b58b2a"   # gold — sampling / generation
 COLOR_LOOP = "#3f789e"
 COLOR_OUTPUT = "#b58b2a"
 
-# Source-workflow node-id → group-key mapping. Nodes we add at runtime
-# (LoRA loaders, Notes) carry their group via ALH_GROUP_TAG / ALH_NOTE_KEY_TAG
-# in their `properties` dict instead of being listed here.
-SOURCE_NODE_GROUPS: dict[int, str] = {
-    # 1. Inputs
-    565: G_INPUTS,        # LoadAudio
-    567: G_INPUTS,        # TrimAudioDuration (song trim, ~300s)
-    581: G_INPUTS,        # SetNode Set_orig_audio (collapsed)
-    604: G_INPUTS,        # GetNode Get_orig_audio (collapsed)
-    444: G_INPUTS,        # LoadImage
-    1527: G_INPUTS,       # INTConstant start_seed
-    1528: G_INPUTS,       # SetNode Set_start_seed (collapsed)
-    1269: G_INPUTS,       # FloatConstant (image strength)
-    1533: G_INPUTS,       # Note (vocal sep)
-    568: G_INPUTS,        # MelBandRoFormerModelLoader (BYPASSED)
-    569: G_INPUTS,        # MelBandRoFormerSampler (BYPASSED)
-    640: G_INPUTS,        # SetNode Set_actual_audio
-    641: G_INPUTS,        # GetNode Get_actual_audio (collapsed)
-    601: G_INPUTS,        # TrimAudioDuration (initial 10s trim)
-
-    # 2. Models (DiT + VAEs + CLIP + Sage)
-    414: G_MODELS,        # UNETLoader (DiT)
-    1537: G_MODELS,       # VAELoaderKJ (video)
-    228: G_MODELS,        # SetNode Set_video_vae (collapsed)
-    1538: G_MODELS,       # VAELoaderKJ (audio)
-    252: G_MODELS,        # SetNode Set_audio_vae (collapsed)
-    416: G_MODELS,        # DualCLIPLoader
-    268: G_MODELS,        # AudioLoopHelperSageAttention
-    504: G_MODELS,        # LTXVChunkFeedForward
-    1523: G_MODELS,       # LTX2AttentionTunerPatch
-    503: G_MODELS,        # LTX2SamplingPreviewOverride
-
-    # 3. LoRAs (bypassed) — Distill + Style loaders are tagged at creation
-    1635: G_LORAS,        # LTXICLoRALoaderModelOnly
-    572: G_LORAS,         # SetNode Set_model
-    1631: G_LORAS,        # TrimAudioDuration (ID-LoRA Reference Slice, BYPASSED)
-    1632: G_LORAS,        # LTXVReferenceAudio (ID-LoRA initial, BYPASSED)
-    1633: G_LORAS,        # LTXVReferenceAudio (ID-LoRA loop, BYPASSED)
-
-    # 4. Conditioning
-    1634: G_COND,         # LTXFramePlanner
-    169: G_COND,          # CLIPTextEncode (Node 169)
-    507: G_COND,          # CLIPTextEncode (negative)
-    420: G_COND,          # ConditioningZeroOut
-    1615: G_COND,         # TimestampPromptScheduleBatchEncode
-    508: G_COND,          # LTX2_NAG
-    164: G_COND,          # LTXVConditioning
-    1616: G_COND,         # ConditioningSelectByIteration
-
-    # 5. Sampler
-    1421: G_SAMPLER,      # ManualSigmas
-    1422: G_SAMPLER,      # VisualizeSigmasKJ
-    1423: G_SAMPLER,      # PreviewImage (sigma viz)
-    579: G_SAMPLER,       # SetNode Set_sigmas (collapsed)
-    154: G_SAMPLER,       # KSamplerSelect
-    1322: G_SAMPLER,      # RandomNoise
-    153: G_SAMPLER,       # CFGGuider
-    161: G_SAMPLER,       # SamplerCustomAdvanced
-
-    # 6. Loop
-    1582: G_LOOP,         # AudioLoopController
-    1560: G_LOOP,         # AudioLoopPlanner
-    1539: G_LOOP,         # TensorLoopOpen
-    1540: G_LOOP,         # TensorLoopClose
-    843:  G_LOOP,         # subgraph invoker (UUID-typed)
-    1618: G_LOOP,         # LoopIterationStamp
-    1563: G_LOOP,         # PreviewAny (Iteration Timestamps)
-    1586: G_LOOP,         # PreviewAny
-
-    # 7. Output
-    1604: G_OUTPUT,       # LTXVTiledVAEDecode (Final)
-    1591: G_OUTPUT,       # LTXVLatentUpsampler (BYPASSED)
-    1589: G_OUTPUT,       # LatentUpscaleModelLoader (BYPASSED)
-    1605: G_OUTPUT,       # LatentConcat (Prepend Initial Render)
-    1587: G_OUTPUT,       # LTXVConditioning (Loop, BYPASSED)
-    617:  G_OUTPUT,       # VHS_VideoCombine
-
-    # 8. Audio pre-encode + init render path (row 1, col 0)
-    2009: G_PREENCODE,    # LTXVAudioVAEEncode (Full-song)
-    2010: G_PREENCODE,    # SetNode Set_full_audio_latent
-    2011: G_PREENCODE,    # GetNode Get_full_audio_latent (collapsed)
-    566:  G_PREENCODE,    # LTXVAudioVAEEncode (initial 10s)
-    570:  G_PREENCODE,    # SetLatentNoiseMask
-    571:  G_PREENCODE,    # SolidMask (collapsed)
-    344:  G_PREENCODE,    # EmptyLTXVLatentVideo
-    531:  G_PREENCODE,    # LTXVImgToVideoInplaceKJ
-    1617: G_PREENCODE,    # VAEEncode (init image → guide latent)
-    350:  G_PREENCODE,    # LTXVConcatAVLatent
-    245:  G_PREENCODE,    # LTXVSeparateAVLatent
-    381:  G_PREENCODE,    # LTXVCropGuides
-    445:  G_PREENCODE,    # ImageResizeKJv2 (init)
-    446:  G_PREENCODE,    # LTXVPreprocess (init)
-
-    # 9. IC-LoRA reference (bypassed) (row 1, col 1)
-    1636: G_ICLORA_REF,   # VHS_LoadVideo (BYPASSED)
-    1637: G_ICLORA_REF,   # ImageResizeKJv2 (ref-video)
-    1638: G_ICLORA_REF,   # LTXVPreprocess (ref-video)
-
-    # GetNode pills routed to their primary consumer's group. Same name
-    # may appear multiple times routed to different groups when distinct
-    # GetNode instances feed different consumers (e.g. Get_video_vae has
-    # one copy at the audio-encode side and one at the decoder side).
-    254: G_PREENCODE,     # Get_audio_vae (consumed by audio encode)
-    599: G_PREENCODE,     # Get_audio_vae
-    413: G_PREENCODE,     # Get_video_vae
-    236: G_PREENCODE,     # Get_video_vae
-    619: G_OUTPUT,        # Get_video_vae (consumed by decoder)
-    1598: G_OUTPUT,       # Get_video_vae
-    582: G_PREENCODE,     # Get_orig_audio
-    580: G_SAMPLER,       # Get_sigmas (SamplerCustomAdvanced)
-    654: G_LOOP,          # Get_model (subgraph invoker)
-    1529: G_SAMPLER,      # Get_start_seed
-    1530: G_SAMPLER,      # Get_start_seed
+# Functional column → group-key mapping for this script. Composed with
+# `SHARED_NODE_FUNCTIONS` (in `scripts/_layout_classifications.py`) at
+# import time to produce SOURCE_NODE_GROUPS. Nodes we add at runtime
+# (LoRA loaders, Notes) carry their group via ALH_GROUP_TAG /
+# ALH_NOTE_KEY_TAG in their `properties` dict instead of being listed
+# in the shared table.
+_FUNCTION_TO_GROUP: dict[str, str] = {
+    "inputs":     G_INPUTS,
+    "models":     G_MODELS,
+    "loras":      G_LORAS,
+    "cond":       G_COND,
+    "sampler":    G_SAMPLER,
+    "loop":       G_LOOP,
+    "output":     G_OUTPUT,
+    "preencode":  G_PREENCODE,
+    "iclora_ref": G_ICLORA_REF,
 }
+
+SOURCE_NODE_GROUPS: dict[int, str] = compose(_FUNCTION_TO_GROUP)
 
 
 def _is_pill(n: dict) -> bool:

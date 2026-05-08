@@ -35,7 +35,20 @@ scripts/_layout_grid.py
 ├── unassigned_node_ids(spec, wf) -> [ids]     # spec-coverage gaps
 ├── summarize(spec, wf) -> str                 # --dry-run output
 └── is_pill(node) -> bool                      # collapsed Get/Set predicate
+
+scripts/_layout_classifications.py
+├── SHARED_NODE_FUNCTIONS: dict[node_id, functional_column]
+└── compose(function_to_group, *, overrides={}) -> dict[node_id, group_key]
 ```
+
+## Shared classifications
+
+`SHARED_NODE_FUNCTIONS` is the single source of truth for `node_id → functional_column` bindings ("inputs", "models", "sampler", etc.) across the audio-loop family workflows. Apply scripts call `compose(function_to_group, overrides={...})` to map the shared bindings through their own group-key vocabulary.
+
+Per-script override patterns:
+- **Identity** (intro): `compose({"inputs": G_INPUTS, "models": G_MODELS, ...})` — every functional column maps to its corresponding group.
+- **Tier shift** (polish): `compose({"inputs": G_COMMON, ...}, overrides={565: G_REQUIRED, 444: G_REQUIRED, ...})` — the inputs column defaults to a COMMON tier, with specific nodes pinned to REQUIRED.
+- **Per-script additions**: nodes not in `SHARED_NODE_FUNCTIONS` (e.g. post-intro additions) are added via plain dict union: `compose(...) | {2013: G_COMMON, ...}`.
 
 ## Tier sub-groups (the column-grid pattern)
 
