@@ -664,7 +664,8 @@
         1
       ],
       "color": "#232",
-      "bgcolor": "#353"
+      "bgcolor": "#353",
+      "title": "first_frame_guide_strength"
     },
     {
       "id": 1271,

@@ -287,12 +287,18 @@ def _compute_loop_geometry(
 def _compute_tile_count(audio_duration: float, stride: float) -> int:
     """Number of valid loop iterations. Matches AudioLoopController stop condition.
 
-    Note: caps at 200 for display/planning purposes. AudioLoopController itself
-    has no cap -- it runs until should_stop fires. For audio > 200 * stride seconds,
-    the planner and ScheduleToMultiPrompt will show/generate 200 tiles but the
-    loop will continue past that (last prompt repeats via fallback).
+    Uses floor(audio_duration / stride) so the last iter starts within audio
+    bounds. The previous formula `ceil(audio_duration/stride) - 1` produced
+    the same count for most cases but pushed the last iter's WINDOW past
+    audio end by up to (window - stride) seconds, leaving a trailing
+    silent tail in the assembled video. floor avoids that overshoot.
+
+    Caps at 200 for display/planning purposes. AudioLoopController itself
+    has no cap -- it runs until should_stop fires.
     """
-    return max(1, min(math.ceil(audio_duration / stride) - 1, 200))
+    if stride <= 0:
+        return 1
+    return max(1, min(int(audio_duration // stride), 200))
 
 
 def _audio_duration(audio: dict) -> float:
