@@ -12,7 +12,9 @@ Top-level helpers: `find_node`, `has_node`, `require_nodes`, `find_link_to_slot(
 
 Slot-dict shape helpers (static methods): `WorkflowEditor.io_in(name, dtype, link=None)`, `widget_in(name, dtype, link=None)`, `out(name, dtype)`. Use these in `from_scratch` builders (`scripts/build_*_workflow.py`) instead of open-coding the `{"name": ..., "type": ..., "link": ...}` dict literals. The helpers preserve the slot-dict contract that `add_top_level_node` consumes.
 
-`scripts/_apply_helpers.py` is for **RAW-orjson fork-and-strip scripts only** (debug-tool stability when `WorkflowEditor` itself is suspect) — NOT a general utility module. Apply scripts that use `WorkflowEditor` (the canonical path) don't import from it. Confirm by reading its docstring before extracting helpers there.
+`scripts/_helpers/_apply_helpers.py` is for **RAW-orjson fork-and-strip scripts only** (debug-tool stability when `WorkflowEditor` itself is suspect) — NOT a general utility module. Apply scripts that use `WorkflowEditor` (the canonical path) don't import from it. Confirm by reading its docstring before extracting helpers there.
+
+**Helper modules live under `scripts/_helpers/`** (underscore-prefix = private helper). Import via qualified path: `from _helpers._apply_helpers import ...`, `from _helpers._layout_grid import ...`, `from _helpers._layout_classifications import ...`. PEP 420 namespace package — no `__init__.py` needed. `scripts/workflow_utils.py` stays at `scripts/` because it's the canonical edit API, not a private helper.
 
 ## Subgraph editing mechanics
 
@@ -40,7 +42,7 @@ Every `apply_*.py` script ships with:
 
 Both templates include the canonical `--revert`, `--dry-run`, idempotence, and `require_nodes` patterns.
 
-**Layout work**: extend `scripts/_layout_grid.py` (column-grid + tier sub-groups + note anchors). Don't freelance pixel coords inline in apply scripts — `internal/design/intro_workflow_design.md` "v1 layout fix" (private clone only) records why partial-layout passes drift. Reference users: `apply_intro_workflow.py::_layout_workflow` (seed pattern), `apply_layout_polish_audio_loop_latent.py` (tier sub-groups + `--from-template` template extraction). Full reference: `docs/reference/workflow_layout_helpers.md`.
+**Layout work**: extend `scripts/_helpers/_layout_grid.py` (column-grid + tier sub-groups + note anchors). Don't freelance pixel coords inline in apply scripts — `internal/design/intro_workflow_design.md` "v1 layout fix" (private clone only) records why partial-layout passes drift. Reference users: `apply_intro_workflow.py::_layout_workflow` (seed pattern), `apply_layout_polish_audio_loop_latent.py` (tier sub-groups + `--from-template` template extraction). Full reference: `docs/reference/workflow_layout_helpers.md`.
 
 ## Before archiving an apply script
 
@@ -123,17 +125,21 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 
 ### Core editing + audit (always-live foundations)
 
+*Add here if you're building infrastructure for workflow validation or JSON editing.*
+
 | Script | Purpose · callers |
 |---|---|
 | `workflow_utils.py` | Canonical `WorkflowEditor` API for JSON edits · imported by ~all `apply_*.py` |
-| `_apply_helpers.py` | Raw-orjson primitives for fork-and-strip scripts when `WorkflowEditor` is suspect · `apply_audio_loop_retake.py`, `apply_spectrogram_iclora_minimal.py`, `apply_keyframe_batch_encode.py` |
-| `_layout_grid.py` | Column-grid + tier sub-group + note-anchor primitives for workflow layout · `apply_intro_workflow.py` (seed reference), `apply_layout_polish_audio_loop_latent.py` |
-| `_layout_classifications.py` | Shared `node_id → functional column` table for the audio-loop family · `apply_intro_workflow.py`, `apply_layout_polish_audio_loop_latent.py` |
+| `_helpers/_apply_helpers.py` | Raw-orjson primitives for fork-and-strip scripts when `WorkflowEditor` is suspect · `apply_audio_loop_retake.py`, `apply_spectrogram_iclora_minimal.py`, `apply_keyframe_batch_encode.py` |
+| `_helpers/_layout_grid.py` | Column-grid + tier sub-group + note-anchor primitives for workflow layout · `apply_intro_workflow.py` (seed reference), `apply_layout_polish_audio_loop_latent.py` |
+| `_helpers/_layout_classifications.py` | Shared `node_id → functional column` table for the audio-loop family · `apply_intro_workflow.py`, `apply_layout_polish_audio_loop_latent.py` |
 | `audit_workflows.py` | Health audit (F-pair invariants + generic checks) · CI, README, `/diagnose-workflow` |
 | `validate_docs_consistency.py` | STALE_PATTERNS scan · CI, root CLAUDE.md |
 | `test_workflow_integrity.py` | Structural integrity + widget consistency check · `.claude/settings.json` smoke test |
 
 ### Workflow inspection / diagnostics
+
+*Add here if you're diagnosing workflow structure, resolution, or runtime behavior.*
 
 | Script | Purpose · callers |
 |---|---|
@@ -147,6 +153,8 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 
 ### From-scratch workflow builders (output: new variant JSON)
 
+*Add here if you're generating new variant JSON (not mutating existing).*
+
 | Script | Purpose · callers |
 |---|---|
 | `build_keyframe_workflow.py` | Build keyframe-conditioned workflow from latent base · `debug_tools.md` |
@@ -154,6 +162,8 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 | `build_upscale_workflow.py` | Build post-loop spatial-upscale workflow · `docs/README.md`, `debug_tools.md` |
 
 ### Apply scripts — sigma chain + sampler (4)
+
+*Add here if you're tuning sampler scheduling, scheduler swap, or VAE decode config.*
 
 | Script | Purpose · callers |
 |---|---|
@@ -163,6 +173,8 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 | `apply_ltx_decoder.py` | Swap generic `VAEDecodeTiled` → `LTXVTiledVAEDecode` · `validate_workflow_decoder.py`, `debugging_guide.md` |
 
 ### Apply scripts — audio + planner topology (7)
+
+*Add here if you're wiring planner/controller/audio-slicer autowires or fixing topology bugs.*
 
 | Script | Purpose · callers |
 |---|---|
@@ -176,6 +188,8 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 
 ### Apply scripts — controller + frame planner schema (4)
 
+*Add here if you're renaming/refactoring AudioLoopController or LTXFramePlanner widget schemas.*
+
 | Script | Purpose · callers |
 |---|---|
 | `apply_alc_seed_rename.py` | Rename `seed` → `base_seed` (avoids ComfyUI's auto-`control_after_generate`) · `audit_workflows.py`, `apply_strip_alc_control_after_generate.py` |
@@ -183,14 +197,19 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 | `apply_frame_planner_consolidation.py` | Migrate to `LTXFramePlanner` as single dim source · `apply_skip_under_seq_len.py`, `apply_initial_render_audio_duration_autowire.py` |
 | `apply_canonical_resolution_fix.py` | Bring `EmptyLTXVLatentVideo` widgets to LTX-valid resolution · `audit_workflows.py` |
 
-### Apply scripts — conditioning + prompt schedule (2)
+### Apply scripts — conditioning + prompt schedule (3)
+
+*Add here if you're migrating conditioning encode paths or prompt scheduling.*
 
 | Script | Purpose · callers |
 |---|---|
 | `apply_batch_encode_fix.py` | Migrate per-iter `CachedTextEncode + ConditioningBlend` → `TimestampPromptScheduleBatchEncode` (CLIP outside loop) · `apply_keyframe_batch_encode.py`, `nag_technical_reference.md`, `debugging_guide.md` |
-| `apply_keyframe_batch_encode.py` | Migrate keyframe `KeyframeImageSchedule + per-iter VAEEncode` → `KeyframeLatentScheduleBatchEncode` · `_apply_helpers.py`, `internal/PLAN.md` (private clone only) |
+| `apply_keyframe_batch_encode.py` | Migrate keyframe `KeyframeImageSchedule + per-iter VAEEncode` → `KeyframeLatentScheduleBatchEncode` · `_helpers/_apply_helpers.py`, `internal/PLAN.md` (private clone only) |
+| `apply_prompt_relay_initial_render.py` | Phase 1: wire `PromptRelayEncode` on initial-render path · `audit_workflows.py`, `tests/test_apply_prompt_relay_initial_render.py` |
 
 ### Apply scripts — guide / cropguides / preprocess symmetry (4)
+
+*Add here if you're matching init/loop preprocessing or guide topology (F2/F3).*
 
 | Script | Purpose · callers |
 |---|---|
@@ -200,6 +219,8 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 | `apply_lanczos_init_preprocess.py` | Two-stage lanczos init preprocess · `debug_tools.md` |
 
 ### Apply scripts — IC-LoRA / ID-LoRA / amplification (5)
+
+*Add here if you're wiring LoRA conditioning paths, LoRA loaders, or amplification.*
 
 | Script | Purpose · callers |
 |---|---|
@@ -211,29 +232,43 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 
 ### Apply scripts — sage / attention (1)
 
+*Add here if you're tuning AudioLoopHelperSageAttention parameters.*
+
 | Script | Purpose · callers |
 |---|---|
 | `apply_skip_under_seq_len.py` | Wire `skip_under_seq_len=1024` on `AudioLoopHelperSageAttention` (skip int8 quant overhead on short-Q) · CLI-only |
 
 ### Apply scripts — retake (2)
 
+*Add here if you're building retake variants or retake-specific edits.*
+
 | Script | Purpose · callers |
 |---|---|
-| `apply_audio_loop_retake.py` | Build retake workflow by forking production · `retake_guide.md`, `_apply_helpers.py`, `audit_workflows.py` |
+| `apply_audio_loop_retake.py` | Build retake workflow by forking production · `retake_guide.md`, `_helpers/_apply_helpers.py`, `audit_workflows.py` |
 | `apply_p3_retake_edit_lora.py` | Wire IC-LoRA edit-anything pattern into retake · `debug_tools.md` |
 
-### Apply scripts — other / one-off (5)
+### Apply scripts — layout + variants (2)
+
+*Add here if you're polishing canvas layout, group structure, or workflow-variant scaffolding.*
 
 | Script | Purpose · callers |
 |---|---|
-| `apply_intro_workflow.py` | Layout-maintenance for canonical intro variant · `apply_initial_render_audio_duration_autowire.py`, `apply_audio_latent_slice_*` |
-| `apply_layout_polish_audio_loop_latent.py` | Stage polished tier-grouped layout for `audio-loop-music-video_latent.json` · CLI; uses `_layout_grid.py` |
+| `apply_intro_workflow.py` | Layout-maintenance for canonical latent variant · `apply_initial_render_audio_duration_autowire.py`, `apply_audio_latent_slice_*` |
+| `apply_layout_polish_audio_loop_latent.py` | Stage polished tier-grouped layout for `audio-loop-music-video_latent.json` · CLI; uses `_helpers/_layout_grid.py` |
+
+### Apply scripts — other / one-off (3)
+
+*Add here if it's a true one-off: feature toggles, retired migrations, or experimental builds. If two scripts share a pattern, claim a new section instead of letting this one drift.*
+
+| Script | Purpose · callers |
+|---|---|
 | `apply_melband_default_off.py` | Disable MelBand vocal separation by default across workflows · scripts/CLAUDE.md, `architecture_overview.md` |
-| `apply_prompt_relay_initial_render.py` | Phase 1: wire `PromptRelayEncode` on initial-render path · `audit_workflows.py`, `tests/test_apply_prompt_relay_initial_render.py` |
-| `apply_spectrogram_iclora_minimal.py` | Build experimental spectrogram-IC-LoRA workflow · `_apply_helpers.py`, `debug_tools.md`, `spectrogram_iclora_tutorial.md` |
-| `apply_vae_and_cleanup.py` | One-shot VAE cleanup applied to LATENT-variant workflows (2026-04-23) · `compare-workflows` skill |
+| `apply_spectrogram_iclora_minimal.py` | Build experimental spectrogram-IC-LoRA workflow · `_helpers/_apply_helpers.py`, `debug_tools.md`, `spectrogram_iclora_tutorial.md` |
+| `apply_vae_and_cleanup.py` | One-shot VAE cleanup applied to LATENT-variant workflows (2026-04-23) · `compare-workflows` skill — archive candidate (one-time migration, fully baked) |
 
 ### Apply scripts — bench / IC-LoRA bench (2)
+
+*Add here if you're profiling bench workflows or sage arm variants.*
 
 | Script | Purpose · callers |
 |---|---|
@@ -241,6 +276,8 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 | `apply_iclora_bench_sage_arm.py` | Sage-attention arm variant of iclora bench · `bench_compare_runs.py`, `bench_workflow_guide.md` |
 
 ### Profiling tools (3 — insert / remove / summarize triplet)
+
+*Add here if you're inserting/removing Profile nodes or analyzing perf traces.*
 
 | Script | Purpose · callers |
 |---|---|
@@ -250,6 +287,8 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 
 ### Bench / telemetry summary (3)
 
+*Add here if you're comparing bench runs or summarizing execution logs.*
+
 | Script | Purpose · callers |
 |---|---|
 | `bench_compare_runs.py` | Side-by-side run comparator · `bench_workflow_guide.md`, `apply_iclora_bench_sage_arm.py` |
@@ -257,6 +296,8 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 | `sage_telemetry_summary.py` | Aggregate sage tracer JSONL into per-mode summary · `exec_log_summary.py`, `debug_tools.md`, README |
 
 ### Audio analysis (3)
+
+*Add here if you're extracting BPM/key/structure/F0 or rendering spectrograms.*
 
 | Script | Purpose · callers |
 |---|---|
@@ -266,12 +307,16 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 
 ### IC-LoRA reference asset prep (2)
 
+*Add here if you're aligning ref videos or rendering spectrograms for IC-LoRA.*
+
 | Script | Purpose · callers |
 |---|---|
 | `align_ref_video.py` | Align driving reference video to audio-loop IC-LoRA workflow params (F12) · CLI-only |
 | `spectrogram_to_reference.py` | Render Mel spectrogram as PNG frame sequence (IC-LoRA spectrogram-as-reference, Phase 2.0) · scripts/CLAUDE.md, `spectrogram_iclora_tutorial.md` |
 
 ### Sage trace verification (1)
+
+*Add here if you're auditing sage attention iteration behavior.*
 
 | Script | Purpose · callers |
 |---|---|

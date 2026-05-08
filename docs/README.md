@@ -133,7 +133,7 @@ linking out (parallel-scrubbed-copy convention retired 2026-04-25).
 | `ltx23_model_reference.md` | Image guides, latent volume, VAE conversion, AdaIN, noise_mask, conditioning path. |
 | `noise_mask_semantics.md` | `noise_mask=0`/`1` semantics; setters + strippers; loop-body discipline; failure modes. |
 | `timestamp_prompt_schedule_batch_encode.md` | Pre-encodes prompts outside the loop; pairs with `ConditioningSelectByIteration`; prevents NAG silent disengagement. |
-| `workflow_layout_helpers.md` | `scripts/_layout_grid.py` — column-grid + tier sub-groups + note anchors for apply scripts; `--from-template` round-trip. |
+| `workflow_layout_helpers.md` | `scripts/_helpers/_layout_grid.py` — column-grid + tier sub-groups + note anchors for apply scripts; `--from-template` round-trip. |
 | `ltx23_prompt_system_prompts.md` | Raw Lightricks i2v/t2v system prompts + why our frozen-audio + i2v workflow prefers concise prompts. |
 | `ltxv_looping_sampler_reference.md` | Video-only structural reference for `LTXVLoopingSampler`. We don't recommend building this for music video (AV-incompatible). |
 | `nag_technical_reference.md` | LTX2_NAG — attention math, widgets, closure-capture mechanism, NAG×CFG composition, troubleshooting. |

@@ -31,7 +31,7 @@ from pathlib import Path
 import orjson
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _apply_helpers import (
+from _helpers._apply_helpers import (
     add_link as _add_link,
     find_link_to_slot as _find_link_to_slot,
     find_node as _find_node,

@@ -98,7 +98,7 @@ only if the rewire is damaged. Canonical TTC1 pair:
 with fresh uuid + reset `last_node_id` / `last_link_id`. Canonical:
 `scripts/apply_spectrogram_iclora_minimal.py`.
 
-**Shared apply-script helpers** live in `scripts/_apply_helpers.py`
+**Shared apply-script helpers** live in `scripts/_helpers/_apply_helpers.py`
 (`add_link`, `find_node`, `remove_node_and_links`, `find_link_to_slot`,
 `next_id`). Import with aliases to preserve call-site names; don't
 re-define inline.

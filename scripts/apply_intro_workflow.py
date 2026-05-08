@@ -47,7 +47,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _layout_classifications import compose  # noqa: E402
+from _helpers._layout_classifications import compose  # noqa: E402
 from workflow_utils import WorkflowEditor  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent

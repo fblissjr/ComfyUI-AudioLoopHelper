@@ -4,11 +4,11 @@ Last updated: 2026-05-08
 
 ## Role
 
-Concept note. The repo's column-grid layout primitive for ComfyUI workflow JSON, exposed by `scripts/_layout_grid.py`. Consumed by apply scripts that need to deterministically (re)position nodes, derive group bounding boxes, and anchor Note nodes to groups. Replaces freelance pixel-coord layout in apply scripts.
+Concept note. The repo's column-grid layout primitive for ComfyUI workflow JSON, exposed by `scripts/_helpers/_layout_grid.py`. Consumed by apply scripts that need to deterministically (re)position nodes, derive group bounding boxes, and anchor Note nodes to groups. Replaces freelance pixel-coord layout in apply scripts.
 
 ## Disambiguation
 
-- **Layout helper ≠ workflow editor.** `_layout_grid.py` only touches `pos`, `size`, `groups[]`, and Note `pos`/`size`. Topology (links, node insertion, widget values) lives in `WorkflowEditor` (`scripts/workflow_utils.py`).
+- **Layout helper ≠ workflow editor.** `_helpers/_layout_grid.py` only touches `pos`, `size`, `groups[]`, and Note `pos`/`size`. Topology (links, node insertion, widget values) lives in `WorkflowEditor` (`scripts/workflow_utils.py`).
 - **Layout spec ≠ workflow JSON.** A `LayoutSpec` is the apply-script's *intent*; the helper materializes it onto the workflow. Same spec applied to two workflows produces two different layouts (different node sets) but with the same column origins and tier structure.
 - **Tier sub-groups ≠ litegraph subgraphs.** A "tier sub-group" is just a regular Group at a specific (x, y) origin — sub-tier structure comes from y-stacking groups in the same x-band. Litegraph subgraphs (loop body) are a separate concept.
 
@@ -25,7 +25,7 @@ Concept note. The repo's column-grid layout primitive for ComfyUI workflow JSON,
 ## Surface
 
 ```
-scripts/_layout_grid.py
+scripts/_helpers/_layout_grid.py
 ├── @dataclass GroupSpec(origin, color, title, font_size=24)
 ├── @dataclass NoteAnchor(group, dx, dy, w, h)
 ├── @dataclass LayoutSpec(groups, node_groups={}, note_anchors={}, group_tag_key, note_key_tag)
@@ -36,10 +36,12 @@ scripts/_layout_grid.py
 ├── summarize(spec, wf) -> str                 # --dry-run output
 └── is_pill(node) -> bool                      # collapsed Get/Set predicate
 
-scripts/_layout_classifications.py
+scripts/_helpers/_layout_classifications.py
 ├── SHARED_NODE_FUNCTIONS: dict[node_id, functional_column]
 └── compose(function_to_group, *, overrides={}) -> dict[node_id, group_key]
 ```
+
+Apply scripts import via qualified namespace: `from _helpers._layout_grid import LayoutSpec, apply_layout`. PEP 420 namespace-package resolution finds `_helpers/` under the `scripts/` entry on `sys.path` — no `__init__.py` needed.
 
 ## Shared classifications
 
@@ -92,7 +94,7 @@ There is no migration for the helper itself — it's a new module. Apply scripts
 
 ## References
 
-- `scripts/_layout_grid.py` — implementation
+- `scripts/_helpers/_layout_grid.py` — implementation
 - `scripts/apply_intro_workflow.py` — seed reference (`_layout_workflow`); pre-extraction pattern, still in use
 - `scripts/apply_layout_polish_audio_loop_latent.py` — first consumer of the extracted helper; tier sub-groups + `--from-template` mode
 - `internal/design/intro_workflow_design.md` — v0→v1 layout-fix history (private clone only)
