@@ -5,8 +5,6 @@ topology described in `internal/design/upscale_workflow_design.md`:
 
     VHS_LoadVideo → VAEEncode → LTXVLatentUpsampler (2x)
                                        ↓
-                LTXVImgToVideoConditionOnly (re-condition with first frame)
-                                       ↓
                 LTXVConcatAVLatent (re-attach empty audio latent)
                                        ↓
                 SamplerCustomAdvanced (3-step low-σ tail, euler, cfg=1)
@@ -15,9 +13,23 @@ topology described in `internal/design/upscale_workflow_design.md`:
                                        ↓
                 VAEDecodeTiled → VHS_VideoCombine (with original audio)
 
+The model passed to CFGGuider walks the canonical perf/VRAM chain:
+
+    UNETLoader → AudioLoopHelperSageAttention → LTXVChunkFeedForward
+              → LTX2AttentionTunerPatch → CFGGuider
+
+Same widget values as `example_workflows/audio-loop-music-video_latent.json`
+so model behavior is identical at the patch layer. Without these patches
+the refine pass OOMs on 24 GB at 1664×960 × ~526 latent-frames (4× the
+loop's latent volume).
+
 Sigmas: `0.85, 0.7250, 0.4219, 0.0` (3-step partial refine starting at
 σ=0.85 — respect the upsample, polish detail without hallucinating).
-Sampler: `euler` (canonical distilled), CFG=1.0.
+Sampler: `euler` (canonical distilled), CFG=1.0. Refine starts from the
+upsampled latent directly; no `LTXVImgToVideoConditionOnly` between the
+upsampler and the sampler — see `internal/analysis/i2v_v5_workflow_assessment.md`
+Issue A for why feeding the multi-frame batch to that node defeats the
+refine pass.
 
 Idempotent: re-running overwrites the output file with deterministic
 content (constant node ids, deterministic link order). `--dry-run`
@@ -212,18 +224,6 @@ def build(ed: WorkflowEditor) -> dict[str, int]:
         outputs=[_out("LATENT", "LATENT")],
         widgets_values=[],
     )
-    ids["i2v_cond"] = ed.add_top_level_node(
-        node_type="LTXVImgToVideoConditionOnly",
-        pos=[-800, 920], size=[300, 130],
-        inputs=[
-            _basic_io_in("vae", "VAE"),
-            _basic_io_in("image", "IMAGE"),
-            _basic_io_in("latent", "LATENT"),
-            _widget_in("bypass", "BOOLEAN"),
-        ],
-        outputs=[_out("latent", "LATENT")],
-        widgets_values=[1.0, False],  # full strength, not bypassed
-    )
     ids["empty_audio"] = ed.add_top_level_node(
         node_type="LTXVEmptyLatentAudio",
         pos=[-800, 1100], size=[260, 110],
@@ -244,6 +244,34 @@ def build(ed: WorkflowEditor) -> dict[str, int]:
         ],
         outputs=[_out("latent", "LATENT")],
         widgets_values=[],
+    )
+
+    # -----------------------------------------------------------------------
+    # Model-chain patches — perf + VRAM. Order + widgets mirror the canonical
+    # loop (`example_workflows/audio-loop-music-video_latent.json`); see root
+    # CLAUDE.md "Nodes that call model.state_dict() constrain model-mutation
+    # order." Module-mutating compile-style patches go right after the loader.
+    # -----------------------------------------------------------------------
+    ids["sage"] = ed.add_top_level_node(
+        node_type="AudioLoopHelperSageAttention",
+        pos=[-1500, 100], size=[300, 100],
+        inputs=[_basic_io_in("model", "MODEL")],
+        outputs=[_out("model", "MODEL")],
+        widgets_values=["auto_mask_aware", True, 1024],
+    )
+    ids["chunk_ff"] = ed.add_top_level_node(
+        node_type="LTXVChunkFeedForward",
+        pos=[-1170, 100], size=[290, 80],
+        inputs=[_basic_io_in("model", "MODEL")],
+        outputs=[_out("model", "MODEL")],
+        widgets_values=[2, 4096],
+    )
+    ids["attn_tuner"] = ed.add_top_level_node(
+        node_type="LTX2AttentionTunerPatch",
+        pos=[-850, 100], size=[300, 150],
+        inputs=[_basic_io_in("model", "MODEL")],
+        outputs=[_out("model", "MODEL")],
+        widgets_values=["", 1, 1, 1, 1, True],
     )
 
     # -----------------------------------------------------------------------
@@ -377,20 +405,20 @@ def build(ed: WorkflowEditor) -> dict[str, int]:
     ed.add_link(ids["upscale_model"], 0, ids["upsampler"], 1, "LATENT_UPSCALE_MODEL")
     ed.add_link(ids["video_vae"], 0, ids["upsampler"], 2, "VAE")
 
-    # I2V re-condition with original first-frame image stack
-    ed.add_link(ids["video_vae"], 0, ids["i2v_cond"], 0, "VAE")
-    ed.add_link(ids["load_video"], 0, ids["i2v_cond"], 1, "IMAGE")
-    ed.add_link(ids["upsampler"], 0, ids["i2v_cond"], 2, "LATENT")
-
-    # Empty audio latent at upscaled length
     ed.add_link(ids["audio_vae"], 0, ids["empty_audio"], 0, "VAE")
+    # Track loaded video's frame count so AV-concat shapes always match.
+    ed.add_link(ids["load_video"], 1, ids["empty_audio"], 1, "INT")
 
-    # AV concat: re-conditioned video + empty audio
-    ed.add_link(ids["i2v_cond"], 0, ids["av_concat"], 0, "LATENT")
+    # Sampler ingests upsampled latent directly; no ConditionOnly intercept (Issue A).
+    ed.add_link(ids["upsampler"], 0, ids["av_concat"], 0, "LATENT")
     ed.add_link(ids["empty_audio"], 0, ids["av_concat"], 1, "LATENT")
 
+    ed.add_link(ids["unet"], 0, ids["sage"], 0, "MODEL")
+    ed.add_link(ids["sage"], 0, ids["chunk_ff"], 0, "MODEL")
+    ed.add_link(ids["chunk_ff"], 0, ids["attn_tuner"], 0, "MODEL")
+    ed.add_link(ids["attn_tuner"], 0, ids["cfg_guider"], 0, "MODEL")
+
     # Sampler stack
-    ed.add_link(ids["unet"], 0, ids["cfg_guider"], 0, "MODEL")
     ed.add_link(ids["ltx_cond"], 0, ids["cfg_guider"], 1, "CONDITIONING")
     ed.add_link(ids["ltx_cond"], 1, ids["cfg_guider"], 2, "CONDITIONING")
     ed.add_link(ids["random_noise"], 0, ids["sampler"], 0, "NOISE")

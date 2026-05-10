@@ -331,6 +331,8 @@ def build(ed: WorkflowEditor) -> dict[str, int]:
     ed.add_link(ids["vae_encode"], 0, ids["seam_mask"], 0, "LATENT")
 
     ed.add_link(ids["audio_vae"], 0, ids["empty_audio"], 0, "VAE")
+    # Track loaded video's frame count so AV-concat shapes always match.
+    ed.add_link(ids["load_video"], 1, ids["empty_audio"], 1, "INT")
 
     ed.add_link(ids["seam_mask"], 0, ids["av_concat"], 0, "LATENT")
     ed.add_link(ids["empty_audio"], 0, ids["av_concat"], 1, "LATENT")
