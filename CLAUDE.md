@@ -155,7 +155,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **Check sibling-session backlogs (`internal/design/*_backlog.md`) before executing stale PLAN items** that touch defaults.
 - **Project-level `settings.json` hook config is loaded once at session start** — deleting a hook script mid-session leaves the cached config trying to run a missing file, blocking every Write/Edit until session restart. Workaround: use Bash for post-deletion edits.
 - **Marketplace plugin cache lags behind merged plugin changes.** To pick up freshly-merged plugin changes immediately, re-run the plugin's `install-git-hooks.sh` from a workspace clone of the plugin repo.
-- **Cross-repo coordination**: when an optimization target lives in a sister repo (current: sage-fork), use the `cross-repo-handoff` skill (bilateral memo files, seen-marker discipline). Pattern reusable for any future sister-repo co-optimization.
+- **Cross-repo coordination**: sister repos split two ways — sister fork (current: `sage-fork`, patches an upstream library) vs companion umbrella (`audio-loop-lab`, workload glue across upstream libs; scaffold per spec). Taxonomy + bootstrap + decision table: `internal/design/sister_repo_taxonomy.md` (private clone only). Bilateral memo channel: `cross-repo-handoff` skill.
 
 ## Documentation conventions
 

@@ -62,14 +62,18 @@ the workflow itself.
 | [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes) | Set/Get nodes, LTX2_NAG, LTXVImgToVideoInplaceKJ, ImageResizeKJv2, GetImageRangeFromBatch, SimpleCalculatorKJ |
 | [ComfyUI-VideoHelperSuite](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite) | VHS_LoadVideo, VHS_VideoCombine |
 
-**Recommended if you have a 4090/Ada architecture:**
+**Companion repos:**
 
-[fblissjr/SageAttention-ada](https://github.com/fblissjr/SageAttention-ada)
-— our SageAttention fork. The shipped workflows wire
-`AudioLoopHelperSageAttention` (`auto_mask_aware`, ~1.22× e2e speedup
-on production iclora workload) which expects this build. **No build, or
-incompatible hardware?** Bypass `AudioLoopHelperSageAttention` (set
-`mode=4`) and either run with default attention or use KJNodes sage in its place.
+This project coordinates with two kinds of sister repos:
+
+| Repo | Bucket | Role |
+|---|---|---|
+| [fblissjr/SageAttention-ada](https://github.com/fblissjr/SageAttention-ada) | Sister fork | SageAttention fork with mask-aware routing tuned for LTX 2.3 cross-attention (active; recommended on Ada — RTX 4090) |
+| [fblissjr/audio-loop-lab](https://github.com/fblissjr/audio-loop-lab) | Companion umbrella | Workload glue across upstream libs — torchao filter functions for the LTX DiT, cross-library bench harness (scaffold pending) |
+
+The split is by upstream lineage: **forks** patch an upstream library's internals (small surface, rebase tax accepted); **umbrellas** build *on top of* upstream libraries (no lineage, free to grow modularly).
+
+**SageAttention-ada specifics:** the shipped workflows wire `AudioLoopHelperSageAttention` (`auto_mask_aware`, ~1.22× e2e speedup on production iclora workload) which expects this build. **No build, or incompatible hardware?** Bypass `AudioLoopHelperSageAttention` (set `mode=4`) and either run with default attention or use KJNodes sage in its place.
 
 **Optional:**
 

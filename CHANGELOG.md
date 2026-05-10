@@ -6,6 +6,12 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Companion-repo coordination.** Root `CLAUDE.md` and `README.md` now
+  document the two-bucket sister-repo scheme (sister fork vs companion
+  umbrella). Adds a second sister to the workflow alongside the existing
+  attention fork.
+
 ### Changed
 - **`scripts/` cleanup pass.** Moved 10 baked-in / superseded apply
   scripts to `scripts/archive/`. Added `scripts/archive/CLAUDE.md`
