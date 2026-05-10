@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1623,
-  "last_link_id": 3090,
+  "last_node_id": 1625,
+  "last_link_id": 3099,
   "nodes": [
     {
       "id": 252,
@@ -329,7 +329,8 @@
           "name": "AUDIO",
           "type": "AUDIO",
           "links": [
-            1654
+            1654,
+            3098
           ]
         }
       ],
@@ -1476,7 +1477,7 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 2989
+          "link": 3096
         },
         {
           "name": "audio",
@@ -3596,7 +3597,7 @@
           "name": "image",
           "type": "IMAGE",
           "links": [
-            2989
+            3097
           ]
         }
       ],
@@ -4017,7 +4018,7 @@
         "cnr_id": "comfy-core",
         "Node name for S&R": "VAEEncode"
       },
-      "title": "VAE Encode (init image \u2192 guide latent)",
+      "title": "VAE Encode (init image → guide latent)",
       "widgets_values": []
     },
     {
@@ -4153,7 +4154,8 @@
           "type": "INT",
           "links": [
             3084,
-            3086
+            3086,
+            3099
           ]
         },
         {
@@ -4223,6 +4225,57 @@
         2.0
       ],
       "title": "overlap_seconds"
+    },
+    {
+      "id": 1625,
+      "type": "TrimImageBatchToAudio",
+      "pos": [
+        3395.8458218450364,
+        4438.634708436207
+      ],
+      "size": [
+        280,
+        90
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 3097
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 3098
+        },
+        {
+          "name": "fps",
+          "type": "INT",
+          "widget": {
+            "name": "fps"
+          },
+          "link": 3099
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            3096
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TrimImageBatchToAudio"
+      },
+      "widgets_values": [
+        25
+      ],
+      "title": "Trim to audio"
     }
   ],
   "links": [
@@ -4779,14 +4832,6 @@
       "VAE"
     ],
     [
-      2989,
-      1604,
-      0,
-      617,
-      0,
-      "IMAGE"
-    ],
-    [
       2993,
       381,
       2,
@@ -5129,6 +5174,38 @@
       1560,
       2,
       "FLOAT"
+    ],
+    [
+      3096,
+      1625,
+      0,
+      617,
+      0,
+      "IMAGE"
+    ],
+    [
+      3097,
+      1604,
+      0,
+      1625,
+      0,
+      "IMAGE"
+    ],
+    [
+      3098,
+      604,
+      0,
+      1625,
+      1,
+      "AUDIO"
+    ],
+    [
+      3099,
+      1622,
+      4,
+      1625,
+      2,
+      "INT"
     ]
   ],
   "groups": [
@@ -6302,7 +6379,7 @@
               "cnr_id": "comfy-core",
               "Node name for S&R": "LTXVCropGuides"
             },
-            "title": "CropGuides (LATENT-only \u2014 split)"
+            "title": "CropGuides (LATENT-only — split)"
           }
         ],
         "groups": [],
@@ -6672,7 +6749,7 @@
         },
         "class_type": "LTXVGemmaCLIPModelLoader",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Gemma 3 Model Loader"
+          "title": "🅛🅣🅧 Gemma 3 Model Loader"
         }
       },
       "3": {
@@ -6758,7 +6835,7 @@
         },
         "class_type": "LTXVAudioVAELoader",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Audio VAE Loader"
+          "title": "🅛🅣🅧 LTXV Audio VAE Loader"
         }
       },
       "14": {
@@ -6774,7 +6851,7 @@
         },
         "class_type": "LTXVAudioVAEDecode",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Audio VAE Decode"
+          "title": "🅛🅣🅧 LTXV Audio VAE Decode"
         }
       },
       "15": {
@@ -6803,7 +6880,7 @@
         },
         "class_type": "VHS_VideoCombine",
         "_meta": {
-          "title": "Video Combine \ud83c\udfa5\ud83c\udd65\ud83c\udd57\ud83c\udd62"
+          "title": "Video Combine 🎥🅥🅗🅢"
         }
       },
       "17": {
@@ -6828,7 +6905,7 @@
         },
         "class_type": "MultimodalGuider",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Multimodal Guider"
+          "title": "🅛🅣🅧 Multimodal Guider"
         }
       },
       "18": {
@@ -6845,7 +6922,7 @@
         },
         "class_type": "GuiderParameters",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Guider Parameters"
+          "title": "🅛🅣🅧 Guider Parameters"
         }
       },
       "19": {
@@ -6858,7 +6935,7 @@
         },
         "class_type": "GuiderParameters",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Guider Parameters"
+          "title": "🅛🅣🅧 Guider Parameters"
         }
       },
       "21": {
@@ -6917,7 +6994,7 @@
         },
         "class_type": "LTXVEmptyLatentAudio",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Empty Latent Audio"
+          "title": "🅛🅣🅧 LTXV Empty Latent Audio"
         }
       },
       "27": {
@@ -6946,7 +7023,7 @@
         },
         "class_type": "LTXVConcatAVLatent",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Concat AV Latent"
+          "title": "🅛🅣🅧 LTXV Concat AV Latent"
         }
       },
       "29": {
@@ -6962,7 +7039,7 @@
         },
         "class_type": "LTXVSeparateAVLatent",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Separate AV Latent"
+          "title": "🅛🅣🅧 LTXV Separate AV Latent"
         }
       },
       "41": {

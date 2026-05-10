@@ -667,6 +667,7 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         _check_initial_render_audio_duration_wired(wf, by_type, record)
         _check_overlap_seconds_single_source(wf, by_type, record)
         _check_vhs_video_combine_frame_rate_parity(wf, by_type, record)
+        _check_trim_image_batch_to_audio_present(wf, by_type, record)
 
     # Generic invariants — apply to all workflows regardless of topology.
     _check_no_sd3_shift_node(wf, by_type, record)
@@ -1524,6 +1525,65 @@ def _check_vhs_video_combine_frame_rate_parity(wf, by_type, record) -> None:
                 "OK", "vhs_frame_rate_matches_planner",
                 f"VHS_VideoCombine(#{vhs.get('id')}).frame_rate={vhs_fps} "
                 f"matches LTXFramePlanner.fps",
+            )
+
+
+def _check_trim_image_batch_to_audio_present(wf, by_type, record) -> None:
+    """ERR if VHS_VideoCombine.images is not fed by TrimImageBatchToAudio.
+
+    Without the trim, fixed-stride iteration math (total video frames =
+    245 + N * stride_px for canonical defaults) overshoots audio length
+    by up to (window - stride) seconds per run. ffmpeg's ``-shortest``
+    does not truncate ``-c:v copy`` streams, so the saved mp4 ends up
+    the longer of audio/video and the user hears silence at the tail.
+
+    Remediation: ``scripts/apply_trim_image_batch_to_audio.py``.
+    Postmortem: ``internal/analysis/loop_audio_overshoot_analysis.md``.
+    """
+    del wf
+    combines = [
+        n for n in by_type.get("VHS_VideoCombine", [])
+        if n.get("mode", 0) == 0
+    ]
+    if not combines:
+        return
+    for combine in combines:
+        cid = combine.get("id")
+        # find link feeding combine.images (slot 0)
+        images_slot_link = None
+        for s in combine.get("inputs", []):
+            if s.get("name") == "images":
+                images_slot_link = s.get("link")
+                break
+        if images_slot_link is None:
+            continue
+        # resolve src by walking by_type's inverse (cheaper than rebuilding)
+        # Use the workflow's links table — already validated upstream.
+        # Reusing the by_id map kept by the caller would be cleaner; doing it
+        # locally here keeps the check self-contained.
+        src_type = None
+        for tlist in by_type.values():
+            for n in tlist:
+                for out_slot in n.get("outputs", []):
+                    if images_slot_link in (out_slot.get("links") or []):
+                        src_type = n.get("type")
+                        break
+                if src_type:
+                    break
+            if src_type:
+                break
+        if src_type == "TrimImageBatchToAudio":
+            record(
+                "OK", "trim_image_batch_to_audio_present",
+                f"VHS_VideoCombine(#{cid}).images <- TrimImageBatchToAudio",
+            )
+        else:
+            record(
+                "ERR", "trim_image_batch_to_audio_present",
+                f"VHS_VideoCombine(#{cid}).images <- {src_type or '?'} (not "
+                "TrimImageBatchToAudio). Saved mp4 will end with silence "
+                "(video > audio by up to window-stride seconds). Run "
+                "scripts/apply_trim_image_batch_to_audio.py.",
             )
 
 

@@ -2047,6 +2047,80 @@ class LatentOverlapTrim(io.ComfyNode):
 #   out = latent.copy(); out.pop("noise_mask", None)
 
 
+class TrimImageBatchToAudio(io.ComfyNode):
+    """Clips an IMAGE batch to ``floor(audio_duration * fps)`` frames.
+
+    Wire between the loop's assembled IMAGE output (typically
+    ``LTXVTiledVAEDecode.image``) and ``VHS_VideoCombine.images``.
+    Eliminates the silence-at-end seen in saved mp4s, which arises
+    because per-iter video generation uses fixed-stride math
+    (``total = 245 + N * 448 px`` for canonical defaults) and can
+    overshoot the audio by up to ``window_seconds - stride_seconds``
+    per loop run. ``-shortest`` in ffmpeg can't truncate ``-c:v copy``
+    streams reliably, so the saved container ends up the longer of
+    audio/video. This node trims the image batch directly so the mp4
+    matches audio length exactly.
+
+    Empirical verification (2026-05-10, 20 random renders, 3 distinct
+    audio sources): observed video length matches ``245 + N * 448``
+    exactly; observed audio matches the trimmed source. Postmortem:
+    ``internal/analysis/loop_audio_overshoot_analysis.md``.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="TrimImageBatchToAudio",
+            display_name="Trim Image Batch to Audio",
+            category="looping/audio",
+            description=(
+                "Clips an IMAGE batch to floor(audio_duration * fps) frames. "
+                "Place between the loop output and VHS_VideoCombine.images "
+                "to prevent silence-at-end caused by fixed-stride iteration "
+                "overshooting the audio length."
+            ),
+            inputs=[
+                io.Image.Input(
+                    "images",
+                    tooltip="Assembled video frames (typically LTXVTiledVAEDecode output).",
+                ),
+                io.Audio.Input(
+                    "audio",
+                    tooltip=(
+                        "Reference audio used to determine target frame count. "
+                        "Wire from the same source feeding VHS_VideoCombine.audio."
+                    ),
+                ),
+                io.Int.Input(
+                    "fps",
+                    default=25,
+                    min=1,
+                    tooltip=(
+                        "Output frame rate. Wire from LTXFramePlanner.fps_int "
+                        "for the canonical loop."
+                    ),
+                ),
+            ],
+            outputs=[
+                io.Image.Output(
+                    "images",
+                    tooltip=(
+                        "Image batch trimmed to floor(audio_duration * fps) "
+                        "frames. Pass-through when video is already shorter "
+                        "than audio."
+                    ),
+                ),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, images, audio: dict, fps: int) -> io.NodeOutput:
+        audio_duration = _audio_duration(audio)
+        target_frames = max(1, int(audio_duration * fps))
+        keep = min(images.shape[0], target_frames)
+        return io.NodeOutput(images[:keep])
+
+
 class LatentTemporalMask(io.ComfyNode):
     """Writes a retake noise_mask to a video latent: regenerate only
     `[start_time, end_time]`, hold the rest fixed as context.
@@ -3442,6 +3516,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LatentOverlapTrim,
             LatentTemporalMask,
             LatentSeamZoneMask,
+            TrimImageBatchToAudio,
             AudioPitchDetect,
             LTXResolutionFromAspect,
             LTXFramePlanner,

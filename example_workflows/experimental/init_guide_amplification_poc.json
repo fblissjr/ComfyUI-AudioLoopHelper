@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1619,
-  "last_link_id": 3072,
+  "last_node_id": 1621,
+  "last_link_id": 3079,
   "nodes": [
     {
       "id": 252,
@@ -385,7 +385,8 @@
           "name": "AUDIO",
           "type": "AUDIO",
           "links": [
-            1654
+            1654,
+            3079
           ]
         }
       ],
@@ -1602,7 +1603,7 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 2989
+          "link": 3077
         },
         {
           "name": "audio",
@@ -3908,7 +3909,7 @@
           "name": "image",
           "type": "IMAGE",
           "links": [
-            2989
+            3078
           ]
         }
       ],
@@ -4269,6 +4270,56 @@
         2.0
       ],
       "title": "overlap_seconds"
+    },
+    {
+      "id": 1621,
+      "type": "TrimImageBatchToAudio",
+      "pos": [
+        3395.8458218450364,
+        4438.634708436207
+      ],
+      "size": [
+        280,
+        90
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 3078
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 3079
+        },
+        {
+          "name": "fps",
+          "type": "INT",
+          "widget": {
+            "name": "fps"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            3077
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TrimImageBatchToAudio"
+      },
+      "widgets_values": [
+        25
+      ],
+      "title": "Trim to audio"
     }
   ],
   "links": [
@@ -4961,14 +5012,6 @@
       "VAE"
     ],
     [
-      2989,
-      1604,
-      0,
-      617,
-      0,
-      "IMAGE"
-    ],
-    [
       2993,
       381,
       2,
@@ -5167,6 +5210,30 @@
       1560,
       2,
       "FLOAT"
+    ],
+    [
+      3077,
+      1621,
+      0,
+      617,
+      0,
+      "IMAGE"
+    ],
+    [
+      3078,
+      1604,
+      0,
+      1621,
+      0,
+      "IMAGE"
+    ],
+    [
+      3079,
+      604,
+      0,
+      1621,
+      1,
+      "AUDIO"
     ]
   ],
   "groups": [

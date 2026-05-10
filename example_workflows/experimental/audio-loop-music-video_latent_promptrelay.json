@@ -1,8 +1,8 @@
 {
   "id": "3db70343-fd10-483b-8d66-6be2395b9681",
   "revision": 0,
-  "last_node_id": 2021,
-  "last_link_id": 3188,
+  "last_node_id": 2023,
+  "last_link_id": 3197,
   "nodes": [
     {
       "id": 252,
@@ -302,7 +302,8 @@
           "type": "AUDIO",
           "links": [
             1654,
-            3107
+            3107,
+            3196
           ]
         }
       ],
@@ -1322,7 +1323,7 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 2989
+          "link": 3194
         },
         {
           "name": "audio",
@@ -3208,7 +3209,7 @@
           "name": "image",
           "type": "IMAGE",
           "links": [
-            2989
+            3195
           ]
         }
       ],
@@ -3508,7 +3509,8 @@
           "type": "INT",
           "links": [
             3136,
-            3138
+            3138,
+            3197
           ]
         },
         {
@@ -4617,6 +4619,57 @@
         0.001
       ],
       "title": "Prompt Relay (initial-render)"
+    },
+    {
+      "id": 2023,
+      "type": "TrimImageBatchToAudio",
+      "pos": [
+        4210,
+        260
+      ],
+      "size": [
+        280,
+        90
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 3195
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 3196
+        },
+        {
+          "name": "fps",
+          "type": "INT",
+          "widget": {
+            "name": "fps"
+          },
+          "link": 3197
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            3194
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TrimImageBatchToAudio"
+      },
+      "widgets_values": [
+        25
+      ],
+      "title": "Trim to audio"
     }
   ],
   "links": [
@@ -5123,14 +5176,6 @@
       1604,
       0,
       "VAE"
-    ],
-    [
-      2989,
-      1604,
-      0,
-      617,
-      0,
-      "IMAGE"
     ],
     [
       2993,
@@ -5683,6 +5728,38 @@
       164,
       0,
       "CONDITIONING"
+    ],
+    [
+      3194,
+      2023,
+      0,
+      617,
+      0,
+      "IMAGE"
+    ],
+    [
+      3195,
+      1604,
+      0,
+      2023,
+      0,
+      "IMAGE"
+    ],
+    [
+      3196,
+      604,
+      0,
+      2023,
+      1,
+      "AUDIO"
+    ],
+    [
+      3197,
+      1634,
+      4,
+      2023,
+      2,
+      "INT"
     ]
   ],
   "groups": [
