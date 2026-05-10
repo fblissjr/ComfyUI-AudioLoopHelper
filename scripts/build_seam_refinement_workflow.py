@@ -33,6 +33,13 @@ Usage:
     uv run --group dev python scripts/build_seam_refinement_workflow.py
     uv run --group dev python scripts/build_seam_refinement_workflow.py --dry-run
     uv run --group dev python scripts/build_seam_refinement_workflow.py --revert
+
+After re-building, chain `apply_trim_image_batch_to_audio.py` to splice
+the loop-audio-overshoot fix back in (skeleton vs. apply convention per
+`scripts/CLAUDE.md`):
+
+    uv run --group dev python scripts/build_seam_refinement_workflow.py
+    uv run --group dev python scripts/apply_trim_image_batch_to_audio.py
 """
 
 from __future__ import annotations

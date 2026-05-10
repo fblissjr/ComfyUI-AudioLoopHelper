@@ -40,6 +40,14 @@ Usage:
     uv run --group dev python scripts/build_upscale_workflow.py
     uv run --group dev python scripts/build_upscale_workflow.py --dry-run
     uv run --group dev python scripts/build_upscale_workflow.py --revert
+
+After re-building, chain `apply_trim_image_batch_to_audio.py` to splice
+the loop-audio-overshoot fix back in (this script produces the skeleton;
+the trim is layered by the apply script per `scripts/CLAUDE.md` apply-vs-
+build convention):
+
+    uv run --group dev python scripts/build_upscale_workflow.py
+    uv run --group dev python scripts/apply_trim_image_batch_to_audio.py
 """
 
 from __future__ import annotations

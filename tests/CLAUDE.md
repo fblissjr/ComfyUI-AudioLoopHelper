@@ -31,6 +31,8 @@ Pytest runs without ComfyUI (CI default). Two affordances make this work:
 
 - **`__init__.py`** guards ComfyUI imports.
 - **`nodes.py`** has `_IOStub`/`_Passthrough` fallback under `try: from comfy_api.latest import io / except ImportError:`. New node modules that need `comfy_api` / `comfy.patcher_extension` define their own inline fallbacks (see `nodes_sage.py`, `nodes_easycache.py`). Two consumers is the minimum threshold for extracting to a shared helper; factor out only if a third node needs the same stubs.
+- **`io.NodeOutput` is a plain tuple under the `_IOStub` fallback.** `_IOStub.NodeOutput(*args)` returns `args` directly, so tests calling `.execute()` access results positionally: `out[0]`, NOT `out.result[0]`. The wrapper-style attribute access only works when ComfyUI's real `io.NodeOutput` is loaded.
+- **Testing `ComfyExtension.get_node_list()` requires AST, not invocation.** `AudioLoopHelperExtension.get_node_list()` uses `from .X import Y` relative imports that fail when `nodes.py` is loaded as a top-level module (pytest default — no package context). Tests verifying a new node was registered should AST-walk `nodes.py` for class names referenced inside `class AudioLoopHelperExtension`. Pattern: `tests/test_trim_image_batch_to_audio.py::test_node_is_registered_in_extension`.
 
 ## Schema invariant tests need AST parsing, not runtime introspection
 

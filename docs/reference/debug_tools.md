@@ -49,6 +49,7 @@ paired with their apply scripts. Two flavors:
 | `iclora_loader_present_when_guide_present` (F12b) | `apply_iclora_video_reference.py` | Subgraph has IC-LoRA guide but top-level has no `LTXICLoRALoaderModelOnly` |
 | `iclora_ref_video_preprocess_symmetry` (F12c) | `apply_iclora_video_reference.py` | IC-LoRA guide present but no `LTXVPreprocess(val=18)` on the ref-video chain |
 | `model_sampling_shift` (F13) | `apply_strip_sd3_shift_node.py` | `ModelSamplingSD3` present and active on a distilled workflow (Lightricks's distilled inference applies no shift; the SD3 node distorts the sigma-to-timestep mapping). WARN-level. |
+| `trim_image_batch_to_audio_present` (F14) | `apply_trim_image_batch_to_audio.py` | Loop workflow's `VHS_VideoCombine.images` not fed by `TrimImageBatchToAudio`. Without the trim, fixed-stride iter math overshoots audio length by up to `window − stride` seconds; ffmpeg `-shortest` doesn't truncate `-c:v copy`, so the saved mp4 ends with audible silence. Postmortem: `internal/analysis/loop_audio_overshoot_analysis.md` (private clone only). |
 
 **Generic structural invariants** (catch CLASSES of drift without per-bug rules):
 
@@ -137,7 +138,7 @@ Scratch-build new workflows from constants — distinct from apply scripts
 | Script | Builds | Topology |
 |---|---|---|
 | `scripts/build_keyframe_workflow.py` | (per script) | Keyframe-schedule baseline. |
-| `scripts/build_upscale_workflow.py` | `internal/workflows/upscale_loop_output.draft.json` | Post-loop spatial upscale: `VHS_LoadVideo → VAEEncode → LTXVLatentUpsampler (2×) → LTXVImgToVideoConditionOnly → LTXVConcatAVLatent → SamplerCustomAdvanced (3-step σ-tail `[0.85, 0.7250, 0.4219, 0.0]`, euler, CFG=1) → LTXVSeparateAVLatent → LTXVCropGuides → LTXVTiledVAEDecode → VHS_VideoCombine` (with original audio re-attached). 24 nodes, 32 links; constants centralized at the top of the script. `--dry-run`, `--revert`. |
+| `scripts/build_upscale_workflow.py` | `internal/workflows/upscale_loop_output.draft.json` | Post-loop spatial upscale: `VHS_LoadVideo → VAEEncode → LTXVLatentUpsampler (2×) → LTXVConcatAVLatent → SamplerCustomAdvanced (3-step σ-tail `[0.85, 0.7250, 0.4219, 0.0]`, euler, CFG=1) → LTXVSeparateAVLatent → LTXVCropGuides → LTXVTiledVAEDecode → VHS_VideoCombine` (with original audio re-attached). Model chain mirrors the canonical loop's perf/VRAM patches (`UNETLoader → AudioLoopHelperSageAttention → LTXVChunkFeedForward → LTX2AttentionTunerPatch → CFGGuider`). 26 nodes, 33 links; constants centralized at the top of the script. `--dry-run`, `--revert`. **Chain `apply_trim_image_batch_to_audio.py` after re-building** so the loop-audio-overshoot fix gets re-spliced (skeleton vs apply convention). |
 
 Build scripts share apply-script conventions for `--dry-run` / `--revert`
 / idempotence, but produce a deterministic file from constants rather

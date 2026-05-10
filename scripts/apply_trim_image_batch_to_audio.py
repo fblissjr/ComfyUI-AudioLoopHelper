@@ -53,13 +53,15 @@ from workflow_utils import WorkflowEditor
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# Workflows the trim DOES NOT apply to: third-party reference files +
-# post-loop processors that operate on already-rendered video.
+# Workflows the trim DOES NOT apply to: third-party reference files
+# we don't own. Post-loop processors (upscale, seam refinement) DO get
+# the trim — they take a VHS_LoadVideo whose audio passes through to
+# VHS_VideoCombine.audio, so the trim correctly clips any inherited
+# video > audio mismatch from older loop outputs (no-op when input is
+# already correct).
 SKIP_FILES = {
     "edit_anything_v2v_reference.json",
     "upscale_3pass_reference.json",
-    "upscale_loop_output.draft.json",
-    "seam_zone_refinement.draft.json",
 }
 
 
