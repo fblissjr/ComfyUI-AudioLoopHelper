@@ -7,6 +7,27 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Staged-variant optimizer for LTX 2.3 I2V tiled pipelines.** New
+  apply script `scripts/apply_ltx_i2v_tiled_optimizations.py` produces
+  an optimized sibling of any single-stage I2V workflow that uses a
+  tiled-sampler upscale path. `--input` is required (no leaky default);
+  output is written to `<input_dir>/<input_stem>_optimized.json`.
+  Idempotent; `--dry-run` and `--revert` supported.
+  Phase 1 — portable LTX 2.3 optimizations: strip a common dead audio
+  re-encode branch; insert `AudioLoopHelperSageAttention` on each
+  MODEL fork (after the last LoRA loader, per the canonical post-LoRA
+  module-mutation order); swap `VAEDecode` → `LTXVTiledVAEDecode
+  [1,1,1,true,"auto","auto"]` (handles the
+  `[samples,vae]` → `[vae,latents]` slot-order difference); swap
+  `ImageResizeKJv2` → `LTXSmartImageResize`; insert
+  `LTXVPreprocess(img_compression=18)` on init-image guide consumers
+  only (F2-style mirror on a non-loop workflow). Phase 2 — DRY cleanup:
+  remove an empty `Power Lora Loader (rgthree)` pass-through (defensive
+  refusal if any LoRA entry is actually configured); remove a dangling
+  `Set_seed` SetNode whose variable has no `GetNode` consumer;
+  symmetrize the output-path `AudioAdjustVolume` to match the preview
+  path. Staged-variant pattern; no `example_workflows/` mutation;
+  audit on the produced output: 0 ERR.
 - **Companion-repo coordination.** Root `CLAUDE.md` and `README.md` now
   document the two-bucket sister-repo scheme (sister fork vs companion
   umbrella). Adds a second sister to the workflow alongside the existing
