@@ -71,6 +71,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from workflow_utils import WorkflowEditor
 
+ID_KSAMPLER = 520                # first-pass KSamplerSelect
 ID_ANCHOR = 731                  # LTXLatentAnchorAware
 ID_STG_GUIDER = 653              # STGGuiderAdvanced
 ID_RTX_VSR = 755                 # RTXVideoSuperResolution (post-decode pixel VSR)
@@ -98,6 +99,7 @@ DEFAULT_INPUT = "internal/workflows/ltx_i2v_tiled_optimized.draft.json"
 _OUTPUTS: dict[str, str] = {
     "arm3": "internal/workflows/ltx_i2v_tiled_arm3.draft.json",
     "arm4": "internal/workflows/ltx_i2v_tiled_arm4.draft.json",
+    "arm5": "internal/workflows/ltx_i2v_tiled_arm5.draft.json",
     "no_rtx": "internal/workflows/ltx_i2v_tiled_no_rtx.draft.json",
 }
 
@@ -146,6 +148,27 @@ def _apply_arm4(ed: WorkflowEditor) -> None:
     _set_widget(stg, 4, ARM4_FLAT_TABLE, "stg stg_scale_values (no warmup)")
 
 
+def _apply_arm5(ed: WorkflowEditor) -> None:
+    """Arm 5 (rebuilt against keeper baseline) -- single-knob test:
+    swap first-pass `KSamplerSelect` from `euler` back to
+    `euler_ancestral` on the keeper baseline (canonical 9-pt curve,
+    no RES4LYF easing, matched anchor / STG).
+
+    Question this isolates: does the ancestral noise injection
+    interact differently with the canonical curve than it did with
+    the source workflow's 14-pt curve? The original session-1 arm5
+    tested ancestral on the SOURCE curve; this version tests it on
+    the KEEPER curve, where the easing isn't present to absorb the
+    stochastic injection.
+    """
+    n = ed.find_node(ID_KSAMPLER)
+    if n.get("type") != "KSamplerSelect":
+        raise SystemExit(
+            f"Expected KSamplerSelect at #{ID_KSAMPLER}, got {n.get('type')!r}."
+        )
+    _set_widget(n, 0, "euler_ancestral", "sampler")
+
+
 def _apply_no_rtx(ed: WorkflowEditor) -> None:
     """Bypass `RTXVideoSuperResolution`. ComfyUI's mode=4 passes the IMAGE
     input through to the IMAGE output since they share type, so no
@@ -163,6 +186,7 @@ def _apply_no_rtx(ed: WorkflowEditor) -> None:
 _DISPATCH = {
     "arm3": _apply_arm3,
     "arm4": _apply_arm4,
+    "arm5": _apply_arm5,
     "no_rtx": _apply_no_rtx,
 }
 
@@ -183,6 +207,9 @@ def _already_migrated(ed: WorkflowEditor, arm: str) -> bool:
             and stg[3] == ARM4_FLAT_TABLE
             and stg[4] == ARM4_FLAT_TABLE
         )
+    if arm == "arm5":
+        wv = ed.find_node(ID_KSAMPLER).get("widgets_values") or []
+        return bool(wv) and wv[0] == "euler_ancestral"
     raise SystemExit(f"Unknown arm: {arm!r}")
 
 

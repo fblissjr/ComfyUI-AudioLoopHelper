@@ -52,7 +52,7 @@ SCRATCH_SOURCE = Path(_scratch_env_value) if _scratch_env_value else None
 ARM0_BASELINE = REPO_ROOT / "internal" / "workflows" / "ltx_i2v_tiled_optimized.draft.json"
 
 # Match `_OUTPUTS` in the variants script.
-EXPECTED_ARMS = ("arm3", "arm4", "no_rtx")
+EXPECTED_ARMS = ("arm3", "arm4", "arm5", "no_rtx")
 
 
 def _run(script: Path, *args: str) -> subprocess.CompletedProcess:

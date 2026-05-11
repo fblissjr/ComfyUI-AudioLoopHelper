@@ -80,6 +80,7 @@ ARM_FROM_STEM: dict[str, str] = {
     "ltx_i2v_tiled_optimized.draft": "arm0",
     "ltx_i2v_tiled_arm3.draft": "arm3",
     "ltx_i2v_tiled_arm4.draft": "arm4",
+    "ltx_i2v_tiled_arm5.draft": "arm5",
     "ltx_i2v_tiled_no_rtx.draft": "no_rtx",
 }
 
