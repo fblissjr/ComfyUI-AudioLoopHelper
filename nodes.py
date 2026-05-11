@@ -2169,63 +2169,43 @@ class _AmplifiedNoise:
     temporal frames of the produced noise tensor.
 
     Equivalent to giving those frames a higher initial sigma without
-    touching the sigma schedule -- a non-uniform-sampling effect
-    achieved by perturbing the input noise instead of the sampler.
-    Used by :class:`LTXNoiseFrameAmplifier` to break LTX 2.3's
-    "ease into motion" temporal prior on i2v init-anchored frames.
-
-    Handles plain tensor noise and NestedTensor noise (LTX AV concat):
-    on a NestedTensor only the first sub-tensor (assumed to be the
-    video latent per `LTXVConcatAVLatent` convention: video first,
-    audio second) gets amplified. Audio noise is left untouched.
+    touching the sigma schedule. On a NestedTensor (LTX AV concat),
+    only the first sub-tensor (the video latent) gets amplified --
+    audio noise is left untouched.
     """
 
     def __init__(self, underlying, n_frames: int, amplifier: float):
         self._underlying = underlying
         self._n_frames = int(n_frames)
         self._amplifier = float(amplifier)
-        # Mirror the seed attribute so the sampler's noise.seed access works.
-        self.seed = getattr(underlying, "seed", 0)
+        # Mirror the seed; let it raise if the underlying noise doesn't
+        # implement the contract -- silent default would mask a real bug.
+        self.seed = underlying.seed
 
     def generate_noise(self, input_latent):
         noise = self._underlying.generate_noise(input_latent)
         if self._n_frames <= 0 or self._amplifier == 1.0:
             return noise
-        # NestedTensor path (LTX AV concat). Detect by .unbind() availability
-        # without importing comfy.nested_tensor (tests run without ComfyUI).
-        unbind = getattr(noise, "unbind", None)
-        if unbind is not None and not hasattr(noise, "shape"):
-            try:
-                parts = list(unbind())
-            except Exception:
-                # Fall through to tensor path if unbind doesn't behave as expected
-                parts = None
-            if parts is not None and parts:
-                parts[0] = self._amplify_temporal(parts[0])
-                try:
-                    import comfy.nested_tensor  # type: ignore
-                    return comfy.nested_tensor.NestedTensor(parts)
-                except ImportError:
-                    # Headless / test environment: return list (tests don't exercise nested path).
-                    return parts
+        # NestedTensor detection follows upstream's canonical pattern
+        # (comfy_extras/nodes_custom_sampler.py:Noise_EmptyNoise uses
+        # latent_image.is_nested).
+        if getattr(noise, "is_nested", False):
+            import comfy.nested_tensor  # type: ignore
+            parts = list(noise.unbind())
+            parts[0] = self._amplify_temporal(parts[0])
+            return comfy.nested_tensor.NestedTensor(parts)
         return self._amplify_temporal(noise)
 
     def _amplify_temporal(self, tensor):
-        """Amplify first ``n_frames`` along the temporal dim (dim 2 for a
-        5D ``[B, C, T, H, W]`` video latent). Out-of-range ``n_frames``
-        clamps to the actual T extent."""
-        if tensor.ndim < 3:
-            # 1D/2D tensor (e.g. audio latent shape) — temporal dim ambiguous; skip.
-            return tensor
+        """Amplify first ``n_frames`` along the temporal dim (dim 2 for
+        a 5D ``[B, C, T, H, W]`` video latent). In-place; relies on
+        `comfy.sample.prepare_noise` returning a fresh tensor per call.
+        Out-of-range ``n_frames`` clamps to the actual T extent."""
         n = min(self._n_frames, tensor.shape[2])
         if n <= 0:
             return tensor
-        # Clone so we don't mutate the underlying generator's output if it
-        # caches. comfy.sample.prepare_noise returns a fresh tensor each
-        # call so this is defensive, not load-bearing.
-        out = tensor.clone()
-        out[:, :, :n] = out[:, :, :n] * self._amplifier
-        return out
+        tensor[:, :, :n].mul_(self._amplifier)
+        return tensor
 
 
 class LTXNoiseFrameAmplifier(io.ComfyNode):
