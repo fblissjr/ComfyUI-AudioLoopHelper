@@ -287,14 +287,26 @@ def _compute_loop_geometry(
 def _compute_tile_count(audio_duration: float, stride: float) -> int:
     """Number of valid loop iterations. Matches AudioLoopController stop condition.
 
-    Uses floor(audio_duration / stride) so the last iter starts within audio
-    bounds. The previous formula `ceil(audio_duration/stride) - 1` produced
-    the same count for most cases but pushed the last iter's WINDOW past
-    audio end by up to (window - stride) seconds, leaving a trailing
-    silent tail in the assembled video. floor avoids that overshoot.
+    Uses ``floor(audio_duration / stride)`` so the last iter's START is
+    within audio bounds. **Does NOT bound the last iter's WINDOW END** —
+    the window extends ``window_seconds`` past its start, so the
+    assembled video can overshoot audio length by up to
+    ``window − stride`` seconds. ``scripts/apply_trim_image_batch_to_audio.py``
+    (F14) clips that overshoot off before muxing; without it the saved
+    mp4 ends with audible silence.
+
+    Why not bound the WINDOW END here instead? Bounding by
+    ``floor((audio − window) / stride)`` would lose up to ``window − stride``
+    seconds of audio coverage at the END of the song — strictly worse
+    user experience than the trim-at-output fix (silence is gone either
+    way; the trim version preserves full audio coverage). The trade-off
+    is ~3-5% wasted sampler compute per render on the overshoot frames,
+    which is much cheaper than truncating the song. Postmortem:
+    ``internal/analysis/loop_audio_overshoot_analysis.md`` (private).
 
     Caps at 200 for display/planning purposes. AudioLoopController itself
-    has no cap -- it runs until should_stop fires.
+    has no cap — it runs until ``should_stop`` fires (see
+    ``AudioLoopController.execute``).
     """
     if stride <= 0:
         return 1

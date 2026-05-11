@@ -75,14 +75,28 @@ Toggle the node back to **Bypass** (`Ctrl+M` again) once you have the
 `LoadLatent` reads from ComfyUI's **input** dir, not the output dir
 where your loop wrote.
 
+Use the helper script — it finds the most recent `.latent` for the
+named workflow and copies under a deterministic filename so the
+upscale workflow's `LoadLatent` widget always picks up the same name:
+
+```bash
+# Set both dirs once per shell (or pass --output-dir / --input-dir)
+export COMFYUI_OUTPUT_DIR=/path/to/comfy/output
+export COMFYUI_INPUT_DIR=/path/to/comfy/input
+
+uv run --group dev python scripts/promote_latent_for_upscale.py audio-loop-music-video_latent
+# → copies <output>/audio-loop-music-video_latent/<latest_timestamp>/latents/segment_00001_.latent
+#   to <input>/assembled_latent.latent
+```
+
+Use `--dry-run` to preview without copying, `--dest-name foo.latent`
+to override the destination filename. Manual `cp` works fine too if
+you'd rather:
+
 ```bash
 cp <output>/audio-loop-music-video_latent/<timestamp>/latents/segment_00001_.latent \
    <comfyui_input_dir>/assembled_latent.latent
 ```
-
-Substitute the actual paths. If you don't know where your ComfyUI
-input dir is, check `extra_model_paths.yaml` or default to
-`<comfyui_root>/input/`.
 
 ### 4. Run the upscale workflow
 

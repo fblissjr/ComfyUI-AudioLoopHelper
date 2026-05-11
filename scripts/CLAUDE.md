@@ -154,6 +154,7 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 | `extract_workflow_from_png.py` | Dump embedded workflow JSON from PNG · `debugging_guide.md` |
 | `diagnose_overlap_seams.py` | Detect seam-zone artifacts in assembled loop output · `build_seam_refinement_workflow.py` |
 | `calc_ltx_resolution.py` | Offline companion to `LTXResolutionFromAspect` — resolve aspect+long-edge to LTX-valid dims · CLI-only (no callers) |
+| `promote_latent_for_upscale.py` | Find the most recent `segment_*.latent` saved by a loop's bypassed-SaveLatent toggle and copy it to ComfyUI's input dir under a deterministic name. Reads `COMFYUI_OUTPUT_DIR` / `COMFYUI_INPUT_DIR` env or `--output-dir` / `--input-dir` flags · `docs/guides/upscale_guide.md` |
 
 ### From-scratch workflow builders (output: new variant JSON)
 

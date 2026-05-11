@@ -7,6 +7,56 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Silence-at-end fix: `TrimImageBatchToAudio` node (F14).** New node
+  clips the assembled IMAGE batch to `floor(audio.duration * fps)`
+  frames before muxing, so the saved mp4's video stream is exactly
+  audio-length. Fixes a long-standing user-visible bug where every
+  saved mp4 ended with 4-10 seconds of audible silence. Verified via
+  ffprobe sweep across 20 random renders (3 distinct audio sources):
+  observed `total_pixel_frames = 245 + N * 448` for canonical defaults
+  with N = `floor(audio / stride)`, matching to the millisecond.
+  ffmpeg's `-shortest` does not truncate `-c:v copy` streams, which is
+  why the trim is required. Applied across all 19 loop + post-loop
+  workflows we own via `scripts/apply_trim_image_batch_to_audio.py`
+  (idempotent + `--revert`). Audit pair: `trim_image_batch_to_audio_present`
+  (ERR-level F14). Postmortem at
+  `internal/analysis/loop_audio_overshoot_analysis.md` (private clone only).
+- **`RunIdPrefix` node + per-render output folders (F15).** Emits one
+  `<workflow_name>/<timestamp>` STRING shared across every save node;
+  every render's mp4 + workflow snapshot + audio-mux now cluster under
+  `<output>/<workflow_name>/<timestamp>/`. `fingerprint_inputs` returns
+  NaN so ComfyUI re-evaluates per queue submission (otherwise the
+  cached timestamp would carry across renders).
+  `scripts/apply_run_id_layout.py` applies across 19 workflows; for
+  loop workflows it ALSO adds a **bypassed** `SaveLatent` toggle wired
+  to `LatentConcat #1605` — user clicks `mode=0` in the UI to capture
+  the assembled video latent for the latent-based upscale path.
+  Audit pair: `run_id_layout_present` (WARN-level F15). User guide:
+  `docs/guides/upscale_guide.md`.
+- **`LatentFrameCount` node.** Emits `(pixel_frames, latent_frames)`
+  from a video latent's temporal extent per the LTX video VAE
+  convention (`pixel_frames = (latent_frames - 1) * 8 + 1`). Lets the
+  upscale + seam workflows size `LTXVEmptyLatentAudio.frames_number`
+  from the loaded latent — no AUDIO source required for that sizing
+  step.
+- **`docs/guides/upscale_guide.md`.** Full 4-step user chain for the
+  latent-based upscale (apply run-id layout → toggle SaveLatent →
+  loop render → move .latent → run upscale). Topology summary, sigma
+  profile tuning table, ffprobe verification recipe, 6-row
+  troubleshooting matrix.
+- **Cross-file test helper `tests/_node_registry.py::assert_node_registered`.**
+  Replaces three near-identical AST-walk blocks for ComfyExtension
+  registration smoke tests with one call. Three call sites (trim,
+  latent_frame_count, run_id_prefix) — the 3rd-site threshold per
+  root CLAUDE.md.
+- **CLI helper `scripts/promote_latent_for_upscale.py`.** Finds the
+  most recent `segment_*.latent` saved by a loop's bypassed-SaveLatent
+  toggle and copies it to ComfyUI's input dir under a deterministic
+  name (default `assembled_latent.latent`). Removes the manual file-
+  shuffle step from the upscale chain. Reads `COMFYUI_OUTPUT_DIR` /
+  `COMFYUI_INPUT_DIR` env vars or `--output-dir` / `--input-dir`
+  flags; no defaults contain absolute paths. `--dry-run` previews the
+  copy. Usage in `docs/guides/upscale_guide.md` Step 3.
 - **Staged-variant optimizer for LTX 2.3 I2V tiled pipelines.** New
   apply script `scripts/apply_ltx_i2v_tiled_optimizations.py` produces
   an optimized sibling of any single-stage I2V workflow that uses a
@@ -80,6 +130,32 @@ This project uses [Semantic Versioning](https://semver.org/).
   cover the topology invariants).
 
 ### Fixed
+- **Upscale workflow OOM on 24 GB.** `scripts/build_upscale_workflow.py`'s
+  draft used `VHS_LoadVideo → VAEEncode` which materializes the entire
+  image batch in pixel space (~16 GB for a 4277-frame song at
+  832×480×3 fp32) before the upsampler runs. Replaced with `LoadLatent
+  + LoadAudio` ingress — reads the assembled video latent directly
+  (~855 MB; 20× reduction). Same surgery applied to
+  `scripts/build_seam_refinement_workflow.py`. Pre-step:
+  `scripts/apply_run_id_layout.py` adds a bypassed `SaveLatent` toggle
+  to the loop workflow; user enables it once to capture the
+  `.latent` for the upscale chain.
+- **`build_upscale_workflow.py` refine pass was a no-op.**
+  `LTXVImgToVideoConditionOnly` wired with the full multi-frame video
+  batch and `strength=1.0` overwrote every latent frame of the
+  upsampler output AND set `noise_mask=0` for every frame — sampler
+  couldn't denoise anything. Output was a bilinear-resized + re-VAE-
+  encoded copy of the input. Fix: drop the ConditionOnly node
+  entirely; upsampled latent feeds the sampler at σ=0.85 directly
+  (matches RuneXX 3-pass actual behavior, contrary to its docstring).
+  Also added the three canonical model-chain perf/VRAM patches
+  (`AudioLoopHelperSageAttention`, `LTXVChunkFeedForward`,
+  `LTX2AttentionTunerPatch`) with widget values byte-equal to the
+  canonical loop — without them the refine OOMs at 1664×960 ×
+  ~526 latent frames. Pinned by `tests/test_build_upscale_workflow.py`
+  (15 tests). Postmortem at
+  `internal/analysis/i2v_v5_workflow_assessment.md` (private clone only).
+
 - **`overlap_seconds` divergence footgun across workflows.** Both
   `AudioLoopController.overlap_seconds` and
   `AudioLoopPlanner.overlap_seconds` shipped as widget-only with default
