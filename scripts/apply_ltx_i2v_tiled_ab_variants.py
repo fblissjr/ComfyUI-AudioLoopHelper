@@ -8,40 +8,24 @@ The A/B matrix is documented in
 `internal/design/ltx_i2v_tiled_sampler_curve_ab.md`; this script
 implements the per-arm edits and writes one variant JSON per arm.
 
-Arms implemented:
+Status note (2026-05-11): Arm 0 baseline now bakes in the keeper
+config from the curve A/B (canonical 9-pt sigmas + euler + matched
+anchor/STG remap + RES4LYF `Sigmas Easing` removed). That collapses
+the matrix:
 
-- arm5 (cheapest single-knob): swap first-pass `KSamplerSelect` from
-  `euler_ancestral` to `euler`. Keeps the 14-pt sigma curve, the
-  RES4LYF easing, the anchor's `cache_at_step=6`, and the STG warmup
-  intact. Isolates the question "is the ancestral noise injection
-  doing anything?"
+- arm1 (canonical curve + euler + matched downstream) is now
+  identity-vs-baseline. RETIRED.
+- arm2 (arm1 - easing) is now identity-vs-baseline. RETIRED.
+- arm5 (euler-only on the source 14-pt curve) no longer maps onto
+  the post-Phase-3 baseline cleanly. RETIRED.
 
-- arm1 (headline curve-length test): coordinated multi-widget edit
-  that replaces the 14-pt sigma curve with the canonical distilled
-  9-pt curve `1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725,
-  0.421875, 0.0`, swaps `KSamplerSelect` to `euler`, remaps
-  `LTXLatentAnchorAware.cache_at_step` from 6 to 5 (matches the
-  same-sigma slot on the new curve), and remaps `STGGuiderAdvanced`'s
-  sigma-keyed cfg/stg/rescale tables onto the new curve. RES4LYF
-  easing is kept in place and acts on the new (shorter) curve. The
-  headline question is "8-step canonical euler vs 13-step
-  euler_ancestral + easing?"
+Arms that remain meaningful against the keeper baseline:
 
 - no_rtx (upscaler-stack A/B, U-B): bypass `RTXVideoSuperResolution`
   via `mode=4`. The post-decode IMAGE flows straight from the tiled
   VAE decode into `VHS_VideoCombine`. Tests "is the NVIDIA pixel-
   space VSR adding value on top of the LTXV 2x latent upsample, or
-  is it redundant?" Sampler / curve / anchor / STG unchanged from
-  Arm 0.
-
-- arm2 (curve A/B, easing ablation): Arm 1 with the RES4LYF
-  `Sigmas Easing` bypassed via `mode=4`. Same canonical 9-pt curve
-  reaches the sampler raw instead of being warped by the cubic
-  in_out easing. SIGMAS input/output share type so ComfyUI's bypass
-  passes the raw ManualSigmas straight through. Tests "is the
-  easing doing anything once the curve is canonical?" Anchor and
-  STG keep their Arm-1 remap (they already read the un-eased
-  curve; nothing else moves).
+  is it redundant?"
 
 - arm3 (curve A/B, anchor ablation): Arm 1 with
   `LTXLatentAnchorAware` internally bypassed (sets widget[5]
@@ -85,17 +69,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from apply_canonical_sigmas import CANONICAL_SIGMAS
 from workflow_utils import WorkflowEditor
 
-# First-pass KSamplerSelect that drives `SamplerCustomAdvanced #510`.
-# Survived the optimize-baseline pass (sage attention + tiled VAE
-# decode etc. do not touch it).
-ID_FIRSTPASS_KSAMPLER = 520
-ID_FIRSTPASS_SIGMAS = 527        # ManualSigmas feeding the easing + anchor
 ID_ANCHOR = 731                  # LTXLatentAnchorAware
 ID_STG_GUIDER = 653              # STGGuiderAdvanced
-ID_SIGMAS_EASING = 652           # RES4LYF Sigmas Easing (curve warp)
 ID_RTX_VSR = 755                 # RTXVideoSuperResolution (post-decode pixel VSR)
 
 # ComfyUI mode constants: 0 = active, 4 = bypass (passes input to
@@ -103,29 +80,12 @@ ID_RTX_VSR = 755                 # RTXVideoSuperResolution (post-decode pixel VS
 MODE_ACTIVE = 0
 MODE_BYPASS = 4
 
-# Arm-1 STG widget remap: 14-pt curve had 13-entry cfg/stg/rescale
-# tables (one per sampler transition) and a 14-entry layers table
-# (off-by-one but harmless because all entries are the same
-# disabled-placeholder). New 9-pt curve gets 8-entry transition tables
-# and a 9-entry layers table. Preserves the 2-step cfg/stg warmup at
-# the top of the curve; flat 1s elsewhere; layer-skipping stays off.
-ARM1_STG_SIGMAS = CANONICAL_SIGMAS
-ARM1_STG_CFG = "2, 1.5, 1, 1, 1, 1, 1, 1"
-ARM1_STG_STG_SCALE = "2, 1.5, 1, 1, 1, 1, 1, 1"
-ARM1_STG_RESCALE = "1, 1, 1, 1, 1, 1, 1, 1"
-ARM1_STG_LAYERS = "[9999], [9999], [9999], [9999], [9999], [9999], [9999], [9999], [9999]"
-
-# Arm 4: flat-1 cfg + stg_scale tables. With layer-skipping already
-# disabled by ARM1_STG_LAYERS, this drops the only remaining warmup
-# signal at the top of the curve. Guider then behaves like plain
-# CFGGuider(cfg=1) without node replacement.
+# Arm 4: flat-1 cfg + stg_scale tables. With STG layer-skipping
+# already disabled by `[9999]` placeholders in the keeper baseline,
+# this drops the only remaining warmup signal at the top of the
+# curve. Guider then behaves like plain CFGGuider(cfg=1) without
+# node replacement.
 ARM4_FLAT_TABLE = "1, 1, 1, 1, 1, 1, 1, 1"
-
-# Anchor cache step remap. Original `cache_at_step=6` against the
-# 14-pt curve fires at sigma=0.812. Closest higher-sigma slot on the
-# canonical 9-pt curve is idx 5 (sigma=0.909375); idx 6 is 0.725.
-# Step 5 is the closest match.
-ARM1_ANCHOR_CACHE_STEP = 5
 
 # LTXLatentAnchorAware widget index 5 is the `bypass` flag. True
 # returns the input model unchanged (patch is a no-op) while keeping
@@ -136,11 +96,8 @@ DEFAULT_INPUT = "internal/workflows/ltx_i2v_tiled_optimized.draft.json"
 
 # Output paths per arm. Anchored to the canonical staging dir.
 _OUTPUTS: dict[str, str] = {
-    "arm1": "internal/workflows/ltx_i2v_tiled_arm1.draft.json",
-    "arm2": "internal/workflows/ltx_i2v_tiled_arm2.draft.json",
     "arm3": "internal/workflows/ltx_i2v_tiled_arm3.draft.json",
     "arm4": "internal/workflows/ltx_i2v_tiled_arm4.draft.json",
-    "arm5": "internal/workflows/ltx_i2v_tiled_arm5.draft.json",
     "no_rtx": "internal/workflows/ltx_i2v_tiled_no_rtx.draft.json",
 }
 
@@ -153,29 +110,6 @@ def _output_for(arm: str) -> Path:
     return Path(_OUTPUTS[arm])
 
 
-def _apply_arm5(ed: WorkflowEditor) -> None:
-    """Arm 5 -- swap first-pass KSamplerSelect to plain euler.
-
-    Single widget edit. Keeps everything else identical to Arm 0
-    (14-pt curve, RES4LYF easing, anchor cache_at_step=6, STG
-    warmup). The point of arm5 is to isolate the ancestral-noise
-    question from the curve-length question.
-    """
-    n = ed.find_node(ID_FIRSTPASS_KSAMPLER)
-    if n.get("type") != "KSamplerSelect":
-        raise SystemExit(
-            f"Expected KSamplerSelect at #{ID_FIRSTPASS_KSAMPLER}, got {n.get('type')!r}. "
-            "Did the canonical Arm 0 draft renumber nodes?"
-        )
-    wv = list(n.get("widgets_values") or [])
-    if not wv:
-        raise SystemExit(f"KSamplerSelect #{ID_FIRSTPASS_KSAMPLER} missing widget value.")
-    old = wv[0]
-    wv[0] = "euler"
-    n["widgets_values"] = wv
-    print(f"  KSamplerSelect #{ID_FIRSTPASS_KSAMPLER}: {old!r} -> 'euler'")
-
-
 def _set_widget(node: dict, idx: int, value, label: str) -> None:
     wv = list(node.get("widgets_values") or [])
     if idx >= len(wv):
@@ -186,67 +120,27 @@ def _set_widget(node: dict, idx: int, value, label: str) -> None:
     print(f"  #{node.get('id')} [{node.get('type')}] {label}: {old!r} -> {value!r}")
 
 
-def _apply_arm1(ed: WorkflowEditor) -> None:
-    """Arm 1 -- canonical 9-pt curve + euler + matched downstream remap.
-
-    Coordinated because the four widgets must move together: anchor's
-    cache_at_step is indexed against the sigma list, STG's sigma-keyed
-    cfg/stg tables key against the same list, and the sampler's noise
-    behavior changes with both family and curve length. Partial
-    application leaves an inconsistent curve.
-    """
-    _set_widget(ed.find_node(ID_FIRSTPASS_SIGMAS), 0, CANONICAL_SIGMAS, "sigmas")
-    _set_widget(ed.find_node(ID_FIRSTPASS_KSAMPLER), 0, "euler", "sampler")
-    _set_widget(ed.find_node(ID_ANCHOR), 1, ARM1_ANCHOR_CACHE_STEP, "cache_at_step")
-    stg = ed.find_node(ID_STG_GUIDER)
-    _set_widget(stg, 2, ARM1_STG_SIGMAS, "stg sigmas")
-    _set_widget(stg, 3, ARM1_STG_CFG, "stg cfg_values")
-    _set_widget(stg, 4, ARM1_STG_STG_SCALE, "stg stg_scale_values")
-    _set_widget(stg, 5, ARM1_STG_RESCALE, "stg stg_rescale_values")
-    _set_widget(stg, 6, ARM1_STG_LAYERS, "stg layers_indices")
-
-
-def _apply_arm2(ed: WorkflowEditor) -> None:
-    """Arm 2 = Arm 1 + bypass `Sigmas Easing`.
-
-    Same `cubic_in_out(t**0.7)` warper that the original workflow
-    inherited; bypass routes the canonical sigmas raw to the sampler.
-    SIGMAS in/out share type so ComfyUI's mode=4 passthrough works
-    without rewiring.
-    """
-    _apply_arm1(ed)
-    n = ed.find_node(ID_SIGMAS_EASING)
-    if n.get("type") != "Sigmas Easing":
-        raise SystemExit(
-            f"Expected `Sigmas Easing` at #{ID_SIGMAS_EASING}, got {n.get('type')!r}."
-        )
-    n["mode"] = MODE_BYPASS
-    print(f"  #{ID_SIGMAS_EASING} [{n['type']}]: mode {MODE_ACTIVE} -> {MODE_BYPASS} (bypassed)")
-
-
 def _apply_arm3(ed: WorkflowEditor) -> None:
-    """Arm 3 = Arm 1 + LTXLatentAnchorAware internally bypassed.
+    """Arm 3 -- LTXLatentAnchorAware internally bypassed.
 
     The anchor's `bypass` widget (idx 5) flips to True; its `patch`
     method returns the model unchanged. Topology preserved -- the
     STGGuiderAdvanced still reads from the anchor's MODEL output,
     just gets the pass-through.
     """
-    _apply_arm1(ed)
     _set_widget(ed.find_node(ID_ANCHOR), ANCHOR_BYPASS_WIDGET_IDX, True, "anchor bypass")
 
 
 def _apply_arm4(ed: WorkflowEditor) -> None:
-    """Arm 4 = Arm 1 + STG warmup flattened.
+    """Arm 4 -- STG warmup flattened.
 
     `STGGuiderAdvanced`'s `cfg_values` + `stg_scale_values` widgets
-    drop from Arm 1's `2, 1.5, 1, 1, 1, 1, 1, 1` (2-step warmup) to
-    flat `1, 1, 1, 1, 1, 1, 1, 1`. Layer-skipping is already
-    disabled by Arm 1's `[9999]` placeholder layer indices, so this
-    flattening reduces the guider to plain `CFGGuider(cfg=1)` in
-    behavior without swapping the node.
+    drop from the baseline's `2, 1.5, 1, 1, 1, 1, 1, 1` (2-step
+    warmup) to flat `1, 1, 1, 1, 1, 1, 1, 1`. Layer-skipping is
+    already disabled by the keeper baseline's `[9999]` placeholder
+    layer indices, so this flattening reduces the guider to plain
+    `CFGGuider(cfg=1)` in behavior without swapping the node.
     """
-    _apply_arm1(ed)
     stg = ed.find_node(ID_STG_GUIDER)
     _set_widget(stg, 3, ARM4_FLAT_TABLE, "stg cfg_values (no warmup)")
     _set_widget(stg, 4, ARM4_FLAT_TABLE, "stg stg_scale_values (no warmup)")
@@ -267,63 +161,25 @@ def _apply_no_rtx(ed: WorkflowEditor) -> None:
 
 
 _DISPATCH = {
-    "arm1": _apply_arm1,
-    "arm2": _apply_arm2,
     "arm3": _apply_arm3,
     "arm4": _apply_arm4,
-    "arm5": _apply_arm5,
     "no_rtx": _apply_no_rtx,
 }
 
 
-def _arm1_widgets_applied(ed: WorkflowEditor) -> bool:
-    """True iff Arm 1's first-pass sigmas + sampler widget edits are in place.
-
-    Arms 1-4 all share this base. Hoisted so each arm's
-    `_already_migrated` branch is its delta-from-Arm-1.
-    """
-    sigmas = ed.find_node(ID_FIRSTPASS_SIGMAS).get("widgets_values") or []
-    sampler = ed.find_node(ID_FIRSTPASS_KSAMPLER).get("widgets_values") or []
-    return (
-        bool(sigmas) and sigmas[0] == CANONICAL_SIGMAS
-        and bool(sampler) and sampler[0] == "euler"
-    )
-
-
 def _already_migrated(ed: WorkflowEditor, arm: str) -> bool:
-    if arm == "arm5":
-        n = ed.find_node(ID_FIRSTPASS_KSAMPLER)
-        wv = n.get("widgets_values") or []
-        return bool(wv) and wv[0] == "euler"
     if arm == "no_rtx":
         return ed.find_node(ID_RTX_VSR).get("mode") == MODE_BYPASS
-    if arm == "arm1":
-        # Check one widget per touched node so a crash mid-application
-        # (between dispatch steps) doesn't short-circuit re-application.
-        anchor = ed.find_node(ID_ANCHOR).get("widgets_values") or []
-        stg = ed.find_node(ID_STG_GUIDER).get("widgets_values") or []
-        return (
-            _arm1_widgets_applied(ed)
-            and len(anchor) > 1 and anchor[1] == ARM1_ANCHOR_CACHE_STEP
-            and len(stg) > 2 and stg[2] == ARM1_STG_SIGMAS
-        )
-    if arm == "arm2":
-        return (
-            _arm1_widgets_applied(ed)
-            and ed.find_node(ID_SIGMAS_EASING).get("mode") == MODE_BYPASS
-        )
     if arm == "arm3":
         anchor = ed.find_node(ID_ANCHOR).get("widgets_values") or []
         return (
-            _arm1_widgets_applied(ed)
-            and len(anchor) > ANCHOR_BYPASS_WIDGET_IDX
+            len(anchor) > ANCHOR_BYPASS_WIDGET_IDX
             and anchor[ANCHOR_BYPASS_WIDGET_IDX] is True
         )
     if arm == "arm4":
         stg = ed.find_node(ID_STG_GUIDER).get("widgets_values") or []
         return (
-            _arm1_widgets_applied(ed)
-            and len(stg) > 4
+            len(stg) > 4
             and stg[3] == ARM4_FLAT_TABLE
             and stg[4] == ARM4_FLAT_TABLE
         )

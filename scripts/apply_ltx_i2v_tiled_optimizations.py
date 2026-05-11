@@ -64,6 +64,30 @@ audio-loop discipline to any single-stage LTX 2.3 I2V pipeline):
      Preview / setnode / dim-derive consumers keep the raw resized
      image.
 
+Phase 3 -- keeper-config promotions from the A/B matrix (2026-05-11
+visual A/B: arm2 selected over arm0/arm1):
+
+  9. Replace the source 14-pt sigma curve on `ManualSigmas #527`
+     with the canonical distilled 9-pt curve from root CLAUDE.md.
+  10. Swap first-pass `KSamplerSelect #520` to `euler`. The source
+      `euler_ancestral` is a distilled-path rule violation; injects
+      stochastic noise the distilled LoRA wasn't trained for.
+  11. Remap `LTXLatentAnchorAware #731.cache_at_step` from 6 to 5
+      so the anchor's matching cache fires at the same sigma slot
+      (~0.91) on the canonical curve that it did at (~0.81) on the
+      source curve.
+  12. Remap `STGGuiderAdvanced #653` sigma list + cfg/stg/rescale/
+      layers widget tables onto the 9-pt curve. 14:13:13:13:14
+      entry layout becomes 9:8:8:8:9. Preserves the 2-step cfg/stg
+      warmup at the top of the curve.
+  13. Remove the RES4LYF `Sigmas Easing #652` node entirely and
+      direct-wire `ManualSigmas #527 -> SamplerCustomAdvanced #510`.
+      Reasoning: RES4LYF is designed for non-distilled pipelines
+      where sigma-curve shape is a free knob. LTX 2.3's distilled
+      LoRA is trained at the canonical 8-step sigmas; warping the
+      curve fights the training. Visual A/B confirmed arm2 (no
+      easing) >= arm0/arm1 on the test render.
+
 Phase 2 -- redundancy / DRY cleanup (no behavioral change to the
 live render path):
 
@@ -140,6 +164,22 @@ ID_FORK_B_FIRST = 719        # first LoRA in fork B (amplifier chain)
 ID_DEAD_SET_SEED = 621       # Set_seed SetNode with no GetNode consumer
 ID_OUTPUT_AUDIO_VOL = 598    # AudioAdjustVolume on output path (widget=0, asymmetric)
 
+# Phase 3 (keeper) node ids.
+ID_MANUAL_SIGMAS = 527       # first-pass ManualSigmas
+ID_KSAMPLER = 520            # first-pass KSamplerSelect
+ID_ANCHOR = 731              # LTXLatentAnchorAware (alias of ID_ANCHOR_731)
+ID_STG_GUIDER = 653          # STGGuiderAdvanced
+ID_SIGMAS_EASING = 652       # RES4LYF Sigmas Easing -- to be removed
+ID_SAMPLER_CUSTOM = 510      # SamplerCustomAdvanced (consumer of the eased curve)
+
+# Canonical distilled curve + STG remap (matches arm1/arm2 from the A/B).
+CANONICAL_SIGMAS = "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"
+KEEPER_STG_CFG = "2, 1.5, 1, 1, 1, 1, 1, 1"
+KEEPER_STG_STG_SCALE = "2, 1.5, 1, 1, 1, 1, 1, 1"
+KEEPER_STG_RESCALE = "1, 1, 1, 1, 1, 1, 1, 1"
+KEEPER_STG_LAYERS = "[9999], [9999], [9999], [9999], [9999], [9999], [9999], [9999], [9999]"
+KEEPER_ANCHOR_CACHE_STEP = 5
+
 REQUIRED_SOURCE_NODES = (
     ID_LAST_LORA_A,
     ID_ANCHOR_731,
@@ -154,7 +194,12 @@ REQUIRED_SOURCE_NODES = (
 
 
 def _already_migrated(ed: WorkflowEditor) -> bool:
-    return bool(ed.find_nodes_by_type("AudioLoopHelperSageAttention"))
+    # Sage = Phase 1 marker; absence of `Sigmas Easing` = Phase 3 marker.
+    # Both required so a draft from before the Phase 3 promotion gets
+    # re-migrated rather than short-circuited.
+    has_sage = bool(ed.find_nodes_by_type("AudioLoopHelperSageAttention"))
+    has_easing = bool(ed.find_nodes_by_type("Sigmas Easing"))
+    return has_sage and not has_easing
 
 
 def _assert_required_nodes_present(ed: WorkflowEditor) -> None:
@@ -361,6 +406,45 @@ def _drop_dead_set_seed(ed: WorkflowEditor) -> None:
     print(f"  removed dead SetNode #{ID_DEAD_SET_SEED} (no GetNode consumes 'seed')")
 
 
+def _apply_keeper_config(ed: WorkflowEditor) -> None:
+    """Phase 3: bake in arm2's wins from the A/B matrix.
+
+    Canonical curve + euler + matched anchor/STG remap + remove the
+    RES4LYF `Sigmas Easing` node entirely. After this Phase 3 step
+    the baseline draft no longer imports RES4LYF; the variants
+    script's `arm1` and `arm2` are now identity-vs-baseline (kept
+    in the dispatch for back-compat but produce no diff).
+    """
+    # Widget edits
+    ed.find_node(ID_MANUAL_SIGMAS)["widgets_values"] = [CANONICAL_SIGMAS]
+    ed.find_node(ID_KSAMPLER)["widgets_values"] = ["euler"]
+    anchor = ed.find_node(ID_ANCHOR)
+    anchor["widgets_values"][1] = KEEPER_ANCHOR_CACHE_STEP
+    stg = ed.find_node(ID_STG_GUIDER)
+    stg["widgets_values"][2] = CANONICAL_SIGMAS
+    stg["widgets_values"][3] = KEEPER_STG_CFG
+    stg["widgets_values"][4] = KEEPER_STG_STG_SCALE
+    stg["widgets_values"][5] = KEEPER_STG_RESCALE
+    stg["widgets_values"][6] = KEEPER_STG_LAYERS
+    print(f"  baked canonical curve + euler + anchor remap + STG remap onto nodes "
+          f"#{ID_MANUAL_SIGMAS}, #{ID_KSAMPLER}, #{ID_ANCHOR}, #{ID_STG_GUIDER}")
+
+    # Remove the Sigmas Easing node and direct-wire its source to its consumer
+    if ed.has_node(ID_SIGMAS_EASING):
+        easing_in_link = ed.find_link_to_slot(ID_SIGMAS_EASING, 0)
+        if easing_in_link is None:
+            raise SystemExit(f"Sigmas Easing #{ID_SIGMAS_EASING} has no sigmas input.")
+        src_node, src_slot = easing_in_link[1], easing_in_link[2]
+        # Capture downstream consumers of the easing output (slot 0).
+        downstream = [(L[3], L[4]) for L in ed.find_links_from(ID_SIGMAS_EASING) if L[2] == 0]
+        ed.remove_node_and_links(ID_SIGMAS_EASING)
+        for tgt, tgt_slot in downstream:
+            ed.add_link(src_node, src_slot, tgt, tgt_slot, "SIGMAS")
+        print(f"  removed `Sigmas Easing` #{ID_SIGMAS_EASING}; "
+              f"direct-wired #{src_node}.SIGMAS -> {len(downstream)} consumer(s) "
+              f"(RES4LYF dep dropped from the pipeline)")
+
+
 def _symmetrize_output_audio_volume(ed: WorkflowEditor) -> None:
     """Set the output-path AudioAdjustVolume to -3 dB (matches preview)."""
     if not ed.has_node(ID_OUTPUT_AUDIO_VOL):
@@ -458,6 +542,9 @@ def _migrate(input_path: Path, output_path: Path, dry_run: bool) -> None:
     _drop_empty_power_lora_loader(ed)
     _drop_dead_set_seed(ed)
     _symmetrize_output_audio_volume(ed)
+
+    # Phase 3 -- keeper-config promotions from the A/B matrix
+    _apply_keeper_config(ed)
 
     ed.save()
     print(f"  wrote {output_path}")

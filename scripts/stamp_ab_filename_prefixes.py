@@ -78,11 +78,8 @@ DRAFTS_DIR = REPO_ROOT / "internal" / "workflows"
 # Filename stem -> arm label used in the output path tree.
 ARM_FROM_STEM: dict[str, str] = {
     "ltx_i2v_tiled_optimized.draft": "arm0",
-    "ltx_i2v_tiled_arm1.draft": "arm1",
-    "ltx_i2v_tiled_arm2.draft": "arm2",
     "ltx_i2v_tiled_arm3.draft": "arm3",
     "ltx_i2v_tiled_arm4.draft": "arm4",
-    "ltx_i2v_tiled_arm5.draft": "arm5",
     "ltx_i2v_tiled_no_rtx.draft": "no_rtx",
 }
 
