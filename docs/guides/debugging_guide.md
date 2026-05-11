@@ -868,6 +868,43 @@ configuration, but it's based on accumulated prior experiments.
 
 ---
 
+## Model swap crash (`'NoneType' object has no attribute 'model_size'`)
+
+**Symptom**: Render fails mid-execution with:
+
+```
+File "comfy/model_management.py", line 563, in model_offloaded_memory
+    return self.model.model_size() - self.model.loaded_size()
+AttributeError: 'NoneType' object has no attribute 'model_size'
+```
+
+May be preceded by `Exception ignored in: <finalize object ...>` from
+`cleanup_models()`.
+
+**Root cause**: ComfyUI core bug. After a large model (e.g. LTX 2.3
+22B at 24 GB) is GC'd, its wrapper in
+`comfy.model_management.current_loaded_models` survives with
+`.model = None`. The next `free_memory()` call walks the list, hits
+the stale entry, crashes computing its size. Most likely when
+session-stale state piles up across multiple renders.
+
+**First fix: restart ComfyUI.** Clears the registry. Then retry the
+render.
+
+**If it recurs across fresh sessions**: wire the `PurgeVRAM` node
+between `SamplerCustomAdvanced` output and the next model-using node
+(typically `LTXVTiledVAEDecode`). It prunes stale wrappers before
+ComfyUI's own cleanup walks them. The node is registered as
+"Purge VRAM (defensive)" under `utility/` in the node picker.
+Pass-through LATENT — wire it inline; no parameters to set.
+
+Not wired into the canonical workflow by default (the underlying
+ComfyUI bug is rare on fresh sessions, and the node touches internals
+we'd rather not depend on permanently). If the bug becomes load-
+bearing for your workflows, ask for the apply-script wiring.
+
+---
+
 ## If you've tried everything and it still doesn't work
 
 Re-read this list top-to-bottom and verify each box is actually

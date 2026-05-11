@@ -2163,6 +2163,98 @@ class LatentFrameCount(io.ComfyNode):
         return io.NodeOutput(pixel_frames, latent_frames)
 
 
+def _purge_stale_loaded_models() -> None:
+    """Prune stale entries from ``comfy.model_management.current_loaded_models``
+    (wrappers whose underlying ``.model`` was GC'd to None) and force a
+    cleanup pass.
+
+    Defensive workaround for a ComfyUI weakref-finalize race where
+    ``free_memory()`` and ``cleanup_models()`` crash with
+    ``AttributeError: 'NoneType' object has no attribute 'model_size'``
+    when walking entries whose model was finalized but the wrapper
+    survived. Surfaces on workflows where a large model (e.g. LTX 2.3
+    22B at 24 GB) gets swapped out and another model needs to load
+    afterwards.
+
+    No-op when ``comfy.model_management`` isn't importable (tests,
+    headless harness). All sub-steps wrapped in try/except so this
+    function never raises into the workflow.
+    """
+    try:
+        import comfy.model_management as mm
+    except ImportError:
+        return
+    try:
+        mm.current_loaded_models[:] = [
+            e for e in mm.current_loaded_models
+            if getattr(e, "model", None) is not None
+        ]
+    except Exception:
+        pass
+    try:
+        mm.cleanup_models()
+    except Exception:
+        pass
+    try:
+        import torch
+        torch.cuda.empty_cache()
+    except Exception:
+        pass
+    try:
+        import gc
+        gc.collect()
+    except Exception:
+        pass
+
+
+class PurgeVRAM(io.ComfyNode):
+    """LATENT pass-through that prunes stale entries from ComfyUI's
+    ``current_loaded_models`` and forces a cleanup pass as a side effect.
+
+    Wire between ``SamplerCustomAdvanced`` output and the next
+    model-using node when you hit the ``AttributeError: 'NoneType'
+    object has no attribute 'model_size'`` crash during model swap.
+    The crash is a ComfyUI core bug (weakref finalize leaves dead
+    entries in ``current_loaded_models``); this node prunes them
+    before the next ``free_memory()`` walk hits the stale entry.
+
+    Not in the canonical workflow by default — splice manually when
+    needed. If the bug becomes load-bearing, we'll wire it via an
+    apply script.
+
+    See ``docs/guides/debugging_guide.md`` "Model swap crash" for
+    symptom + when to use this.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="PurgeVRAM",
+            display_name="Purge VRAM (defensive)",
+            category="utility",
+            description=(
+                "Pass-through LATENT that prunes stale entries from "
+                "comfy.model_management.current_loaded_models and "
+                "calls cleanup. Workaround for the model-swap crash "
+                "(AttributeError on .model_size of a None model)."
+            ),
+            inputs=[
+                io.Latent.Input(
+                    "latent",
+                    tooltip="LATENT pass-through. Cleanup runs as a side effect before returning.",
+                ),
+            ],
+            outputs=[
+                io.Latent.Output("latent", tooltip="Same LATENT, unchanged."),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, latent: dict) -> io.NodeOutput:
+        _purge_stale_loaded_models()
+        return io.NodeOutput(latent)
+
+
 class TrimVideoLatentToAudio(io.ComfyNode):
     """Latent-space companion to ``TrimImageBatchToAudio`` (F14).
 
@@ -3702,6 +3794,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LatentFrameCount,
             TrimVideoLatentToAudio,
             TrimImageBatchToAudio,
+            PurgeVRAM,
             AudioPitchDetect,
             LTXResolutionFromAspect,
             LTXFramePlanner,

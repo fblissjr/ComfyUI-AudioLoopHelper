@@ -66,6 +66,20 @@ This project uses [Semantic Versioning](https://semver.org/).
   registration smoke tests with one call. Three call sites (trim,
   latent_frame_count, run_id_prefix) — the 3rd-site threshold per
   root CLAUDE.md.
+- **`PurgeVRAM` defensive node + helper `_purge_stale_loaded_models`.**
+  LATENT pass-through that prunes stale entries from ComfyUI's
+  `current_loaded_models` registry and calls `cleanup_models()` +
+  `torch.cuda.empty_cache()` + `gc.collect()` as a side effect.
+  Workaround for the model-swap crash
+  (`AttributeError: 'NoneType' object has no attribute 'model_size'`)
+  that surfaces when a large model (LTX 2.3 22B at 24 GB) gets swapped
+  out and its wrapper survives with `.model = None`. ComfyUI's
+  `free_memory()` walk crashes on the stale entry; this node prunes
+  first. Not wired into the canonical workflow — splice manually
+  between `SamplerCustomAdvanced` output and the next model-using node
+  when the crash recurs across fresh ComfyUI sessions. Symptom +
+  remediation documented at `docs/guides/debugging_guide.md` "Model
+  swap crash" section.
 - **CLI helper `scripts/promote_latent_for_upscale.py`.** Finds the
   most recent `segment_*.latent` saved by a loop's bypassed-SaveLatent
   toggle and copies it to ComfyUI's input dir under a deterministic
