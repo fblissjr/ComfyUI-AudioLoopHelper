@@ -1,12 +1,21 @@
-Last updated: 2026-04-24
+Last updated: 2026-05-11
 
 # Experimental features
 
-Work-in-progress features. Each has a working implementation and a hands-on tutorial, but is **not production-validated**. Use at your own risk; gates for promotion to `docs/` + `example_workflows/` are listed per feature.
+Work-in-progress features. Each has a working implementation, but is **not production-validated**. Use at your own risk; gates for promotion to `docs/` + `example_workflows/` are listed per feature.
 
-Corresponding workflow files live under `example_workflows/experimental/`. They are checked into git (unlike `internal/scratch/`) so users can download + run them.
+Corresponding workflow files live under `example_workflows/experimental/`. They are checked into git (unlike `internal/scratch/`) so users can download + run them. Experimental research-grade *nodes* (registered with ComfyUI but not wired into default workflows) live in `nodes.py` and are documented here.
 
 ## Current experiments
+
+### Per-frame initial noise amplification
+
+- **Doc:** [`noise_frame_amplifier.md`](./noise_frame_amplifier.md)
+- **Node:** `LTXNoiseFrameAmplifier` (`nodes.py`, registered in `AudioLoopHelperExtension`)
+- **Tests:** `tests/test_ltx_noise_frame_amplifier.py` (7 behavioral)
+- **Hypothesis:** multiplying the first N temporal frames of the sampler's initial noise by `k > 1` is equivalent to a per-frame sigma boost, pushing the model out of its "ease into motion" temporal prior on i2v init-anchored clips so meaningful motion starts earlier.
+- **Gate for promotion out of experimental:** 3+ seed A/B showing reduced filler with retained frame-0 init-image fidelity on `amplifier=1.5` vs. `amplifier=1.0`. Quantitative motion-start signal (e.g. optical-flow magnitude in early frames) preferred but not required.
+- **Status:** working node, full unit-test coverage, no multi-seed visual A/B yet.
 
 ### Spectrogram-as-reference IC-LoRA (Phase 2.0)
 
