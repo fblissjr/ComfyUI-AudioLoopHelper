@@ -51,6 +51,15 @@ Arms implemented:
   "not much," the anchor + its reference-image energy map become
   optional for this pipeline shape.
 
+- arm4 (curve A/B, STG warmup ablation): Arm 1 with
+  `STGGuiderAdvanced` cfg + stg_scale value lists flattened to
+  all-1s (kills the 2-step `2, 1.5, ...` warmup at the curve top).
+  The STG layer-skipping mechanism is already disabled by the
+  `[9999]` placeholder indices, so flat cfg/stg makes the guider
+  behave as plain `CFGGuider(cfg=1)` without needing to swap the
+  node out. Tests "is the 2-step CFG warmup at sigma=1.0 doing
+  any real work?"
+
 Arms 2-4 of the curve matrix (drop easing / drop anchor / drop STG
 warmup) plus arm `no_ltxv_upsample` (the deeper U-C topology
 surgery) are designed in the matrix doc; add when the user wants
@@ -106,6 +115,12 @@ ARM1_STG_STG_SCALE = "2, 1.5, 1, 1, 1, 1, 1, 1"
 ARM1_STG_RESCALE = "1, 1, 1, 1, 1, 1, 1, 1"
 ARM1_STG_LAYERS = "[9999], [9999], [9999], [9999], [9999], [9999], [9999], [9999], [9999]"
 
+# Arm 4: flat-1 cfg + stg_scale tables. With layer-skipping already
+# disabled by ARM1_STG_LAYERS, this drops the only remaining warmup
+# signal at the top of the curve. Guider then behaves like plain
+# CFGGuider(cfg=1) without node replacement.
+ARM4_FLAT_TABLE = "1, 1, 1, 1, 1, 1, 1, 1"
+
 # Anchor cache step remap. Original `cache_at_step=6` against the
 # 14-pt curve fires at sigma=0.812. Closest higher-sigma slot on the
 # canonical 9-pt curve is idx 5 (sigma=0.909375); idx 6 is 0.725.
@@ -124,6 +139,7 @@ _OUTPUTS: dict[str, str] = {
     "arm1": "internal/workflows/ltx_i2v_tiled_arm1.draft.json",
     "arm2": "internal/workflows/ltx_i2v_tiled_arm2.draft.json",
     "arm3": "internal/workflows/ltx_i2v_tiled_arm3.draft.json",
+    "arm4": "internal/workflows/ltx_i2v_tiled_arm4.draft.json",
     "arm5": "internal/workflows/ltx_i2v_tiled_arm5.draft.json",
     "no_rtx": "internal/workflows/ltx_i2v_tiled_no_rtx.draft.json",
 }
@@ -220,6 +236,22 @@ def _apply_arm3(ed: WorkflowEditor) -> None:
     _set_widget(ed.find_node(ID_ANCHOR), ANCHOR_BYPASS_WIDGET_IDX, True, "anchor bypass")
 
 
+def _apply_arm4(ed: WorkflowEditor) -> None:
+    """Arm 4 = Arm 1 + STG warmup flattened.
+
+    `STGGuiderAdvanced`'s `cfg_values` + `stg_scale_values` widgets
+    drop from Arm 1's `2, 1.5, 1, 1, 1, 1, 1, 1` (2-step warmup) to
+    flat `1, 1, 1, 1, 1, 1, 1, 1`. Layer-skipping is already
+    disabled by Arm 1's `[9999]` placeholder layer indices, so this
+    flattening reduces the guider to plain `CFGGuider(cfg=1)` in
+    behavior without swapping the node.
+    """
+    _apply_arm1(ed)
+    stg = ed.find_node(ID_STG_GUIDER)
+    _set_widget(stg, 3, ARM4_FLAT_TABLE, "stg cfg_values (no warmup)")
+    _set_widget(stg, 4, ARM4_FLAT_TABLE, "stg stg_scale_values (no warmup)")
+
+
 def _apply_no_rtx(ed: WorkflowEditor) -> None:
     """Bypass `RTXVideoSuperResolution`. ComfyUI's mode=4 passes the IMAGE
     input through to the IMAGE output since they share type, so no
@@ -238,6 +270,7 @@ _DISPATCH = {
     "arm1": _apply_arm1,
     "arm2": _apply_arm2,
     "arm3": _apply_arm3,
+    "arm4": _apply_arm4,
     "arm5": _apply_arm5,
     "no_rtx": _apply_no_rtx,
 }
@@ -283,6 +316,18 @@ def _already_migrated(ed: WorkflowEditor, arm: str) -> bool:
             and bool(sampler) and sampler[0] == "euler"
             and len(anchor) > ANCHOR_BYPASS_WIDGET_IDX
             and anchor[ANCHOR_BYPASS_WIDGET_IDX] is True
+        )
+    if arm == "arm4":
+        # Arm 4 = Arm 1 + STG cfg/stg_scale flattened.
+        sigmas = ed.find_node(ID_FIRSTPASS_SIGMAS).get("widgets_values") or []
+        sampler = ed.find_node(ID_FIRSTPASS_KSAMPLER).get("widgets_values") or []
+        stg = ed.find_node(ID_STG_GUIDER).get("widgets_values") or []
+        return (
+            bool(sigmas) and sigmas[0] == CANONICAL_SIGMAS
+            and bool(sampler) and sampler[0] == "euler"
+            and len(stg) > 4
+            and stg[3] == ARM4_FLAT_TABLE
+            and stg[4] == ARM4_FLAT_TABLE
         )
     raise SystemExit(f"Unknown arm: {arm!r}")
 
