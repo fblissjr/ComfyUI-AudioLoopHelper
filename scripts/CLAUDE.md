@@ -35,6 +35,7 @@ Every `apply_*.py` script ships with:
 - **`require_nodes` pre-flight guards** — refuse with an actionable message when expected upstream nodes are missing.
 - **Pre-flight chaining** — when one migration depends on another, detect the prerequisite's signature and refuse with "Run scripts/apply_<X>.py first." Reference: `apply_iclora_video_reference.py` refuses if `#1625/#1626/#1627` are still present (Step 0 strip unrun).
 - **Don't stash revert metadata as keys on workflow JSON nodes/groups** (e.g. `_X_pre`). The keys persist into shipped JSON on apply. For revert: use hardcoded canonical defaults (legacy shapes are stable across shipped variants); for non-trivial dynamic state, a sidecar at `internal/.apply_state/<script>.json`.
+- **Widget defaults that DROP user content must be opt-in, not opt-out.** The 2026-05-10 `#567 TrimAudioDuration [start_index=5, duration=300]` default ate the first 5 seconds of every song silently because the user had to notice the widget to disable it. When defining a new node or setting widget defaults via apply scripts, ANY default that removes/clips/transforms user input should default to a no-op (`start_index=0`, `strength=0`, `bypass=True` / `mode=4`). Make destructive behavior require explicit user opt-in. Footgun-by-default eats render time + user trust.
 
 **Scaffold new scripts from `scripts/templates/`**:
 - `apply_script_all_workflows.py` — in-place edits across `example_workflows/`.
