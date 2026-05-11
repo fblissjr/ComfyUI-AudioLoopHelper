@@ -2,16 +2,37 @@
 
 Last updated: 2026-05-11
 
-Stamps per-arm `VHS_VideoCombine.filename_prefix` widgets on every
-LTX 2.3 I2V tiled-sampler A/B draft under `internal/workflows/`, so
-each arm's renders land in its own subdirectory under ComfyUI's
-`output/` (or `temp/` for the first-pass preview).
+Stamps per-arm filename prefixes on every LTX 2.3 I2V tiled-sampler
+A/B draft under `internal/workflows/`, so each arm's renders land
+in its own subdirectory under ComfyUI's `output/` (or `temp/` for
+the first-pass preview).
+
+This has to handle TWO mechanisms because the source workflow uses
+both:
+
+1. `VHS_VideoCombine.filename_prefix` widget. The default path
+   when there's no upstream wiring.
+
+2. `RunIdPrefix` (F15 from this repo). When present, its
+   `video_prefix` STRING output is wired INTO each
+   `VHS_VideoCombine.filename_prefix` slot, overriding the widget.
+   ComfyUI honors the input wire when present and ignores the
+   widget. So if `RunIdPrefix` is in the workflow, its
+   `workflow_name` widget is what actually determines the output
+   directory -- not the VHS widget.
+
+The optimize script's source workflow has `RunIdPrefix` (added by
+`scripts/apply_run_id_layout.py` upstream), so all seven A/B drafts
+inherit it. The stamper handles both shapes: if a `RunIdPrefix`
+node exists and feeds `VHS_VideoCombine.filename_prefix`, the
+stamper writes the arm into `RunIdPrefix.workflow_name`; otherwise
+it falls back to stamping the VHS widget directly.
 
 Why a separate step: the variants script produces drafts by copying
 the optimized baseline and editing a few topology / widget knobs.
-The baseline carries the source workflow's original filename_prefix
-strings, so without this stamper every arm would write into the
-same folder, overwriting each other.
+The baseline carries the source workflow's original prefix strings
+and a single `RunIdPrefix` value, so without this stamper every
+arm would write into the same folder, overwriting each other.
 
 Mapping (per draft, both `VHS_VideoCombine` nodes):
 
@@ -67,21 +88,56 @@ ARM_FROM_STEM: dict[str, str] = {
 
 ROOT_FOLDER = "ltx_i2v_tiled"
 
-# Original prefix strings on the unstamped baseline. Used by --revert to
-# restore the source workflow's filenames. Identified by their save_output
-# value (preview is False, final is True) rather than by node id.
+# Original prefix strings + RunIdPrefix workflow_name on the unstamped
+# baseline. Used by --revert.
 ORIGINAL_PREVIEW_PREFIX = "10E_firstpass"
 ORIGINAL_FINAL_PREFIX = "10/10E_9-16_I2V"
+ORIGINAL_RUN_ID_WORKFLOW_NAME = "ltx_i2v_tiled_optimized.draft"
 
 
-def _prefix_for(arm: str, save_output: bool) -> str:
+def _vhs_prefix_for(arm: str, save_output: bool) -> str:
     leaf = "output" if save_output else "firstpass_preview"
     return f"{ROOT_FOLDER}/{arm}/{leaf}"
+
+
+def _run_id_workflow_name_for(arm: str) -> str:
+    return f"{ROOT_FOLDER}_{arm}"
+
+
+def _vhs_filename_prefix_is_wired(node: dict) -> bool:
+    for inp in node.get("inputs", []) or []:
+        if inp.get("name") == "filename_prefix" and inp.get("link") is not None:
+            return True
+    return False
 
 
 def _stamp_one(path: Path, arm: str, dry_run: bool, revert: bool) -> bool:
     ed = WorkflowEditor(path)
     changed = False
+
+    # Pass 1: RunIdPrefix. If present, its widget[0] (workflow_name)
+    # is the path key that ComfyUI uses for the output folder.
+    for n in ed.wf["nodes"]:
+        if n.get("type") != "RunIdPrefix":
+            continue
+        wv = n.get("widgets_values")
+        if not isinstance(wv, list) or not wv:
+            continue
+        target = ORIGINAL_RUN_ID_WORKFLOW_NAME if revert else _run_id_workflow_name_for(arm)
+        if wv[0] == target:
+            continue
+        if dry_run:
+            print(f"  [{path.name}] #{n['id']} RunIdPrefix.workflow_name: {wv[0]!r} -> {target!r}  (dry-run)")
+        else:
+            wv[0] = target
+            print(f"  [{path.name}] #{n['id']} RunIdPrefix.workflow_name: {wv[0]!r} (was {ORIGINAL_RUN_ID_WORKFLOW_NAME!r})")
+            wv[0] = target
+        changed = True
+
+    # Pass 2: VHS_VideoCombine.filename_prefix. Only the widget when the
+    # `filename_prefix` input is unwired -- otherwise the upstream
+    # RunIdPrefix output takes effect and the widget is dead. We still
+    # write the widget for visual consistency / revert safety.
     for n in ed.wf["nodes"]:
         if n.get("type") != "VHS_VideoCombine":
             continue
@@ -92,16 +148,18 @@ def _stamp_one(path: Path, arm: str, dry_run: bool, revert: bool) -> bool:
         if revert:
             target = ORIGINAL_FINAL_PREFIX if save_output else ORIGINAL_PREVIEW_PREFIX
         else:
-            target = _prefix_for(arm, save_output)
+            target = _vhs_prefix_for(arm, save_output)
         current = wv.get("filename_prefix")
         if current == target:
             continue
+        wired_note = " (wired -- widget is dead path)" if _vhs_filename_prefix_is_wired(n) else ""
         if dry_run:
-            print(f"  [{path.name}] #{n['id']} filename_prefix: {current!r} -> {target!r}  (dry-run)")
+            print(f"  [{path.name}] #{n['id']} filename_prefix: {current!r} -> {target!r}{wired_note}  (dry-run)")
         else:
             wv["filename_prefix"] = target
-            print(f"  [{path.name}] #{n['id']} filename_prefix: {current!r} -> {target!r}")
+            print(f"  [{path.name}] #{n['id']} filename_prefix: {current!r} -> {target!r}{wired_note}")
         changed = True
+
     if changed and not dry_run:
         ed.save()
     return changed
@@ -146,7 +204,8 @@ def main() -> None:
         print(f"\nWould modify {touched} draft(s). Re-run without --dry-run to apply.")
     else:
         print(f"\nStamped {touched} draft(s).")
-        print(f"After rendering, find outputs under `<comfy>/output/{ROOT_FOLDER}/<arm>/` and previews under `<comfy>/temp/{ROOT_FOLDER}/<arm>/`.")
+        print(f"After rendering, find outputs at `<comfy_output>/{ROOT_FOLDER}_<arm>/<TIMESTAMP>_<NNNNN>...`.")
+        print(f"Mapping: arm0 -> {ROOT_FOLDER}_arm0, arm1 -> {ROOT_FOLDER}_arm1, ..., no_rtx -> {ROOT_FOLDER}_no_rtx.")
 
 
 if __name__ == "__main__":
