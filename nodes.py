@@ -12,6 +12,7 @@ for generating full-length music videos with LTX 2.3.
 import gc
 import math
 import re
+import warnings
 from collections import OrderedDict
 from contextlib import nullcontext
 from typing import NamedTuple
@@ -2183,28 +2184,27 @@ def _purge_stale_loaded_models() -> None:
     try:
         import comfy.model_management as mm
     except ImportError:
-        return
+        return  # expected when running under pytest/headless harness
     try:
         mm.current_loaded_models[:] = [
             e for e in mm.current_loaded_models
             if getattr(e, "model", None) is not None
         ]
-    except Exception:
-        pass
+    except Exception as e:
+        warnings.warn(f"PurgeVRAM: stale-prune failed: {e!r}", stacklevel=2)
     try:
         mm.cleanup_models()
-    except Exception:
-        pass
+    except Exception as e:
+        warnings.warn(f"PurgeVRAM: cleanup_models failed: {e!r}", stacklevel=2)
     try:
         import torch
         torch.cuda.empty_cache()
-    except Exception:
-        pass
+    except Exception as e:
+        warnings.warn(f"PurgeVRAM: empty_cache failed: {e!r}", stacklevel=2)
     try:
-        import gc
         gc.collect()
-    except Exception:
-        pass
+    except Exception as e:
+        warnings.warn(f"PurgeVRAM: gc.collect failed: {e!r}", stacklevel=2)
 
 
 class PurgeVRAM(io.ComfyNode):

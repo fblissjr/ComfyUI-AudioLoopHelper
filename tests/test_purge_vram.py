@@ -72,8 +72,10 @@ def test_helper_survives_cleanup_models_raising(fake_mm):
         raise RuntimeError("simulated ComfyUI internals crash")
     fake_mm.cleanup_models = _boom
     fake_mm.current_loaded_models = [_Live()]
-    # must not raise
-    _purge_stale_loaded_models()
+    # must not raise into the workflow — surface as a warning instead so
+    # the failure is visible without breaking the render.
+    with pytest.warns(UserWarning, match="cleanup_models failed"):
+        _purge_stale_loaded_models()
     # state survived
     assert len(fake_mm.current_loaded_models) == 1
 
