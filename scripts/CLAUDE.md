@@ -1,6 +1,6 @@
 # scripts/ — apply scripts, audit, utilities
 
-Last updated: 2026-05-07
+Last updated: 2026-05-10
 
 This subtree holds workflow-mutation scripts (`apply_*.py`), workflow validators (`audit_workflows.py`, `validate_docs_consistency.py`, `analyze_workflow_dag.py`, `trace_node_source.py`), the canonical edit utility (`workflow_utils.py`), audio analysis tools, and templates. Loads only when Claude is operating inside `scripts/`. Root project rules: `../CLAUDE.md`. Governance policy: `../.claude/CLAUDE.md`.
 
@@ -125,7 +125,7 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 
 ## Inventory (current scripts/, post-2026-05-05 cleanup)
 
-63 scripts grouped by purpose. Each row: **script** — purpose · *primary callers*. Scripts with **no callers** are leaf utilities (CLI-invoked directly or emergency fallbacks). Archive entries: `scripts/archive/CLAUDE.md`.
+74 scripts (+ 3 helpers under `scripts/_helpers/`) grouped by purpose. Each row: **script** — purpose · *primary callers*. Scripts with **no callers** are leaf utilities (CLI-invoked directly or emergency fallbacks). Archive entries: `scripts/archive/CLAUDE.md`.
 
 ### Core editing + audit (always-live foundations)
 
@@ -163,8 +163,8 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 | Script | Purpose · callers |
 |---|---|
 | `build_keyframe_workflow.py` | Build keyframe-conditioned workflow from latent base · `debug_tools.md` |
-| `build_seam_refinement_workflow.py` | Build post-loop seam-zone refinement workflow · CLI-only (just shipped 2026-05-05) |
-| `build_upscale_workflow.py` | Build post-loop spatial-upscale workflow · `docs/README.md`, `debug_tools.md` |
+| `build_seam_refinement_workflow.py` | Build post-loop seam-zone refinement workflow. Ingress migrated 2026-05-10 from `VHS_LoadVideo + VAEEncode` (OOM at 24 GB) to `LoadLatent + LoadAudio`; sizes empty audio latent via `LatentFrameCount`. Chain `apply_trim_image_batch_to_audio.py` + `apply_run_id_layout.py` after rebuild · `docs/guides/upscale_guide.md` |
+| `build_upscale_workflow.py` | Build post-loop spatial-upscale workflow. Same ingress migration 2026-05-10 — reads the loop's assembled `.latent` directly (~855 MB) instead of decoding the mp4 (~16 GB pixel batch). 27 nodes / 32 links. Pre-step: `apply_run_id_layout.py` on the loop workflow + toggle SaveLatent in UI · `docs/README.md`, `docs/guides/upscale_guide.md`, `debug_tools.md` |
 
 ### Apply scripts — sigma chain + sampler (4)
 
