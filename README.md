@@ -69,7 +69,7 @@ This project coordinates with two kinds of sister repos:
 | Repo | Bucket | Role |
 |---|---|---|
 | [fblissjr/SageAttention-ada](https://github.com/fblissjr/SageAttention-ada) | Sister fork | SageAttention fork with mask-aware routing tuned for LTX 2.3 cross-attention (active; recommended on Ada — RTX 4090) |
-| [fblissjr/audio-loop-lab](https://github.com/fblissjr/audio-loop-lab) | Companion umbrella | Workload glue across upstream libs — torchao filter functions for the LTX DiT, cross-library bench harness (scaffold pending) |
+| [fblissjr/comfy-workbench](https://github.com/fblissjr/comfy-workbench) | Companion umbrella | Cross-workload meta-harness: shared Claude Code conventions, agents, skills, templates, apply-script + audit-pair protocol, CLAUDE.md governance, cross-repo memo channels (bootstrap phase) |
 
 The split is by upstream lineage: **forks** patch an upstream library's internals (small surface, rebase tax accepted); **umbrellas** build *on top of* upstream libraries (no lineage, free to grow modularly).
 

@@ -1,6 +1,6 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-05-07
+Last updated: 2026-05-10
 
 ComfyUI nodes that automate loop timing + audio analysis for full-length music video generation with LTX 2.3. Core pattern: `AudioLoopController` drives stride from integer latent counts, audio is frozen via `noise_mask=0`, prompts pre-encoded once outside the loop (CLIP must never enter the loop body). **Start here:** `docs/architecture_overview.md`; task-first nav at `docs/README.md`.
 
@@ -39,6 +39,8 @@ Runtime files: `nodes.py` (core loop), `nodes_analysis.py` (torchaudio audio ana
 Core nodes (per-node role + wiring in each class's docstring; full reference at `docs/reference/ltx23_model_reference.md`):
 
 - **Loop spine**: `AudioLoopController`, `LoopIterationStamp`, `IterationCleanup`, `AudioLoopPlanner`, `AudioDuration`
+- **Output trim** (eliminates silence-at-end from fixed-stride overshoot): `TrimImageBatchToAudio` (F14, image-space post-VAE), `TrimVideoLatentToAudio` (latent-space pre-VAE; A/B staged 2026-05-10). Postmortem: `internal/analysis/loop_audio_overshoot_analysis.md` (private).
+- **Output routing**: `RunIdPrefix` (F15, per-render output folder), `LatentFrameCount` (sizes empty audio latent from loaded video latent for the upscale + seam workflows)
 - **Prompt schedule**: `TimestampPromptScheduleBatchEncode` + `ConditioningSelectByIteration` (current) / `TimestampPromptSchedule` + `CachedTextEncode` (legacy; don't wire in loop body)
 - **Keyframe schedule**: `KeyframeLatentScheduleBatchEncode` + `LatentSelectByIteration` (current — VAE-encodes once outside loop) / `KeyframeImageSchedule` + `ImageBlend` (legacy; per-iter VAE)
 - **Latent ops**: `LatentContextExtract`, `LatentOverlapTrim`, `LatentTemporalMask` (retake; `edge_taper_seconds` for soft boundary), `LatentSeamZoneMask` (multi-band mask centered on iteration boundaries — pairs with `scripts/diagnose_overlap_seams.py`)
@@ -133,6 +135,8 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **Loop iterations**: top-level `VAEEncode → subgraph slot 8 → #1519 LTXVAddLatentGuide latent_idx=-1`. Init encoded ONCE.
 - **F2 + F3 are MANDATORY symmetry rules** for the init-image path: both initial and loop branches share the same `LTXVPreprocess(img_compression=18)` output (F2); loop `CFGGuider` positive/negative flow through `LTXVCropGuides` (F3). Skipping either is the photoreal-drift / identity-drift footgun. Full trace + apply scripts: `docs/reference/pipeline_flow_latent.md`.
 - **F12 video-reference IC-LoRA** (companion to F2/F3): IC-LoRA guide inside the subgraph between `#1519` and the F3 cropguides chain; F2/F3 symmetry rules extend to the ref-video chain. F2/F3 background: `docs/reference/pipeline_flow_latent.md`. Baked into the canonical latent.json (bypassed by default; un-bypass loader + guide + ref-video to enable). Design record: `scripts/archive/apply_iclora_video_reference.py`. Decisions: `internal/ic_lora_assessment.md` D19–D23 (private clone only).
+- **F14 silence-at-end trim**: every active `VHS_VideoCombine.images` is fed by `TrimImageBatchToAudio` (`apply_trim_image_batch_to_audio.py`). Without it the saved mp4 ends with 4-10s of silence — fixed-stride iter math overshoots audio length by up to `window − stride` seconds, and ffmpeg `-shortest` doesn't truncate `-c:v copy` streams. Latent-space companion (`TrimVideoLatentToAudio`) is staged A/B in `internal/scratch/`. Postmortem: `internal/analysis/loop_audio_overshoot_analysis.md` (private clone only).
+- **F15 per-render output folders**: every active `VHS_VideoCombine.filename_prefix` is fed by `RunIdPrefix` (`apply_run_id_layout.py`). Outputs cluster under `<output>/<workflow_name>/<timestamp>/`. WARN-level. Same apply script adds a bypassed `SaveLatent` toggle wired to `LatentConcat #1605` for the LoadLatent upscale chain — user toggles `mode=0` in the UI to capture, back to `mode=4` to disable. User guide: `docs/guides/upscale_guide.md`.
 - **i2v init-image resize precision matters.** Single-pass lanczos at >2× linear reduction aliases (model reads as motion cues → spurious zoom/dolly); naive multi-stage PIL-backed lanczos stacks float32→uint8 quantization rounds (banding noise → same motion-cue effect). `LTXSmartImageResize` solves both: stages adaptively, uses bicubic+antialias for intermediates and lanczos only at the final stage. Stage planner: `nodes._compute_resize_stages`. Postmortem: `internal/analysis/smart_resize_quantization_postmortem.md` (private clone only).
 - **`first_frame_guide_strength` (`FloatConstant #1269`) is the per-iter init-anchor strength** for `LTXVAddLatentGuide #1519`. Default `1.0` = max identity stability, minimal motion freedom. Lower for expressivity at the cost of cross-iter drift: `0.5` soft anchor, `0.3` visible drift, `0.0` no anchor.
 
@@ -155,7 +159,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **Check sibling-session backlogs (`internal/design/*_backlog.md`) before executing stale PLAN items** that touch defaults.
 - **Project-level `settings.json` hook config is loaded once at session start** — deleting a hook script mid-session leaves the cached config trying to run a missing file, blocking every Write/Edit until session restart. Workaround: use Bash for post-deletion edits.
 - **Marketplace plugin cache lags behind merged plugin changes.** To pick up freshly-merged plugin changes immediately, re-run the plugin's `install-git-hooks.sh` from a workspace clone of the plugin repo.
-- **Cross-repo coordination**: sister repos split two ways — sister fork (current: `sage-fork`, patches an upstream library) vs companion umbrella (`audio-loop-lab`, workload glue across upstream libs; scaffold per spec). Taxonomy + bootstrap + decision table: `internal/design/sister_repo_taxonomy.md` (private clone only). Bilateral memo channel: `cross-repo-handoff` skill.
+- **Cross-repo coordination**: sister repos split two ways — sister fork (current: `sage-fork`, patches an upstream library) vs companion umbrella (`comfy-workbench`, cross-workload meta-harness + glue). Taxonomy + bootstrap + decision table: `internal/design/sister_repo_taxonomy.md` (private clone only). Bilateral memo channel: `cross-repo-handoff` skill.
 
 ## Documentation conventions
 
@@ -186,7 +190,7 @@ Subtree CLAUDE.md files (auto-loaded when working in that subtree):
 
 Internal (gitignored): `internal/PLAN.md`, `internal/TODO.md`, `internal/ic_lora_assessment.md`, `internal/design/*.md` (long-term designs), `internal/autoresearch/`, `internal/scripts/` (out-of-repo deploy sources), `internal/postmortem_*.md`, `internal/prompts/`, `internal/analysis/`, `internal/log/log_YYYY-MM-DD.md` (session logs).
 
-## Pending review (last drained: 2026-05-04)
+## Pending review (last drained: 2026-05-10)
 
 <!--
 Capture-then-review staging area. New findings (via `#`-key or otherwise)
