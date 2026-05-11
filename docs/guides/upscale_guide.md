@@ -11,8 +11,8 @@ Workflow: `internal/workflows/upscale_loop_output.draft.json` (gated
 on first-render validation before promotion to `example_workflows/`).
 Built by: `scripts/build_upscale_workflow.py`. Re-running the build
 script re-emits the draft from constants; chain
-`scripts/apply_trim_image_batch_to_audio.py` afterward to splice the
-loop-audio-overshoot fix back in.
+`scripts/apply_trim_video_latent_to_audio.py` afterward to splice the
+F14 latent-trim back in.
 
 ## When to use this
 
@@ -135,8 +135,8 @@ ffprobe -v error -show_entries stream=codec_type,duration -of default=noprint_wr
 ```
 
 Expected: `container.duration == video.duration == audio.duration`
-exactly. If video exceeds audio, the `TrimImageBatchToAudio` node
-(F14) isn't wired — re-run `apply_trim_image_batch_to_audio.py`.
+exactly. If video exceeds audio, the `TrimVideoLatentToAudio` node
+(F14) isn't wired — re-run `apply_trim_video_latent_to_audio.py`.
 
 ## Topology summary
 
@@ -153,7 +153,7 @@ SamplerCustomAdvanced (3-step partial refine, σ-tail
   ↓
 LTXVSeparateAVLatent → LTXVCropGuides → LTXVTiledVAEDecode (1664×960)
   ↓
-TrimImageBatchToAudio (clip to floor(audio.duration * fps))
+TrimVideoLatentToAudio (clip latent so VAE decode emits ≤ floor(audio.duration * fps) frames)
   ↓
 VHS_VideoCombine (mp4 + audio from LoadAudio)
 ```
@@ -188,15 +188,15 @@ Drop step count by editing `ManualSigmas #19`'s widget.
 | `LoadLatent` widget shows no files | `.latent` not in ComfyUI's input dir | `cp` it there; see Step 3 |
 | OOM at sampler step 1 | Model-chain patches missing | Re-run `build_upscale_workflow.py` to regenerate the draft |
 | OOM at VAE decode | Tiled decode set to single-tile on a small card | Edit `LTXVTiledVAEDecode #25` widgets `[1,1,1]` → `[2,2,1]` |
-| Saved mp4 has silence at end | `TrimImageBatchToAudio` not wired | `apply_trim_image_batch_to_audio.py` |
+| Saved mp4 has silence at end | `TrimVideoLatentToAudio` not wired | `apply_trim_video_latent_to_audio.py` |
 | Output looks bilinear-resized, not refined | `LTXVImgToVideoConditionOnly` somehow back in the topology | Re-run `build_upscale_workflow.py`; see `internal/analysis/i2v_v5_workflow_assessment.md` Issue A |
-| Upscaled video has trailing seconds of stalled visuals | Loop-side overshoot (audio latent was truncated for those frames) | Image-batch trim clips them at the output; if you see them in the saved mp4, the F14 trim isn't applied (see row 4) |
+| Upscaled video has trailing seconds of stalled visuals | Loop-side overshoot (audio latent was truncated for those frames) | Latent trim clips them before VAE decode; if you see them in the saved mp4, the F14 trim isn't applied (see row 4) |
 
 ## References
 
 - `internal/design/upscale_workflow_design.md` — design rationale + sigma profile sourcing
-- `internal/analysis/loop_audio_overshoot_analysis.md` — silence-at-end postmortem (the F14 trim that backstops this guide)
+- `internal/analysis/loop_audio_overshoot_analysis.md` — silence-at-end postmortem (the F14 latent-trim that backstops this guide; migrated 2026-05-10 from image-space)
 - `internal/analysis/i2v_v5_workflow_assessment.md` — `LTXVImgToVideoConditionOnly` trap (don't re-introduce)
 - `scripts/build_upscale_workflow.py` — re-generates the draft from constants
 - `scripts/apply_run_id_layout.py` — installs the per-render folder layout + SaveLatent toggle
-- `scripts/apply_trim_image_batch_to_audio.py` — F14 audit pair
+- `scripts/apply_trim_video_latent_to_audio.py` — F14 audit pair

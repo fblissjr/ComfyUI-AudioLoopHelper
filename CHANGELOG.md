@@ -6,6 +6,23 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **F14 audit invariant migrated from image-space to latent-space.**
+  `apply_trim_image_batch_to_audio.py` + `_ab` variant retired
+  (deleted). Production replacement: `apply_trim_video_latent_to_audio.py`
+  splices `TrimVideoLatentToAudio` between the assembled video latent
+  and the final VAE decode. Same correctness contract (saved mp4 has
+  audio-length video), lower VAE decode VRAM/time since the decoder
+  no longer materializes the overshoot frames. A/B render on
+  2026-05-10 confirmed user-visible output is identical (sub-frame
+  trim-boundary delta, < 25ms across both arms). Audit invariant
+  renamed `trim_image_batch_to_audio_present` →
+  `trim_video_latent_to_audio_present` (still F14, different semantic
+  check). 27 workflows updated (10 example + 17 internal drafts;
+  2 third-party reference files skipped). The image-space
+  `TrimImageBatchToAudio` node remains in `nodes.py` for users who
+  prefer post-decode trimming; it's just unwired from canonical.
+
 ### Added
 - **Silence-at-end fix: `TrimImageBatchToAudio` node (F14).** New node
   clips the assembled IMAGE batch to `floor(audio.duration * fps)`

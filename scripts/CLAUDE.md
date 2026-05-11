@@ -163,7 +163,7 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 | Script | Purpose · callers |
 |---|---|
 | `build_keyframe_workflow.py` | Build keyframe-conditioned workflow from latent base · `debug_tools.md` |
-| `build_seam_refinement_workflow.py` | Build post-loop seam-zone refinement workflow. Ingress migrated 2026-05-10 from `VHS_LoadVideo + VAEEncode` (OOM at 24 GB) to `LoadLatent + LoadAudio`; sizes empty audio latent via `LatentFrameCount`. Chain `apply_trim_image_batch_to_audio.py` + `apply_run_id_layout.py` after rebuild · `docs/guides/upscale_guide.md` |
+| `build_seam_refinement_workflow.py` | Build post-loop seam-zone refinement workflow. Ingress migrated 2026-05-10 from `VHS_LoadVideo + VAEEncode` (OOM at 24 GB) to `LoadLatent + LoadAudio`; sizes empty audio latent via `LatentFrameCount`. Chain `apply_trim_video_latent_to_audio.py` + `apply_run_id_layout.py` after rebuild · `docs/guides/upscale_guide.md` |
 | `build_upscale_workflow.py` | Build post-loop spatial-upscale workflow. Same ingress migration 2026-05-10 — reads the loop's assembled `.latent` directly (~855 MB) instead of decoding the mp4 (~16 GB pixel batch). 27 nodes / 32 links. Pre-step: `apply_run_id_layout.py` on the loop workflow + toggle SaveLatent in UI · `docs/README.md`, `docs/guides/upscale_guide.md`, `debug_tools.md` |
 
 ### Apply scripts — sigma chain + sampler (4)
@@ -189,9 +189,8 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 | `apply_overlap_seconds_single_source.py` | Eliminate AudioLoopController ↔ AudioLoopPlanner overlap_seconds drift · `audit_workflows.py` |
 | `apply_iterations_autowire.py` | Wire `AudioLoopPlanner.total_iterations` → `TensorLoopOpen.iterations_in` · `debug_tools.md`, `audit_workflows.py` |
 | `apply_planner_break_stride_cycle.py` | Break planner-stride dependency cycle · `audit_workflows.py`, `f_pair_convention.md` |
-| `apply_trim_image_batch_to_audio.py` (F14) | Splice `TrimImageBatchToAudio` between loop IMAGE source and `VHS_VideoCombine.images` to clip fixed-stride-overshoot before muxing (eliminates silence-at-end in saved mp4) · `audit_workflows.py`, `build_upscale_workflow.py`, `build_seam_refinement_workflow.py` (chained after rebuild) |
+| `apply_trim_video_latent_to_audio.py` (F14) | Splice `TrimVideoLatentToAudio` between the assembled video latent (e.g. `LatentConcat #1605`) and the final VAE decode's LATENT input. Trim happens at the producer (pre-decode), saving VAE decode work on overshoot frames. Replaced image-space `apply_trim_image_batch_to_audio.py` on 2026-05-10 after the A/B confirmed identical user-visible output · `audit_workflows.py`, `build_upscale_workflow.py`, `build_seam_refinement_workflow.py` (chained after rebuild), `docs/guides/upscale_guide.md` |
 | `apply_run_id_layout.py` (F15) | Insert `RunIdPrefix` and wire it into `VHS_VideoCombine.filename_prefix` (+ any existing `SaveLatent`) so every render's artifacts cluster under `<output>/<workflow_name>/<timestamp>/`. For loop workflows, also adds a **bypassed** `SaveLatent` wired to `LatentConcat #1605` — user toggles `mode=0` in the UI to capture the assembled latent for the latent-load upscale path · `audit_workflows.py`, `docs/guides/upscale_guide.md` |
-| `apply_trim_video_latent_to_audio_ab.py` | **Staged A/B variant.** Forks `example_workflows/audio-loop-music-video_latent.json` → `internal/scratch/audio-loop-music-video_latent_LATENT_TRIM_AB.json` and inserts `TrimVideoLatentToAudio` between `LatentConcat #1605` and `LTXVTiledVAEDecode #1604.latents`. F14 image-level trim stays as the safety net. Lets the user render both arms and compare ffprobe + VAE-decode VRAM/wall-clock · CLI |
 | `apply_audio_vae_fix.py` | **Emergency fallback**: swap `VAELoaderKJ` → core `VAELoader` if KJ breaks · CLI-only, unapplied to canonical |
 
 ### Apply scripts — controller + frame planner schema (4)

@@ -667,7 +667,7 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         _check_initial_render_audio_duration_wired(wf, by_type, record)
         _check_overlap_seconds_single_source(wf, by_type, record)
         _check_vhs_video_combine_frame_rate_parity(wf, by_type, record)
-        _check_trim_image_batch_to_audio_present(wf, by_type, record)
+        _check_trim_video_latent_to_audio_present(wf, by_type, record)
         _check_run_id_layout_present(wf, by_type, record)
 
     # Generic invariants — apply to all workflows regardless of topology.
@@ -1549,16 +1549,21 @@ def _input_slot_link(node: dict, slot_name: str) -> int | None:
     return None
 
 
-def _check_trim_image_batch_to_audio_present(wf, by_type, record) -> None:
-    """ERR if VHS_VideoCombine.images is not fed by TrimImageBatchToAudio.
+def _check_trim_video_latent_to_audio_present(wf, by_type, record) -> None:
+    """ERR if the VAE decoder's LATENT input is not fed by
+    TrimVideoLatentToAudio.
 
-    Without the trim, fixed-stride iteration math (total video frames =
-    245 + N * stride_px for canonical defaults) overshoots audio length
-    by up to (window - stride) seconds per run. ffmpeg's ``-shortest``
-    does not truncate ``-c:v copy`` streams, so the saved mp4 ends up
-    the longer of audio/video and the user hears silence at the tail.
+    Replaces the image-level F14 (``TrimImageBatchToAudio``) audit
+    after the 2026-05-10 migration to latent-space trimming. Without
+    the trim, fixed-stride iter math overshoots audio length by up to
+    ``window − stride`` seconds and the saved mp4 ends with audible
+    silence (ffmpeg ``-shortest`` doesn't truncate ``-c:v copy``).
 
-    Remediation: ``scripts/apply_trim_image_batch_to_audio.py``.
+    Skips secondary decoders that don't feed VHS_VideoCombine (e.g.
+    side-preview decoders) by allowing the WARN-shaped report only on
+    decoders reachable from an active VHS_VideoCombine.images.
+
+    Remediation: ``scripts/apply_trim_video_latent_to_audio.py``.
     Postmortem: ``internal/analysis/loop_audio_overshoot_analysis.md``.
     """
     del wf
@@ -1568,24 +1573,65 @@ def _check_trim_image_batch_to_audio_present(wf, by_type, record) -> None:
     ]
     if not combines:
         return
+    decoder_types = {"LTXVTiledVAEDecode", "VAEDecodeTiled", "VAEDecode"}
     for combine in combines:
-        cid = combine.get("id")
+        # Walk back from combine.images through any pass-through (e.g. legacy
+        # TrimImageBatchToAudio) until we hit a decoder. Side-preview
+        # decoders that don't feed combine.images aren't audited.
         images_link = _input_slot_link(combine, "images")
         if images_link is None:
             continue
-        src_type = _link_source_type(by_type, images_link)
-        if src_type == "TrimImageBatchToAudio":
+        cur_type, cur_link_id = None, images_link
+        for _ in range(8):
+            cur_type = _link_source_type(by_type, cur_link_id)
+            if cur_type in decoder_types:
+                break
+            # follow IMAGE-typed pass-throughs (rare; legacy F14 etc.)
+            for tlist in by_type.values():
+                hit = next(
+                    (n for n in tlist
+                     if n.get("type") == cur_type
+                     and any(cur_link_id in (s.get("links") or []) for s in n.get("outputs", []))),
+                    None,
+                )
+                if hit:
+                    next_link = _input_slot_link(hit, "images")
+                    if next_link is not None:
+                        cur_link_id = next_link
+                        break
+            else:
+                break
+        else:
+            continue
+        if cur_type not in decoder_types:
+            continue
+
+        # Find the decoder node we landed on.
+        decoder = next(
+            (n for tlist in by_type.values() for n in tlist
+             if n.get("type") == cur_type
+             and any(cur_link_id in (s.get("links") or []) for s in n.get("outputs", []))),
+            None,
+        )
+        if decoder is None:
+            continue
+        did = decoder.get("id")
+        latent_link = _input_slot_link(decoder, "latents") or _input_slot_link(decoder, "samples")
+        if latent_link is None:
+            continue
+        src_type = _link_source_type(by_type, latent_link)
+        if src_type == "TrimVideoLatentToAudio":
             record(
-                "OK", "trim_image_batch_to_audio_present",
-                f"VHS_VideoCombine(#{cid}).images <- TrimImageBatchToAudio",
+                "OK", "trim_video_latent_to_audio_present",
+                f"{decoder['type']}(#{did}).latents <- TrimVideoLatentToAudio",
             )
         else:
             record(
-                "ERR", "trim_image_batch_to_audio_present",
-                f"VHS_VideoCombine(#{cid}).images <- {src_type or '?'} (not "
-                "TrimImageBatchToAudio). Saved mp4 will end with silence "
+                "ERR", "trim_video_latent_to_audio_present",
+                f"{decoder['type']}(#{did}).latents <- {src_type or '?'} (not "
+                "TrimVideoLatentToAudio). Saved mp4 will end with silence "
                 "(video > audio by up to window-stride seconds). Run "
-                "scripts/apply_trim_image_batch_to_audio.py.",
+                "scripts/apply_trim_video_latent_to_audio.py.",
             )
 
 

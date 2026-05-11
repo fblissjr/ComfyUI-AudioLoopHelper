@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1629,
-  "last_link_id": 3105,
+  "last_node_id": 1630,
+  "last_link_id": 3110,
   "nodes": [
     {
       "id": 252,
@@ -330,7 +330,7 @@
           "type": "AUDIO",
           "links": [
             1654,
-            3098
+            3108
           ]
         }
       ],
@@ -1477,7 +1477,7 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 3096
+          "link": 3110
         },
         {
           "name": "audio",
@@ -3597,7 +3597,7 @@
         {
           "name": "latents",
           "type": "LATENT",
-          "link": 2995
+          "link": 3106
         }
       ],
       "outputs": [
@@ -3605,7 +3605,7 @@
           "name": "image",
           "type": "IMAGE",
           "links": [
-            3097
+            3110
           ]
         }
       ],
@@ -3659,8 +3659,8 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            2995,
-            3104
+            3104,
+            3107
           ]
         }
       ],
@@ -4164,7 +4164,7 @@
           "links": [
             3084,
             3086,
-            3099
+            3109
           ]
         },
         {
@@ -4234,57 +4234,6 @@
         2.0
       ],
       "title": "overlap_seconds"
-    },
-    {
-      "id": 1625,
-      "type": "TrimImageBatchToAudio",
-      "pos": [
-        3395.8458218450364,
-        4438.634708436207
-      ],
-      "size": [
-        280,
-        90
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 3097
-        },
-        {
-          "name": "audio",
-          "type": "AUDIO",
-          "link": 3098
-        },
-        {
-          "name": "fps",
-          "type": "INT",
-          "widget": {
-            "name": "fps"
-          },
-          "link": 3099
-        }
-      ],
-      "outputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "links": [
-            3096
-          ]
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "TrimImageBatchToAudio"
-      },
-      "widgets_values": [
-        25
-      ],
-      "title": "Trim to audio"
     },
     {
       "id": 1628,
@@ -4363,6 +4312,57 @@
         "latents/segment"
       ],
       "title": "Save assembled latent (toggle)"
+    },
+    {
+      "id": 1630,
+      "type": "TrimVideoLatentToAudio",
+      "pos": [
+        3480,
+        4500
+      ],
+      "size": [
+        300,
+        100
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "link": 3107
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 3108
+        },
+        {
+          "name": "fps",
+          "type": "INT",
+          "widget": {
+            "name": "fps"
+          },
+          "link": 3109
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "links": [
+            3106
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TrimVideoLatentToAudio"
+      },
+      "widgets_values": [
+        25
+      ],
+      "title": "Trim latent to audio"
     }
   ],
   "links": [
@@ -4927,14 +4927,6 @@
       "LATENT"
     ],
     [
-      2995,
-      1605,
-      0,
-      1604,
-      1,
-      "LATENT"
-    ],
-    [
       2999,
       648,
       0,
@@ -5263,38 +5255,6 @@
       "FLOAT"
     ],
     [
-      3096,
-      1625,
-      0,
-      617,
-      0,
-      "IMAGE"
-    ],
-    [
-      3097,
-      1604,
-      0,
-      1625,
-      0,
-      "IMAGE"
-    ],
-    [
-      3098,
-      604,
-      0,
-      1625,
-      1,
-      "AUDIO"
-    ],
-    [
-      3099,
-      1622,
-      4,
-      1625,
-      2,
-      "INT"
-    ],
-    [
       3103,
       1628,
       0,
@@ -5317,6 +5277,46 @@
       1629,
       1,
       "STRING"
+    ],
+    [
+      3106,
+      1630,
+      0,
+      1604,
+      1,
+      "LATENT"
+    ],
+    [
+      3107,
+      1605,
+      0,
+      1630,
+      0,
+      "LATENT"
+    ],
+    [
+      3108,
+      604,
+      0,
+      1630,
+      1,
+      "AUDIO"
+    ],
+    [
+      3109,
+      1622,
+      4,
+      1630,
+      2,
+      "INT"
+    ],
+    [
+      3110,
+      1604,
+      0,
+      617,
+      0,
+      "IMAGE"
     ]
   ],
   "groups": [
