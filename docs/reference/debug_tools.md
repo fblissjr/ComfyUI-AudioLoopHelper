@@ -50,6 +50,7 @@ paired with their apply scripts. Two flavors:
 | `iclora_ref_video_preprocess_symmetry` (F12c) | `apply_iclora_video_reference.py` | IC-LoRA guide present but no `LTXVPreprocess(val=18)` on the ref-video chain |
 | `model_sampling_shift` (F13) | `apply_strip_sd3_shift_node.py` | `ModelSamplingSD3` present and active on a distilled workflow (Lightricks's distilled inference applies no shift; the SD3 node distorts the sigma-to-timestep mapping). WARN-level. |
 | `trim_image_batch_to_audio_present` (F14) | `apply_trim_image_batch_to_audio.py` | Loop workflow's `VHS_VideoCombine.images` not fed by `TrimImageBatchToAudio`. Without the trim, fixed-stride iter math overshoots audio length by up to `window − stride` seconds; ffmpeg `-shortest` doesn't truncate `-c:v copy`, so the saved mp4 ends with audible silence. Postmortem: `internal/analysis/loop_audio_overshoot_analysis.md` (private clone only). |
+| `run_id_layout_present` (F15) | `apply_run_id_layout.py` | Loop workflow's `VHS_VideoCombine.filename_prefix` not fed by `RunIdPrefix.video_prefix`. WARN-level — without it, every render's mp4 + workflow-snapshot + audio-mux outputs spray flat with a global counter instead of clustering under `<output>/<workflow_name>/<timestamp>/`. Same apply script also adds a bypassed `SaveLatent` toggle wired from `LatentConcat #1605` for the LoadLatent upscale path. User guide: [`guides/upscale_guide.md`](../guides/upscale_guide.md). |
 
 **Generic structural invariants** (catch CLASSES of drift without per-bug rules):
 

@@ -49,7 +49,7 @@ linking out (parallel-scrubbed-copy convention retired 2026-04-25).
 - LTXVLoopingSampler structural reference (video-only; NOT for music video): [`reference/ltxv_looping_sampler_reference.md`](reference/ltxv_looping_sampler_reference.md)
 - Fix one section of a previously generated video (retake): [`guides/retake_guide.md`](guides/retake_guide.md)
 - Bench / A-B procedure (sage variants, profiling arms): [`guides/bench_workflow_guide.md`](guides/bench_workflow_guide.md)
-- Post-loop spatial upscale (2×, 3-step σ-tail refine; staged draft): `scripts/build_upscale_workflow.py` — see `reference/debug_tools.md` "Workflow build scripts"
+- Post-loop spatial upscale (2× via LoadLatent, 3-step σ-tail refine): [`guides/upscale_guide.md`](guides/upscale_guide.md)
 
 ### "I want to write a prompt schedule"
 - Project-specific rules + variation patterns: [`guides/prompt_creation_guide.md`](guides/prompt_creation_guide.md)

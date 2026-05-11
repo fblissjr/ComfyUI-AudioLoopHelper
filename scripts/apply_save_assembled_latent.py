@@ -1,6 +1,17 @@
 """apply_save_assembled_latent — capture LatentConcat output for length-mismatch diagnostic.
 
-Last updated: 2026-05-08
+Last updated: 2026-05-10
+
+> **For production use (assembled-latent capture feeding the LoadLatent
+> upscale path), use ``scripts/apply_run_id_layout.py`` instead.** It
+> wires a *bypassed* SaveLatent onto the canonical workflow with a
+> per-render filename prefix; the user toggles ``mode=0`` in the UI
+> to enable, then back to ``mode=4`` when done. No separate draft file
+> to maintain.
+>
+> THIS script remains for the diagnostic carve-out: staging a separate
+> draft file with the SaveLatent always-on, useful when isolating
+> length-mismatch / shape-drift bugs without touching the canonical.
 
 Stages a workflow variant with a `SaveLatent` node wired to the
 `LatentConcat #1605` output (the assembled `initial_render + loop_body`

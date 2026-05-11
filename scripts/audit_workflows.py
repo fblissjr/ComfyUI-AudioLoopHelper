@@ -668,6 +668,7 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         _check_overlap_seconds_single_source(wf, by_type, record)
         _check_vhs_video_combine_frame_rate_parity(wf, by_type, record)
         _check_trim_image_batch_to_audio_present(wf, by_type, record)
+        _check_run_id_layout_present(wf, by_type, record)
 
     # Generic invariants — apply to all workflows regardless of topology.
     _check_no_sd3_shift_node(wf, by_type, record)
@@ -1528,6 +1529,26 @@ def _check_vhs_video_combine_frame_rate_parity(wf, by_type, record) -> None:
             )
 
 
+def _link_source_type(by_type: dict, link_id: int) -> str | None:
+    """Return the ``type`` of the node whose output slot owns ``link_id``,
+    or None if no node claims it. O(nodes * outputs) — fine for audit-pass
+    workflows (~50 nodes × ~3 outputs each)."""
+    for tlist in by_type.values():
+        for n in tlist:
+            for out_slot in n.get("outputs", []):
+                if link_id in (out_slot.get("links") or []):
+                    return n.get("type")
+    return None
+
+
+def _input_slot_link(node: dict, slot_name: str) -> int | None:
+    """Return the link id feeding ``node.inputs[slot_name]``, or None."""
+    for s in node.get("inputs", []):
+        if s.get("name") == slot_name:
+            return s.get("link")
+    return None
+
+
 def _check_trim_image_batch_to_audio_present(wf, by_type, record) -> None:
     """ERR if VHS_VideoCombine.images is not fed by TrimImageBatchToAudio.
 
@@ -1549,29 +1570,10 @@ def _check_trim_image_batch_to_audio_present(wf, by_type, record) -> None:
         return
     for combine in combines:
         cid = combine.get("id")
-        # find link feeding combine.images (slot 0)
-        images_slot_link = None
-        for s in combine.get("inputs", []):
-            if s.get("name") == "images":
-                images_slot_link = s.get("link")
-                break
-        if images_slot_link is None:
+        images_link = _input_slot_link(combine, "images")
+        if images_link is None:
             continue
-        # resolve src by walking by_type's inverse (cheaper than rebuilding)
-        # Use the workflow's links table — already validated upstream.
-        # Reusing the by_id map kept by the caller would be cleaner; doing it
-        # locally here keeps the check self-contained.
-        src_type = None
-        for tlist in by_type.values():
-            for n in tlist:
-                for out_slot in n.get("outputs", []):
-                    if images_slot_link in (out_slot.get("links") or []):
-                        src_type = n.get("type")
-                        break
-                if src_type:
-                    break
-            if src_type:
-                break
+        src_type = _link_source_type(by_type, images_link)
         if src_type == "TrimImageBatchToAudio":
             record(
                 "OK", "trim_image_batch_to_audio_present",
@@ -1584,6 +1586,49 @@ def _check_trim_image_batch_to_audio_present(wf, by_type, record) -> None:
                 "TrimImageBatchToAudio). Saved mp4 will end with silence "
                 "(video > audio by up to window-stride seconds). Run "
                 "scripts/apply_trim_image_batch_to_audio.py.",
+            )
+
+
+def _check_run_id_layout_present(wf, by_type, record) -> None:
+    """WARN if VHS_VideoCombine.filename_prefix is not fed by RunIdPrefix.
+
+    Without the wire, every render's artifacts spray flat under the
+    output dir with a global counter (LTX-2_00250.mp4 etc) instead of
+    clustering under ``<output>/<workflow_name>/<timestamp>/``. WARN
+    rather than ERR because not all forks need the per-render folder
+    convention.
+
+    Remediation: ``scripts/apply_run_id_layout.py``.
+    """
+    del wf
+    combines = [
+        n for n in by_type.get("VHS_VideoCombine", [])
+        if n.get("mode", 0) == 0
+    ]
+    if not combines:
+        return
+    for combine in combines:
+        cid = combine.get("id")
+        prefix_link = _input_slot_link(combine, "filename_prefix")
+        if prefix_link is None:
+            record(
+                "WARN", "run_id_layout_present",
+                f"VHS_VideoCombine(#{cid}).filename_prefix has no incoming link "
+                "(widget-only). Outputs won't cluster under per-render folders. "
+                "Run scripts/apply_run_id_layout.py.",
+            )
+            continue
+        src_type = _link_source_type(by_type, prefix_link)
+        if src_type == "RunIdPrefix":
+            record(
+                "OK", "run_id_layout_present",
+                f"VHS_VideoCombine(#{cid}).filename_prefix <- RunIdPrefix",
+            )
+        else:
+            record(
+                "WARN", "run_id_layout_present",
+                f"VHS_VideoCombine(#{cid}).filename_prefix <- {src_type or '?'} "
+                "(expected RunIdPrefix). Outputs won't cluster predictably.",
             )
 
 
