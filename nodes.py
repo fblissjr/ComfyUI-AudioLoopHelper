@@ -2163,6 +2163,72 @@ class LatentFrameCount(io.ComfyNode):
         return io.NodeOutput(pixel_frames, latent_frames)
 
 
+class TrimVideoLatentToAudio(io.ComfyNode):
+    """Latent-space companion to ``TrimImageBatchToAudio`` (F14).
+
+    Clips a video LATENT's temporal dim so that — after LTX VAE
+    decode — the resulting image batch is at most
+    ``int(audio_duration * fps)`` pixel frames. Saves VAE decode work
+    on overshoot frames (~3-5% on typical loop renders, ~17% on
+    short-audio cases). Pair with F14 downstream as a safety net for
+    any off-by-one in the latent → pixel arithmetic.
+
+    LTX video VAE convention: ``pixel_frames = (latent_frames - 1) * 8 + 1``.
+    For a target pixel count ``P`` we snap DOWN to the largest valid
+    ``P' = ((P - 1) // 8) * 8 + 1`` and emit ``L = (P' - 1) // 8 + 1``
+    latent frames. Snap-down guarantees decoded output never exceeds
+    audio duration.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="TrimVideoLatentToAudio",
+            display_name="Trim Video Latent to Audio",
+            category="looping/audio",
+            description=(
+                "Clip a video latent's temporal dim so its VAE-decoded "
+                "pixel-frame count is ≤ floor(audio_duration * fps). "
+                "Latent-space companion to TrimImageBatchToAudio — "
+                "saves VAE decode work on overshoot frames."
+            ),
+            inputs=[
+                io.Latent.Input(
+                    "latent",
+                    tooltip="Assembled video latent (typically LatentConcat output before final VAE decode).",
+                ),
+                io.Audio.Input(
+                    "audio",
+                    tooltip="Reference audio. Wire from the same source feeding VHS_VideoCombine.audio.",
+                ),
+                io.Int.Input(
+                    "fps",
+                    default=25,
+                    min=1,
+                    tooltip="Output frame rate. Wire from LTXFramePlanner.fps_int.",
+                ),
+            ],
+            outputs=[
+                io.Latent.Output(
+                    "latent",
+                    tooltip="Latent trimmed to a count whose decoded pixel-frame count ≤ audio_duration * fps.",
+                ),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, latent: dict, audio: dict, fps: int) -> io.NodeOutput:
+        audio_duration = _audio_duration(audio)
+        target_pixel = max(1, int(audio_duration * fps))
+        snapped_pixel = max(1, ((target_pixel - 1) // LTX_TEMPORAL_SCALE) * LTX_TEMPORAL_SCALE + 1)
+        target_latent = max(1, (snapped_pixel - 1) // LTX_TEMPORAL_SCALE + 1)
+
+        samples = latent["samples"]
+        keep = min(samples.shape[2], target_latent)
+        out: dict = {**latent, "samples": samples[:, :, :keep]}
+        return io.NodeOutput(out)
+
+
 class TrimImageBatchToAudio(io.ComfyNode):
     """Clips an IMAGE batch to ``floor(audio_duration * fps)`` frames.
 
@@ -3634,6 +3700,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LatentSeamZoneMask,
             RunIdPrefix,
             LatentFrameCount,
+            TrimVideoLatentToAudio,
             TrimImageBatchToAudio,
             AudioPitchDetect,
             LTXResolutionFromAspect,
