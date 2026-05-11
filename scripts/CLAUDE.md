@@ -176,7 +176,7 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 | `apply_no_tile_vae_decode.py` | Set `LTXVTiledVAEDecode` to `[1,1,1]` (24GB+ optimization) · root CLAUDE.md, `audit_workflows.py` |
 | `apply_ltx_decoder.py` | Swap generic `VAEDecodeTiled` → `LTXVTiledVAEDecode` · `validate_workflow_decoder.py`, `debugging_guide.md` |
 
-### Apply scripts — audio + planner topology (8)
+### Apply scripts — audio + planner topology (9)
 
 *Add here if you're wiring planner/controller/audio-slicer autowires or fixing topology bugs.*
 
@@ -189,6 +189,7 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 | `apply_iterations_autowire.py` | Wire `AudioLoopPlanner.total_iterations` → `TensorLoopOpen.iterations_in` · `debug_tools.md`, `audit_workflows.py` |
 | `apply_planner_break_stride_cycle.py` | Break planner-stride dependency cycle · `audit_workflows.py`, `f_pair_convention.md` |
 | `apply_trim_image_batch_to_audio.py` (F14) | Splice `TrimImageBatchToAudio` between loop IMAGE source and `VHS_VideoCombine.images` to clip fixed-stride-overshoot before muxing (eliminates silence-at-end in saved mp4) · `audit_workflows.py`, `build_upscale_workflow.py`, `build_seam_refinement_workflow.py` (chained after rebuild) |
+| `apply_run_id_layout.py` | Insert `RunIdPrefix` and wire it into `VHS_VideoCombine.filename_prefix` (+ any existing `SaveLatent`) so every render's artifacts cluster under `<output>/<workflow_name>/<timestamp>/`. For loop workflows, also adds a **bypassed** `SaveLatent` wired to `LatentConcat #1605` — user toggles `mode=0` in the UI to capture the assembled latent for the latent-load upscale path · CLI |
 | `apply_audio_vae_fix.py` | **Emergency fallback**: swap `VAELoaderKJ` → core `VAELoader` if KJ breaks · CLI-only, unapplied to canonical |
 
 ### Apply scripts — controller + frame planner schema (4)

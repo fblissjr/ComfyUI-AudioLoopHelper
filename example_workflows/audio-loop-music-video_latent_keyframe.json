@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1632,
-  "last_link_id": 3129,
+  "last_node_id": 1636,
+  "last_link_id": 3135,
   "nodes": [
     {
       "id": 252,
@@ -1510,6 +1510,14 @@
           "shape": 7,
           "type": "VAE",
           "link": null
+        },
+        {
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": 3133
         }
       ],
       "outputs": [
@@ -3631,7 +3639,8 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            2995
+            2995,
+            3134
           ]
         }
       ],
@@ -4431,6 +4440,84 @@
         25
       ],
       "title": "Trim to audio"
+    },
+    {
+      "id": 1635,
+      "type": "RunIdPrefix",
+      "pos": [
+        -2500,
+        -200
+      ],
+      "size": [
+        300,
+        100
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "video_prefix",
+          "type": "STRING",
+          "links": [
+            3133
+          ]
+        },
+        {
+          "name": "latent_prefix",
+          "type": "STRING",
+          "links": [
+            3135
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "RunIdPrefix"
+      },
+      "widgets_values": [
+        "audio-loop-music-video_latent_keyframe",
+        "%Y%m%d_%H%M%S"
+      ],
+      "title": "Run ID Prefix"
+    },
+    {
+      "id": 1636,
+      "type": "SaveLatent",
+      "pos": [
+        1700,
+        -200
+      ],
+      "size": [
+        320,
+        80
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 3134
+        },
+        {
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": 3135
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "SaveLatent"
+      },
+      "widgets_values": [
+        "latents/segment"
+      ],
+      "title": "Save assembled latent (toggle)"
     }
   ],
   "links": [
@@ -5417,6 +5504,30 @@
       1632,
       2,
       "INT"
+    ],
+    [
+      3133,
+      1635,
+      0,
+      617,
+      4,
+      "STRING"
+    ],
+    [
+      3134,
+      1605,
+      0,
+      1636,
+      0,
+      "LATENT"
+    ],
+    [
+      3135,
+      1635,
+      1,
+      1636,
+      1,
+      "STRING"
     ]
   ],
   "groups": [

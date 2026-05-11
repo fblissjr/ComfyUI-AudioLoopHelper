@@ -118,13 +118,23 @@ def test_apply_is_idempotent(tmp_paths):
     r1 = _apply(in_path, out_path)
     assert r1.returncode == 0
     ed1 = WorkflowEditor(out_path)
-    n_save = sum(1 for n in ed1.wf["nodes"] if n.get("type") == SAVE_LATENT_TYPE)
+    # Count only ACTIVE (mode=0) SaveLatents — the canonical source workflow
+    # carries a bypassed SaveLatent toggle from apply_run_id_layout.py
+    # (the assembled-latent capture point), which we must not double-count
+    # against the per-iter SaveLatent this apply script adds.
+    n_save = sum(
+        1 for n in ed1.wf["nodes"]
+        if n.get("type") == SAVE_LATENT_TYPE and n.get("mode", 0) == 0
+    )
     assert n_save == 1
 
     r2 = _apply(in_path, out_path)
     assert r2.returncode == 0
     ed2 = WorkflowEditor(out_path)
-    n_save_2 = sum(1 for n in ed2.wf["nodes"] if n.get("type") == SAVE_LATENT_TYPE)
+    n_save_2 = sum(
+        1 for n in ed2.wf["nodes"]
+        if n.get("type") == SAVE_LATENT_TYPE and n.get("mode", 0) == 0
+    )
     assert n_save_2 == 1, "second apply added a duplicate SaveLatent"
 
 

@@ -2047,6 +2047,70 @@ class LatentOverlapTrim(io.ComfyNode):
 #   out = latent.copy(); out.pop("noise_mask", None)
 
 
+class RunIdPrefix(io.ComfyNode):
+    """Emits a per-render unique filename prefix shared across every save
+    node in a workflow.
+
+    Wire ``video_prefix`` into ``VHS_VideoCombine.filename_prefix`` and
+    ``SaveImage.filename_prefix``; wire ``latent_prefix`` into
+    ``SaveLatent.filename_prefix``. All artifacts of one render land
+    under ``<output>/<workflow_name>/<timestamp>/`` — the run is now a
+    folder, not a counter on the global namespace.
+
+    ``fingerprint_inputs`` returns NaN so ComfyUI re-evaluates the node
+    on every queue submission. Without that the cached timestamp would
+    propagate across all renders and the unification contract would
+    break.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="RunIdPrefix",
+            display_name="Run ID Prefix",
+            category="utility",
+            description=(
+                "Emits a per-render filename prefix (`<workflow_name>/"
+                "<timestamp>`) shared across every save node in the "
+                "workflow. Forces re-evaluation each queue submission so "
+                "the timestamp is fresh per render."
+            ),
+            inputs=[
+                io.String.Input(
+                    "workflow_name",
+                    default="render",
+                    tooltip="Output sub-folder (typically the workflow's filename base).",
+                ),
+                io.String.Input(
+                    "timestamp_format",
+                    default="%Y%m%d_%H%M%S",
+                    tooltip="strftime format for the per-run timestamp segment.",
+                ),
+            ],
+            outputs=[
+                io.String.Output(
+                    "video_prefix",
+                    tooltip="<workflow_name>/<timestamp> — wire to VHS_VideoCombine and SaveImage.",
+                ),
+                io.String.Output(
+                    "latent_prefix",
+                    tooltip="<workflow_name>/<timestamp>/latents/segment — wire to SaveLatent.",
+                ),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, workflow_name: str, timestamp_format: str) -> io.NodeOutput:
+        import datetime
+        ts = datetime.datetime.now().strftime(timestamp_format)
+        base = f"{workflow_name}/{ts}"
+        return io.NodeOutput(base, f"{base}/latents/segment")
+
+    @classmethod
+    def fingerprint_inputs(cls, **kwargs) -> float:
+        return float("NaN")
+
+
 class LatentFrameCount(io.ComfyNode):
     """Emits pixel-frame and latent-frame counts from a video LATENT.
 
@@ -3556,6 +3620,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LatentOverlapTrim,
             LatentTemporalMask,
             LatentSeamZoneMask,
+            RunIdPrefix,
             LatentFrameCount,
             TrimImageBatchToAudio,
             AudioPitchDetect,

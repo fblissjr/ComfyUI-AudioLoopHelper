@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1626,
-  "last_link_id": 3097,
+  "last_node_id": 1628,
+  "last_link_id": 3099,
   "nodes": [
     {
       "id": 252,
@@ -1402,6 +1402,14 @@
           "shape": 7,
           "type": "VAE",
           "link": null
+        },
+        {
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": 3099
         }
       ],
       "outputs": [
@@ -3312,6 +3320,44 @@
         25
       ],
       "title": "Trim to audio"
+    },
+    {
+      "id": 1628,
+      "type": "RunIdPrefix",
+      "pos": [
+        -2500,
+        -200
+      ],
+      "size": [
+        300,
+        100
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "video_prefix",
+          "type": "STRING",
+          "links": [
+            3099
+          ]
+        },
+        {
+          "name": "latent_prefix",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "RunIdPrefix"
+      },
+      "widgets_values": [
+        "iclora_amplification_poc",
+        "%Y%m%d_%H%M%S"
+      ],
+      "title": "Run ID Prefix"
     }
   ],
   "links": [
@@ -3850,6 +3896,14 @@
       1626,
       1,
       "AUDIO"
+    ],
+    [
+      3099,
+      1628,
+      0,
+      617,
+      4,
+      "STRING"
     ]
   ],
   "groups": [
