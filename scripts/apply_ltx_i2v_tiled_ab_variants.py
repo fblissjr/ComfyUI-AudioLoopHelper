@@ -43,6 +43,14 @@ Arms implemented:
   STG keep their Arm-1 remap (they already read the un-eased
   curve; nothing else moves).
 
+- arm3 (curve A/B, anchor ablation): Arm 1 with
+  `LTXLatentAnchorAware` internally bypassed (sets widget[5]
+  bypass=True). The node stays in the graph (MODEL pass-through)
+  but its patch returns the model unchanged. Tests "how much does
+  the content-aware latent anchor contribute?" If the answer is
+  "not much," the anchor + its reference-image energy map become
+  optional for this pipeline shape.
+
 Arms 2-4 of the curve matrix (drop easing / drop anchor / drop STG
 warmup) plus arm `no_ltxv_upsample` (the deeper U-C topology
 surgery) are designed in the matrix doc; add when the user wants
@@ -104,12 +112,18 @@ ARM1_STG_LAYERS = "[9999], [9999], [9999], [9999], [9999], [9999], [9999], [9999
 # Step 5 is the closest match.
 ARM1_ANCHOR_CACHE_STEP = 5
 
+# LTXLatentAnchorAware widget index 5 is the `bypass` flag. True
+# returns the input model unchanged (patch is a no-op) while keeping
+# the node in the graph topologically -- no rewiring required.
+ANCHOR_BYPASS_WIDGET_IDX = 5
+
 DEFAULT_INPUT = "internal/workflows/ltx_i2v_tiled_optimized.draft.json"
 
 # Output paths per arm. Anchored to the canonical staging dir.
 _OUTPUTS: dict[str, str] = {
     "arm1": "internal/workflows/ltx_i2v_tiled_arm1.draft.json",
     "arm2": "internal/workflows/ltx_i2v_tiled_arm2.draft.json",
+    "arm3": "internal/workflows/ltx_i2v_tiled_arm3.draft.json",
     "arm5": "internal/workflows/ltx_i2v_tiled_arm5.draft.json",
     "no_rtx": "internal/workflows/ltx_i2v_tiled_no_rtx.draft.json",
 }
@@ -194,6 +208,18 @@ def _apply_arm2(ed: WorkflowEditor) -> None:
     print(f"  #{ID_SIGMAS_EASING} [{n['type']}]: mode {MODE_ACTIVE} -> {MODE_BYPASS} (bypassed)")
 
 
+def _apply_arm3(ed: WorkflowEditor) -> None:
+    """Arm 3 = Arm 1 + LTXLatentAnchorAware internally bypassed.
+
+    The anchor's `bypass` widget (idx 5) flips to True; its `patch`
+    method returns the model unchanged. Topology preserved -- the
+    STGGuiderAdvanced still reads from the anchor's MODEL output,
+    just gets the pass-through.
+    """
+    _apply_arm1(ed)
+    _set_widget(ed.find_node(ID_ANCHOR), ANCHOR_BYPASS_WIDGET_IDX, True, "anchor bypass")
+
+
 def _apply_no_rtx(ed: WorkflowEditor) -> None:
     """Bypass `RTXVideoSuperResolution`. ComfyUI's mode=4 passes the IMAGE
     input through to the IMAGE output since they share type, so no
@@ -211,6 +237,7 @@ def _apply_no_rtx(ed: WorkflowEditor) -> None:
 _DISPATCH = {
     "arm1": _apply_arm1,
     "arm2": _apply_arm2,
+    "arm3": _apply_arm3,
     "arm5": _apply_arm5,
     "no_rtx": _apply_no_rtx,
 }
@@ -245,6 +272,17 @@ def _already_migrated(ed: WorkflowEditor, arm: str) -> bool:
             bool(sigmas) and sigmas[0] == CANONICAL_SIGMAS
             and bool(sampler) and sampler[0] == "euler"
             and ed.find_node(ID_SIGMAS_EASING).get("mode") == MODE_BYPASS
+        )
+    if arm == "arm3":
+        # Arm 3 = Arm 1 + anchor bypass widget True.
+        sigmas = ed.find_node(ID_FIRSTPASS_SIGMAS).get("widgets_values") or []
+        sampler = ed.find_node(ID_FIRSTPASS_KSAMPLER).get("widgets_values") or []
+        anchor = ed.find_node(ID_ANCHOR).get("widgets_values") or []
+        return (
+            bool(sigmas) and sigmas[0] == CANONICAL_SIGMAS
+            and bool(sampler) and sampler[0] == "euler"
+            and len(anchor) > ANCHOR_BYPASS_WIDGET_IDX
+            and anchor[ANCHOR_BYPASS_WIDGET_IDX] is True
         )
     raise SystemExit(f"Unknown arm: {arm!r}")
 
