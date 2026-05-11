@@ -71,30 +71,22 @@ SKIP_FILES = {
 LATENT_CONCAT_NODE_ID = 1605  # canonical assembled-latent producer
 
 
-def _find_filename_prefix_input_idx(node: dict) -> int | None:
-    """Return the input-list index for ``filename_prefix``, or None
-    if the node has no such input slot yet (pure widget)."""
-    for i, s in enumerate(node.get("inputs", [])):
-        if s.get("name") == "filename_prefix":
-            return i
-    return None
-
-
 def _ensure_filename_prefix_input(node: dict) -> int:
     """Make ``filename_prefix`` an input slot on the node. Returns its
     slot index. Idempotent: if already converted, returns the existing
-    index without mutating."""
-    existing = _find_filename_prefix_input_idx(node)
-    if existing is not None:
-        return existing
-    node.setdefault("inputs", []).append(
-        {
-            "name": "filename_prefix",
-            "type": "STRING",
-            "widget": {"name": "filename_prefix"},
-        }
-    )
-    return len(node["inputs"]) - 1
+    index without mutating. Uses ``WorkflowEditor.find_input_slot`` per
+    ``scripts/CLAUDE.md`` "Don't hand-roll link lookups or rewires."""
+    try:
+        return WorkflowEditor.find_input_slot(node, "filename_prefix")
+    except ValueError:
+        node.setdefault("inputs", []).append(
+            {
+                "name": "filename_prefix",
+                "type": "STRING",
+                "widget": {"name": "filename_prefix"},
+            }
+        )
+        return len(node["inputs"]) - 1
 
 
 def _apply_one(wf_path: Path, revert: bool, dry_run: bool) -> str:

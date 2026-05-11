@@ -75,14 +75,5 @@ def test_fingerprint_forces_re_evaluation_each_run():
 
 
 def test_node_is_registered_in_extension():
-    import ast
-    import pathlib
-    src = pathlib.Path("nodes.py").read_text()
-    tree = ast.parse(src)
-    found_names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef) and node.name == "AudioLoopHelperExtension":
-            for child in ast.walk(node):
-                if isinstance(child, ast.Name):
-                    found_names.add(child.id)
-    assert "RunIdPrefix" in found_names
+    from _node_registry import assert_node_registered
+    assert_node_registered("RunIdPrefix")

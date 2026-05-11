@@ -105,22 +105,5 @@ def test_three_observed_render_cases_from_ffprobe_data():
 
 
 def test_node_is_registered_in_extension():
-    """Smoke test: the node is in the ComfyExtension's node list so
-    ComfyUI can discover it. AST scan because `get_node_list` uses
-    relative imports that fail when nodes.py is loaded outside a
-    package context (pytest default)."""
-    import ast
-    import pathlib
-
-    src = pathlib.Path("nodes.py").read_text()
-    tree = ast.parse(src)
-    found_names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef) and node.name == "AudioLoopHelperExtension":
-            for child in ast.walk(node):
-                if isinstance(child, ast.Name):
-                    found_names.add(child.id)
-    assert "TrimImageBatchToAudio" in found_names, (
-        "TrimImageBatchToAudio not referenced inside AudioLoopHelperExtension. "
-        "Add it to the get_node_list() return value."
-    )
+    from _node_registry import assert_node_registered
+    assert_node_registered("TrimImageBatchToAudio")
