@@ -16,10 +16,19 @@ Arms implemented:
   intact. Isolates the question "is the ancestral noise injection
   doing anything?"
 
-Arms 1-4 are designed in the matrix doc but not yet implemented here.
-They require coordinated multi-widget edits (sigma curve + sampler +
-STG sigma list + anchor cache step) -- added when the user wants to
-run them.
+- arm1 (headline curve-length test): coordinated multi-widget edit
+  that replaces the 14-pt sigma curve with the canonical distilled
+  9-pt curve `1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725,
+  0.421875, 0.0`, swaps `KSamplerSelect` to `euler`, remaps
+  `LTXLatentAnchorAware.cache_at_step` from 6 to 5 (matches the
+  same-sigma slot on the new curve), and remaps `STGGuiderAdvanced`'s
+  sigma-keyed cfg/stg/rescale tables onto the new curve. RES4LYF
+  easing is kept in place and acts on the new (shorter) curve. The
+  headline question is "8-step canonical euler vs 13-step
+  euler_ancestral + easing?"
+
+Arms 2-4 (drop easing / drop anchor / drop STG warmup) are designed
+in the matrix doc; add when the user wants to run them.
 
 Usage:
     uv run --group dev python scripts/apply_ltx_i2v_tiled_ab_variants.py --arm arm5
@@ -41,17 +50,40 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from apply_canonical_sigmas import CANONICAL_SIGMAS
 from workflow_utils import WorkflowEditor
 
 # First-pass KSamplerSelect that drives `SamplerCustomAdvanced #510`.
 # Survived the optimize-baseline pass (sage attention + tiled VAE
 # decode etc. do not touch it).
 ID_FIRSTPASS_KSAMPLER = 520
+ID_FIRSTPASS_SIGMAS = 527        # ManualSigmas feeding the easing + anchor
+ID_ANCHOR = 731                  # LTXLatentAnchorAware
+ID_STG_GUIDER = 653              # STGGuiderAdvanced
+
+# Arm-1 STG widget remap: 14-pt curve had 13-entry cfg/stg/rescale
+# tables (one per sampler transition) and a 14-entry layers table
+# (off-by-one but harmless because all entries are the same
+# disabled-placeholder). New 9-pt curve gets 8-entry transition tables
+# and a 9-entry layers table. Preserves the 2-step cfg/stg warmup at
+# the top of the curve; flat 1s elsewhere; layer-skipping stays off.
+ARM1_STG_SIGMAS = CANONICAL_SIGMAS
+ARM1_STG_CFG = "2, 1.5, 1, 1, 1, 1, 1, 1"
+ARM1_STG_STG_SCALE = "2, 1.5, 1, 1, 1, 1, 1, 1"
+ARM1_STG_RESCALE = "1, 1, 1, 1, 1, 1, 1, 1"
+ARM1_STG_LAYERS = "[9999], [9999], [9999], [9999], [9999], [9999], [9999], [9999], [9999]"
+
+# Anchor cache step remap. Original `cache_at_step=6` against the
+# 14-pt curve fires at sigma=0.812. Closest higher-sigma slot on the
+# canonical 9-pt curve is idx 5 (sigma=0.909375); idx 6 is 0.725.
+# Step 5 is the closest match.
+ARM1_ANCHOR_CACHE_STEP = 5
 
 DEFAULT_INPUT = "internal/workflows/ltx_i2v_tiled_optimized.draft.json"
 
 # Output paths per arm. Anchored to the canonical staging dir.
 _OUTPUTS: dict[str, str] = {
+    "arm1": "internal/workflows/ltx_i2v_tiled_arm1.draft.json",
     "arm5": "internal/workflows/ltx_i2v_tiled_arm5.draft.json",
 }
 
@@ -87,7 +119,38 @@ def _apply_arm5(ed: WorkflowEditor) -> None:
     print(f"  KSamplerSelect #{ID_FIRSTPASS_KSAMPLER}: {old!r} -> 'euler'")
 
 
+def _set_widget(node: dict, idx: int, value, label: str) -> None:
+    wv = list(node.get("widgets_values") or [])
+    if idx >= len(wv):
+        raise SystemExit(f"Node #{node.get('id')} widget index {idx} out of range ({len(wv)} widgets).")
+    old = wv[idx]
+    wv[idx] = value
+    node["widgets_values"] = wv
+    print(f"  #{node.get('id')} [{node.get('type')}] {label}: {old!r} -> {value!r}")
+
+
+def _apply_arm1(ed: WorkflowEditor) -> None:
+    """Arm 1 -- canonical 9-pt curve + euler + matched downstream remap.
+
+    Coordinated because the four widgets must move together: anchor's
+    cache_at_step is indexed against the sigma list, STG's sigma-keyed
+    cfg/stg tables key against the same list, and the sampler's noise
+    behavior changes with both family and curve length. Partial
+    application leaves an inconsistent curve.
+    """
+    _set_widget(ed.find_node(ID_FIRSTPASS_SIGMAS), 0, CANONICAL_SIGMAS, "sigmas")
+    _set_widget(ed.find_node(ID_FIRSTPASS_KSAMPLER), 0, "euler", "sampler")
+    _set_widget(ed.find_node(ID_ANCHOR), 1, ARM1_ANCHOR_CACHE_STEP, "cache_at_step")
+    stg = ed.find_node(ID_STG_GUIDER)
+    _set_widget(stg, 2, ARM1_STG_SIGMAS, "stg sigmas")
+    _set_widget(stg, 3, ARM1_STG_CFG, "stg cfg_values")
+    _set_widget(stg, 4, ARM1_STG_STG_SCALE, "stg stg_scale_values")
+    _set_widget(stg, 5, ARM1_STG_RESCALE, "stg stg_rescale_values")
+    _set_widget(stg, 6, ARM1_STG_LAYERS, "stg layers_indices")
+
+
 _DISPATCH = {
+    "arm1": _apply_arm1,
     "arm5": _apply_arm5,
 }
 
@@ -97,6 +160,19 @@ def _already_migrated(ed: WorkflowEditor, arm: str) -> bool:
         n = ed.find_node(ID_FIRSTPASS_KSAMPLER)
         wv = n.get("widgets_values") or []
         return bool(wv) and wv[0] == "euler"
+    if arm == "arm1":
+        # Check one widget per touched node so a crash mid-application
+        # (between dispatch steps) doesn't short-circuit re-application.
+        sigmas = ed.find_node(ID_FIRSTPASS_SIGMAS).get("widgets_values") or []
+        sampler = ed.find_node(ID_FIRSTPASS_KSAMPLER).get("widgets_values") or []
+        anchor = ed.find_node(ID_ANCHOR).get("widgets_values") or []
+        stg = ed.find_node(ID_STG_GUIDER).get("widgets_values") or []
+        return (
+            bool(sigmas) and sigmas[0] == CANONICAL_SIGMAS
+            and bool(sampler) and sampler[0] == "euler"
+            and len(anchor) > 1 and anchor[1] == ARM1_ANCHOR_CACHE_STEP
+            and len(stg) > 2 and stg[2] == ARM1_STG_SIGMAS
+        )
     raise SystemExit(f"Unknown arm: {arm!r}")
 
 
