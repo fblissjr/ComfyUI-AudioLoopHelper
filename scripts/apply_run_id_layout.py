@@ -59,7 +59,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from workflow_utils import WorkflowEditor
+from workflow_utils import WorkflowEditor, iter_all_workflows
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -214,15 +214,6 @@ def _apply_one(wf_path: Path, revert: bool, dry_run: bool) -> str:
     return f"updated (RunIdPrefix #{rip_id}; {sl_note})"
 
 
-def _iter_workflows() -> list[Path]:
-    paths: list[Path] = []
-    for d in (REPO_ROOT / "example_workflows", REPO_ROOT / "internal" / "workflows"):
-        if not d.exists():
-            continue
-        paths.extend(sorted(d.rglob("*.json")))
-    return paths
-
-
 def apply(revert: bool, dry_run: bool) -> int:
     if dry_run:
         action = f"Would {'revert' if revert else 'apply'}"
@@ -230,7 +221,7 @@ def apply(revert: bool, dry_run: bool) -> int:
         action = "Reverting" if revert else "Applying"
     print(f"{action} RunIdPrefix layout across workflows...")
     fail = 0
-    for wf_path in _iter_workflows():
+    for wf_path in iter_all_workflows():
         rel = wf_path.relative_to(REPO_ROOT)
         status = _apply_one(wf_path, revert, dry_run)
         print(f"  {rel}: {status}")

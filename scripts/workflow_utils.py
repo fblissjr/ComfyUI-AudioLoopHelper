@@ -24,8 +24,28 @@ import orjson
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_WORKFLOWS_DIR = REPO_ROOT / "example_workflows"
+INTERNAL_WORKFLOWS_DIR = REPO_ROOT / "internal" / "workflows"
 RUNS_DIR = REPO_ROOT / "internal" / "analysis" / "runs"
 DATA_RUNS_DIR = REPO_ROOT / "data" / "runs"
+
+
+def iter_all_workflows() -> list[Path]:
+    """Return every workflow JSON the apply-script family touches:
+    ``example_workflows/`` (shipped, public) + ``internal/workflows/``
+    (drafts, gitignored). Sorted within each dir for deterministic
+    iteration; deterministic across runs.
+
+    Promoted from inline ``_iter_workflows`` in 4 apply scripts
+    (``apply_trim_image_batch_to_audio``, ``apply_trim_video_latent_to_audio``,
+    ``apply_run_id_layout``, ``apply_fix_source_audio_trim_defaults``)
+    per CLAUDE.md "promote at 3rd call site." Skips dirs that don't
+    exist (some clones have no internal/workflows).
+    """
+    paths: list[Path] = []
+    for d in (EXAMPLE_WORKFLOWS_DIR, INTERNAL_WORKFLOWS_DIR):
+        if d.exists():
+            paths.extend(sorted(d.rglob("*.json")))
+    return paths
 
 # Decoders that produce IMAGE from a video LATENT. Shared vocabulary so
 # `apply_trim_video_latent_to_audio.py` (splice-target detection) and

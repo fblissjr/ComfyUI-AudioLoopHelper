@@ -35,7 +35,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from workflow_utils import DECODER_TYPES, WorkflowEditor
+from workflow_utils import DECODER_TYPES, WorkflowEditor, iter_all_workflows
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -178,20 +178,11 @@ def _apply_one(wf_path: Path, revert: bool, dry_run: bool) -> str:
     return f"updated (added TrimVideoLatentToAudio #{trim_id} before decoder #{decoder['id']}, {fps_note})"
 
 
-def _iter_workflows() -> list[Path]:
-    paths: list[Path] = []
-    for d in (REPO_ROOT / "example_workflows", REPO_ROOT / "internal" / "workflows"):
-        if not d.exists():
-            continue
-        paths.extend(sorted(d.rglob("*.json")))
-    return paths
-
-
 def apply(revert: bool, dry_run: bool) -> int:
     action = ("Would " if dry_run else "") + ("revert" if revert else "apply").capitalize()
     print(f"{action} TrimVideoLatentToAudio across workflows...")
     fail = 0
-    for wf_path in _iter_workflows():
+    for wf_path in iter_all_workflows():
         rel = wf_path.relative_to(REPO_ROOT)
         status = _apply_one(wf_path, revert, dry_run)
         print(f"  {rel}: {status}")
