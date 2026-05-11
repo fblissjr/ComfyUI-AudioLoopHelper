@@ -89,6 +89,11 @@ Any node that uses `id()`-keyed LRU + `IS_CHANGED` for memoization (the `Timesta
 
 Read these BEFORE rewriting the system prompt. A substring you remove silently breaks the test.
 
+## Validating audio/duration-affecting changes
+
+- **Compare to the SOURCE audio file, not the saved mp4's audio stream.** `ffprobe -show_entries stream=duration` on a saved mp4 reports the audio stream's duration *after* ffmpeg muxed it — `-shortest` can clip audio to match a too-short video without changing how it "looks" in ffprobe. Two mp4s with identical sub-frame deltas can both have audio clipped from source (the F14 layered-trim bug, 2026-05-10). For trim/duration changes, ffprobe BOTH the source mp3/wav AND the output mp4, and compare audio durations directly.
+- **`-shortest` + `-c:v copy` in ffmpeg is asymmetric.** Clips audio when video < audio (works as expected) but doesn't reliably clip video when video > audio (`-c:v copy` bypasses the truncation). Asymmetry forces F14's layered shape: latent trim snaps UP so video ≥ audio (audio survives), image trim then clips video to exact audio length (no silence-at-end). Don't shortcut to either trim alone.
+
 ## Apply-script tests need pre-migration state
 
 Have the fixture `shutil.copy2(CANONICAL, dst)` then invoke the apply script's own `--revert` to restore. Keeps fixture state in lockstep with the script's understanding of "before"; avoids a separate fixture-baseline file that drifts when the canonical changes.
