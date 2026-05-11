@@ -27,8 +27,17 @@ Arms implemented:
   headline question is "8-step canonical euler vs 13-step
   euler_ancestral + easing?"
 
-Arms 2-4 (drop easing / drop anchor / drop STG warmup) are designed
-in the matrix doc; add when the user wants to run them.
+- no_rtx (upscaler-stack A/B, U-B): bypass `RTXVideoSuperResolution`
+  via `mode=4`. The post-decode IMAGE flows straight from the tiled
+  VAE decode into `VHS_VideoCombine`. Tests "is the NVIDIA pixel-
+  space VSR adding value on top of the LTXV 2x latent upsample, or
+  is it redundant?" Sampler / curve / anchor / STG unchanged from
+  Arm 0.
+
+Arms 2-4 of the curve matrix (drop easing / drop anchor / drop STG
+warmup) plus arm `no_ltxv_upsample` (the deeper U-C topology
+surgery) are designed in the matrix doc; add when the user wants
+to run them.
 
 Usage:
     uv run --group dev python scripts/apply_ltx_i2v_tiled_ab_variants.py --arm arm5
@@ -60,6 +69,12 @@ ID_FIRSTPASS_KSAMPLER = 520
 ID_FIRSTPASS_SIGMAS = 527        # ManualSigmas feeding the easing + anchor
 ID_ANCHOR = 731                  # LTXLatentAnchorAware
 ID_STG_GUIDER = 653              # STGGuiderAdvanced
+ID_RTX_VSR = 755                 # RTXVideoSuperResolution (post-decode pixel VSR)
+
+# ComfyUI mode constants: 0 = active, 4 = bypass (passes input to
+# output of same type only).
+MODE_ACTIVE = 0
+MODE_BYPASS = 4
 
 # Arm-1 STG widget remap: 14-pt curve had 13-entry cfg/stg/rescale
 # tables (one per sampler transition) and a 14-entry layers table
@@ -85,6 +100,7 @@ DEFAULT_INPUT = "internal/workflows/ltx_i2v_tiled_optimized.draft.json"
 _OUTPUTS: dict[str, str] = {
     "arm1": "internal/workflows/ltx_i2v_tiled_arm1.draft.json",
     "arm5": "internal/workflows/ltx_i2v_tiled_arm5.draft.json",
+    "no_rtx": "internal/workflows/ltx_i2v_tiled_no_rtx.draft.json",
 }
 
 # Available arms. Add to both this set and the dispatch table below
@@ -149,9 +165,24 @@ def _apply_arm1(ed: WorkflowEditor) -> None:
     _set_widget(stg, 6, ARM1_STG_LAYERS, "stg layers_indices")
 
 
+def _apply_no_rtx(ed: WorkflowEditor) -> None:
+    """Bypass `RTXVideoSuperResolution`. ComfyUI's mode=4 passes the IMAGE
+    input through to the IMAGE output since they share type, so no
+    rewiring is needed.
+    """
+    n = ed.find_node(ID_RTX_VSR)
+    if n.get("type") != "RTXVideoSuperResolution":
+        raise SystemExit(
+            f"Expected RTXVideoSuperResolution at #{ID_RTX_VSR}, got {n.get('type')!r}."
+        )
+    n["mode"] = MODE_BYPASS
+    print(f"  #{ID_RTX_VSR} [{n['type']}]: mode {MODE_ACTIVE} -> {MODE_BYPASS} (bypassed)")
+
+
 _DISPATCH = {
     "arm1": _apply_arm1,
     "arm5": _apply_arm5,
+    "no_rtx": _apply_no_rtx,
 }
 
 
@@ -173,6 +204,8 @@ def _already_migrated(ed: WorkflowEditor, arm: str) -> bool:
             and len(anchor) > 1 and anchor[1] == ARM1_ANCHOR_CACHE_STEP
             and len(stg) > 2 and stg[2] == ARM1_STG_SIGMAS
         )
+    if arm == "no_rtx":
+        return ed.find_node(ID_RTX_VSR).get("mode") == MODE_BYPASS
     raise SystemExit(f"Unknown arm: {arm!r}")
 
 
