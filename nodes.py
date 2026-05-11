@@ -2164,6 +2164,155 @@ class LatentFrameCount(io.ComfyNode):
         return io.NodeOutput(pixel_frames, latent_frames)
 
 
+class _AmplifiedNoise:
+    """Wraps an underlying NOISE generator and amplifies the first N
+    temporal frames of the produced noise tensor.
+
+    Equivalent to giving those frames a higher initial sigma without
+    touching the sigma schedule -- a non-uniform-sampling effect
+    achieved by perturbing the input noise instead of the sampler.
+    Used by :class:`LTXNoiseFrameAmplifier` to break LTX 2.3's
+    "ease into motion" temporal prior on i2v init-anchored frames.
+
+    Handles plain tensor noise and NestedTensor noise (LTX AV concat):
+    on a NestedTensor only the first sub-tensor (assumed to be the
+    video latent per `LTXVConcatAVLatent` convention: video first,
+    audio second) gets amplified. Audio noise is left untouched.
+    """
+
+    def __init__(self, underlying, n_frames: int, amplifier: float):
+        self._underlying = underlying
+        self._n_frames = int(n_frames)
+        self._amplifier = float(amplifier)
+        # Mirror the seed attribute so the sampler's noise.seed access works.
+        self.seed = getattr(underlying, "seed", 0)
+
+    def generate_noise(self, input_latent):
+        noise = self._underlying.generate_noise(input_latent)
+        if self._n_frames <= 0 or self._amplifier == 1.0:
+            return noise
+        # NestedTensor path (LTX AV concat). Detect by .unbind() availability
+        # without importing comfy.nested_tensor (tests run without ComfyUI).
+        unbind = getattr(noise, "unbind", None)
+        if unbind is not None and not hasattr(noise, "shape"):
+            try:
+                parts = list(unbind())
+            except Exception:
+                # Fall through to tensor path if unbind doesn't behave as expected
+                parts = None
+            if parts is not None and parts:
+                parts[0] = self._amplify_temporal(parts[0])
+                try:
+                    import comfy.nested_tensor  # type: ignore
+                    return comfy.nested_tensor.NestedTensor(parts)
+                except ImportError:
+                    # Headless / test environment: return list (tests don't exercise nested path).
+                    return parts
+        return self._amplify_temporal(noise)
+
+    def _amplify_temporal(self, tensor):
+        """Amplify first ``n_frames`` along the temporal dim (dim 2 for a
+        5D ``[B, C, T, H, W]`` video latent). Out-of-range ``n_frames``
+        clamps to the actual T extent."""
+        if tensor.ndim < 3:
+            # 1D/2D tensor (e.g. audio latent shape) — temporal dim ambiguous; skip.
+            return tensor
+        n = min(self._n_frames, tensor.shape[2])
+        if n <= 0:
+            return tensor
+        # Clone so we don't mutate the underlying generator's output if it
+        # caches. comfy.sample.prepare_noise returns a fresh tensor each
+        # call so this is defensive, not load-bearing.
+        out = tensor.clone()
+        out[:, :, :n] = out[:, :, :n] * self._amplifier
+        return out
+
+
+class LTXNoiseFrameAmplifier(io.ComfyNode):
+    """Multiply the first N temporal frames of the input NOISE tensor by
+    a scalar amplifier.
+
+    Use case: LTX 2.3 i2v "filler" problem. The model's distilled LoRA
+    is trained on a video distribution where shots ease into motion --
+    early frames stay near the init-image state, action develops over
+    1-2 seconds. Standard sampling uses uniform noise across the video
+    latent; this node breaks that uniformity. Higher noise on frames
+    0..N-1 gives the sampler more denoising work in those frames, which
+    the model can only resolve by diverging from the init-image's
+    temporal prior. Net effect: motion starts earlier.
+
+    Mechanism is equivalent to a per-frame sigma schedule -- those
+    frames begin sampling at effective sigma = amplifier * sigma_T --
+    achieved by manipulating the input noise instead of writing a
+    custom non-uniform sampler. Sigma chain, sage attention, anchor,
+    STG all unchanged.
+
+    Plug between ``RandomNoise`` and ``SamplerCustomAdvanced.noise``:
+
+        RandomNoise.NOISE -> LTXNoiseFrameAmplifier.noise
+                             LTXNoiseFrameAmplifier.noise -> SamplerCustomAdvanced.noise
+
+    Defaults (n_frames=8, amplifier=1.5) target the first ~0.32 s of a
+    25 fps clip (8 latent frames = 57 pixel frames per the LTX video
+    VAE formula). Tune for your filler length. amplifier=1.0 or
+    n_frames=0 is a no-op pass-through. Amplifier < 1.0 attenuates
+    early-frame noise instead (anchor MORE strongly to init image --
+    inverse use case).
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="LTXNoiseFrameAmplifier",
+            display_name="LTX Noise Frame Amplifier",
+            category="sampling/custom_sampling/noise",
+            description=(
+                "Multiply the first N latent-temporal frames of input "
+                "NOISE by a scalar. Drives non-uniform initial sigma "
+                "without touching the sigma schedule. Used to break "
+                "LTX 2.3 i2v's ease-into-motion temporal prior."
+            ),
+            inputs=[
+                io.Noise.Input(
+                    "noise",
+                    tooltip="Upstream NOISE (typically from RandomNoise).",
+                ),
+                io.Int.Input(
+                    "n_frames",
+                    default=8,
+                    min=0,
+                    max=4096,
+                    tooltip=(
+                        "How many LATENT temporal frames to amplify "
+                        "starting at frame 0. 0 disables. 8 latent "
+                        "frames = ~57 pixel frames (LTX VAE temporal "
+                        "scale of 8) = ~0.32 s at 25 fps."
+                    ),
+                ),
+                io.Float.Input(
+                    "amplifier",
+                    default=1.5,
+                    min=0.1,
+                    max=5.0,
+                    step=0.05,
+                    tooltip=(
+                        "Multiplier on early-frame noise. 1.0 = no-op. "
+                        ">1 pushes model to do more denoising work "
+                        "on those frames -> more divergence from init. "
+                        "Typical range 1.3-2.0; >2.5 likely produces "
+                        "over-noisy artifacts. <1.0 attenuates early "
+                        "noise (anchors MORE strongly to init)."
+                    ),
+                ),
+            ],
+            outputs=[io.Noise.Output()],
+        )
+
+    @classmethod
+    def execute(cls, noise, n_frames: int, amplifier: float) -> io.NodeOutput:
+        return io.NodeOutput(_AmplifiedNoise(noise, n_frames=n_frames, amplifier=amplifier))
+
+
 def _purge_stale_loaded_models() -> None:
     """Prune stale entries from ``comfy.model_management.current_loaded_models``
     (wrappers whose underlying ``.model`` was GC'd to None) and force a
@@ -3798,6 +3947,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LatentSeamZoneMask,
             RunIdPrefix,
             LatentFrameCount,
+            LTXNoiseFrameAmplifier,
             TrimVideoLatentToAudio,
             TrimImageBatchToAudio,
             PurgeVRAM,
