@@ -2476,10 +2476,10 @@
         "Node name for S&R": "TrimAudioDuration"
       },
       "widgets_values": [
-        5,
-        300
+        0,
+        600
       ],
-      "title": "Song Trim (skip intro, take N seconds)"
+      "title": "Song Trim (full song by default — set start_index > 0 to skip intro)"
     },
     {
       "id": 1540,

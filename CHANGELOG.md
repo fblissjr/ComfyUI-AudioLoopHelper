@@ -6,6 +6,22 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **`TrimAudioDuration #567` ate the first 5s of every song.** Canonical
+  default was `[start_index=5, duration=300]`, originally meant to
+  "skip silent intros and cap at 5 minutes." But the default-ON intro
+  skip silently lost the first 5 seconds of every render's audio
+  unless the user explicitly noticed and edited the widget. Reported
+  2026-05-10 after a render where the user heard audio cut off — F14
+  trim chain was working correctly; the audio was already short of
+  source by 5s when it entered the loop. Fix: change `#567` widgets
+  to `[0, 600]` (full song by default, capped at 10 minutes; user can
+  set start_index > 0 to skip intro explicitly). Title also updated
+  to "Song Trim (full song by default — set start_index > 0 to skip
+  intro)" so the new default is discoverable. Applied via
+  `scripts/apply_fix_source_audio_trim_defaults.py` across 13
+  workflows that had the buggy default.
+
 ### Changed
 - **F14 reverted to layered (latent + image) trim after audio-clipping bug.**
   2026-05-10 ran the canonical workflow end-to-end and reported "cut

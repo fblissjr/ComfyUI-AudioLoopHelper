@@ -2778,8 +2778,8 @@
         "Node name for S&R": "TrimAudioDuration"
       },
       "widgets_values": [
-        5,
-        300
+        0,
+        600
       ]
     },
     {
