@@ -5,7 +5,7 @@ Last updated: 2026-05-04
 Produces `internal/workflows/seam_zone_refinement.draft.json` per the
 topology described in `internal/design/polish_passes_design.md §P5`:
 
-    VHS_LoadVideo → VAEEncode
+    LoadLatent (assembled video latent from loop save)
                        ↓
             LatentSeamZoneMask (multi-band mask centered on each
                                 internal iteration boundary)
@@ -104,31 +104,36 @@ def build(ed: WorkflowEditor) -> dict[str, int]:
         widgets_values=[AUDIO_VAE_NAME, "main_device", "bf16"],
     )
 
-    ids["load_video"] = ed.add_top_level_node(
-        node_type="VHS_LoadVideo",
-        pos=[-1900, 800], size=[460, 280],
-        inputs=[
-            _basic_io_in("meta_batch", "VHS_BatchManager"),
-            _basic_io_in("vae", "VAE"),
-            _widget_in("frame_load_cap", "INT"),
-        ],
+    # Source: loaded assembled video latent + source audio. Avoids the
+    # VHS_LoadVideo → VAEEncode pixel-batch OOM (~16GB at 4000+ frames).
+    # Pre-step: run loop with scripts/apply_save_assembled_latent.py applied,
+    # move <output>/seam_diag/assembled_latent_NNNNN_.latent into ComfyUI's
+    # input/ directory.
+    ids["load_latent"] = ed.add_top_level_node(
+        node_type="LoadLatent",
+        pos=[-1900, 800], size=[460, 60],
+        inputs=[],
+        outputs=[_out("LATENT", "LATENT")],
+        widgets_values=["assembled_latent.latent"],
+        title="Load assembled video latent",
+    )
+    ids["load_audio"] = ed.add_top_level_node(
+        node_type="LoadAudio",
+        pos=[-1900, 900], size=[460, 90],
+        inputs=[],
+        outputs=[_out("AUDIO", "AUDIO")],
+        widgets_values=["source_audio.mp3", None, None],
+        title="Source audio (same as loop)",
+    )
+    ids["latent_frame_count"] = ed.add_top_level_node(
+        node_type="LatentFrameCount",
+        pos=[-1400, 1000], size=[260, 80],
+        inputs=[_basic_io_in("latent", "LATENT")],
         outputs=[
-            _out("IMAGE", "IMAGE"),
-            _out("frame_count", "INT"),
-            _out("audio", "AUDIO"),
-            _out("video_info", "VHS_VIDEOINFO"),
+            _out("pixel_frames", "INT"),
+            _out("latent_frames", "INT"),
         ],
-        widgets_values={
-            "video": "loop_output.mp4",
-            "force_rate": FRAME_RATE,
-            "custom_width": 0,
-            "custom_height": 0,
-            "frame_load_cap": 0,
-            "skip_first_frames": 0,
-            "select_every_nth": 1,
-            "format": "Wildcard",
-        },
-        title="Load loop output",
+        widgets_values=[],
     )
 
     ids["pos_text"] = ed.add_top_level_node(
@@ -169,16 +174,6 @@ def build(ed: WorkflowEditor) -> dict[str, int]:
         widgets_values=[FRAME_RATE],
     )
 
-    ids["vae_encode"] = ed.add_top_level_node(
-        node_type="VAEEncode",
-        pos=[-1400, 800], size=[210, 50],
-        inputs=[
-            _basic_io_in("pixels", "IMAGE"),
-            _basic_io_in("vae", "VAE"),
-        ],
-        outputs=[_out("LATENT", "LATENT")],
-        widgets_values=[],
-    )
     ids["seam_mask"] = ed.add_top_level_node(
         node_type="LatentSeamZoneMask",
         pos=[-1100, 800], size=[330, 200],
@@ -333,13 +328,13 @@ def build(ed: WorkflowEditor) -> dict[str, int]:
     ed.add_link(ids["pos_text"], 0, ids["ltx_cond"], 0, "CONDITIONING")
     ed.add_link(ids["zero_neg"], 0, ids["ltx_cond"], 1, "CONDITIONING")
 
-    ed.add_link(ids["load_video"], 0, ids["vae_encode"], 0, "IMAGE")
-    ed.add_link(ids["video_vae"], 0, ids["vae_encode"], 1, "VAE")
-    ed.add_link(ids["vae_encode"], 0, ids["seam_mask"], 0, "LATENT")
+    # Source: loaded assembled video latent → seam mask. Skips the
+    # VHS_LoadVideo + VAEEncode pixel round-trip that OOMs at long lengths.
+    ed.add_link(ids["load_latent"], 0, ids["seam_mask"], 0, "LATENT")
+    ed.add_link(ids["load_latent"], 0, ids["latent_frame_count"], 0, "LATENT")
 
     ed.add_link(ids["audio_vae"], 0, ids["empty_audio"], 0, "VAE")
-    # Track loaded video's frame count so AV-concat shapes always match.
-    ed.add_link(ids["load_video"], 1, ids["empty_audio"], 1, "INT")
+    ed.add_link(ids["latent_frame_count"], 0, ids["empty_audio"], 1, "INT")
 
     ed.add_link(ids["seam_mask"], 0, ids["av_concat"], 0, "LATENT")
     ed.add_link(ids["empty_audio"], 0, ids["av_concat"], 1, "LATENT")
@@ -361,7 +356,7 @@ def build(ed: WorkflowEditor) -> dict[str, int]:
     ed.add_link(ids["video_vae"], 0, ids["decode"], 1, "VAE")
 
     ed.add_link(ids["decode"], 0, ids["combine"], 0, "IMAGE")
-    ed.add_link(ids["load_video"], 2, ids["combine"], 1, "AUDIO")
+    ed.add_link(ids["load_audio"], 0, ids["combine"], 1, "AUDIO")
 
     return ids
 

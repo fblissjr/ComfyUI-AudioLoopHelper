@@ -2047,6 +2047,46 @@ class LatentOverlapTrim(io.ComfyNode):
 #   out = latent.copy(); out.pop("noise_mask", None)
 
 
+class LatentFrameCount(io.ComfyNode):
+    """Emits pixel-frame and latent-frame counts from a video LATENT.
+
+    Used by the latent-load-based upscale + seam workflows to size
+    ``LTXVEmptyLatentAudio.frames_number`` directly from the loaded
+    video latent's temporal extent — no AUDIO source required for that
+    sizing step. The LTX video VAE convention is
+    ``pixel_frames = (latent_frames - 1) * 8 + 1`` (LTX_TEMPORAL_SCALE
+    = 8). Mirrors ``_snap_frames`` in reverse.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="LatentFrameCount",
+            display_name="Latent Frame Count",
+            category="latent/utility",
+            description=(
+                "Counts frames in a video LATENT. Returns (pixel_frames, "
+                "latent_frames) where pixel_frames = (latent_frames - 1)*8 + 1 "
+                "per the LTX video VAE temporal scale. Useful for sizing "
+                "LTXVEmptyLatentAudio.frames_number when loading a "
+                "pre-saved latent instead of decoding a video."
+            ),
+            inputs=[
+                io.Latent.Input("latent", tooltip="Video latent (e.g. from LoadLatent)."),
+            ],
+            outputs=[
+                io.Int.Output("pixel_frames", tooltip="pixel_frames = (latent_frames - 1)*8 + 1"),
+                io.Int.Output("latent_frames", tooltip="Raw temporal dim of the latent."),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, latent: dict) -> io.NodeOutput:
+        latent_frames = int(latent["samples"].shape[2])
+        pixel_frames = (latent_frames - 1) * LTX_TEMPORAL_SCALE + 1
+        return io.NodeOutput(pixel_frames, latent_frames)
+
+
 class TrimImageBatchToAudio(io.ComfyNode):
     """Clips an IMAGE batch to ``floor(audio_duration * fps)`` frames.
 
@@ -3516,6 +3556,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LatentOverlapTrim,
             LatentTemporalMask,
             LatentSeamZoneMask,
+            LatentFrameCount,
             TrimImageBatchToAudio,
             AudioPitchDetect,
             LTXResolutionFromAspect,

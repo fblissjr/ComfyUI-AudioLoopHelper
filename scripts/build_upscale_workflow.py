@@ -3,9 +3,10 @@
 Produces `internal/workflows/upscale_loop_output.draft.json` per the
 topology described in `internal/design/upscale_workflow_design.md`:
 
-    VHS_LoadVideo → VAEEncode → LTXVLatentUpsampler (2x)
+    LoadLatent (assembled video latent from loop save) → LTXVLatentUpsampler (2x)
                                        ↓
-                LTXVConcatAVLatent (re-attach empty audio latent)
+                LTXVConcatAVLatent (re-attach empty audio latent, sized
+                                    from LatentFrameCount)
                                        ↓
                 SamplerCustomAdvanced (3-step low-σ tail, euler, cfg=1)
                                        ↓
@@ -138,33 +139,40 @@ def build(ed: WorkflowEditor) -> dict[str, int]:
     )
 
     # -----------------------------------------------------------------------
-    # Source loop output
+    # Source loop output — load the SAVED assembled video latent directly,
+    # NOT the pixel mp4. VHS_LoadVideo → VAEEncode at 4000+ frames OOMs on
+    # 24GB before the upsampler runs (~16GB pixel batch). LoadLatent reads
+    # the assembled.latent file produced by scripts/apply_save_assembled_latent.py
+    # on the loop run. Memory: ~855MB for a 535-latent-frame song vs ~16GB.
+    # User pre-step: run loop with apply_save_assembled_latent applied,
+    # move the resulting <output>/seam_diag/assembled_latent_NNNNN_.latent
+    # into ComfyUI's input/ directory.
     # -----------------------------------------------------------------------
-    ids["load_video"] = ed.add_top_level_node(
-        node_type="VHS_LoadVideo",
-        pos=[-1900, 920], size=[460, 280],
-        inputs=[
-            _basic_io_in("meta_batch", "VHS_BatchManager"),
-            _basic_io_in("vae", "VAE"),
-            _widget_in("frame_load_cap", "INT"),
-        ],
+    ids["load_latent"] = ed.add_top_level_node(
+        node_type="LoadLatent",
+        pos=[-1900, 920], size=[460, 60],
+        inputs=[],
+        outputs=[_out("LATENT", "LATENT")],
+        widgets_values=["assembled_latent.latent"],  # user sets in UI
+        title="Load assembled video latent",
+    )
+    ids["load_audio"] = ed.add_top_level_node(
+        node_type="LoadAudio",
+        pos=[-1900, 1020], size=[460, 90],
+        inputs=[],
+        outputs=[_out("AUDIO", "AUDIO")],
+        widgets_values=["source_audio.mp3", None, None],
+        title="Source audio (same as loop)",
+    )
+    ids["latent_frame_count"] = ed.add_top_level_node(
+        node_type="LatentFrameCount",
+        pos=[-1400, 1120], size=[260, 80],
+        inputs=[_basic_io_in("latent", "LATENT")],
         outputs=[
-            _out("IMAGE", "IMAGE"),
-            _out("frame_count", "INT"),
-            _out("audio", "AUDIO"),
-            _out("video_info", "VHS_VIDEOINFO"),
+            _out("pixel_frames", "INT"),
+            _out("latent_frames", "INT"),
         ],
-        widgets_values={
-            "video": "loop_output.mp4",  # placeholder — user sets in UI
-            "force_rate": FRAME_RATE,
-            "custom_width": 0,
-            "custom_height": 0,
-            "frame_load_cap": 0,
-            "skip_first_frames": 0,
-            "select_every_nth": 1,
-            "format": "Wildcard",
-        },
-        title="Load loop output",
+        widgets_values=[],
     )
 
     # -----------------------------------------------------------------------
@@ -211,16 +219,6 @@ def build(ed: WorkflowEditor) -> dict[str, int]:
     # -----------------------------------------------------------------------
     # Latent path: encode → upscale → re-condition → AV concat
     # -----------------------------------------------------------------------
-    ids["vae_encode"] = ed.add_top_level_node(
-        node_type="VAEEncode",
-        pos=[-1400, 920], size=[210, 50],
-        inputs=[
-            _basic_io_in("pixels", "IMAGE"),
-            _basic_io_in("vae", "VAE"),
-        ],
-        outputs=[_out("LATENT", "LATENT")],
-        widgets_values=[],
-    )
     ids["upsampler"] = ed.add_top_level_node(
         node_type="LTXVLatentUpsampler",
         pos=[-1100, 920], size=[260, 90],
@@ -406,16 +404,16 @@ def build(ed: WorkflowEditor) -> dict[str, int]:
     ed.add_link(ids["pos_text"], 0, ids["ltx_cond"], 0, "CONDITIONING")
     ed.add_link(ids["zero_neg"], 0, ids["ltx_cond"], 1, "CONDITIONING")
 
-    # Source video → encode → upscale
-    ed.add_link(ids["load_video"], 0, ids["vae_encode"], 0, "IMAGE")
-    ed.add_link(ids["video_vae"], 0, ids["vae_encode"], 1, "VAE")
-    ed.add_link(ids["vae_encode"], 0, ids["upsampler"], 0, "LATENT")
+    # Source: loaded assembled video latent → upsampler. Direct latent input
+    # skips a 16GB-pixel-batch + VAEEncode round-trip that OOMs on 24GB.
+    ed.add_link(ids["load_latent"], 0, ids["upsampler"], 0, "LATENT")
     ed.add_link(ids["upscale_model"], 0, ids["upsampler"], 1, "LATENT_UPSCALE_MODEL")
     ed.add_link(ids["video_vae"], 0, ids["upsampler"], 2, "VAE")
 
+    # Empty audio latent: size from the loaded video latent's temporal extent.
+    ed.add_link(ids["load_latent"], 0, ids["latent_frame_count"], 0, "LATENT")
     ed.add_link(ids["audio_vae"], 0, ids["empty_audio"], 0, "VAE")
-    # Track loaded video's frame count so AV-concat shapes always match.
-    ed.add_link(ids["load_video"], 1, ids["empty_audio"], 1, "INT")
+    ed.add_link(ids["latent_frame_count"], 0, ids["empty_audio"], 1, "INT")
 
     # Sampler ingests upsampled latent directly; no ConditionOnly intercept (Issue A).
     ed.add_link(ids["upsampler"], 0, ids["av_concat"], 0, "LATENT")
@@ -443,9 +441,9 @@ def build(ed: WorkflowEditor) -> dict[str, int]:
     ed.add_link(ids["crop_guides"], 2, ids["decode"], 0, "LATENT")
     ed.add_link(ids["video_vae"], 0, ids["decode"], 1, "VAE")
 
-    # Combine: decoded images + original audio passthrough
+    # Combine: decoded images + source audio (from LoadAudio).
     ed.add_link(ids["decode"], 0, ids["combine"], 0, "IMAGE")
-    ed.add_link(ids["load_video"], 2, ids["combine"], 1, "AUDIO")
+    ed.add_link(ids["load_audio"], 0, ids["combine"], 1, "AUDIO")
 
     return ids
 

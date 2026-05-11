@@ -190,15 +190,14 @@ def test_model_chain_order_unet_to_cfg_guider(built_wf):
 # ---------------------------------------------------------------------------
 
 
-def test_empty_audio_frames_number_autowired_from_loaded_video(built_wf):
+def test_empty_audio_frames_number_autowired_from_latent_frame_count(built_wf):
     """LTXVEmptyLatentAudio.frames_number must be wired from
-    VHS_LoadVideo.frame_count (output slot 1).
+    LatentFrameCount.pixel_frames (output slot 0).
 
-    Hardcoding the widget defeats the workflow on any input video whose
-    frame count differs from the default — AV concat produces a
-    mismatched-shape latent and the sampler errors out. Autowiring
-    makes the workflow accept any loaded video without per-run UI
-    edits.
+    With the latent-load architecture, the loaded video latent's
+    temporal extent is the single source of truth for the audio
+    latent's frame count — no AUDIO needed for this sizing.
+    Hardcoding the widget would lock the workflow to one input length.
     """
     wf, ids = built_wf
     by_id = _node_by_id(wf)
@@ -214,13 +213,48 @@ def test_empty_audio_frames_number_autowired_from_loaded_video(built_wf):
     )
     src_id, src_slot = link[1], link[2]
     src = by_id[src_id]
-    assert src["type"] == "VHS_LoadVideo", (
-        f"frames_number must come from VHS_LoadVideo, got {src['type']}"
+    assert src["type"] == "LatentFrameCount", (
+        f"frames_number must come from LatentFrameCount, got {src['type']}"
     )
     src_slot_name = src["outputs"][src_slot]["name"]
-    assert src_slot_name == "frame_count", (
-        f"frames_number must come from VHS_LoadVideo.frame_count, "
-        f"got VHS_LoadVideo.{src_slot_name}"
+    assert src_slot_name == "pixel_frames", (
+        f"frames_number must come from LatentFrameCount.pixel_frames, "
+        f"got LatentFrameCount.{src_slot_name}"
+    )
+
+
+def test_pixel_pipeline_absent(built_wf):
+    """The pixel-decoding ingress is gone: no VHS_LoadVideo, no VAEEncode.
+    OOM regression guard — see internal/analysis/loop_audio_overshoot_analysis.md
+    section on the 16GB pixel-batch failure mode."""
+    wf, _ = built_wf
+    types = _types(wf)
+    assert "VHS_LoadVideo" not in types, (
+        "VHS_LoadVideo reintroduces the 16GB pixel-batch OOM. Use LoadLatent."
+    )
+    assert "VAEEncode" not in types, (
+        "VAEEncode means we round-tripped pixels. Use LoadLatent directly."
+    )
+
+
+def test_source_inputs_are_latent_and_audio(built_wf):
+    """Confirm LoadLatent + LoadAudio are present as the input sources."""
+    wf, _ = built_wf
+    types = _types(wf)
+    assert "LoadLatent" in types, "Missing LoadLatent — saved-latent ingest path."
+    assert "LoadAudio" in types, "Missing LoadAudio — source-audio ingest path."
+
+
+def test_combine_audio_comes_from_load_audio(built_wf):
+    """VHS_VideoCombine.audio must be fed by LoadAudio (not the absent VHS_LoadVideo)."""
+    wf, ids = built_wf
+    by_id = _node_by_id(wf)
+    combine_id = ids["combine"]
+    link = _link_into(wf, combine_id, 1)
+    assert link is not None, "VHS_VideoCombine.audio has no incoming link"
+    src = by_id[link[1]]
+    assert src["type"] == "LoadAudio", (
+        f"VHS_VideoCombine.audio must come from LoadAudio, got {src['type']}"
     )
 
 
