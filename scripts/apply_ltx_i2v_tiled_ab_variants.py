@@ -276,55 +276,53 @@ _DISPATCH = {
 }
 
 
+def _arm1_widgets_applied(ed: WorkflowEditor) -> bool:
+    """True iff Arm 1's first-pass sigmas + sampler widget edits are in place.
+
+    Arms 1-4 all share this base. Hoisted so each arm's
+    `_already_migrated` branch is its delta-from-Arm-1.
+    """
+    sigmas = ed.find_node(ID_FIRSTPASS_SIGMAS).get("widgets_values") or []
+    sampler = ed.find_node(ID_FIRSTPASS_KSAMPLER).get("widgets_values") or []
+    return (
+        bool(sigmas) and sigmas[0] == CANONICAL_SIGMAS
+        and bool(sampler) and sampler[0] == "euler"
+    )
+
+
 def _already_migrated(ed: WorkflowEditor, arm: str) -> bool:
     if arm == "arm5":
         n = ed.find_node(ID_FIRSTPASS_KSAMPLER)
         wv = n.get("widgets_values") or []
         return bool(wv) and wv[0] == "euler"
+    if arm == "no_rtx":
+        return ed.find_node(ID_RTX_VSR).get("mode") == MODE_BYPASS
     if arm == "arm1":
         # Check one widget per touched node so a crash mid-application
         # (between dispatch steps) doesn't short-circuit re-application.
-        sigmas = ed.find_node(ID_FIRSTPASS_SIGMAS).get("widgets_values") or []
-        sampler = ed.find_node(ID_FIRSTPASS_KSAMPLER).get("widgets_values") or []
         anchor = ed.find_node(ID_ANCHOR).get("widgets_values") or []
         stg = ed.find_node(ID_STG_GUIDER).get("widgets_values") or []
         return (
-            bool(sigmas) and sigmas[0] == CANONICAL_SIGMAS
-            and bool(sampler) and sampler[0] == "euler"
+            _arm1_widgets_applied(ed)
             and len(anchor) > 1 and anchor[1] == ARM1_ANCHOR_CACHE_STEP
             and len(stg) > 2 and stg[2] == ARM1_STG_SIGMAS
         )
-    if arm == "no_rtx":
-        return ed.find_node(ID_RTX_VSR).get("mode") == MODE_BYPASS
     if arm == "arm2":
-        # Arm 2 builds on Arm 1's widget set + bypasses the easing.
-        # Re-check the Arm-1 signature, plus the easing-bypass mode.
-        sigmas = ed.find_node(ID_FIRSTPASS_SIGMAS).get("widgets_values") or []
-        sampler = ed.find_node(ID_FIRSTPASS_KSAMPLER).get("widgets_values") or []
         return (
-            bool(sigmas) and sigmas[0] == CANONICAL_SIGMAS
-            and bool(sampler) and sampler[0] == "euler"
+            _arm1_widgets_applied(ed)
             and ed.find_node(ID_SIGMAS_EASING).get("mode") == MODE_BYPASS
         )
     if arm == "arm3":
-        # Arm 3 = Arm 1 + anchor bypass widget True.
-        sigmas = ed.find_node(ID_FIRSTPASS_SIGMAS).get("widgets_values") or []
-        sampler = ed.find_node(ID_FIRSTPASS_KSAMPLER).get("widgets_values") or []
         anchor = ed.find_node(ID_ANCHOR).get("widgets_values") or []
         return (
-            bool(sigmas) and sigmas[0] == CANONICAL_SIGMAS
-            and bool(sampler) and sampler[0] == "euler"
+            _arm1_widgets_applied(ed)
             and len(anchor) > ANCHOR_BYPASS_WIDGET_IDX
             and anchor[ANCHOR_BYPASS_WIDGET_IDX] is True
         )
     if arm == "arm4":
-        # Arm 4 = Arm 1 + STG cfg/stg_scale flattened.
-        sigmas = ed.find_node(ID_FIRSTPASS_SIGMAS).get("widgets_values") or []
-        sampler = ed.find_node(ID_FIRSTPASS_KSAMPLER).get("widgets_values") or []
         stg = ed.find_node(ID_STG_GUIDER).get("widgets_values") or []
         return (
-            bool(sigmas) and sigmas[0] == CANONICAL_SIGMAS
-            and bool(sampler) and sampler[0] == "euler"
+            _arm1_widgets_applied(ed)
             and len(stg) > 4
             and stg[3] == ARM4_FLAT_TABLE
             and stg[4] == ARM4_FLAT_TABLE
