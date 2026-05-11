@@ -107,6 +107,12 @@ live render path):
      intent and -3 dB on both paths matches the preview behavior
      the workflow author already chose.
 
+  8b. Normalize the `LoadImage` default filename to `ref_image.jpg`
+      so the shipped drafts don't carry the source workflow's
+      user-specific input filename. To render, drop your reference
+      image into ComfyUI's `input/` directory as `ref_image.jpg`
+      (or pick another file via the LoadImage widget UI).
+
 Out-of-scope (deferred -- risky or workflow-author-tuned):
 
   - The `euler_ancestral` / `euler_ancestral_cfg_pp` samplers
@@ -163,6 +169,9 @@ ID_FORK_A_FIRST = 722        # first LoRA in fork A (anchor chain)
 ID_FORK_B_FIRST = 719        # first LoRA in fork B (amplifier chain)
 ID_DEAD_SET_SEED = 621       # Set_seed SetNode with no GetNode consumer
 ID_OUTPUT_AUDIO_VOL = 598    # AudioAdjustVolume on output path (widget=0, asymmetric)
+ID_LOAD_IMAGE_REF = 773      # LoadImage for the i2v init reference image
+
+DEFAULT_REF_IMAGE_FILENAME = "ref_image.jpg"
 
 # Phase 3 (keeper) node ids.
 ID_MANUAL_SIGMAS = 527       # first-pass ManualSigmas
@@ -406,6 +415,28 @@ def _drop_dead_set_seed(ed: WorkflowEditor) -> None:
     print(f"  removed dead SetNode #{ID_DEAD_SET_SEED} (no GetNode consumes 'seed')")
 
 
+def _normalize_load_image_default(ed: WorkflowEditor) -> None:
+    """Set `LoadImage` filename widget to a generic placeholder.
+
+    The source workflow carries a user-specific input filename. The
+    keeper drafts ship with `ref_image.jpg` so a reader's first action
+    is to drop their actual reference image at `input/ref_image.jpg`
+    rather than work around a stranger's filename.
+    """
+    if not ed.has_node(ID_LOAD_IMAGE_REF):
+        return
+    n = ed.find_node(ID_LOAD_IMAGE_REF)
+    wv = list(n.get("widgets_values") or [])
+    if not wv:
+        return
+    old = wv[0]
+    if old == DEFAULT_REF_IMAGE_FILENAME:
+        return
+    wv[0] = DEFAULT_REF_IMAGE_FILENAME
+    n["widgets_values"] = wv
+    print(f"  LoadImage #{ID_LOAD_IMAGE_REF} default: {old!r} -> {DEFAULT_REF_IMAGE_FILENAME!r}")
+
+
 def _apply_keeper_config(ed: WorkflowEditor) -> None:
     """Phase 3: bake in arm2's wins from the A/B matrix.
 
@@ -542,6 +573,7 @@ def _migrate(input_path: Path, output_path: Path, dry_run: bool) -> None:
     _drop_empty_power_lora_loader(ed)
     _drop_dead_set_seed(ed)
     _symmetrize_output_audio_volume(ed)
+    _normalize_load_image_default(ed)
 
     # Phase 3 -- keeper-config promotions from the A/B matrix
     _apply_keeper_config(ed)
