@@ -27,6 +27,12 @@ EXAMPLE_WORKFLOWS_DIR = REPO_ROOT / "example_workflows"
 RUNS_DIR = REPO_ROOT / "internal" / "analysis" / "runs"
 DATA_RUNS_DIR = REPO_ROOT / "data" / "runs"
 
+# Decoders that produce IMAGE from a video LATENT. Shared vocabulary so
+# `apply_trim_video_latent_to_audio.py` (splice-target detection) and
+# `audit_workflows.py::_check_trim_video_latent_to_audio_present` (F14
+# invariant) stay in sync. Add new types here when a workflow uses one.
+DECODER_TYPES = frozenset({"LTXVTiledVAEDecode", "VAEDecodeTiled", "VAEDecode"})
+
 
 _RUN_TIMESTAMP_FMT = "%Y-%m-%d_%H%M%S"  # lexicographic-sortable; verify_sage_iteration_trace.sh depends on this shape
 

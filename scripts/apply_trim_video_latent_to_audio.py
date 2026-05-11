@@ -35,7 +35,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from workflow_utils import WorkflowEditor
+from workflow_utils import DECODER_TYPES, WorkflowEditor
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -43,9 +43,6 @@ SKIP_FILES = {
     "edit_anything_v2v_reference.json",
     "upscale_3pass_reference.json",
 }
-
-# Decoder node types whose LATENT-typed input we splice in front of.
-DECODER_TYPES = {"LTXVTiledVAEDecode", "VAEDecodeTiled", "VAEDecode"}
 
 
 def _find_latent_decoder(ed: WorkflowEditor) -> dict | None:

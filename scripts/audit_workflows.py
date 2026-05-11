@@ -33,7 +33,7 @@ import orjson
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from workflow_utils import EXAMPLE_WORKFLOWS_DIR, is_active
+from workflow_utils import DECODER_TYPES, EXAMPLE_WORKFLOWS_DIR, is_active
 from nodes import (
     _LTX_LATENT_VOLUME_OK_MAX as _VOLUME_OK_MAX,
     _LTX_LATENT_VOLUME_EDGE_MAX as _VOLUME_EDGE_MAX,
@@ -1529,16 +1529,23 @@ def _check_vhs_video_combine_frame_rate_parity(wf, by_type, record) -> None:
             )
 
 
-def _link_source_type(by_type: dict, link_id: int) -> str | None:
-    """Return the ``type`` of the node whose output slot owns ``link_id``,
-    or None if no node claims it. O(nodes * outputs) — fine for audit-pass
-    workflows (~50 nodes × ~3 outputs each)."""
+def _find_node_by_output_link(by_type: dict, link_id: int) -> dict | None:
+    """Return the node whose output slot owns ``link_id``, or None if
+    no node claims it. O(nodes * outputs) — fine at audit-pass scale
+    (~50 nodes × ~3 outputs each)."""
     for tlist in by_type.values():
         for n in tlist:
             for out_slot in n.get("outputs", []):
                 if link_id in (out_slot.get("links") or []):
-                    return n.get("type")
+                    return n
     return None
+
+
+def _link_source_type(by_type: dict, link_id: int) -> str | None:
+    """Return just the ``type`` of the node owning ``link_id`` (thin
+    wrapper over ``_find_node_by_output_link``)."""
+    n = _find_node_by_output_link(by_type, link_id)
+    return n.get("type") if n is not None else None
 
 
 def _input_slot_link(node: dict, slot_name: str) -> int | None:
@@ -1573,46 +1580,30 @@ def _check_trim_video_latent_to_audio_present(wf, by_type, record) -> None:
     ]
     if not combines:
         return
-    decoder_types = {"LTXVTiledVAEDecode", "VAEDecodeTiled", "VAEDecode"}
+    # Max backward walk depth from combine.images to a decoder. Real
+    # workflows have 0-1 IMAGE-typed pass-through nodes (e.g. legacy
+    # F14 image-trim), so 8 is a generous safety bound.
+    MAX_WALK_DEPTH = 8
     for combine in combines:
-        # Walk back from combine.images through any pass-through (e.g. legacy
-        # TrimImageBatchToAudio) until we hit a decoder. Side-preview
-        # decoders that don't feed combine.images aren't audited.
-        images_link = _input_slot_link(combine, "images")
-        if images_link is None:
+        # Walk back from combine.images through any IMAGE pass-through
+        # until we hit a decoder. Side-preview decoders that don't feed
+        # an active VHS_VideoCombine.images aren't audited.
+        cur_link = _input_slot_link(combine, "images")
+        if cur_link is None:
             continue
-        cur_type, cur_link_id = None, images_link
-        for _ in range(8):
-            cur_type = _link_source_type(by_type, cur_link_id)
-            if cur_type in decoder_types:
+        decoder: dict | None = None
+        for _ in range(MAX_WALK_DEPTH):
+            src = _find_node_by_output_link(by_type, cur_link)
+            if src is None:
                 break
-            # follow IMAGE-typed pass-throughs (rare; legacy F14 etc.)
-            for tlist in by_type.values():
-                hit = next(
-                    (n for n in tlist
-                     if n.get("type") == cur_type
-                     and any(cur_link_id in (s.get("links") or []) for s in n.get("outputs", []))),
-                    None,
-                )
-                if hit:
-                    next_link = _input_slot_link(hit, "images")
-                    if next_link is not None:
-                        cur_link_id = next_link
-                        break
-            else:
+            if src.get("type") in DECODER_TYPES:
+                decoder = src
                 break
-        else:
-            continue
-        if cur_type not in decoder_types:
-            continue
-
-        # Find the decoder node we landed on.
-        decoder = next(
-            (n for tlist in by_type.values() for n in tlist
-             if n.get("type") == cur_type
-             and any(cur_link_id in (s.get("links") or []) for s in n.get("outputs", []))),
-            None,
-        )
+            # IMAGE pass-through (e.g. legacy F14): step backward through its
+            # `images` input and keep looking for the decoder behind it.
+            cur_link = _input_slot_link(src, "images")
+            if cur_link is None:
+                break
         if decoder is None:
             continue
         did = decoder.get("id")
