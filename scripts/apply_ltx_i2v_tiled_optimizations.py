@@ -101,9 +101,10 @@ Usage:
     uv run --group dev python scripts/apply_ltx_i2v_tiled_optimizations.py --input <path> --dry-run
 
 `--input` is required (no default — avoids leaking source-specific
-paths into the public script). `--output` defaults to
-`<input_dir>/<input_stem>_optimized.json`. Idempotent on the OUTPUT
-path. `--revert` deletes the output staging file.
+paths into the public script). `--output` defaults to the canonical
+draft location `internal/workflows/ltx_i2v_tiled_optimized.draft.json`
+(gitignored per `internal/workflows/README.md`). Idempotent on the
+OUTPUT path. `--revert` deletes the output staging file.
 """
 
 from __future__ import annotations
@@ -409,8 +410,7 @@ def _insert_preprocess_on_init_path(ed: WorkflowEditor, resize_id: int) -> None:
     print(f"  inserted LTXVPreprocess #{pre_id} (img_compression=18) for 3 init-guide consumers")
 
 
-def _default_output_for(input_path: Path) -> Path:
-    return input_path.with_name(f"{input_path.stem}_optimized{input_path.suffix}")
+DEFAULT_OUTPUT = "internal/workflows/ltx_i2v_tiled_optimized.draft.json"
 
 
 def _migrate(input_path: Path, output_path: Path, dry_run: bool) -> None:
@@ -483,9 +483,8 @@ def main() -> None:
     )
     ap.add_argument("--input", required=True,
                     help="Path to the source workflow JSON.")
-    ap.add_argument("--output", default=None,
-                    help="Path to the optimized output. Defaults to "
-                         "<input_dir>/<input_stem>_optimized.json.")
+    ap.add_argument("--output", default=DEFAULT_OUTPUT,
+                    help=f"Output draft path (default: {DEFAULT_OUTPUT}).")
     ap.add_argument("--revert", action="store_true",
                     help="Delete the output staging file (does not touch --input).")
     ap.add_argument("--dry-run", action="store_true",
@@ -493,7 +492,7 @@ def main() -> None:
     args = ap.parse_args()
 
     input_path = Path(args.input)
-    output_path = Path(args.output) if args.output else _default_output_for(input_path)
+    output_path = Path(args.output)
 
     if args.revert:
         _revert(output_path)
