@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1627,
-  "last_link_id": 3089,
+  "last_node_id": 1628,
+  "last_link_id": 3092,
   "nodes": [
     {
       "id": 252,
@@ -1117,7 +1117,7 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 3089
+          "link": 3090
         },
         {
           "name": "audio",
@@ -1906,7 +1906,7 @@
           "name": "image",
           "type": "IMAGE",
           "links": [
-            3089
+            3091
           ]
         }
       ],
@@ -1991,7 +1991,8 @@
           "type": "AUDIO",
           "links": [
             3076,
-            3088
+            3088,
+            3092
           ]
         },
         {
@@ -2196,6 +2197,56 @@
         25
       ],
       "title": "Trim latent to audio"
+    },
+    {
+      "id": 1628,
+      "type": "TrimImageBatchToAudio",
+      "pos": [
+        3395.8458218450364,
+        4438.634708436207
+      ],
+      "size": [
+        280,
+        90
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 3091
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 3092
+        },
+        {
+          "name": "fps",
+          "type": "INT",
+          "widget": {
+            "name": "fps"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            3090
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TrimImageBatchToAudio"
+      },
+      "widgets_values": [
+        25
+      ],
+      "title": "Trim to audio"
     }
   ],
   "links": [
@@ -2568,12 +2619,28 @@
       "AUDIO"
     ],
     [
-      3089,
-      1604,
+      3090,
+      1628,
       0,
       617,
       0,
       "IMAGE"
+    ],
+    [
+      3091,
+      1604,
+      0,
+      1628,
+      0,
+      "IMAGE"
+    ],
+    [
+      3092,
+      1620,
+      1,
+      1628,
+      1,
+      "AUDIO"
     ]
   ],
   "groups": [

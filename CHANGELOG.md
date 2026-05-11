@@ -7,6 +7,24 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- **F14 reverted to layered (latent + image) trim after audio-clipping bug.**
+  2026-05-10 ran the canonical workflow end-to-end and reported "cut
+  off some of the audio." Root cause: latent-only trim snaps to LTX
+  `(L-1)%8==0` boundary, which makes video up to 7 pixel-frames
+  (0.28s @ 25fps) SHORTER than audio. ffmpeg's `-shortest` then
+  clipped audio to match — audible loss at the song end. The A/B
+  ffprobe comparison couldn't catch it because comparing
+  `mp4.audio.duration` to `mp4.video.duration` doesn't reveal that
+  the audio stream was itself clipped from the source. Fix: change
+  `TrimVideoLatentToAudio` math from snap-DOWN to snap-UP (video ≥
+  audio, never under) and restore `TrimImageBatchToAudio` post-decode
+  to clip the 0-7 pixel residue at exact audio length. Both trims now
+  active on all 19 loop + post-loop workflows; both audit invariants
+  (`trim_video_latent_to_audio_present` ERR-level pre-decode,
+  `trim_image_batch_to_audio_present` ERR-level post-decode) enforce.
+  Net cost: a small extra apply-script run per workflow. Net benefit:
+  audio is intact AND decode work is still saved on the overshoot.
+
 - **F14 audit invariant migrated from image-space to latent-space.**
   `apply_trim_image_batch_to_audio.py` + `_ab` variant retired
   (deleted). Production replacement: `apply_trim_video_latent_to_audio.py`

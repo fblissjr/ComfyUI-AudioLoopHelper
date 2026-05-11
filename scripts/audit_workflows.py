@@ -667,6 +667,7 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         _check_initial_render_audio_duration_wired(wf, by_type, record)
         _check_overlap_seconds_single_source(wf, by_type, record)
         _check_vhs_video_combine_frame_rate_parity(wf, by_type, record)
+        _check_trim_image_batch_to_audio_present(wf, by_type, record)
         _check_trim_video_latent_to_audio_present(wf, by_type, record)
         _check_run_id_layout_present(wf, by_type, record)
 
@@ -1554,6 +1555,46 @@ def _input_slot_link(node: dict, slot_name: str) -> int | None:
         if s.get("name") == slot_name:
             return s.get("link")
     return None
+
+
+def _check_trim_image_batch_to_audio_present(wf, by_type, record) -> None:
+    """ERR if VHS_VideoCombine.images is not fed by TrimImageBatchToAudio.
+
+    Layered with the latent-space trim (`_check_trim_video_latent_to_audio_present`):
+    latent trim snaps UP to LTX boundary so video >= audio; this image
+    trim then clips the residual 0-7 pixel-frame overshoot to exact
+    audio length. Without it, ffmpeg's ``-shortest`` is the only thing
+    keeping the saved mp4 from showing silence at the end — and
+    ``-shortest`` doesn't truncate ``-c:v copy`` streams reliably.
+
+    Remediation: ``scripts/apply_trim_image_batch_to_audio.py``.
+    Postmortem: ``internal/analysis/loop_audio_overshoot_analysis.md``.
+    """
+    del wf
+    combines = [
+        n for n in by_type.get("VHS_VideoCombine", [])
+        if n.get("mode", 0) == 0
+    ]
+    if not combines:
+        return
+    for combine in combines:
+        cid = combine.get("id")
+        images_link = _input_slot_link(combine, "images")
+        if images_link is None:
+            continue
+        src_type = _link_source_type(by_type, images_link)
+        if src_type == "TrimImageBatchToAudio":
+            record(
+                "OK", "trim_image_batch_to_audio_present",
+                f"VHS_VideoCombine(#{cid}).images <- TrimImageBatchToAudio",
+            )
+        else:
+            record(
+                "ERR", "trim_image_batch_to_audio_present",
+                f"VHS_VideoCombine(#{cid}).images <- {src_type or '?'} (not "
+                "TrimImageBatchToAudio). Saved mp4 may end with silence. "
+                "Run scripts/apply_trim_image_batch_to_audio.py.",
+            )
 
 
 def _check_trim_video_latent_to_audio_present(wf, by_type, record) -> None:

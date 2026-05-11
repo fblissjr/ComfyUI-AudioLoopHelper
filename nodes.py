@@ -2310,10 +2310,16 @@ class TrimVideoLatentToAudio(io.ComfyNode):
 
     @classmethod
     def execute(cls, latent: dict, audio: dict, fps: int) -> io.NodeOutput:
+        # Snap UP to the smallest valid latent count whose decoded pixel
+        # count >= target_pixel. Snapping DOWN would clip up to 7 pixel
+        # frames (0.28s at 25fps) of audio at the END because ffmpeg
+        # -shortest clips audio when video < audio. Snapping UP keeps
+        # video >= audio; downstream F14 (`TrimImageBatchToAudio`) clips
+        # the small overshoot at exact pixel precision.
         audio_duration = _audio_duration(audio)
         target_pixel = max(1, int(audio_duration * fps))
-        snapped_pixel = max(1, ((target_pixel - 1) // LTX_TEMPORAL_SCALE) * LTX_TEMPORAL_SCALE + 1)
-        target_latent = max(1, (snapped_pixel - 1) // LTX_TEMPORAL_SCALE + 1)
+        # pixel = (latent - 1) * 8 + 1; solve latent >= (pixel - 1) / 8 + 1, round up.
+        target_latent = max(1, math.ceil((target_pixel - 1) / LTX_TEMPORAL_SCALE) + 1)
 
         samples = latent["samples"]
         keep = min(samples.shape[2], target_latent)

@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1637,
-  "last_link_id": 3140,
+  "last_node_id": 1638,
+  "last_link_id": 3144,
   "nodes": [
     {
       "id": 252,
@@ -386,7 +386,8 @@
           "type": "AUDIO",
           "links": [
             1654,
-            3138
+            3138,
+            3143
           ]
         }
       ],
@@ -1491,7 +1492,7 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 3140
+          "link": 3141
         },
         {
           "name": "audio",
@@ -3585,7 +3586,7 @@
           "name": "image",
           "type": "IMAGE",
           "links": [
-            3140
+            3142
           ]
         }
       ],
@@ -4319,7 +4320,8 @@
           "links": [
             3114,
             3116,
-            3139
+            3139,
+            3144
           ]
         },
         {
@@ -4518,6 +4520,57 @@
         25
       ],
       "title": "Trim latent to audio"
+    },
+    {
+      "id": 1638,
+      "type": "TrimImageBatchToAudio",
+      "pos": [
+        3395.8458218450364,
+        4438.634708436207
+      ],
+      "size": [
+        280,
+        90
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 3142
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 3143
+        },
+        {
+          "name": "fps",
+          "type": "INT",
+          "widget": {
+            "name": "fps"
+          },
+          "link": 3144
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            3141
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TrimImageBatchToAudio"
+      },
+      "widgets_values": [
+        25
+      ],
+      "title": "Trim to audio"
     }
   ],
   "links": [
@@ -5522,12 +5575,36 @@
       "INT"
     ],
     [
-      3140,
-      1604,
+      3141,
+      1638,
       0,
       617,
       0,
       "IMAGE"
+    ],
+    [
+      3142,
+      1604,
+      0,
+      1638,
+      0,
+      "IMAGE"
+    ],
+    [
+      3143,
+      604,
+      0,
+      1638,
+      1,
+      "AUDIO"
+    ],
+    [
+      3144,
+      1629,
+      4,
+      1638,
+      2,
+      "INT"
     ]
   ],
   "groups": [
