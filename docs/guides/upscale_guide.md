@@ -165,11 +165,11 @@ OOMs on 24 GB at 1664×960 × ~526 latent frames.
 
 ## Refinement step tuning
 
-The sigma profile `[0.85, 0.7250, 0.4219, 0.0]` is corroborated by 3
-independent third-party authors (RuneXX 3-pass, edit-anything, 10Eros
-TripleSample). 3 steps = 4 sigma values; partial refine from σ=0.85
-means only ~15% of the latent is denoised, so the upscaled content is
-preserved.
+The sigma profile `[0.85, 0.7250, 0.4219, 0.0]` is corroborated by
+multiple independent third-party workflows that converge on the same
+3-step σ-tail for upscale-pass refinement. 3 steps = 4 sigma values;
+partial refine from σ=0.85 means only ~15% of the latent is
+denoised, so the upscaled content is preserved.
 
 If 3 steps OOM:
 

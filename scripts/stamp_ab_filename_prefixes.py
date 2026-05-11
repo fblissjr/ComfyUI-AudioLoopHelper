@@ -50,15 +50,15 @@ Per draft:
   - Final `VHS_VideoCombine` (`save_output=True`, writes to
     `output/`):             <ROOT>/<arm>/output
 
-Idempotent. `--dry-run` reports the planned mutations. `--revert`
-restores the original prefix strings from the optimized baseline if
-it's still present, or no-ops if the baseline was reverted (the
-optimize script's `--revert` already removes the baseline file).
+Idempotent. `--dry-run` reports the planned mutations.
 
 Usage:
     uv run --group dev python scripts/stamp_ab_filename_prefixes.py
     uv run --group dev python scripts/stamp_ab_filename_prefixes.py --dry-run
-    uv run --group dev python scripts/stamp_ab_filename_prefixes.py --revert
+
+To restore source-workflow defaults, revert + reapply the optimize
+script instead -- this stamper has no reverse path since the source
+prefixes are workflow-specific.
 """
 
 from __future__ import annotations
@@ -85,12 +85,6 @@ ARM_FROM_STEM: dict[str, str] = {
 
 ROOT_FOLDER = "ltx_i2v_tiled"
 
-# Original prefix strings + RunIdPrefix workflow_name on the unstamped
-# baseline. Used by --revert.
-ORIGINAL_PREVIEW_PREFIX = "10E_firstpass"
-ORIGINAL_FINAL_PREFIX = "10/10E_9-16_I2V"
-ORIGINAL_RUN_ID_WORKFLOW_NAME = "ltx_i2v_tiled_optimized.draft"
-
 
 def _vhs_prefix_for(arm: str, save_output: bool) -> str:
     leaf = "output" if save_output else "firstpass_preview"
@@ -108,7 +102,7 @@ def _vhs_filename_prefix_is_wired(node: dict) -> bool:
     return False
 
 
-def _stamp_one(path: Path, arm: str, dry_run: bool, revert: bool) -> bool:
+def _stamp_one(path: Path, arm: str, dry_run: bool) -> bool:
     ed = WorkflowEditor(path)
     changed = False
 
@@ -120,21 +114,20 @@ def _stamp_one(path: Path, arm: str, dry_run: bool, revert: bool) -> bool:
         wv = n.get("widgets_values")
         if not isinstance(wv, list) or not wv:
             continue
-        target = ORIGINAL_RUN_ID_WORKFLOW_NAME if revert else _run_id_workflow_name_for(arm)
+        target = _run_id_workflow_name_for(arm)
         if wv[0] == target:
             continue
         if dry_run:
             print(f"  [{path.name}] #{n['id']} RunIdPrefix.workflow_name: {wv[0]!r} -> {target!r}  (dry-run)")
         else:
             wv[0] = target
-            print(f"  [{path.name}] #{n['id']} RunIdPrefix.workflow_name: {wv[0]!r} (was {ORIGINAL_RUN_ID_WORKFLOW_NAME!r})")
-            wv[0] = target
+            print(f"  [{path.name}] #{n['id']} RunIdPrefix.workflow_name: -> {target!r}")
         changed = True
 
     # Pass 2: VHS_VideoCombine.filename_prefix. Only the widget when the
     # `filename_prefix` input is unwired -- otherwise the upstream
     # RunIdPrefix output takes effect and the widget is dead. We still
-    # write the widget for visual consistency / revert safety.
+    # write the widget for visual consistency.
     for n in ed.wf["nodes"]:
         if n.get("type") != "VHS_VideoCombine":
             continue
@@ -142,10 +135,7 @@ def _stamp_one(path: Path, arm: str, dry_run: bool, revert: bool) -> bool:
         if not isinstance(wv, dict):
             continue
         save_output = bool(wv.get("save_output", False))
-        if revert:
-            target = ORIGINAL_FINAL_PREFIX if save_output else ORIGINAL_PREVIEW_PREFIX
-        else:
-            target = _vhs_prefix_for(arm, save_output)
+        target = _vhs_prefix_for(arm, save_output)
         current = wv.get("filename_prefix")
         if current == target:
             continue
@@ -154,7 +144,7 @@ def _stamp_one(path: Path, arm: str, dry_run: bool, revert: bool) -> bool:
             print(f"  [{path.name}] #{n['id']} filename_prefix: {current!r} -> {target!r}{wired_note}  (dry-run)")
         else:
             wv["filename_prefix"] = target
-            print(f"  [{path.name}] #{n['id']} filename_prefix: {current!r} -> {target!r}{wired_note}")
+            print(f"  [{path.name}] #{n['id']} filename_prefix: -> {target!r}{wired_note}")
         changed = True
 
     if changed and not dry_run:
@@ -178,22 +168,19 @@ def main() -> None:
     )
     ap.add_argument("--dry-run", action="store_true",
                     help="Report planned changes without writing.")
-    ap.add_argument("--revert", action="store_true",
-                    help="Restore original source-workflow filename prefixes.")
     args = ap.parse_args()
 
     pairs = _iter_drafts()
     if not pairs:
         print(f"No A/B drafts found under {DRAFTS_DIR}. Produce them first with:")
         print("  scripts/apply_ltx_i2v_tiled_optimizations.py --input <scratch source>")
-        print("  scripts/apply_ltx_i2v_tiled_ab_variants.py --arm {arm1,arm2,arm3,arm4,arm5,no_rtx}")
+        print("  scripts/apply_ltx_i2v_tiled_ab_variants.py --arm {arm3,arm4,no_rtx}")
         return
 
-    action = "revert" if args.revert else "stamp"
-    print(f"{action.title()}ing filename prefixes across {len(pairs)} draft(s){' (dry-run)' if args.dry_run else ''}:")
+    print(f"Stamping filename prefixes across {len(pairs)} draft(s){' (dry-run)' if args.dry_run else ''}:")
     touched = 0
     for path, arm in pairs:
-        if _stamp_one(path, arm, dry_run=args.dry_run, revert=args.revert):
+        if _stamp_one(path, arm, dry_run=args.dry_run):
             touched += 1
     if touched == 0:
         print("All drafts already at the target state.")

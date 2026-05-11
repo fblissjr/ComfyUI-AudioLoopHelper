@@ -28,6 +28,7 @@ during apply-script edits but won't fire on CI.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -39,16 +40,19 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 OPTIMIZE_SCRIPT = REPO_ROOT / "scripts" / "apply_ltx_i2v_tiled_optimizations.py"
 VARIANTS_SCRIPT = REPO_ROOT / "scripts" / "apply_ltx_i2v_tiled_ab_variants.py"
 
-# The user's local scratch source; gitignored.
-SCRATCH_SOURCE = (
-    REPO_ROOT
-    / "internal" / "scratch"
-    / "10_fixed_10SNodes_9-16Vertical_TiledSampler.json"
-)
+# The end-to-end optimize-script test consumes a source workflow from
+# `internal/scratch/` (gitignored). Path is filename-specific so it
+# stays out of the tracked test code via env var. Set
+# `LTX_I2V_TILED_SCRATCH_SOURCE=<abs path>` to enable the test;
+# otherwise it skips.
+_SCRATCH_ENV = "LTX_I2V_TILED_SCRATCH_SOURCE"
+_scratch_env_value = os.environ.get(_SCRATCH_ENV, "").strip()
+SCRATCH_SOURCE = Path(_scratch_env_value) if _scratch_env_value else None
+
 ARM0_BASELINE = REPO_ROOT / "internal" / "workflows" / "ltx_i2v_tiled_optimized.draft.json"
 
 # Match `_OUTPUTS` in the variants script.
-EXPECTED_ARMS = ("arm1", "arm2", "arm3", "arm4", "arm5", "no_rtx")
+EXPECTED_ARMS = ("arm3", "arm4", "no_rtx")
 
 
 def _run(script: Path, *args: str) -> subprocess.CompletedProcess:
@@ -145,8 +149,8 @@ def test_each_arm_produces_valid_output(arm: str, tmp_path: Path):
 @pytestmark_needs_baseline
 def test_dry_run_writes_nothing(tmp_path: Path):
     """`--dry-run` must not produce or modify any output file."""
-    output = tmp_path / "variant_arm5.draft.json"
-    proc = _run(VARIANTS_SCRIPT, "--arm", "arm5", "--input", str(ARM0_BASELINE), "--output", str(output), "--dry-run")
+    output = tmp_path / "variant_arm3.draft.json"
+    proc = _run(VARIANTS_SCRIPT, "--arm", "arm3", "--input", str(ARM0_BASELINE), "--output", str(output), "--dry-run")
     assert proc.returncode == 0, proc.stderr
     assert "would copy" in proc.stdout
     assert "would apply" in proc.stdout
@@ -157,7 +161,7 @@ def test_dry_run_writes_nothing(tmp_path: Path):
 def test_revert_on_missing_output_is_noop(tmp_path: Path):
     """`--revert` against a non-existent output reports nothing-to-do but succeeds."""
     output = tmp_path / "never_created.draft.json"
-    proc = _run(VARIANTS_SCRIPT, "--arm", "arm1", "--input", str(ARM0_BASELINE), "--output", str(output), "--revert")
+    proc = _run(VARIANTS_SCRIPT, "--arm", "no_rtx", "--input", str(ARM0_BASELINE), "--output", str(output), "--revert")
     assert proc.returncode == 0, proc.stderr
     assert "does not exist" in proc.stdout or "nothing to revert" in proc.stdout
 
@@ -168,11 +172,12 @@ def test_revert_on_missing_output_is_noop(tmp_path: Path):
 
 
 @pytest.mark.skipif(
-    not SCRATCH_SOURCE.exists(),
-    reason=f"Scratch source {SCRATCH_SOURCE} absent (gitignored).",
+    SCRATCH_SOURCE is None or not SCRATCH_SOURCE.exists(),
+    reason=f"Set ${_SCRATCH_ENV}=<abs path> to enable the optimize-script smoke test.",
 )
 def test_optimize_produces_baseline(tmp_path: Path):
     """End-to-end: optimize script consumes the scratch source and produces a JSON-valid baseline."""
+    assert SCRATCH_SOURCE is not None  # guarded by skipif
     output = tmp_path / "baseline.draft.json"
     # Stage a writable copy of the source so we don't depend on its current state being modifiable.
     src_copy = tmp_path / "source.json"
