@@ -1,4 +1,4 @@
-Last updated: 2026-05-11
+Last updated: 2026-05-12
 
 # Architecture overview — ComfyUI-AudioLoopHelper
 
@@ -611,7 +611,6 @@ For "I want to...":
 | Goal | Start here |
 |------|------------|
 | Add per-iteration NEGATIVE prompts | §7 `LTX2_NAG` inside the loop (re-patch model per-iter), OR bump inner `CFGGuider` to CFG>1 and wire a scheduled negative (doubles sampling cost) |
-| Reduce i2v opening-filler frames (model "easing into motion") | `LTXNoiseFrameAmplifier` between `RandomNoise` and `SamplerCustomAdvanced.noise` — scales first N temporal frames of initial noise = non-uniform initial sigma without touching the schedule. Experimental. See `docs/experimental/noise_frame_amplifier.md` |
 | Multi-image guide per iteration (re-anchor style) | §6 + §8 — `LTXVAddGuideMulti` (KJNodes, up to 20 images) or chain `LTXVAddLatentGuide` |
 | A2V two-stage pipeline | §8 — INFEASIBLE as straight port; build a custom node that runs both stages with an explicit frozen-modality handoff |
 | Replace NAG with Lightricks-native guidance | §6 — swap to `MultimodalGuider` + `GuiderParameters` + optional `STG` / `APG`. See `example_workflows/audio-loop-music-video_latent_stg.json` for a working A/B variant |

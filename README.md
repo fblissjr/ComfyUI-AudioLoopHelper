@@ -4,7 +4,7 @@
   <img src="assets/hero.webp" alt="ComfyUI-AudioLoopHelper" width="500">
 </p>
 
-Last updated: 2026-05-11
+Last updated: 2026-05-12
 
 Custom ComfyUI nodes for full-length music video generation with LTX 2.3.
 Drives loop timing from integer-latent counts, freezes audio via
@@ -93,18 +93,6 @@ The split is by upstream lineage: **forks** patch an upstream library's internal
 
 Experimental forks live in `example_workflows/experimental/` paired with
 `docs/experiments/` run logs. Not on the shipped-promotion path.
-
-## Experimental nodes
-
-In addition to the production loop spine, this repo ships some
-experimental research-grade nodes that aren't (yet) wired into the
-default workflows. They're registered with ComfyUI but require
-manual insertion. See [`docs/experimental/`](docs/experimental/) for
-full hypotheses, tuning guides, and promotion criteria.
-
-| Node | What it does | Doc |
-|---|---|---|
-| `LTXNoiseFrameAmplifier` | Multiplies the first N temporal frames of the sampler's initial noise by a scalar. Equivalent to a per-frame sigma boost without touching the sigma schedule. Designed to push the model past LTX 2.3's "ease into motion" temporal prior on i2v init-anchored renders, so meaningful motion starts earlier in the clip. Drop in between `RandomNoise` and `SamplerCustomAdvanced.noise`. | [`noise_frame_amplifier.md`](docs/experimental/noise_frame_amplifier.md) |
 
 ## Audio feature analysis
 
