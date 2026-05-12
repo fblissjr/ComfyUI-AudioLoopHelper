@@ -1,6 +1,6 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-05-10
+Last updated: 2026-05-11
 
 ComfyUI nodes that automate loop timing + audio analysis for full-length music video generation with LTX 2.3. Core pattern: `AudioLoopController` drives stride from integer latent counts, audio is frozen via `noise_mask=0`, prompts pre-encoded once outside the loop (CLIP must never enter the loop body). **Start here:** `docs/architecture_overview.md`; task-first nav at `docs/README.md`.
 
@@ -44,6 +44,7 @@ Core nodes (per-node role + wiring in each class's docstring; full reference at 
 - **Latent ops**: `LatentContextExtract`, `LatentOverlapTrim`, `LatentTemporalMask` (retake; `edge_taper_seconds` for soft boundary), `LatentSeamZoneMask` (multi-band mask centered on iteration boundaries — pairs with `scripts/diagnose_overlap_seams.py`), `LatentFrameCount` (sizes empty audio latent for upscale + seam), `TrimImageBatchToAudio` (F14), `TrimVideoLatentToAudio` (A/B staged), `RunIdPrefix` (F15)
 - **Attention + profiling + blend**: `AudioLoopHelperSageAttention` (default `auto_mask_aware`), `ProfileBegin`/`IterStep`/`End`, `ConditioningBlend` (works with Gemma 3 + CLIP)
 - **Step-skipping cache**: `LTXVideoEasyCache` (experimental, default off)
+- **Initial-noise shaping**: `LTXNoiseFrameAmplifier` (experimental; wraps `NOISE` to scale first N temporal frames — non-uniform initial sigma without touching the schedule. Doc: `docs/experimental/noise_frame_amplifier.md`)
 - **Dimension SSoT**: `LTXFramePlanner` — see `docs/reference/frame_planner_reference.md`
 
 Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + vocal-fraction; pairs with `ConditioningBlend.blend_factor`.
