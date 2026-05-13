@@ -197,4 +197,4 @@ test, few earn a slot in the curated body. Policy: .claude/CLAUDE.md
 finish a curation pass.
 -->
 
-(empty)
+- **ComfyUI's dynamic VRAM loader absorbs memory pressure as offload, not OOM.** When GPU memory is tight, model weights shuffle to CPU and back transparently — renders go slower instead of crashing. "Didn't OOM" is not equivalent to "fit in budget." Memory benchmarks for any kernel/path change must track (wall time + dynamic-VRAM offload events from ComfyUI's `prepared for dynamic VRAM loading. NNN MB Staged` log lines) not just (peak allocation snapshots). Snapshot benches passing a peak-MB gate do NOT validate end-to-end offload-pressure improvement. Affects: how we measure attention-kernel changes, mask-path changes, anything that touches per-call working set on memory-constrained workloads (24GB cards rendering at LTX 2.3 scales).
