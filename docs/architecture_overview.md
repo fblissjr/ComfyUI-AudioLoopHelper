@@ -611,6 +611,7 @@ For "I want to...":
 | Goal | Start here |
 |------|------------|
 | Add per-iteration NEGATIVE prompts | §7 `LTX2_NAG` inside the loop (re-patch model per-iter), OR bump inner `CFGGuider` to CFG>1 and wire a scheduled negative (doubles sampling cost) |
+| Trim i2v opening-filler frames from the saved clip | `LTXHeadTrim` between the decoded `IMAGE` output and `VHS_VideoCombine`; drops the first `trim_latent_frames * 8` pixel frames + matching audio span. Default 0 = no-op. Post-decode trim, not pre-sample — doesn't fight the model's temporal prior, just hides the window where it dominates |
 | Multi-image guide per iteration (re-anchor style) | §6 + §8 — `LTXVAddGuideMulti` (KJNodes, up to 20 images) or chain `LTXVAddLatentGuide` |
 | A2V two-stage pipeline | §8 — INFEASIBLE as straight port; build a custom node that runs both stages with an explicit frozen-modality handoff |
 | Replace NAG with Lightricks-native guidance | §6 — swap to `MultimodalGuider` + `GuiderParameters` + optional `STG` / `APG`. See `example_workflows/audio-loop-music-video_latent_stg.json` for a working A/B variant |

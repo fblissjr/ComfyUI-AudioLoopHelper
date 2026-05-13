@@ -2401,6 +2401,95 @@ class TrimImageBatchToAudio(io.ComfyNode):
         return io.NodeOutput(images[:keep])
 
 
+class LTXHeadTrim(io.ComfyNode):
+    """Drops the first N latent-frames' worth of pixel frames + the
+    matching audio span. Composite IMAGE + AUDIO so they stay in lockstep.
+
+    Use case: LTX 2.3 i2v "filler" frames. The model spends 0.5-2 s
+    easing out of the init image before motion develops; this node
+    discards that window after sampling so the saved mp4 starts where
+    the action does. The trim is post-VAE-decode (image-level), not
+    pre-decode: simpler to compose, single-node A/B, no NestedTensor
+    plumbing, and the VAE work on the dropped frames is the only cost.
+
+    Place between the decoded `IMAGE` feed and `VHS_VideoCombine`:
+
+        LTXVTiledVAEDecode.image -> LTXHeadTrim.images -> VHS_VideoCombine.images
+        Set_orig_audio          -> LTXHeadTrim.audio  -> VHS_VideoCombine.audio
+
+    Default `trim_latent_frames=0` is a no-op pass-through; opt in via
+    widget. Pixel-frame trim is `trim_latent_frames * LTX_TEMPORAL_SCALE`
+    (= 8). Audio waveform trims by the same duration in seconds
+    (pixel_trim / fps) so video + audio stay aligned.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="LTXHeadTrim",
+            display_name="LTX Head Trim (Image+Audio)",
+            category="looping/audio",
+            description=(
+                "Drop the first N latent-frames' worth of pixel frames "
+                "and the matching audio span. Composite IMAGE + AUDIO. "
+                "Default 0 = no-op. Use to clip i2v filler frames at "
+                "clip start."
+            ),
+            inputs=[
+                io.Image.Input(
+                    "images",
+                    tooltip="Decoded video frames (typically LTXVTiledVAEDecode output).",
+                ),
+                io.Audio.Input(
+                    "audio",
+                    tooltip="Audio waveform to trim in sync with images.",
+                ),
+                io.Int.Input(
+                    "trim_latent_frames",
+                    default=0,
+                    min=0,
+                    max=4096,
+                    tooltip=(
+                        "How many LATENT frames' worth of pixel frames "
+                        "to drop from the start. 0 = no-op. 1 latent "
+                        "frame = 8 pixel frames = ~0.32 s at 25 fps. "
+                        "Typical i2v filler is 2-6 latent frames."
+                    ),
+                ),
+                io.Int.Input(
+                    "fps",
+                    default=25,
+                    min=1,
+                    tooltip="Output frame rate. Used only to convert pixel-frame trim to audio-seconds trim.",
+                ),
+            ],
+            outputs=[
+                io.Image.Output("images", tooltip="Trimmed image batch."),
+                io.Audio.Output("audio", tooltip="Audio with matching head span dropped."),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, images, audio: dict, trim_latent_frames: int, fps: int) -> io.NodeOutput:
+        if trim_latent_frames <= 0 or fps <= 0:
+            return io.NodeOutput(images, audio)
+
+        pixel_trim = trim_latent_frames * LTX_TEMPORAL_SCALE
+        # Floor at images.shape[0] - 1 so VHS_VideoCombine never receives an
+        # empty image batch (it errors). max(0, ...) handles the 0-frame edge.
+        pixel_trim = min(pixel_trim, max(0, images.shape[0] - 1))
+        trimmed_images = images[pixel_trim:]
+
+        seconds_trim = pixel_trim / fps
+        waveform = audio["waveform"]
+        sample_rate = audio["sample_rate"]
+        sample_trim = min(int(round(seconds_trim * sample_rate)), waveform.shape[-1])
+        trimmed_waveform = waveform[..., sample_trim:]
+        trimmed_audio = {"waveform": trimmed_waveform, "sample_rate": sample_rate}
+
+        return io.NodeOutput(trimmed_images, trimmed_audio)
+
+
 class LatentTemporalMask(io.ComfyNode):
     """Writes a retake noise_mask to a video latent: regenerate only
     `[start_time, end_time]`, hold the rest fixed as context.
@@ -3800,6 +3889,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LatentFrameCount,
             TrimVideoLatentToAudio,
             TrimImageBatchToAudio,
+            LTXHeadTrim,
             PurgeVRAM,
             AudioPitchDetect,
             LTXResolutionFromAspect,

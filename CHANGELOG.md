@@ -6,6 +6,19 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **`LTXHeadTrim` node — composite IMAGE + AUDIO head trim.** Drops
+  the first `trim_latent_frames * 8` pixel frames from the decoded
+  image batch and the matching audio span from the waveform, keeping
+  the saved mp4 in lockstep. Use case: clip the i2v "ease-into-motion"
+  filler window at clip start without fighting the model's temporal
+  prior — just discard the frames where it dominates. Default
+  `trim_latent_frames=0` is a no-op pass-through; opt in via widget.
+  Place between the decoded `IMAGE` feed and `VHS_VideoCombine.images`
+  (with paired audio rewire). Sibling of `TrimImageBatchToAudio` /
+  `TrimVideoLatentToAudio`; image-level trim chosen over latent-level
+  for single-node A/B and no NestedTensor plumbing.
+
 ### Fixed
 - **`TrimAudioDuration #567` ate the first 5s of every song.** Canonical
   default was `[start_index=5, duration=300]`, originally meant to
