@@ -1,0 +1,181 @@
+#!/bin/bash
+# ComfyUI startup script — canonical deploy template.
+# Last updated: 2026-05-13
+#
+# Tuned for 24GB-class consumer cards (RTX 4090 etc.) running LTX 2.3 /
+# WAN2.1 / similar fp8-scaled video diffusion models. Adjust the mode
+# definitions below if your hardware budget differs.
+#
+# Deploy by copying this to <comfyui_root>/start.sh and editing the
+# environment-variable defaults at the top (COMFYUI_OUTPUT_DIR /
+# COMFYUI_INPUT_DIR / COMFYUI_TEMP_DIR / COMFYUI_PORT). Defaults work
+# out of the box if you use ComfyUI's standard relative layout (./output,
+# ./input, ./temp).
+#
+# Usage:
+#   ./start.sh                       # default mode
+#   ./start.sh [mode]                # pick a mode
+#   ./start.sh [mode] [flags...]     # mode + extra flags forwarded to main.py
+#   ./start.sh [flags...]            # default mode + extra flags
+#   ./start.sh -h | --help           # show this help
+#
+# Modes:
+#   default     Balanced for LTX 2.3 / WAN2.1 (cuda-malloc + fast + fp8-compute + 0.5GB reserve)
+#   safe        Fallback when default OOMs (lowvram, fp16-unet, fp32-vae, 4GB reserve)
+#   extreme     Maximum speed, may OOM (fp8_e4m3fn-unet, fp16-vae, fast)
+#   minimal     Last resort, very slow (novram, cpu-vae, async-offload)
+#   nodynvram   Clean baseline for kernel OOM testing (disables dynamic VRAM,
+#               async offload, and node cache — see comments in that case)
+#   highvram    Keep models resident after use (may OOM with large models
+#               + heavy text encoder on a 24GB card)
+#
+# Extra ComfyUI flags after the mode are forwarded verbatim to main.py.
+# Examples:
+#   ./start.sh default --verbose DEBUG
+#   ./start.sh nodynvram --reserve-vram 0
+#   ./start.sh --disable-dynamic-vram          # implicit default mode + flag
+#
+# For experiment-mode launches that enable AudioLoopHelper's per-render
+# telemetry (RUN_ID + sage tracer + exec logger), use the wrapper at
+#   <comfyui_root>/custom_nodes/ComfyUI-AudioLoopHelper/start_experiment.sh
+# which sets the relevant env vars then exec's back here.
+
+set -e
+
+# ---- Customize these for your deployment if non-default --------------------
+# Override at invocation time (e.g. COMFYUI_OUTPUT_DIR=/mnt/data/output ./start.sh)
+# or edit the defaults here. All four resolve to ComfyUI's standard relative
+# layout if unset.
+: "${COMFYUI_OUTPUT_DIR:=./output}"
+: "${COMFYUI_INPUT_DIR:=./input}"
+: "${COMFYUI_TEMP_DIR:=./temp}"
+: "${COMFYUI_PORT:=8188}"
+# ----------------------------------------------------------------------------
+
+# Help short-circuit before any other parsing.
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
+    exit 0
+fi
+
+# Pick the mode. If $1 starts with `-`, treat it as a flag (not a mode) and
+# fall back to the default mode without shifting. Lets callers pass flags
+# inline without thinking about the positional structure.
+if [[ -z "$1" || "$1" == -* ]]; then
+    MODE="default"
+else
+    MODE="$1"
+    shift
+fi
+
+# Base configuration — always used, regardless of mode.
+BASE_ARGS=(
+    --output-directory "$COMFYUI_OUTPUT_DIR"
+    --temp-directory "$COMFYUI_TEMP_DIR"
+    --input-directory "$COMFYUI_INPUT_DIR"
+    --preview-method none
+    --preview-size 512
+    --disable-api-nodes
+    --port "$COMFYUI_PORT"
+)
+
+# Common perf flags reused by every "go fast" mode (default, extreme,
+# nodynvram, highvram). Safe on Ada/Hopper with fp8-scaled models.
+# mmap loading reduces RAM pressure when checkpoints are large.
+PERF_ARGS=(
+    --cuda-malloc
+    --fast
+    --supports-fp8-compute
+    --mmap-torch-files
+)
+
+CMD_ARGS=("${BASE_ARGS[@]}")
+
+case "$MODE" in
+    default)
+        echo "[start.sh] mode=default — balanced for LTX 2.3 / WAN2.1 (perf flags + 0.5GB reserve)"
+        CMD_ARGS+=(
+            "${PERF_ARGS[@]}"
+            --reserve-vram 0.5
+        )
+        ;;
+
+    safe)
+        echo "[start.sh] mode=safe — conservative (lowvram + fp16-unet + fp32-vae + 4GB reserve)"
+        CMD_ARGS+=(
+            --lowvram
+            --fp16-unet
+            --fp32-vae
+            --cache-none
+            --reserve-vram 4
+        )
+        ;;
+
+    extreme)
+        echo "[start.sh] mode=extreme — max perf, may OOM (fp8_e4m3fn-unet, fp16-vae + perf flags)"
+        CMD_ARGS+=(
+            "${PERF_ARGS[@]}"
+            --fp8_e4m3fn-unet
+            --fp16-vae
+        )
+        ;;
+
+    minimal)
+        echo "[start.sh] mode=minimal — max memory savings (novram, fp16-unet, cpu-vae)"
+        CMD_ARGS+=(
+            --novram
+            --fp16-unet
+            --cpu-vae
+            --cache-none
+            --async-offload
+        )
+        ;;
+
+    nodynvram)
+        echo "[start.sh] mode=nodynvram — clean baseline for kernel OOM testing (no dynamic VRAM, no async offload, no node cache)"
+        # Targets the "ComfyUI memory management is masking my kernel's actual
+        # memory profile" scenario. Model load/unload between stages stays
+        # normal (text encoder offloads after use, etc.), but during a forward
+        # pass nothing shuffles weights — so if a kernel's per-call working
+        # set exceeds budget, you OOM cleanly instead of seeing offload
+        # slowdown. Notes:
+        #   --disable-dynamic-vram  : kills aimdo page-level offload during inference
+        #   --disable-async-offload : kills async weight streams (the lower-level mechanism)
+        #   --cache-none            : no node-output cache between renders (cleaner repro)
+        #   --reserve-vram 0        : maximize the budget (user budget == actual budget)
+        # NOT included: --gpu-only / --highvram (would OOM at load on 24GB
+        # with LTX 2.3 + large text encoders), --disable-smart-memory
+        # (inverted name — forces MORE offload).
+        CMD_ARGS+=(
+            "${PERF_ARGS[@]}"
+            --reserve-vram 0
+            --disable-dynamic-vram
+            --disable-async-offload
+            --cache-none
+        )
+        ;;
+
+    highvram)
+        echo "[start.sh] mode=highvram — keep models resident after use (may OOM with large models)"
+        CMD_ARGS+=(
+            "${PERF_ARGS[@]}"
+            --highvram
+            --reserve-vram 0
+        )
+        ;;
+
+    *)
+        echo "Unknown mode: $MODE" >&2
+        echo "Run \`$0 --help\` for available modes." >&2
+        exit 1
+        ;;
+esac
+
+# Surface exactly what main.py receives. Useful for verifying flag passthrough
+# from wrappers and for reproducibility (anyone re-running a bench can copy
+# the resolved arg list from this line).
+echo "[start.sh] forwarding to main.py: ${CMD_ARGS[*]} $*"
+
+# Execute ComfyUI. The grep filter strips a noisy SSL warning that fires
+# during normal operation.
+uv run --active python main.py "${CMD_ARGS[@]}" "$@" 2>&1 | grep -v "SSL connection is closed"
