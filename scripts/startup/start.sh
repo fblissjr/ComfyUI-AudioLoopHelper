@@ -20,9 +20,9 @@
 #   ./start.sh -h | --help           # show this help
 #
 # Modes:
-#   default     Balanced for LTX 2.3 / WAN2.1 (cuda-malloc + fast + fp8-compute + 0.5GB reserve)
+#   default     Balanced for LTX 2.3 / WAN2.1 (cuda-malloc + fp8-compute + 0.5GB reserve)
 #   safe        Fallback when default OOMs (lowvram, fp16-unet, fp32-vae, 4GB reserve)
-#   extreme     Maximum speed, may OOM (fp8_e4m3fn-unet, fp16-vae, fast)
+#   extreme     Maximum speed, may OOM (fp8_e4m3fn-unet, fp16-vae)
 #   minimal     Last resort, very slow (novram, cpu-vae, async-offload)
 #   nodynvram   Clean baseline for kernel OOM testing (disables dynamic VRAM,
 #               async offload, and node cache — see comments in that case)
@@ -82,9 +82,14 @@ BASE_ARGS=(
 # Common perf flags reused by every "go fast" mode (default, extreme,
 # nodynvram, highvram). Safe on Ada/Hopper with fp8-scaled models.
 # mmap loading reduces RAM pressure when checkpoints are large.
+#
+# Deliberately NOT including --fast: that's a blanket switch for four
+# experimental optimizations (fp16_accumulation, fp8_matrix_mult,
+# cublas_ops, autotune). Newer fp8-quantized weights manage their own
+# per-layer matmul dispatch and don't need it. If you want a specific
+# sub-optimization, pass it explicitly, e.g.: `--fast fp16_accumulation`.
 PERF_ARGS=(
     --cuda-malloc
-    --fast
     --supports-fp8-compute
     --mmap-torch-files
 )
