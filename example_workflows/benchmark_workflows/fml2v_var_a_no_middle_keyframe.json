@@ -1500,7 +1500,7 @@
           "widget": {
             "name": "text"
           },
-          "link": 3729
+          "link": 4147
         }
       ],
       "outputs": [
@@ -2579,46 +2579,6 @@
         "secondTabWidth": 65
       },
       "widgets_values": []
-    },
-    {
-      "id": 2081,
-      "type": "SetNode",
-      "pos": [
-        1246.838570455656,
-        4582.07669147833
-      ],
-      "size": [
-        210,
-        34
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 104,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "BOOLEAN",
-          "type": "BOOLEAN",
-          "link": 3691
-        }
-      ],
-      "outputs": [
-        {
-          "name": "BOOLEAN",
-          "type": "BOOLEAN",
-          "links": null
-        }
-      ],
-      "title": "Set_enhance_prompt",
-      "properties": {
-        "Node name for S&R": "SetNode",
-        "aux_id": "SetNode",
-        "previousName": "enhance_prompt"
-      },
-      "widgets_values": [
-        "enhance_prompt"
-      ]
     },
     {
       "id": 2192,
@@ -4077,109 +4037,6 @@
       ]
     },
     {
-      "id": 2068,
-      "type": "GetNode",
-      "pos": [
-        1822.0138170533953,
-        3758.416363802782
-      ],
-      "size": [
-        210,
-        50
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 45,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "BOOLEAN",
-          "type": "BOOLEAN",
-          "links": [
-            3681
-          ]
-        }
-      ],
-      "title": "Get_enhance_prompt",
-      "properties": {
-        "Node name for S&R": "GetNode",
-        "aux_id": "kijai/ComfyUI-KJNodes"
-      },
-      "widgets_values": [
-        "enhance_prompt"
-      ]
-    },
-    {
-      "id": 2102,
-      "type": "19e3f7e8-881c-4a61-a360-1c463734043a",
-      "pos": [
-        1806.878781142234,
-        3799.9599483653406
-      ],
-      "size": [
-        178.24207663381185,
-        26
-      ],
-      "flags": {
-        "collapsed": false
-      },
-      "order": 46,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": [
-            3728
-          ]
-        }
-      ],
-      "properties": {
-        "proxyWidgets": [],
-        "cnr_id": "comfy-core",
-        "ver": "0.18.1"
-      },
-      "widgets_values": []
-    },
-    {
-      "id": 2067,
-      "type": "GetNode",
-      "pos": [
-        1820.5905042792194,
-        3792.8330326148193
-      ],
-      "size": [
-        210,
-        34
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 47,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "CLIP",
-          "type": "CLIP",
-          "links": [
-            3680
-          ]
-        }
-      ],
-      "title": "Get_clip",
-      "properties": {
-        "Node name for S&R": "GetNode",
-        "aux_id": "kijai/ComfyUI-KJNodes"
-      },
-      "widgets_values": [
-        "clip"
-      ]
-    },
-    {
       "id": 2167,
       "type": "GetNode",
       "pos": [
@@ -4248,113 +4105,6 @@
       "widgets_values": [
         "negative_guider2"
       ]
-    },
-    {
-      "id": 2070,
-      "type": "8fa4f93a-67ee-463f-ba43-249580c0bfb1",
-      "pos": [
-        1740.7738984790383,
-        3700.029920528406
-      ],
-      "size": [
-        280.90474762012536,
-        168
-      ],
-      "flags": {
-        "collapsed": false
-      },
-      "order": 106,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "clip",
-          "type": "CLIP",
-          "link": 3680
-        },
-        {
-          "name": "image",
-          "type": "IMAGE",
-          "link": 3728
-        },
-        {
-          "label": "Enabled",
-          "name": "",
-          "type": "*",
-          "link": 3681
-        },
-        {
-          "label": "Prompt",
-          "name": "_1",
-          "type": "*",
-          "link": 3730
-        }
-      ],
-      "outputs": [
-        {
-          "label": "generated_text",
-          "name": "generated_text",
-          "type": "STRING",
-          "links": [
-            3682,
-            3729
-          ]
-        }
-      ],
-      "properties": {
-        "proxyWidgets": [
-          [
-            "482",
-            "string_b"
-          ]
-        ],
-        "cnr_id": "comfy-core",
-        "ver": "0.17.0"
-      },
-      "widgets_values": []
-    },
-    {
-      "id": 2071,
-      "type": "PreviewAny",
-      "pos": [
-        1679.4859634625498,
-        3660.4970819996133
-      ],
-      "size": [
-        387.0142215022124,
-        224.94884332014044
-      ],
-      "flags": {
-        "collapsed": false
-      },
-      "order": 119,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "source",
-          "type": "*",
-          "link": 3682
-        }
-      ],
-      "outputs": [
-        {
-          "name": "STRING",
-          "type": "STRING",
-          "links": null
-        }
-      ],
-      "title": "ENHANCED PROMPT",
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.17.0",
-        "Node name for S&R": "PreviewAny"
-      },
-      "widgets_values": [
-        null,
-        null,
-        null
-      ],
-      "color": "#008181",
-      "bgcolor": "rgba(24,24,27,.9)"
     },
     {
       "id": 216,
@@ -5973,42 +5723,6 @@
       "bgcolor": "rgba(24,24,27,.9)"
     },
     {
-      "id": 2082,
-      "type": "PrimitiveBoolean",
-      "pos": [
-        1210.2406174580046,
-        4555.046884590713
-      ],
-      "size": [
-        259.7545983295847,
-        59.0461245939091
-      ],
-      "flags": {},
-      "order": 71,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "BOOLEAN",
-          "type": "BOOLEAN",
-          "links": [
-            3691
-          ]
-        }
-      ],
-      "title": "ENABLE PROMPT ENHANCER",
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.18.1",
-        "Node name for S&R": "PrimitiveBoolean"
-      },
-      "widgets_values": [
-        true
-      ],
-      "color": "#008181",
-      "bgcolor": "rgba(24,24,27,.9)"
-    },
-    {
       "id": 45,
       "type": "LoadImage",
       "pos": [
@@ -6076,7 +5790,7 @@
           "name": "STRING",
           "type": "STRING",
           "links": [
-            3730
+            4147
           ]
         }
       ],
@@ -6087,7 +5801,7 @@
         "Node name for S&R": "PrimitiveStringMultiline"
       },
       "widgets_values": [
-        "Make this come alive with cinematic motion, smooth animation. \n\nThe scene starts with a close up of an LTX soda can with ic cubes around it. \n\nAll of a suddent an arm comes into frame and grabs the soda can, and lifts the soda can up. \n\nCamera pans up smoothly to show a woman holding the soda can. She talks with a soft British voice, and she says :\" An LTX a day, keeps the doctor away\". Then she laghts, and finally she drinks from the soda can. "
+        "video of a man dancing and singing"
       ],
       "color": "#346434",
       "bgcolor": "rgba(24,24,27,.9)"
@@ -7523,30 +7237,6 @@
       "MODEL"
     ],
     [
-      3680,
-      2067,
-      0,
-      2070,
-      0,
-      "CLIP"
-    ],
-    [
-      3681,
-      2068,
-      0,
-      2070,
-      2,
-      "BOOLEAN"
-    ],
-    [
-      3682,
-      2070,
-      0,
-      2071,
-      0,
-      "STRING"
-    ],
-    [
       3685,
       2079,
       0,
@@ -7595,14 +7285,6 @@
       "FLOAT"
     ],
     [
-      3691,
-      2082,
-      0,
-      2081,
-      0,
-      "BOOLEAN"
-    ],
-    [
       3692,
       48,
       0,
@@ -7649,30 +7331,6 @@
       2084,
       0,
       "IMAGE"
-    ],
-    [
-      3728,
-      2102,
-      0,
-      2070,
-      1,
-      "IMAGE"
-    ],
-    [
-      3729,
-      2070,
-      0,
-      16,
-      1,
-      "STRING"
-    ],
-    [
-      3730,
-      2103,
-      0,
-      2070,
-      3,
-      "STRING"
     ],
     [
       3739,
@@ -8185,6 +7843,14 @@
       226,
       0,
       "MODEL"
+    ],
+    [
+      4147,
+      2103,
+      0,
+      16,
+      1,
+      "STRING"
     ]
   ],
   "groups": [
@@ -8319,19 +7985,6 @@
       "flags": {}
     },
     {
-      "id": 53,
-      "title": "Prompt Enhancer (optional)",
-      "bounding": [
-        1648.0177344364579,
-        3572.2355381896177,
-        465.6373769471227,
-        339.7478390280994
-      ],
-      "color": "#3f789e",
-      "font_size": 24,
-      "flags": {}
-    },
-    {
       "id": 54,
       "title": "Video Settings",
       "bounding": [
@@ -8341,19 +7994,6 @@
         167.52598620638946
       ],
       "color": "#8A8",
-      "font_size": 24,
-      "flags": {}
-    },
-    {
-      "id": 55,
-      "title": "Enhance Prompt",
-      "bounding": [
-        1183.6106095872776,
-        4472.31775814194,
-        315.2145072376529,
-        166.2110464721154
-      ],
-      "color": "#8AA",
       "font_size": 24,
       "flags": {}
     },
