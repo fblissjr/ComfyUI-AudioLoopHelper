@@ -110,6 +110,9 @@ Three rules whose details belong here even though the rule itself is in root:
 - `scripts/analyze_workflow_dag.py` — DAG structural view of a workflow.
 - `scripts/trace_node_source.py <wf> <node_id>` — show node definition + widget shape from upstream (e.g. KJNodes registry). Useful when a saved workflow's widget order disagrees with what apparent.
 - `scripts/validate_docs_consistency.py` — STALE_PATTERNS scan against `docs/`. CI runs this; failure = update STALE_PATTERNS or fix the doc.
+- `scripts/analyze_sage_traces.py <sage.jsonl>...` — aggregate per-shape kernel timing (p50/p95 masked + unmasked) across one or more sage trace files. Used for cross-run reproducibility checks + masked-vs-unmasked deltas.
+- `scripts/bench_aimdo_vram.py --output <ndjson>` — poll ComfyUI's `/aimdo/vram` endpoint (from `ComfyUI-MemoryVisualization` custom node) at 1Hz; writes per-model VRAM-residency NDJSON. Companion to `analyze_sage_traces.py` for the dynamic-VRAM-offload-pressure question.
+- `scripts/startup/start.sh` — canonical deploy template for ComfyUI's launcher (six modes: `default | safe | extreme | minimal | nodynvram | highvram`). The `nodynvram` mode is the load-bearing config for kernel-OOM testing — disables dynamic VRAM, async offload, and node cache. Full methodology at `docs/reference/benchmarking_memory_pressure.md`.
 
 Full inventory + the canonical first-pass-when-a-workflow-won't-run flow: `docs/reference/debug_tools.md`. Or invoke `/diagnose-workflow`.
 
