@@ -20,21 +20,23 @@ table across all files.
 from __future__ import annotations
 
 import argparse
-import json
+import statistics
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
+
+import orjson
 
 
 def load_trace(path: Path) -> list[dict[str, Any]]:
     """Read an NDJSON sage trace; skip the header event and malformed lines."""
     entries: list[dict[str, Any]] = []
-    with open(path) as f:
+    with open(path, "rb") as f:
         for line in f:
             try:
-                e = json.loads(line)
-            except json.JSONDecodeError:
+                e = orjson.loads(line)
+            except orjson.JSONDecodeError:
                 continue
             if e.get("event") == "header":
                 continue
@@ -60,23 +62,31 @@ def per_run_summary(label: str, entries: list[dict[str, Any]]) -> dict[str, Any]
 
 
 def aggregate(entries: list[dict[str, Any]]) -> None:
-    ran = [e for e in entries if not e.get("skipped", False)]
-    masked = [e for e in ran if e.get("has_mask")]
-    unmasked = [e for e in ran if not e.get("has_mask")]
+    # Group elapsed_us per (has_mask, shape) in one pass — avoids O(shapes × entries)
+    # rescans when shapes is large.
+    masked_by_shape: dict[tuple, list[float]] = defaultdict(list)
+    unmasked_by_shape: dict[tuple, list[float]] = defaultdict(list)
+    for e in entries:
+        if e.get("skipped", False):
+            continue
+        elapsed = e.get("elapsed_us")
+        if elapsed is None:
+            continue
+        sh = tuple(e.get("shape", []))
+        (masked_by_shape if e.get("has_mask") else unmasked_by_shape)[sh].append(elapsed)
 
-    masked_shapes = Counter(tuple(e.get("shape", [])) for e in masked)
-    print(f"\n=== Per-shape masked timing (aggregated across all input traces) ===")
+    print("\n=== Per-shape masked timing (aggregated across all input traces) ===")
     print(f"{'shape':<25}{'n':>6}  {'p50_us':>10}  {'p95_us':>10}  {'unmasked p50':>14}")
-    for sh, n in masked_shapes.most_common():
-        masked_times = sorted(e["elapsed_us"] for e in masked if tuple(e.get("shape", [])) == sh)
-        unmasked_times = sorted(e["elapsed_us"] for e in unmasked if tuple(e.get("shape", [])) == sh)
+    for sh, _ in Counter({k: len(v) for k, v in masked_by_shape.items()}).most_common():
+        masked_times = masked_by_shape[sh]
         if not masked_times:
             continue
-        p50 = masked_times[len(masked_times) // 2]
-        p95 = masked_times[int(len(masked_times) * 0.95)] if len(masked_times) >= 20 else max(masked_times)
-        u50 = unmasked_times[len(unmasked_times) // 2] if unmasked_times else None
-        u50_s = f"{u50:.0f}" if u50 is not None else "—"
-        print(f"{str(sh):<25}{n:>6}  {p50:>10.0f}  {p95:>10.0f}  {u50_s:>14}")
+        p50 = statistics.median(masked_times)
+        # quantiles requires n>=2; for small samples fall back to max as p95.
+        p95 = statistics.quantiles(masked_times, n=20)[18] if len(masked_times) >= 20 else max(masked_times)
+        unmasked_times = unmasked_by_shape.get(sh, [])
+        u50_s = f"{statistics.median(unmasked_times):.0f}" if unmasked_times else "—"
+        print(f"{str(sh):<25}{len(masked_times):>6}  {p50:>10.0f}  {p95:>10.0f}  {u50_s:>14}")
 
 
 def parse_args() -> argparse.Namespace:

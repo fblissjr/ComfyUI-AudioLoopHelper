@@ -112,7 +112,7 @@ def main() -> int:
 
     if not initial.get("enabled"):
         print(
-            f"WARNING: endpoint reports enabled=False (no CUDA device or non-CUDA torch)",
+            "WARNING: endpoint reports enabled=False (no CUDA device or non-CUDA torch)",
             file=sys.stderr,
         )
 
@@ -156,12 +156,13 @@ def main() -> int:
                 if errors == 1 or errors % 10 == 0:
                     print(f"WARN: poll {n_polls + errors} failed: {e}", file=sys.stderr)
 
-            # Sleep with interruption-aware loop so Ctrl-C is responsive
-            remaining = args.interval
-            slice_s = 0.1
-            while remaining > 0 and not stop:
-                time.sleep(min(slice_s, remaining))
-                remaining -= slice_s
+            # Deadline-based sleep so per-poll work doesn't drift the cadence.
+            # Signal delivery interrupts time.sleep on Linux, so Ctrl-C remains responsive.
+            deadline = now + args.interval
+            try:
+                time.sleep(max(0.0, deadline - time.time()))
+            except InterruptedError:
+                pass
 
     duration = time.time() - start
     print(f"\nStopped after {duration:.1f}s: {n_polls} polls written, {errors} errors")
