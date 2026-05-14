@@ -438,7 +438,7 @@
         "Node name for S&R": "VAELoaderKJ"
       },
       "widgets_values": [
-        "LTX23_audio_vae_bf16_KJ.safetensors",
+        "LTX2_audio_vae_bf16.safetensors",
         "main_device",
         "bf16"
       ],
