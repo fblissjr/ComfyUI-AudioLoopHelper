@@ -56,7 +56,7 @@ Run every check. For each, report PASS / FAIL / N/A with a specific node+slot re
 
 ### Sampler stack parity
 - [ ] Both samplers' MODEL inputs resolve to the same source (typically `Set_model` / `Get_model` from `LTX2SamplingPreviewOverride`). Walk the link chain on each side.
-- [ ] Both samplers' SIGMAS inputs resolve to the same `Set_sigmas` / `Get_sigmas` output. Scheduler params (`linear_quadratic, 8, 1` + `shift=13`) apply to both.
+- [ ] Both samplers' SIGMAS inputs resolve to the same `Set_sigmas` / `Get_sigmas` output. Since `apply_canonical_sigmas.py`, shipped workflows use `ManualSigmas "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"` with no `ModelSamplingSD3` node.
 - [ ] Both `CFGGuider` nodes have the same `cfg` widget value.
 
 ### Vestigial nodes

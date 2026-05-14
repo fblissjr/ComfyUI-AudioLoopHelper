@@ -1,6 +1,6 @@
 ---
 name: ltx-constraints-auditor
-description: Audit diffs and workflow JSON edits against LTX 2.3 critical constraints from CLAUDE.md. Checks audio-path sacredness, mask=0 semantics, distilled sigma chain, resolution div-by-32/64, length (L-1) % 8 == 0 rule, Node 169 == schedule[0], "singing" verb presence in prompts, noise_mask stripping, and distilled-vs-full checkpoint sigma wiring. Read-only — reports findings, user fixes.
+description: Audit diffs and workflow JSON edits against LTX 2.3 critical constraints from CLAUDE.md. Checks audio-path sacredness, mask=0 semantics, distilled sigma chain, resolution div-by-32/64, length (L-1) % 8 == 0 rule, Node 169 == schedule[0], concrete action-verb presence in prompts, noise_mask stripping, and distilled-vs-full checkpoint sigma wiring. Read-only — reports findings, user fixes.
 tools: Read, Grep, Glob, Bash
 ---
 
@@ -43,7 +43,7 @@ Input: either explicit file list from the caller, or `git diff --staged --name-o
 For workflows running `ltx-2.3-22b-distilled-1.1.safetensors`:
 
 - [ ] **`ManualSigmas` widget** holds the literal string `"1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"`. These are Lightricks's hand-tuned `DISTILLED_SIGMA_VALUES` from `coderef/ID-LoRA-2.3/packages/ltx-pipelines/utils/constants.py` — what their distilled checkpoint was trained to denoise. (Pre-2026-04-27 we used `BasicScheduler linear_quadratic 8 1` which approximated this curve parametrically; migrated via `scripts/apply_canonical_sigmas.py`.)
-- [ ] `ModelSamplingSD3 shift=13`.
+- [ ] **No `ModelSamplingSD3`** — the shift node distorts LTX 2.3 distilled sampling and must be absent or bypassed. Audit ID: `model_sampling_shift` (PASS = absent or bypassed-only).
 - [ ] `KSamplerSelect sampler=euler` (NOT `euler_ancestral*` — Lightricks's own distilled inference uses plain `EulerDiffusionStep`; the 4-step plateau near σ≈0.99 amplifies ancestral re-noise enough to bleed across TensorLoop iteration boundaries).
 - [ ] `CFGGuider cfg=1` (or STG hybrid: `MultimodalGuider` + `GuiderParameters(cfg=1, stg=1)`).
 - [ ] **Do NOT use upstream ComfyUI-LTXVideo's 15-step `LTXVScheduler`** from `LTX-2.3_T2V_I2V_Single_Stage_Distilled_Full.json`. Authoritative distilled path is the 8 fixed sigmas above per `coderef/LTX-2/.../distilled.py`.

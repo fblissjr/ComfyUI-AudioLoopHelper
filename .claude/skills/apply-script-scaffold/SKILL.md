@@ -94,4 +94,4 @@ uv run --group dev --group analysis python -m pytest tests/test_workflows.py -v 
 - Templates: `scripts/templates/apply_script_all_workflows.py`, `scripts/templates/apply_script_staged_variant.py`
 - Convention: `scripts/templates/README.md` and CLAUDE.md "Apply scripts" + "Subgraph editing"
 - Editor API: `scripts/workflow_utils.py` (`WorkflowEditor` class)
-- Helpers: `scripts/_apply_helpers.py` (shared utilities — import with aliases to preserve call-site names)
+- Helpers: `scripts/_helpers/_apply_helpers.py` (shared utilities — import with aliases to preserve call-site names)

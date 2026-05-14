@@ -31,9 +31,9 @@ exit(0 if r else 1)
 
 ## What the tests cover
 
-- **test_audio_features.py** (24 tests): Offline librosa extraction -- BPM, key, chromagram, mel spectrogram, F0, structure, schedule generation
+- **test_audio_features.py** (61 tests): Offline librosa extraction -- BPM, key, chromagram, mel spectrogram, F0, structure, schedule generation
 - **test_audio_analysis_nodes.py** (9 tests): Runtime torchaudio nodes -- _slice_audio_window, AudioPitchDetect, vocal fraction, male/female classification
-- **test_workflows.py** (2 tests): Workflow JSON structural validation for both IMAGE and LATENT variants
+- **test_workflows.py** (1 test): Workflow JSON structural validation for both IMAGE and LATENT variants
 
 ## Common failures
 
