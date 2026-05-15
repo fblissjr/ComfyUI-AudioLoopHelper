@@ -178,14 +178,19 @@ class AudioLoopHelperSageFFN(io.ComfyNode):
 
     Skips the 4 bookend blocks `[0, 1, 46, 47]` whose FFN weights are
     bf16 in the distilled checkpoint. Composes with `LTXVChunkFeedForward`
-    (KJNodes) — does not replace it. On 24 GiB cards keep chunking
-    enabled for stage-2 memory management; sage_ffn adds fp8-native
-    matmul speedup on top.
+    (KJNodes) — does not replace it.
 
-    Mocking phase: when `sageattention.sage_ffn` is not available
-    (sage < v0.6 installed), the node still installs patches but they
-    fall through to the stock path. Numerically identical to no-patch;
-    lets users wire the node into workflows before v0.6 ships.
+    Default `enabled=False`: production A/B (2026-05-15) showed
+    sage_ffn is slower than torch's bf16-dequant reference at LTX FFN
+    shapes (3% at stage-1, 20% at stage-2 T=44880; ~1.8% e2e). The
+    synthetic-bench speedup didn't translate due to L2 cache
+    contention with attention's working set + kernel-launch overhead
+    at LTX call counts. Ships as a completeness primitive (the only
+    fp8-native fused MLP for ComfyUI consumer-app on sm89), not a
+    perf win on the current Triton stack.
+
+    When sage v0.6 is unavailable, patches fall through to the stock
+    path. Numerically identical to no-patch.
 
     Detail: `internal/reference/sage_optimization_landscape.md`.
     """
@@ -201,36 +206,40 @@ class AudioLoopHelperSageFFN(io.ComfyNode):
                 "sage v0.6's fused fp8 MLP kernel (sage_ffn). Skips "
                 "the 4 bookend blocks [0, 1, 46, 47] whose FFN weights "
                 "are bf16 in the distilled checkpoint.\n\n"
-                "REQUIRES the SageAttention-ada fork v0.6+ "
-                "(github.com/fblissjr/SageAttention-ada). Older sage "
-                "versions: patches are still installed but fall through "
-                "to the stock FFN path (numerically identical to "
-                "no-patch). Restart ComfyUI after installing v0.6 to "
-                "pick up the real kernel.\n\n"
+                "REQUIRES SageAttention-ada >= v0.6 "
+                "(github.com/fblissjr/SageAttention-ada). When sage_ffn "
+                "is unavailable, patches fall through to the stock FFN "
+                "path (numerically identical to no-patch). Restart "
+                "ComfyUI after installing v0.6.\n\n"
                 "COMPOSE WITH LTXVChunkFeedForward (KJNodes), don't "
-                "replace it. The v0.6 design is two-kernel split: "
-                "intermediate hits HBM, same memory footprint as "
-                "un-chunked baseline. On 24 GiB cards keep chunking "
-                "enabled for stage-2 memory management; sage_ffn adds "
-                "fp8-native matmul speedup on top.\n\n"
-                "Expected delivered speedup: ~10-25% FFN matmul vs "
-                "torch's bf16-dequant reference path, depending on "
-                "Triton autotune. e2e impact at our measured 24-27% "
-                "FFN share: ~2-5% wall-time reduction. Modest but real; "
-                "the uncontested-availability framing (only fp8-native "
-                "fused MLP for ComfyUI consumer-app on sm89) is the "
-                "primary wedge, not the absolute speedup magnitude."
+                "replace it. The v0.6 design is a two-kernel split: "
+                "intermediate hits HBM, same memory footprint as the "
+                "un-chunked baseline.\n\n"
+                "STATUS (post in-pipeline validation 2026-05-15): "
+                "sage_ffn is the only fp8-native fused MLP kernel for "
+                "ComfyUI consumer-app on sm89, but production A/B on "
+                "FML2V multi-guide showed it is ~1-20% SLOWER than "
+                "torch's bf16-dequant reference path (3% at stage-1, "
+                "20% at stage-2 T=44880; ~1.8% e2e wall-time slower). "
+                "Synthetic-bench predicted a speedup; the gap closes "
+                "in production due to L2 cache contention with the "
+                "neighboring attention sub-modules + kernel-launch "
+                "overhead across ~1000 FFN calls per render. Ship "
+                "STATUS: completeness primitive — opt-in if you want "
+                "the fp8 path for forward-compat reasons. Default off."
             ),
             is_experimental=True,
             inputs=[
                 io.Model.Input("model"),
                 io.Boolean.Input(
                     "enabled",
-                    default=True,
+                    default=False,
                     tooltip=(
-                        "When False, the model passes through unchanged. "
-                        "Useful for A/B testing sage_ffn against baseline "
-                        "without rewiring the workflow."
+                        "When False (default), the model passes through "
+                        "unchanged — recommended until a v0.6.1+ closes "
+                        "the production gap with torch reference. When "
+                        "True, routes FFN through sage_ffn. Useful for "
+                        "A/B comparisons and forward-compat testing."
                     ),
                 ),
             ],
