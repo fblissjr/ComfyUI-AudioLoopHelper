@@ -3972,6 +3972,7 @@ class AudioLoopHelperExtension(ComfyExtension):
         from .nodes_audio_latent_slice import AudioLatentSlice
         from .nodes_easycache import LTXVideoEasyCache
         from .nodes_regional_compile import LTXVideoRegionalCompile
+        from .nodes_ffn import AudioLoopHelperSageFFN
         from .nodes_sage import AudioLoopHelperSageAttention
         from .nodes_validation import LoopConfigValidator
 
@@ -4008,6 +4009,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LoopIterationStamp,
             IterPatchInspector,
             AudioLoopHelperSageAttention,
+            AudioLoopHelperSageFFN,
             AudioLatentSlice,
             LTXVideoEasyCache,
             LTXVideoRegionalCompile,
