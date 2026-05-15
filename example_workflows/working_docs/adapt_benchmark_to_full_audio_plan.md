@@ -91,7 +91,7 @@ Source: `workflow_quality_delta_analysis.md`. Listed in priority order from the 
 
 ### Tier 2 — useful but porting-safe to defer
 
-4. **`AudioLoopHelperSageAttention` mode `auto`** — B uses `auto`, shipped workflows use `auto_mask_aware`. The mask-aware path isn't exercised on audio-loop workflows (per CLAUDE.md "Pending review" note about `LTXVCropGuides`/`LTXVConcatAVLatent` stripping `guide_attention_entries`). **Recommend keeping `auto_mask_aware` for consistency with audit conventions.**
+4. **`AudioLoopHelperSageAttention` mode `auto`** — B uses `auto`. As of 2026-05-15, `auto` is the unified default across all shipped workflows (was `auto_mask_aware` on audio-loop workflows previously; standardized via `scripts/apply_sage_mode_auto.py`). The mask-aware path isn't exercised on audio-loop workflows (per CLAUDE.md "Pending review" note about `LTXVCropGuides`/`LTXVConcatAVLatent` stripping `guide_attention_entries`), so the two modes are runtime-equivalent there. Use `auto` for new variants.
 
 5. **`LTXVChunkFeedForward [2, 4096]`** — already matches A. No port needed.
 
@@ -359,14 +359,13 @@ These came up during the planning discussion and are recorded here so they don't
 
 This stacks the two notes vertically just above the sage node. If the whole sage-node cluster is being relocated as part of the migration to fit into A's canvas region, move the notes as a unit with it.
 
-### 8.2 — Sage mode: `auto` → `auto_mask_aware`
+### 8.2 — Sage mode: `auto` (unified default)
 
-`#2296` currently has widget `["auto", true, 1024]`. For the adapted music-video workflow, change widget[0] to `"auto_mask_aware"`. Rationale:
+`#2296` widget `["auto", true, 1024]` — keep as-is. As of 2026-05-15, `auto` is the unified default across all shipped workflows (`scripts/apply_sage_mode_auto.py`). Rationale:
 
-- `auto_mask_aware` routes masked cross-attn to fp16_triton (the kernel that handles LTX cross-attn cleanly) and unmasked self-attn to sage auto. Source: `nodes_sage.py:639-705` tooltip.
-- `auto` delegates fully to sage's dispatch — that's correct for the kernel-benchmark variant (it lets sage's fp8 fork dispatch the fp8 masked path on sm89+), but the wrong default for a production music-video render.
-- The canonical music-video workflow `audio-loop-music-video_latent.json` `#268` ships with `auto_mask_aware` — matching it is consistency-with-canonical.
-- Caveat (root CLAUDE.md Pending-review note): audio-loop workflows cannot actually exercise LTX 2.3's masked self-attn path (something in `LTXVCropGuides` / `LTXVConcatAVLatent`'s NestedTensor packing strips `guide_attention_entries` before `_process_input` builds the mask). So `auto_mask_aware` is correct-and-safe but the mask routing is inert — it falls through to unmasked sage auto. Still the right default.
+- Audio-loop workflows cannot exercise LTX 2.3's masked self-attn path (per root CLAUDE.md "Pending review" — something in `LTXVCropGuides` / `LTXVConcatAVLatent`'s NestedTensor packing strips `guide_attention_entries` before `_process_input` builds the mask). So `auto` and `auto_mask_aware` produce equivalent runtime behavior on these workflows.
+- Benchmark workflows (FML2V multi-guide topology) DO exercise the masked self-attn path and need `auto` so sage-fork's fp8++ mask CUDA kernel dispatches correctly.
+- Single default across the repo = no fork-source ambiguity for new variants.
 
 ### 8.3 — `skip_under_seq_len`: keep at 1024
 

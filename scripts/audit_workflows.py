@@ -145,14 +145,14 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         all_good = True
         for n in sage:
             wv = n.get("widgets_values", [])
-            if not wv or wv[0] != "auto_mask_aware":
-                record("WARN", "sage_mode", f"mode={wv[0] if wv else None!r} (expected auto_mask_aware)")
+            if not wv or wv[0] != "auto":
+                record("WARN", "sage_mode", f"mode={wv[0] if wv else None!r} (expected auto)")
                 all_good = False
             if n.get("mode", 0) != 0:
                 record("WARN", "sage_active", f"mode field={n.get('mode')} (4=bypassed)")
                 all_good = False
         if all_good:
-            record("OK", "sage", "AudioLoopHelperSageAttention auto_mask_aware active")
+            record("OK", "sage", "AudioLoopHelperSageAttention auto active")
 
     # AudioLoopController seed input name (post-2026-04-26 rename)
     # ComfyUI auto-attaches control_after_generate to any INT widget literally

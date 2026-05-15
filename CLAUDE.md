@@ -42,7 +42,7 @@ Core nodes (per-node role + wiring in each class's docstring; full reference at 
 - **Prompt schedule**: `TimestampPromptScheduleBatchEncode` + `ConditioningSelectByIteration` (current) / `TimestampPromptSchedule` + `CachedTextEncode` (legacy; don't wire in loop body)
 - **Keyframe schedule**: `KeyframeLatentScheduleBatchEncode` + `LatentSelectByIteration` (current — VAE-encodes once outside loop) / `KeyframeImageSchedule` + `ImageBlend` (legacy; per-iter VAE)
 - **Latent ops**: `LatentContextExtract`, `LatentOverlapTrim`, `LatentTemporalMask` (retake; `edge_taper_seconds` for soft boundary), `LatentSeamZoneMask` (multi-band mask centered on iteration boundaries — pairs with `scripts/diagnose_overlap_seams.py`), `LatentFrameCount` (sizes empty audio latent for upscale + seam), `TrimImageBatchToAudio` (F14), `TrimVideoLatentToAudio` (A/B staged), `LTXHeadTrim` (image+audio composite — drops first N latent-frames' pixel + matching audio span; default 0 = no-op), `RunIdPrefix` (F15)
-- **Attention + profiling + blend**: `AudioLoopHelperSageAttention` (default `auto_mask_aware`), `ProfileBegin`/`IterStep`/`End`, `ConditioningBlend` (works with Gemma 3 + CLIP)
+- **Attention + profiling + blend**: `AudioLoopHelperSageAttention` (default `auto` as of 2026-05-15 via `scripts/apply_sage_mode_auto.py`; `auto_mask_aware` was prior default — runtime-equivalent on audio-loop workflows since the masked path doesn't fire there, and `auto` is what benchmark workflows need), `ProfileBegin`/`IterStep`/`End`, `ConditioningBlend` (works with Gemma 3 + CLIP)
 - **Step-skipping cache**: `LTXVideoEasyCache` (experimental, default off)
 - **Dimension SSoT**: `LTXFramePlanner` — see `docs/reference/frame_planner_reference.md`
 
@@ -176,7 +176,7 @@ Public: `docs/README.md` (task-first nav) → `docs/guides/` (how-to), `docs/ref
 
 Reference codebases (read-only): `coderef/LTX-2/`, `coderef/LTX-Desktop/`, ComfyUI-LTXVideo upstream.
 
-Example workflows: eight shipped on `AudioLoopHelperSageAttention auto_mask_aware`. Validate via `scripts/audit_workflows.py`.
+Example workflows: ten shipped on `AudioLoopHelperSageAttention auto`. Validate via `scripts/audit_workflows.py`.
 
 Subtree CLAUDE.md files (auto-loaded when working in that subtree):
 - `scripts/CLAUDE.md` — apply-script conventions, audit invariants, WorkflowEditor patterns.

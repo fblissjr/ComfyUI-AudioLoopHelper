@@ -1815,7 +1815,7 @@
         "Node name for S&R": "AudioLoopHelperSageAttention"
       },
       "widgets_values": [
-        "auto_mask_aware",
+        "auto",
         true
       ]
     },

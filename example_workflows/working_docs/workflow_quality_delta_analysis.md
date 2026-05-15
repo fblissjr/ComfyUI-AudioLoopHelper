@@ -80,13 +80,13 @@ Hypothesis: resolution itself is unlikely to be the quality driver (both are wel
 
 | Axis | A | B (active stack) |
 |---|---|---|
-| Sage variant | `AudioLoopHelperSageAttention #268` `['auto_mask_aware', True, 1024]` | `AudioLoopHelperSageAttention #2296` `['auto', True, 1024]` |
+| Sage variant | `AudioLoopHelperSageAttention #268` `['auto', True, 1024]` (was `auto_mask_aware` pre-2026-05-15; unified to `auto` via `scripts/apply_sage_mode_auto.py`) | `AudioLoopHelperSageAttention #2296` `['auto', True, 1024]` |
 | `PathchSageAttentionKJ` | absent | present but **bypassed** (mode=4) |
 | `LTX2MemoryEfficientSageAttentionPatch` | absent | present but **bypassed** (mode=4) |
 | `LTXVChunkFeedForward` | `#504` widgets `[2, 4096]` (active) | `#228` widgets `[2, 4096]` (active) |
 | `LTX2AttentionTunerPatch` | `#1523` widgets `['', 1, 1, 1, 1, True]` (active) | `#229` widgets `['', 1, 1, 1, 1, True]` (bypassed, mode=4) |
 
-B's active sage mode is `'auto'`, not `'auto_mask_aware'` (CLAUDE.md notes `auto_mask_aware` is the default for shipped workflows). Per the "Pending review" note in root CLAUDE.md, audio-loop workflows cannot exercise LTX 2.3's masked self-attn path anyway (something in the conditioning route strips `guide_attention_entries`), so the mask-aware branch is defensive only on these workflows. **`auto` vs `auto_mask_aware` is perf-affecting but not quality-affecting** for this workload class.
+As of 2026-05-15, `auto` is the unified default across all shipped workflows. Previously, audio-loop workflows shipped on `auto_mask_aware` and benchmark workflows on `auto` — the two-default split had no runtime payoff (the masked self-attn path doesn't fire on audio-loop workflows per root CLAUDE.md's "Pending review" note, so the modes are equivalent there), and `auto` is what benchmark workflows need. **Sage mode is no longer a delta axis between A and B.**
 
 `LTX2AttentionTunerPatch` is active in A but bypassed in B — widgets are identity (`scale=1, gate=1, ...`), so bypassing is a no-op on math; this is housekeeping not behavior.
 
