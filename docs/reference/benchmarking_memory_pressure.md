@@ -1,6 +1,6 @@
 # Benchmarking memory pressure on ComfyUI + LTX 2.3
 
-Last updated: 2026-05-13
+Last updated: 2026-05-15
 
 ## Role
 
@@ -88,6 +88,28 @@ Sage traces from this stack are remarkably stable run-to-run when config is iden
 | Sage trace has zero `has_mask=True` entries despite workflow setting `guide_strength<1.0` | Workflow strips `guide_attention_entries` upstream of `_process_input` (e.g. audio-loop NestedTensor handling) — see `comfy/ldm/lightricks/model.py:1044` | Use a workflow that lets guide entries survive to the model (e.g. RuneXX FML2V at `example_workflows/benchmark_workflows/`); audio-loop family is structurally incompatible |
 | Run-to-run variance > 5% at p95 across identical configs | Autotune cache cold for one run, or different mask sparsity per render | Run 3+ times; aggregate; quote p50 + p95 not single-run numbers |
 | Trace file size suspiciously small (< 500 KB on LTX self-attn) | Partial render (user cancelled, OOM, error). | Check `exec.jsonl` for completion; treat partial trace as data-only-not-conclusion |
+
+## FFN intermediate dominates at multi-guide scale
+
+`LTXVChunkFeedForward` (KJNodes) is **load-bearing** for fitting LTX 2.3 multi-guide renders on 24 GiB cards. It chunks the FFN intermediate along the T dimension to reduce peak allocation; bypass it and the workflow OOMs deterministically at stage-2 step 0.
+
+Failure mode (observed with `AudioLoopHelperSageAttention` in `auto` mode, fp8_cuda++ on masked attention, `--disable-dynamic-vram`, `LTXVChunkFeedForward` set to `mode=4`):
+
+```
+Stage-1: 8/8 steps completed cleanly
+Stage-2: 0% [0/3] -- OOM immediately at:
+  ldm/lightricks/av_model.py:356  ff_out = self.ff(vx_scaled)
+  ldm/lightricks/model.py:322     return self.net(x)
+  ldm/lightricks/model.py:308     gelu(self.proj(x), approximate="tanh")
+```
+
+The killer allocation is the FFN's first `Linear(dim, inner_dim)` output. At multi-guide-expanded T=44880 with `dim=4096`, `mult=4` → `inner_dim=16384`, the output tensor `(1, 44880, 16384)` bf16 = ~1.47 GiB. With `chunks=2` that becomes ~735 MiB per slice; sequential allocation/free keeps peak below the ceiling.
+
+Stage-1 doesn't trigger this because stage-1 uses the smaller T=10780 shape — proj output there is ~360 MiB, comfortably fits.
+
+Implication: at LTX 2.3 multi-guide scale on a 24 GiB card, attention-kernel choice is the **second-order** memory variable. FFN chunking is the first-order one. When benchmarking attention changes, always run with `LTXVChunkFeedForward` enabled (canonical config in `example_workflows/benchmark_workflows/fml2v_var_*.json` since 2026-05-14) — otherwise the FFN OOM dominates and attention-side deltas can't surface.
+
+Upstream footgun worth knowing: `comfy/ldm/lightricks/model.py::FeedForward.__init__` accepts a `glu` kwarg but never references it. Both LTX 2.3 call sites pass `glu=True` expecting GEGLU; the class silently builds plain GELU. So `inner_dim = dim * 4`, not `dim * 8`. Doesn't affect the bench (the deployed behavior is what's measured), but anyone reading the call sites assuming GEGLU should know.
 
 ## Related
 
