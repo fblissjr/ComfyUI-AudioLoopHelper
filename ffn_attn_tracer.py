@@ -204,8 +204,15 @@ def install_hooks(diffusion_model: Any) -> bool:
     global _OUTPUT_PATH, _ATEXIT_REGISTERED, _CACHED_PROMPT_ID
     if not is_enabled():
         return False
-    if _OUTPUT_PATH is None:
-        _OUTPUT_PATH = _resolve_path()
+
+    # New render → flush any tail events from a prior render to its file
+    # BEFORE we swap _OUTPUT_PATH, so they don't land in the new render's
+    # file. Then re-resolve the path freshly so this render writes to its
+    # own prompt_id-keyed location (previously _OUTPUT_PATH was cached on
+    # first call and every subsequent render appended to the first file).
+    if _OUTPUT_PATH is not None and _PENDING:
+        _flush_pending()
+    _OUTPUT_PATH = _resolve_path()
     if _OUTPUT_PATH is None:
         return False
 
