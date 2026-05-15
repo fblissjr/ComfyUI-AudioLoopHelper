@@ -3503,6 +3503,15 @@ class LoopIterationStamp(io.ComfyNode):
         return (clone,)
 
 
+# Module-level call counters keyed by label. ComfyUI's v3 _io API locks
+# class attributes on the executor's clone of the ComfyNode subclass, so
+# `cls._call_counter += 1` fails with AttributeError at runtime even
+# though the pytest fake (_IOStub) tolerates it. Keying by label here
+# also keeps two inspector instances in the same workflow from sharing
+# a counter when they're given different labels.
+_INSPECTOR_CALL_COUNTERS: dict[str, int] = {}
+
+
 class IterPatchInspector(io.ComfyNode):
     """Diagnostic pass-through that logs model patch state per call.
 
@@ -3512,15 +3521,13 @@ class IterPatchInspector(io.ComfyNode):
     reload between iterations. Pure pass-through: never mutates the model.
 
     Each call logs:
-      - call counter (class-level) and user-supplied label
+      - call counter (per-label, module-level) and user-supplied label
       - len(model.patches) and len(model.object_patches) if present
       - top-level keys of transformer_options
       - whether `optimized_attention_override` is set (sage/tuner sentinel)
 
     With `verbose=True`, also dumps the full keys of `model.patches`.
     """
-
-    _call_counter = 0  # class-level so per-iter calls increment monotonically
 
     @classmethod
     def define_schema(cls):
@@ -3564,7 +3571,8 @@ class IterPatchInspector(io.ComfyNode):
     def _inspect_impl(cls, model, *, label: str, verbose: bool):
         """Testable seam. Returns (model,) unchanged after emitting a
         log line summarizing patch state. No mutation, no GPU work."""
-        cls._call_counter += 1
+        call_n = _INSPECTOR_CALL_COUNTERS.get(label, 0) + 1
+        _INSPECTOR_CALL_COUNTERS[label] = call_n
 
         # `getattr` with default so absent surfaces don't AttributeError on
         # minimal fakes (and tolerates future ModelPatcher API drift).
@@ -3581,7 +3589,7 @@ class IterPatchInspector(io.ComfyNode):
 
         logger = logging.getLogger(__name__)
         msg = (
-            f"[{label}] call={cls._call_counter} "
+            f"[{label}] call={call_n} "
             f"patches={patches_n} object_patches={obj_n} "
             f"attention_override={attn_override} "
             f"transformer_options_keys={to_keys}"
@@ -3590,7 +3598,7 @@ class IterPatchInspector(io.ComfyNode):
 
         if verbose and patches:
             logger.info(
-                f"[{label}] call={cls._call_counter} patch_keys="
+                f"[{label}] call={call_n} patch_keys="
                 f"{sorted(patches.keys())}"
             )
 

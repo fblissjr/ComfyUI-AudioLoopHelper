@@ -138,15 +138,17 @@ def test_inspector_non_verbose_omits_full_patch_keys(caplog):
 
 def test_inspector_call_counter_increments_across_calls(caplog):
     model = FakeModel()
-    from nodes import IterPatchInspector
+    import nodes as _nodes  # noqa: F401
 
-    # Reset counter so this test doesn't depend on prior tests.
-    IterPatchInspector._call_counter = 0
+    # Reset the module-level counter so this test doesn't depend on prior
+    # test ordering. Counter moved off the class because ComfyUI's v3 _io
+    # API locks class attributes on the executor's clone — see nodes.py
+    # comment above `_INSPECTOR_CALL_COUNTERS`.
+    _nodes._INSPECTOR_CALL_COUNTERS.pop("patch_inspect", None)
     with caplog.at_level(logging.INFO):
         _inspect(model)
         _inspect(model)
         _inspect(model)
-    # Three INFO logs with counters 1, 2, 3.
     counters = [
         r.getMessage() for r in caplog.records if "patch_inspect" in r.getMessage()
     ]
