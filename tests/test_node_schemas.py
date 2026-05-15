@@ -515,6 +515,12 @@ _CONDITIONING_PASSTHROUGH_TYPES = frozenset({
 # transitively sources from TimestampPromptScheduleBatchEncode (the per-iter
 # selector). ConditioningZeroOut terminates the negative chain (CFG=1 inert,
 # but still a real source from the wiring perspective).
+#
+# NOTE: scripts/audit_workflows.py::_CONDITIONING_SOURCE_TYPES is a permissive
+# superset that conflates passthroughs (LTXVCropGuides etc.) into the source
+# set. This taxonomy is the stricter test-only split: passthroughs are walked
+# through, only real CONDITIONING-producing nodes are terminal. If the two
+# allowlists drift further, unify behind workflow_utils.py.
 _CONDITIONING_SOURCE_TYPES = frozenset({
     "CLIPTextEncode",
     "TimestampPromptScheduleBatchEncode",
@@ -536,6 +542,7 @@ _MODEL_PASSTHROUGH_TYPES = frozenset({
     "LTX2SamplingPreviewOverride",
     "LTXVReferenceAudio",  # also passes MODEL when bypassed
     "LTXVPerStepAdainPatcher",  # upstream ComfyUI-LTXVideo per-step adain patch
+    "IterPatchInspector",  # diagnostic — pure passthrough that logs patch state per iter
 })
 
 # Real MODEL sources — terminates a trace successfully. Today only

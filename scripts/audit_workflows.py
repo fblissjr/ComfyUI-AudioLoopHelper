@@ -1770,6 +1770,14 @@ def _check_run_id_layout_present(wf, by_type, record) -> None:
 # distributor (-10) — the latter means the conditioning came in from the
 # top-level invoker, which has its own audit (the batch-encode + select
 # chain runs there).
+# NOTE: tests/test_node_schemas.py keeps a parallel split between
+# _CONDITIONING_PASSTHROUGH_TYPES and _CONDITIONING_SOURCE_TYPES — the
+# stricter test taxonomy. This audit conflates them (permissive: walk
+# terminates at any node-type below, including ones that are really
+# passthroughs). If a third walker lands or this set drifts vs the test,
+# unify both behind a shared frozenset in workflow_utils.py — but
+# audit_workflows.py is intentionally WorkflowEditor-independent
+# (scripts/CLAUDE.md), so the shared module must stay class-free.
 _CONDITIONING_SOURCE_TYPES = frozenset({
     "CLIPTextEncode",
     "TimestampPromptScheduleBatchEncode",
@@ -1804,6 +1812,7 @@ _MODEL_PASSTHROUGH_TYPES = frozenset({
     "ModelSamplingSD3",
     "LTX2_NAG",
     "AudioLoopHelperSageAttention",
+    "IterPatchInspector",  # diagnostic — pure passthrough that logs patch state per iter
     "SetNode",
     "GetNode",
 })
