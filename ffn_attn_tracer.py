@@ -168,6 +168,12 @@ def _make_pre_hook():
         e_start = torch.cuda.Event(enable_timing=True)
         e_start.record()
         # Stash on the module instance for the post-hook to pair.
+        # Safe because the value is a tuple — if you ever extend this to
+        # carry a Tensor or another nn.Module, you'll trip the auto-
+        # register-as-submodule footgun (see root CLAUDE.md "ComfyUI
+        # gotchas" entry on `nn.Module.__setattr__`). Use a non-Module
+        # container instead (dict-on-the-module is fine, since the dict
+        # itself isn't Module-typed).
         module._ffn_attn_trace_state = (T, e_start, time.time())
     return pre_hook
 

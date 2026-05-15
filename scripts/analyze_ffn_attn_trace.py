@@ -31,14 +31,18 @@ STAGE_T_CUTOFF = 16384
 ATTN_LABELS = frozenset({"attn1", "attn2", "audio_attn1", "audio_attn2", "video_to_audio_attn"})
 FFN_LABELS = frozenset({"ff", "audio_ff"})
 
-# LTX 2.3 distilled has 48 transformer blocks. Each sampler step pairs a
-# positive + negative CFG branch -> 2 forwards. So `ff` (video FFN) fires
-# 2 * 48 = 96 times per sampler step. Use `ff` alone (not summed with
-# audio_ff) to infer step count: audio_ff cadence differs slightly across
-# stages (audio path stays at smaller T while video expands).
+# LTX 2.3 distilled has 48 transformer blocks. The number of forwards per
+# sampler step depends on CFG:
+#   CFG=1 (audio-loop workflows + distilled single-pass)  -> 1 forward / step
+#   CFG>1 (classical positive+negative-branch sampling)   -> 2 forwards / step
+# So `ff` (video FFN) fires `NUM_BLOCKS * CFG_FORWARDS_PER_STEP` times per
+# sampler step. Use `ff` alone (not summed with audio_ff) to infer step
+# count: audio_ff cadence differs slightly across stages.
+#
+# Default assumes CFG=1 (the audio-loop case). Override via --cfg-forwards
+# on a benchmark workflow that runs the full 2-branch CFG path.
 NUM_TRANSFORMER_BLOCKS = 48
-CFG_FORWARDS_PER_STEP = 2
-FF_CALLS_PER_STEP = NUM_TRANSFORMER_BLOCKS * CFG_FORWARDS_PER_STEP  # 96
+CFG_FORWARDS_PER_STEP_DEFAULT = 1
 
 
 def parse_args() -> argparse.Namespace:
@@ -48,6 +52,17 @@ def parse_args() -> argparse.Namespace:
         nargs="?",
         type=Path,
         help="Path to ffn_attn_breakdown.jsonl. Defaults to most recent.",
+    )
+    p.add_argument(
+        "--cfg-forwards",
+        type=int,
+        default=CFG_FORWARDS_PER_STEP_DEFAULT,
+        choices=(1, 2),
+        help=(
+            "Forwards per sampler step (1=CFG=1 audio-loop default, "
+            "2=classical CFG pos+neg branches). Determines per-step "
+            "scaling: ff_calls / (48 * cfg_forwards) = inferred steps."
+        ),
     )
     return p.parse_args()
 
@@ -79,7 +94,10 @@ def main() -> int:
         print(f"ERROR: no trace file found ({path})", file=sys.stderr)
         return 1
 
+    ff_calls_per_step = NUM_TRANSFORMER_BLOCKS * args.cfg_forwards
     print(f"Trace: {path}")
+    print(f"Assuming {args.cfg_forwards} forward(s)/step -> "
+          f"{ff_calls_per_step} ff_calls/step")
 
     # (stage, kind) -> sum of elapsed_ms
     totals: dict[tuple[str, str], float] = defaultdict(float)
@@ -133,8 +151,8 @@ def main() -> int:
         # cadence varies across stages (audio path stays at smaller T while
         # video expands) so summing both before dividing inflates the count.
         ff_calls = ff_calls_by_stage.get(stage, 0)
-        if ff_calls >= FF_CALLS_PER_STEP:
-            num_steps = round(ff_calls / FF_CALLS_PER_STEP)
+        if ff_calls >= ff_calls_per_step:
+            num_steps = round(ff_calls / ff_calls_per_step)
         else:
             num_steps = 1
 
