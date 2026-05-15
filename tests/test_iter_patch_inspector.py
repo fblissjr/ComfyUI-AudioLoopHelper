@@ -138,7 +138,7 @@ def test_inspector_non_verbose_omits_full_patch_keys(caplog):
 
 def test_inspector_call_counter_increments_across_calls(caplog):
     model = FakeModel()
-    import nodes as _nodes  # noqa: F401
+    import nodes as _nodes
 
     # Reset the module-level counter so this test doesn't depend on prior
     # test ordering. Counter moved off the class because ComfyUI's v3 _io
