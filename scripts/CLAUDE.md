@@ -16,6 +16,22 @@ Slot-dict shape helpers (static methods): `WorkflowEditor.io_in(name, dtype, lin
 
 **Helper modules live under `scripts/_helpers/`** (underscore-prefix = private helper). Import via qualified path: `from _helpers._apply_helpers import ...`, `from _helpers._layout_grid import ...`, `from _helpers._layout_classifications import ...`. PEP 420 namespace package — no `__init__.py` needed. `scripts/workflow_utils.py` stays at `scripts/` because it's the canonical edit API, not a private helper.
 
+### Importing `scripts/workflow_utils.py` from package modules
+
+`workflow_utils.py` lives at `scripts/`, NOT package root. Naive `from .workflow_utils import run_artifact_path` from a top-level package module (e.g. `ffn_attn_tracer.py`, `exec_logger.py`, `nodes_sage.py`) silently fails; any try/except fallback runs and the caller may land in the wrong path with no error. Canonical pattern at `nodes_sage.py:72-80`:
+
+```python
+sys.path.insert(0, str(Path(__file__).parent / "scripts"))
+try:
+    from workflow_utils import run_artifact_path  # type: ignore
+except Exception:
+    def run_artifact_path(category: str, ext: str) -> Path:
+        # inline fallback path
+        ...
+```
+
+Mirror this exactly when adding new opt-in env-gated tracers or any package-level module that needs `run_artifact_path` or other `workflow_utils` helpers.
+
 ## Subgraph editing mechanics
 
 - Top-level links are arrays `[id, src, src_slot, tgt, tgt_slot, type]`; subgraph internal links are dicts `{id, origin_id, origin_slot, target_id, target_slot, type}`. Subgraph def at `wf['definitions']['subgraphs'][0]`.
