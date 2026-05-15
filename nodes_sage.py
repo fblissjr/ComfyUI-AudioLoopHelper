@@ -798,11 +798,27 @@ class AudioLoopHelperSageAttention(io.ComfyNode):
         transformer_options = model_clone.model_options.setdefault("transformer_options", {})
         transformer_options["optimized_attention_override"] = override_fn
 
+        # Opt-in per-sub-block GPU-time tracer (env-gated). Hooks the
+        # AVTransformerBlock sub-modules to record cuda.Event timings. See
+        # ffn_attn_tracer.py for activation env var + output format.
+        from . import ffn_attn_tracer
+        if ffn_attn_tracer.is_enabled():
+            try:
+                diffusion_model = model_clone.get_model_object("diffusion_model")
+                ffn_attn_tracer.install_hooks(diffusion_model)
+            except Exception:
+                # Defensive: tracer failures must not block rendering.
+                pass
+
         def _cleanup(*_args, **_kwargs):
             opts = model_clone.model_options.get("transformer_options", {})
             if opts.get("optimized_attention_override") is override_fn:
                 opts.pop("optimized_attention_override", None)
             tracer.flush_summary()
+            try:
+                ffn_attn_tracer.maybe_flush()
+            except Exception:
+                pass
 
         model_clone.add_callback(_ON_CLEANUP, _cleanup)
         return (model_clone,)
