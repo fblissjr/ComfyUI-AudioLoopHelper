@@ -3096,10 +3096,10 @@ class VideoFrameExtract(io.ComfyNode):
                 ),
                 io.Float.Input(
                     "source_fps",
-                    default=25.0,
+                    default=24.0,
                     min=0.01,
                     step=0.01,
-                    tooltip="Frame rate of the source video batch.",
+                    tooltip="Frame rate of the source video batch. Override if the source isn't LTX-generated.",
                 ),
             ],
             outputs=[

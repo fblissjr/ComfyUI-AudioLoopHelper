@@ -28,6 +28,13 @@ INTERNAL_WORKFLOWS_DIR = REPO_ROOT / "internal" / "workflows"
 RUNS_DIR = REPO_ROOT / "internal" / "analysis" / "runs"
 DATA_RUNS_DIR = REPO_ROOT / "data" / "runs"
 
+# LTX 2.3 was trained at 24fps. Used by:
+#   - scripts/apply_fps_24_default.py (the sweep)
+#   - scripts/audit_workflows.py (F16 invariant)
+# Reference: comfy/ldm/lightricks/av_model.py:866 (frame_rate scales the
+# model's temporal positional embedding).
+LTX23_TRAINING_FPS = 24
+
 
 def iter_all_workflows() -> list[Path]:
     """Return every workflow JSON the apply-script family touches:

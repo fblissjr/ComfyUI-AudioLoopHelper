@@ -33,7 +33,12 @@ import orjson
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from workflow_utils import DECODER_TYPES, EXAMPLE_WORKFLOWS_DIR, is_active
+from workflow_utils import (
+    DECODER_TYPES,
+    EXAMPLE_WORKFLOWS_DIR,
+    LTX23_TRAINING_FPS,
+    is_active,
+)
 from nodes import (
     _LTX_LATENT_VOLUME_OK_MAX as _VOLUME_OK_MAX,
     _LTX_LATENT_VOLUME_EDGE_MAX as _VOLUME_EDGE_MAX,
@@ -158,27 +163,25 @@ def _audit_one(wf_path: Path) -> list[Finding]:
     # LTX 2.3 was trained at 24fps; `LTXVConditioning.frame_rate` scales the
     # model's temporal positional embedding at
     # `comfy/ldm/lightricks/av_model.py:866`. The legacy default of 25
-    # produced a ~4.2% pos-embed time-stretch error. ERR-level (not WARN)
-    # because the paired apply script `apply_fps_24_default.py` has been
-    # run on every shipped workflow as of 2026-05-15; any future drift
-    # back to 25 is a regression.
+    # produced a ~4.2% pos-embed time-stretch error. ERR-level because the
+    # paired apply script `apply_fps_24_default.py` has been run on every
+    # shipped workflow as of 2026-05-15; any future drift back to 25 is a
+    # regression.
     cond_nodes = by_type.get("LTXVConditioning", [])
     if cond_nodes:
-        bad = []
+        all_good = True
         for n in cond_nodes:
-            wv = n.get("widgets_values") or []
-            fr = wv[0] if wv else None
-            if fr != 24:
-                bad.append((n.get("id"), fr))
-        if bad:
-            for nid, fr in bad:
+            wv = n.get("widgets_values")
+            fr = wv[0] if isinstance(wv, list) and wv else None
+            if fr != LTX23_TRAINING_FPS:
                 record(
                     "ERR",
                     "cond_frame_rate_24",
-                    f"LTXVConditioning(id={nid}).frame_rate={fr} (expected 24 — F16; run scripts/apply_fps_24_default.py)",
+                    f"LTXVConditioning(id={n.get('id')}).frame_rate={fr} (expected {LTX23_TRAINING_FPS} — F16; run scripts/apply_fps_24_default.py)",
                 )
-        else:
-            record("OK", "cond_frame_rate_24", "LTXVConditioning frame_rate=24 (F16)")
+                all_good = False
+        if all_good:
+            record("OK", "cond_frame_rate_24", f"LTXVConditioning frame_rate={LTX23_TRAINING_FPS} (F16)")
 
     # AudioLoopController seed input name (post-2026-04-26 rename)
     # ComfyUI auto-attaches control_after_generate to any INT widget literally

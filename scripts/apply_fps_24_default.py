@@ -77,12 +77,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from workflow_utils import WorkflowEditor
+from workflow_utils import LTX23_TRAINING_FPS, WorkflowEditor
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS_DIR = REPO_ROOT / "example_workflows"
 
-TARGET_FPS = 24
+TARGET_FPS = LTX23_TRAINING_FPS  # 24
 LEGACY_FPS = 25
 
 # Per-node fps widget index. Verified against each class's
@@ -143,6 +143,11 @@ def _flip_list_widget(
         raise ValueError(
             f"node #{node.get('id')} type={node.get('type')} widget[{widget_idx}] "
             f"is not numeric: {cur!r}"
+        )
+    if isinstance(cur, float) and not cur.is_integer():
+        raise ValueError(
+            f"node #{node.get('id')} type={node.get('type')} widget[{widget_idx}] "
+            f"= {cur!r} is non-integer; refuse to silently truncate"
         )
     cur_int = int(cur)
     if cur_int == target:
@@ -220,8 +225,7 @@ def _apply_one(wf_path: Path, revert: bool, dry_run: bool) -> str:
     target = LEGACY_FPS if revert else TARGET_FPS
     legacy = TARGET_FPS if revert else LEGACY_FPS
 
-    # changes: list of (node_id, node_type, descriptor, old, new)
-    changes: list[tuple[int, str, str, int, int]] = []
+    edit_count = 0
     type_touch_count: dict[str, int] = {}
     any_matching = False
 
@@ -233,54 +237,38 @@ def _apply_one(wf_path: Path, revert: bool, dry_run: bool) -> str:
                 widget_idx = LIST_WIDGET_NODES[t]
                 result = _flip_list_widget(n, widget_idx, target, legacy)
                 if result is not None:
-                    old, new = result
-                    changes.append(
-                        (n["id"], t, f"widget[{widget_idx}]", old, new)
-                    )
+                    _, new = result
+                    n["widgets_values"][widget_idx] = new
+                    edit_count += 1
                     type_touch_count[t] = type_touch_count.get(t, 0) + 1
             elif t == VHS_NODE_TYPE:
                 any_matching = True
-                for descr, old, new in _flip_vhs(n, target, legacy):
-                    changes.append((n["id"], t, descr, old, new))
+                for path, _old, new in _flip_vhs(n, target, legacy):
+                    wv = n["widgets_values"]
+                    if path == "frame_rate":
+                        wv["frame_rate"] = new
+                    elif path == "videopreview.params.frame_rate":
+                        wv["videopreview"]["params"]["frame_rate"] = new
+                    edit_count += 1
                     type_touch_count[t] = type_touch_count.get(t, 0) + 1
     except ValueError as e:
         return f"skip ({e})"
 
     if not any_matching:
         return "skip (no matching nodes)"
-
-    if not changes:
+    if edit_count == 0:
         return f"no change (already {target})"
 
-    if dry_run:
-        type_summary = ", ".join(
-            f"{n} {t}" for t, n in sorted(type_touch_count.items())
-        )
-        verb = "would revert" if revert else "would update"
-        return f"{verb} (#{len(changes)} edits: {type_summary})"
-
-    for nid, _t, descr, _old, new in changes:
-        node = None
-        for n in _iter_all_nodes(ed):
-            if n.get("id") == nid:
-                node = n
-                break
-        if node is None:
-            return f"internal error: node #{nid} disappeared between scan and write"
-        if descr.startswith("widget["):
-            idx = int(descr[len("widget[") : -1])
-            node["widgets_values"][idx] = new
-        elif descr == "frame_rate":
-            node["widgets_values"]["frame_rate"] = new
-        elif descr == "videopreview.params.frame_rate":
-            node["widgets_values"]["videopreview"]["params"]["frame_rate"] = new
-
-    ed.save(wf_path)
     type_summary = ", ".join(
         f"{n} {t}" for t, n in sorted(type_touch_count.items())
     )
+    if dry_run:
+        verb = "would revert" if revert else "would update"
+        return f"{verb} (#{edit_count} edits: {type_summary})"
+
+    ed.save(wf_path)
     verb = "reverted" if revert else "updated"
-    return f"{verb} (#{len(changes)} edits rate={legacy}->{target}: {type_summary})"
+    return f"{verb} (#{edit_count} edits rate={legacy}->{target}: {type_summary})"
 
 
 def apply(revert: bool, dry_run: bool) -> int:
