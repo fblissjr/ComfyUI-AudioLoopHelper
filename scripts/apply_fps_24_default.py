@@ -115,17 +115,25 @@ LIST_WIDGET_NODES: dict[str, int] = {
     "LTXVEmptyLatentAudio": 1,
     # LoopConfigValidator: [window_seconds, overlap_seconds, fps, length, ...]
     "LoopConfigValidator": 2,
-    # LTXVAudioVideoMask: [fps, num_audio_streams, audio_start_time,
-    #   audio_end_time, video_end_time, audio_strategy, mask_op]
+    # LTXVAudioVideoMask (KJNodes upstream): widgets are [video_fps,
+    # video_start_time, video_end_time, audio_start_time, audio_end_time,
+    # max_length, existing_mask_mode] — LATENT inputs (video_latent,
+    # audio_latent) are sockets and don't count toward widgets_values.
+    # Source: ComfyUI-KJNodes/nodes/ltxv_nodes.py LTXVAudioVideoMask schema.
     # Lives INSIDE the loop subgraph. Builds per-iter noise_mask boundaries
-    # in pixel-frame space — if fps disagrees with the rest of the pipeline
-    # the mask edge slips by ~(fps_mismatch / actual_fps) per iter, drifting
-    # the audio-frozen / video-new boundary at every iter transition.
+    # in pixel-frame space via `start_time * fps` / `end_time * fps`; an fps
+    # mismatch vs the rest of the pipeline slips the boundary by
+    # ~(fps_mismatch / actual_fps) per iter, drifting the audio-frozen /
+    # video-new boundary at every iter transition.
     "LTXVAudioVideoMask": 0,
+
+    # EXCLUDED — looks like an fps widget by value but isn't:
+    # GetImageRangeFromBatch.widget[1] is `num_frames`, not a rate. The
+    # audio-loop's ref-video slicer ships with widget[1] = 25 meaning
+    # "25 frames per iter," coincidentally matching fps. Do NOT add this
+    # to LIST_WIDGET_NODES — the apply script would flip 25 → 24 and
+    # silently shorten the ref-video window by one frame per iter.
 }
-# Note: GetImageRangeFromBatch.widget[1] is num_frames not fps — value of
-# 25 in audio-loop's ref-video slicer is "25 frames per iter," coincidental
-# match to fps. Do NOT flip.
 
 # VHS_VideoCombine stores its widgets as a dict, not a list. Two slots
 # carry fps: the top-level `frame_rate` and the nested
