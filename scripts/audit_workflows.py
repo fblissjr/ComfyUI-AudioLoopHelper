@@ -43,6 +43,13 @@ from nodes import (
     _LTX_LATENT_VOLUME_OK_MAX as _VOLUME_OK_MAX,
     _LTX_LATENT_VOLUME_EDGE_MAX as _VOLUME_EDGE_MAX,
 )
+# Sibling-script import: LIST_WIDGET_NODES is the authoritative
+# fps-widget index table for F16/F18. Importing the dict (not the
+# class API) keeps audit_workflows.py WorkflowEditor-independent.
+from apply_fps_24_default import (
+    LIST_WIDGET_NODES as _FPS_LIST_WIDGET_NODES,
+    VHS_NODE_TYPE as _VHS_NODE_TYPE,
+)
 
 
 class Finding(NamedTuple):
@@ -699,6 +706,8 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         _check_trim_image_batch_to_audio_present(wf, by_type, record)
         _check_trim_video_latent_to_audio_present(wf, by_type, record)
         _check_run_id_layout_present(wf, by_type, record)
+        # F17 — loop-body CFGGuider input traceability (subgraph-scoped).
+        _check_cfg_guider_inputs_traced_to_source(wf, by_type, by_id, record)
 
     # Generic invariants — apply to all workflows regardless of topology.
     _check_no_sd3_shift_node(wf, by_type, record)
@@ -706,6 +715,8 @@ def _audit_one(wf_path: Path) -> list[Finding]:
     _check_link_integrity(wf, by_id, links_by_id, record)
     _check_widget_shape(wf, record)
     _check_layout_no_orphans(wf, record)
+    # F18 — fps coherence (runs on every workflow with fps widgets).
+    _check_fps_coherence(wf, by_type, record)
 
     if _is_retake(name):
         _check_retake_wiring(wf, by_type, record)
@@ -1737,6 +1748,338 @@ def _check_run_id_layout_present(wf, by_type, record) -> None:
                 f"VHS_VideoCombine(#{cid}).filename_prefix <- {src_type or '?'} "
                 "(expected RunIdPrefix). Outputs won't cluster predictably.",
             )
+
+
+# F17 — cfg_guider_inputs_traced_to_source.
+# Walks backwards from every loop-body CFGGuider's positive/negative/model
+# inputs, hopping through bypassed pass-through nodes + cropguides, and
+# verifies each lands on a real source. Catches:
+#   - Negative not wired (cfg=1 still validates both slots; an unwired
+#     negative leaves no guidance at all).
+#   - Positive not wired (silent prompt loss).
+#   - LTX2_NAG present but the patched MODEL chain branches around the
+#     loop subgraph invoker — NAG isn't applied to per-iter sampling.
+# ERR-level. Remediation pointer: "Check that the loop CFGGuider's
+# positive/negative/model inputs aren't dangling. If LTX2_NAG is present
+# but not upstream of the per-iter CFGGuider, NAG isn't being applied to
+# per-iter sampling."
+
+# Subgraph-internal CONDITIONING-producing terminal nodes. Reaching one of
+# these on the backward walk = success. CFG-only chains commonly terminate
+# at CONDITIONING_SOURCE_TYPES, at LTXVCropGuides[NoLatent], or at the
+# distributor (-10) — the latter means the conditioning came in from the
+# top-level invoker, which has its own audit (the batch-encode + select
+# chain runs there).
+_CONDITIONING_SOURCE_TYPES = frozenset({
+    "CLIPTextEncode",
+    "TimestampPromptScheduleBatchEncode",
+    "ConditioningSelectByIteration",
+    "ConditioningZeroOut",  # canonical loop body's negative is zero'd
+    "LTXVCropGuides",
+    "LTXVCropGuidesNoLatent",
+    "LTXVAddLatentGuide",
+    "LTXVAddGuideMulti",
+    "LTXAddVideoICLoRAGuide",
+    "LTXVConditioning",
+    "ConditioningBlend",
+    "PromptRelayEncode",
+})
+
+# Top-level MODEL-producing terminal nodes. UNETLoader is canonical;
+# CheckpointLoaderSimple ships on some forks.
+_MODEL_SOURCE_TYPES = frozenset({
+    "UNETLoader",
+    "CheckpointLoaderSimple",
+    "CheckpointLoader",
+    "LoadDiffusionModel",
+})
+
+# Subgraph-internal nodes that pass MODEL through. Bypassed or active,
+# the chain continues backwards through `model` input slot.
+_MODEL_PASSTHROUGH_TYPES = frozenset({
+    "LoraLoaderModelOnly",
+    "LTXVReferenceAudio",
+    "LTXICLoRALoaderModelOnly",
+    "LoopIterationStamp",
+    "ModelSamplingSD3",
+    "LTX2_NAG",
+    "AudioLoopHelperSageAttention",
+    "SetNode",
+    "GetNode",
+})
+
+
+def _check_cfg_guider_inputs_traced_to_source(wf, by_type, by_id, record) -> None:
+    sgs = wf.get("definitions", {}).get("subgraphs", []) or []
+    if not sgs:
+        return
+    sg = sgs[0]
+    sg_nodes = sg.get("nodes", [])
+    sg_node_by_id = {n.get("id"): n for n in sg_nodes}
+    sg_links = sg.get("links", []) or []
+    sg_cfgs = [n for n in sg_nodes if n.get("type") == "CFGGuider"]
+    if not sg_cfgs:
+        return
+
+    # Build target->incoming-links index for the subgraph.
+    incoming_by_tgt: dict[tuple[int, int], dict] = {}
+    for l in sg_links:
+        key = (l.get("target_id"), l.get("target_slot"))
+        incoming_by_tgt[key] = l
+
+    # Top-level: target node id -> input slot index -> source link id.
+    # Used for the model-side walk on the top-level once we hit -10 slot 2.
+    invoker_id = _subgraph_invoker_id(wf)
+    invoker = by_id.get(invoker_id) if invoker_id is not None else None
+    top_links_by_id = {l[0]: l for l in (wf.get("links") or []) if isinstance(l, list)}
+
+    # LTX2_NAG presence on top-level (any active instance).
+    nag_active_ids = {
+        n["id"] for n in by_type.get("LTX2_NAG", []) if n.get("mode", 0) != 4
+    }
+    nag_present = bool(by_type.get("LTX2_NAG", []))
+
+    MAX_HOPS = 16
+
+    def _walk_subgraph_back(start_node_id: int, start_slot: int, kind: str) -> tuple[bool, str]:
+        """Walk backwards through subgraph links from (start_node_id, start_slot).
+        kind ∈ {"conditioning", "model"}. Returns (ok, terminus_desc).
+        Terminates at:
+          - distributor (-10): success (came from invoker; trust top-level)
+          - a known source type for `kind`: success
+          - max hops or dead-end: failure
+        Hops through bypassed pass-through nodes by matching input/output dtype.
+        """
+        visited: set[tuple[int, int]] = set()
+        stack: list[tuple[int, int]] = [(start_node_id, start_slot)]
+        for _ in range(MAX_HOPS):
+            if not stack:
+                break
+            cur_id, cur_slot = stack.pop()
+            if (cur_id, cur_slot) in visited:
+                continue
+            visited.add((cur_id, cur_slot))
+            l = incoming_by_tgt.get((cur_id, cur_slot))
+            if l is None:
+                return False, f"node {cur_id} slot {cur_slot} has no inbound link"
+            origin_id = l.get("origin_id")
+            origin_slot = l.get("origin_slot")
+            # Distributor terminus — came from top-level invoker; OK.
+            if origin_id == -10:
+                return True, f"distributor slot {origin_slot}"
+            origin_node = sg_node_by_id.get(origin_id)
+            if origin_node is None:
+                return False, f"link to missing node {origin_id}"
+            origin_type = origin_node.get("type")
+            # Terminus check per kind.
+            if kind == "conditioning" and origin_type in _CONDITIONING_SOURCE_TYPES:
+                return True, f"{origin_type}({origin_id})"
+            if kind == "model" and origin_type in _MODEL_SOURCE_TYPES:
+                return True, f"{origin_type}({origin_id})"
+            # Pass-through (or bypassed): step backwards through the
+            # same-named input slot if present, else through input slot 0.
+            inputs = origin_node.get("inputs") or []
+            next_slot = None
+            target_name = "model" if kind == "model" else None
+            if target_name:
+                for i, inp in enumerate(inputs):
+                    if inp.get("name") == target_name:
+                        next_slot = i
+                        break
+            if next_slot is None and inputs:
+                # Default to slot 0 for conditioning passthrough; CONDITIONING
+                # passthrough nodes (e.g. LTXVCropGuides) typically chain via
+                # slot 0/1. For model chain on an unknown type, also fall back.
+                next_slot = 0
+            if next_slot is None:
+                return False, f"{origin_type}({origin_id}) has no inputs"
+            stack.append((origin_id, next_slot))
+        return False, "max hops exceeded"
+
+    def _walk_top_model_back(start_link_id: int) -> tuple[bool, bool, str]:
+        """Walk backwards on top-level MODEL chain from a starting link.
+        Returns (ok, passed_through_nag, terminus_desc).
+        """
+        visited_links: set[int] = set()
+        cur_link_id = start_link_id
+        passed_nag = False
+        for _ in range(MAX_HOPS):
+            if cur_link_id in visited_links:
+                return False, passed_nag, "cycle in model walk"
+            visited_links.add(cur_link_id)
+            link = top_links_by_id.get(cur_link_id)
+            if link is None:
+                return False, passed_nag, f"dangling link {cur_link_id}"
+            src_id = link[1]
+            src_node = by_id.get(src_id)
+            if src_node is None:
+                return False, passed_nag, f"link {cur_link_id} src node {src_id} missing"
+            src_type = src_node.get("type")
+            if src_id in nag_active_ids:
+                passed_nag = True
+            # Terminus
+            if src_type in _MODEL_SOURCE_TYPES:
+                return True, passed_nag, f"{src_type}({src_id})"
+            # SetNode/GetNode broadcast: jump to matching SetNode by var name.
+            if src_type == "GetNode":
+                wv = src_node.get("widgets_values") or []
+                if not wv or not isinstance(wv[0], str):
+                    return False, passed_nag, f"GetNode({src_id}) has no var name"
+                var = wv[0]
+                # Find SetNode with matching var that has a MODEL input link.
+                matched = False
+                for n in wf.get("nodes") or []:
+                    if n.get("type") != "SetNode":
+                        continue
+                    swv = n.get("widgets_values") or []
+                    if not swv or swv[0] != var:
+                        continue
+                    inputs = n.get("inputs") or []
+                    if inputs and inputs[0].get("link"):
+                        cur_link_id = inputs[0]["link"]
+                        matched = True
+                        break
+                if not matched:
+                    return False, passed_nag, f"GetNode({src_id}) var={var!r} no matching SetNode"
+                continue
+            # Pass-through: step back through `model` input (or input slot 0).
+            inputs = src_node.get("inputs") or []
+            next_link = None
+            for inp in inputs:
+                if inp.get("name") == "model":
+                    next_link = inp.get("link")
+                    break
+            if next_link is None and inputs:
+                next_link = inputs[0].get("link")
+            if next_link is None:
+                return False, passed_nag, f"{src_type}({src_id}) has no model input"
+            cur_link_id = next_link
+        return False, passed_nag, "max hops exceeded"
+
+    any_err = False
+    for cfg in sg_cfgs:
+        cid = cfg.get("id")
+        # Per-instance results — emit one record line per (CFGGuider, slot).
+        for slot_idx, slot_name, kind in (
+            (1, "positive", "conditioning"),
+            (2, "negative", "conditioning"),
+            (0, "model", "model"),
+        ):
+            l = incoming_by_tgt.get((cid, slot_idx))
+            if l is None:
+                record(
+                    "ERR", "cfg_guider_inputs_traced_to_source",
+                    f"loop CFGGuider(#{cid}).{slot_name} has no inbound link. "
+                    "Check that the loop CFGGuider's positive/negative/model "
+                    "inputs aren't dangling. If LTX2_NAG is present but not "
+                    "upstream of the per-iter CFGGuider, NAG isn't being "
+                    "applied to per-iter sampling.",
+                )
+                any_err = True
+                continue
+            ok, terminus = _walk_subgraph_back(cid, slot_idx, kind)
+            if not ok:
+                record(
+                    "ERR", "cfg_guider_inputs_traced_to_source",
+                    f"loop CFGGuider(#{cid}).{slot_name} not traceable to a "
+                    f"source ({terminus}). Check that the loop CFGGuider's "
+                    "positive/negative/model inputs aren't dangling.",
+                )
+                any_err = True
+                continue
+            # For model chain: if it terminated at the distributor, continue
+            # the walk on the top-level invoker's `model` input. If LTX2_NAG
+            # is present, the top-level walk must pass through it.
+            if kind == "model" and terminus.startswith("distributor"):
+                if invoker is None:
+                    continue
+                model_inp = next(
+                    (i for i in invoker.get("inputs") or [] if i.get("name") == "model"),
+                    None,
+                )
+                model_link_id = model_inp.get("link") if model_inp else None
+                if model_link_id is None:
+                    record(
+                        "ERR", "cfg_guider_inputs_traced_to_source",
+                        f"loop CFGGuider(#{cid}).model traces to invoker but "
+                        f"invoker(#{invoker_id}).model is unwired.",
+                    )
+                    any_err = True
+                    continue
+                top_ok, passed_nag, top_terminus = _walk_top_model_back(model_link_id)
+                if not top_ok:
+                    record(
+                        "ERR", "cfg_guider_inputs_traced_to_source",
+                        f"loop CFGGuider(#{cid}).model top-level chain not "
+                        f"traceable to a model source ({top_terminus}).",
+                    )
+                    any_err = True
+                    continue
+                if nag_present and nag_active_ids and not passed_nag:
+                    record(
+                        "ERR", "cfg_guider_inputs_traced_to_source",
+                        f"LTX2_NAG is present + active but not on the MODEL "
+                        f"chain feeding loop CFGGuider(#{cid}). NAG isn't "
+                        "being applied to per-iter sampling. Verify the "
+                        "SetNode/GetNode model-broadcast chain or the "
+                        "model-loader splice ordering.",
+                    )
+                    any_err = True
+                    continue
+    if not any_err:
+        record(
+            "OK", "cfg_guider_inputs_traced_to_source",
+            f"{len(sg_cfgs)} loop CFGGuider(s) positive/negative/model "
+            "inputs all trace to real sources",
+        )
+
+
+# F18 — fps_coherence.
+# F16 enforces the absolute rule `LTXVConditioning.frame_rate == 24`;
+# F18 enforces relative coherence — all fps/frame_rate widgets agreeing
+# with each other. Catches future drift between nodes even if the
+# absolute target changes. Sources: `LIST_WIDGET_NODES` from
+# `apply_fps_24_default.py` (authoritative per-node widget index table)
+# plus `VHS_VideoCombine.widgets_values["frame_rate"]` (dict-shape).
+def _check_fps_coherence(wf, by_type, record) -> None:
+    del wf
+    seen: list[tuple[str, int, int]] = []  # (description, node_id, fps)
+    for ntype, widget_idx in _FPS_LIST_WIDGET_NODES.items():
+        for n in by_type.get(ntype, []):
+            wv = n.get("widgets_values") or []
+            if not isinstance(wv, list) or widget_idx >= len(wv):
+                continue
+            val = wv[widget_idx]
+            if not isinstance(val, (int, float)):
+                continue
+            if isinstance(val, float) and not val.is_integer():
+                continue
+            seen.append((f"{ntype}.widgets_values[{widget_idx}]", n.get("id"), int(val)))
+    for n in by_type.get(_VHS_NODE_TYPE, []):
+        wv = n.get("widgets_values")
+        if not isinstance(wv, dict):
+            continue
+        val = wv.get("frame_rate")
+        if isinstance(val, (int, float)) and (not isinstance(val, float) or val.is_integer()):
+            seen.append((f"{_VHS_NODE_TYPE}.frame_rate", n.get("id"), int(val)))
+    if not seen:
+        return
+    distinct = {fps for _, _, fps in seen}
+    if len(distinct) == 1:
+        record("OK", "fps_coherence", f"all fps widgets={next(iter(distinct))} ({len(seen)} sites)")
+        return
+    breakdown = ", ".join(
+        f"{desc}(#{nid})={fps}" for desc, nid, fps in seen
+    )
+    record(
+        "ERR", "fps_coherence",
+        f"fps widgets disagree: {breakdown}. "
+        "All fps/frame_rate widgets in a workflow must agree. F16 "
+        "(cond_frame_rate_24) enforces LTXVConditioning.frame_rate == 24 "
+        "(load-bearing absolute rule); F18 enforces relative coherence so "
+        "future drift between nodes gets caught. Run "
+        "scripts/apply_fps_24_default.py to re-sweep.",
+    )
 
 
 def main() -> int:

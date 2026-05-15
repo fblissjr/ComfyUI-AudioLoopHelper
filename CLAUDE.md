@@ -1,6 +1,6 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-05-12
+Last updated: 2026-05-15
 
 ComfyUI nodes that automate loop timing + audio analysis for full-length music video generation with LTX 2.3. Core pattern: `AudioLoopController` drives stride from integer latent counts, audio is frozen via `noise_mask=0`, prompts pre-encoded once outside the loop (CLIP must never enter the loop body). **Start here:** `docs/architecture_overview.md`; task-first nav at `docs/README.md`.
 
@@ -80,7 +80,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **Use `In a [shot], [camera]` continuation framing for non-first entries — NOT `Cut to a ...`.** Lightricks's official LTX 2.3 system prompt explicitly trains the model to treat scene-cut language as a discontinuation directive. Convention retracted 2026-04-25. Guide: `docs/guides/prompt_creation_guide.md`. Evidence: `docs/reference/ltx23_prompt_system_prompts.md`.
 - **Node 169 prompt matches schedule 0:00 entry** structurally (`_build_prompt_for_section` via shared `_prepare_sections`; byte-exact).
 - **CLIP must not enter the loop body.** Pre-encode via `TimestampPromptScheduleBatchEncode` outside; `ConditioningSelectByIteration` plucks per-iter inside. Mechanism + cache + failure modes: `docs/reference/timestamp_prompt_schedule_batch_encode.md`.
-- **Loop-body CONDITIONING must carry `frame_rate`** (default 24.0; LTX 2.3 trained at 24fps — `LTXVConditioning.frame_rate` scales the temporal pos embed at `comfy/ldm/lightricks/av_model.py:866`). Batch encoder stamps it; new CONDITIONING-producing loop-body nodes must too via `node_helpers.conditioning_set_values`. Missing → identity drift iter-over-iter.
+- **Loop-body CONDITIONING must carry `frame_rate`** (default 24.0; LTX 2.3 trained at 24fps — `LTXVConditioning.frame_rate` scales the temporal pos embed at `comfy/ldm/lightricks/av_model.py:866`). Batch encoder stamps it; new CONDITIONING-producing loop-body nodes must too via `node_helpers.conditioning_set_values`. Missing → identity drift iter-over-iter. `scripts/apply_fps_24_default.py`'s `LIST_WIDGET_NODES` covers both project nodes and a hand-maintained upstream allowlist (e.g. `LTXVAudioVideoMask`, `LTXVConditioning`, `LTXVEmptyLatentAudio`); coverage enforced by `tests/test_node_schemas.py::test_apply_fps_24_default_covers_all_fps_bearing_widgets`.
 - **Illustrated inits drift toward photoreal across iterations** (cross-attention is photoreal-trained). Match init-image style family; or re-anchor via `LTXVAddGuideMulti` per iteration.
 - **LTX2_NAG widgets** `[nag_scale, nag_alpha, nag_tau, inplace]`. KJNodes default `scale=11` is aggressive for distilled — dial to 3-7 if initial render freezes. Reference: `docs/reference/nag_technical_reference.md`.
 
@@ -121,7 +121,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - Validate after edits: `python3 -c "import json; json.load(open('file.json'))"`.
 - **TensorLoop framework-cache invalidation is transitive.** Any node downstream of `current_iteration` re-executes per iter. Memoize via `id()`-keyed LRU + `IS_CHANGED`.
 - **LTX has no image VAE encode node.** For image→latent, use core `VAEEncode`.
-- **KJNodes ships `GetImageRangeFromBatch` and `SimpleCalculatorKJ`.** Compose these before building custom slicer or math nodes. Grep `ComfyUI-KJNodes/__init__.py` registry before designing new utility nodes.
+- **KJNodes ships `GetImageRangeFromBatch` and `SimpleCalculatorKJ`.** Compose these before building custom slicer or math nodes. Grep `ComfyUI-KJNodes/__init__.py` registry before designing new utility nodes. Sibling-repo nodes also leak their own widget defaults into saved workflows (e.g. `LTXVAudioVideoMask.video_fps=25`); apply-scripts must allowlist them — coverage: `tests/test_node_schemas.py::test_apply_fps_24_default_covers_all_fps_bearing_widgets`.
 - **No `.py` edits to ANY file in this package while a render is in flight.** ComfyUI-HotReloadHack reloads the entire package on any `.py` change, invalidating Inductor autotune state. CPU-only edits to docs / scripts / `internal/scratch/*.json` / non-package files are safe.
 - **Always `git status --short` before `git commit`.** Pre-staged files get swept into your commit otherwise. Scrub workflows before open-sourcing.
 - **Concurrent unstaged edits get bundled into your commit.** When a file you intend to edit already shows ` M` in `git status`, `git add <file>` stages BOTH the prior unstaged changes AND your edits — your commit captures both. Either `git stash` first, or `git diff --cached -- <file>` post-stage to verify scope when you only meant to land your own edits.
@@ -188,13 +188,7 @@ Internal (gitignored): `internal/PLAN.md`, `internal/TODO.md`, `internal/ic_lora
 
 ## Pending review (last drained: 2026-05-10)
 
-<!--
-Capture-then-review staging area. New findings (via `#`-key or otherwise)
-land HERE, not inline above. Drained on each curation pass: most demote
-to internal/ archive, some promote to scripts/audit_workflows.py or a
-test, few earn a slot in the curated body. Policy: .claude/CLAUDE.md
-"CLAUDE.md governance". Update the "last drained" date above when you
-finish a curation pass.
--->
+<!-- Capture-then-review staging. New findings land HERE, not inline. Drained per curation pass (policy: .claude/CLAUDE.md "CLAUDE.md governance"). -->
 
 - **Memory benchmarks must track offload pressure, not just peak allocation.** ComfyUI's dynamic VRAM loader (`comfy-aimdo`) shuffles model weights to CPU under memory pressure — renders go slower instead of crashing, so snapshot-allocation gates miss the actual cost. Full methodology + tooling pointers (`scripts/bench_aimdo_vram.py`, `scripts/analyze_sage_traces.py`) + A/B recipe + failure modes at `docs/reference/benchmarking_memory_pressure.md`. Related gotcha: audio-loop workflows cannot exercise LTX 2.3's masked self-attn path — something in the conditioning route (likely `LTXVCropGuides` or `LTXVConcatAVLatent`'s NestedTensor packing) strips `guide_attention_entries` before `_process_input` builds the mask. For masked-path code (kernel benches, mask-correctness checks), use `example_workflows/benchmark_workflows/fml2v_sage_masked_attn_benchmark.json` instead.
+- **`IterPatchInspector` (AudioLoopHelper/debug, experimental, pass-through) logs per-call patch state** — `len(model.patches)`, `object_patches` count, `transformer_options` keys, and the `optimized_attention_override` sentinel — for verifying whether NAG / sage / AttentionTuner / ChunkedFFN patches survive comfy-aimdo's dynamic VRAM reload between loop iters. Drop in the model chain (typically between `LoopIterationStamp #1618` and the subgraph invoker). Class-level call counter so per-iter logs are distinguishable. Defined in `nodes.py::IterPatchInspector`.

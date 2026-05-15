@@ -10,6 +10,7 @@ for generating full-length music videos with LTX 2.3.
 """
 
 import gc
+import logging
 import math
 import re
 import warnings
@@ -3502,6 +3503,100 @@ class LoopIterationStamp(io.ComfyNode):
         return (clone,)
 
 
+class IterPatchInspector(io.ComfyNode):
+    """Diagnostic pass-through that logs model patch state per call.
+
+    Insert in the model chain (typically inside the loop subgraph or just
+    before the subgraph invoker) to confirm whether patches like NAG /
+    sage / AttentionTuner / ChunkedFFN survive comfy-aimdo's dynamic VRAM
+    reload between iterations. Pure pass-through: never mutates the model.
+
+    Each call logs:
+      - call counter (class-level) and user-supplied label
+      - len(model.patches) and len(model.object_patches) if present
+      - top-level keys of transformer_options
+      - whether `optimized_attention_override` is set (sage/tuner sentinel)
+
+    With `verbose=True`, also dumps the full keys of `model.patches`.
+    """
+
+    _call_counter = 0  # class-level so per-iter calls increment monotonically
+
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="IterPatchInspector",
+            display_name="Iteration Patch Inspector (diagnostic)",
+            category="AudioLoopHelper/debug",
+            is_experimental=True,
+            description=(
+                "Pass-through diagnostic that logs the model's attached "
+                "patch state on every execute() call. Use inside the loop "
+                "body to verify whether NAG / sage / AttentionTuner / "
+                "ChunkedFFN patches survive comfy-aimdo's dynamic VRAM "
+                "reload between iterations."
+            ),
+            inputs=[
+                io.Model.Input("model"),
+                io.String.Input(
+                    "label",
+                    default="patch_inspect",
+                    tooltip=(
+                        "Prefix for log lines so multiple inspectors are "
+                        "distinguishable in console output."
+                    ),
+                ),
+                io.Boolean.Input(
+                    "verbose",
+                    default=False,
+                    tooltip="Print full patch keys, not just counts.",
+                ),
+            ],
+            outputs=[io.Model.Output(display_name="model")],
+        )
+
+    @classmethod
+    def execute(cls, model, label, verbose) -> io.NodeOutput:
+        (out,) = cls._inspect_impl(model, label=label, verbose=verbose)
+        return io.NodeOutput(out)
+
+    @classmethod
+    def _inspect_impl(cls, model, *, label: str, verbose: bool):
+        """Testable seam. Returns (model,) unchanged after emitting a
+        log line summarizing patch state. No mutation, no GPU work."""
+        cls._call_counter += 1
+
+        # `getattr` with default so absent surfaces don't AttributeError on
+        # minimal fakes (and tolerates future ModelPatcher API drift).
+        patches = getattr(model, "patches", None)
+        patches_n = len(patches) if patches is not None else 0
+
+        object_patches = getattr(model, "object_patches", None)
+        obj_n = len(object_patches) if object_patches is not None else 0
+
+        model_options = getattr(model, "model_options", {}) or {}
+        transformer_options = model_options.get("transformer_options", {}) or {}
+        to_keys = sorted(transformer_options.keys())
+        attn_override = "optimized_attention_override" in transformer_options
+
+        logger = logging.getLogger(__name__)
+        msg = (
+            f"[{label}] call={cls._call_counter} "
+            f"patches={patches_n} object_patches={obj_n} "
+            f"attention_override={attn_override} "
+            f"transformer_options_keys={to_keys}"
+        )
+        logger.info(msg)
+
+        if verbose and patches:
+            logger.info(
+                f"[{label}] call={cls._call_counter} patch_keys="
+                f"{sorted(patches.keys())}"
+            )
+
+        return (model,)
+
+
 # --- Profiling nodes ---
 #
 # Three coordinated nodes capture end-to-end profile data for the audio loop:
@@ -3903,6 +3998,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             CachedTextEncode,
             IterationCleanup,
             LoopIterationStamp,
+            IterPatchInspector,
             AudioLoopHelperSageAttention,
             AudioLatentSlice,
             LTXVideoEasyCache,

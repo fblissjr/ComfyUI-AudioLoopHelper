@@ -1,13 +1,20 @@
 """Schema-level invariants for our ComfyUI nodes.
 
+Last updated: 2026-05-15
+
 Source-level (AST) checks rather than runtime introspection — the test must
 work both with and without ComfyUI loaded, and `define_schema()` returns
 opaque `_Passthrough` stubs in the stub-import path used by pytest.
+
+Most tests in this file are AST-based; the workflow-JSON walker at the
+bottom is the same shape as the LIST_WIDGET_NODES coverage test — a pure
+JSON property test, no AST involved.
 """
 
 import ast
 from pathlib import Path
 
+import orjson
 import pytest
 
 
@@ -476,4 +483,348 @@ def test_apply_fps_24_default_covers_all_fps_bearing_widgets():
         + "\n\nIf the node was renamed/removed, drop the entry from "
         "LIST_WIDGET_NODES. If it's an upstream node we still need to "
         "sweep, add it to _UPSTREAM_FPS_NODES in this test."
+    )
+
+
+# --------------------------------------------------------------------------
+# Per-iter CFGGuider wiring property test (#644 inside the loop subgraph)
+# --------------------------------------------------------------------------
+#
+# Mirror of the `cfg_guider_inputs_traced_to_source` audit invariant.
+# Walks the workflow JSON and asserts each CFGGuider input (positive,
+# negative, model) terminates at a real source through any number of
+# bypassed pass-throughs / cropguides / boundary crossings.
+
+# Nodes that ALWAYS pass their typed inputs straight through (whether
+# bypassed or active). Cropguides strip guide metadata; LTXVAddLatentGuide
+# / LTXAddVideoICLoRAGuide accumulate keyframe_idxs but keep the
+# conditioning tensor identity-stable on the typed output path.
+_CONDITIONING_PASSTHROUGH_TYPES = frozenset({
+    "LTXVCropGuides",
+    "LTXVCropGuidesNoLatent",
+    "LTXVAddLatentGuide",
+    "LTXVAddGuide",
+    "LTXVAddGuideMulti",
+    "LTXAddVideoICLoRAGuide",
+    "LTXVConditioning",   # stamps frame_rate; conditioning identity preserved
+    "LTXVReferenceAudio", # bypassed in shipped workflows; passes positive/negative
+    "ConditioningBlend",  # blends two CONDITIONING tensors
+})
+
+# Nodes that count as a real CONDITIONING source. ConditioningSelectByIteration
+# transitively sources from TimestampPromptScheduleBatchEncode (the per-iter
+# selector). ConditioningZeroOut terminates the negative chain (CFG=1 inert,
+# but still a real source from the wiring perspective).
+_CONDITIONING_SOURCE_TYPES = frozenset({
+    "CLIPTextEncode",
+    "TimestampPromptScheduleBatchEncode",
+    "ConditioningSelectByIteration",
+    "ConditioningZeroOut",
+})
+
+# Model pass-throughs that preserve identity (cloned but same upstream).
+# LoopIterationStamp stamps transformer_options; LoRA loaders patch but
+# remain a passthrough on the MODEL slot regardless of mode.
+_MODEL_PASSTHROUGH_TYPES = frozenset({
+    "LoopIterationStamp",
+    "LoraLoaderModelOnly",
+    "LTXICLoRALoaderModelOnly",
+    "LTX2_NAG",
+    "AudioLoopHelperSageAttention",
+    "LTX2AttentionTunerPatch",
+    "LTXVChunkFeedForward",
+    "LTX2SamplingPreviewOverride",
+    "LTXVReferenceAudio",  # also passes MODEL when bypassed
+    "LTXVPerStepAdainPatcher",  # upstream ComfyUI-LTXVideo per-step adain patch
+})
+
+# Real MODEL sources — terminates a trace successfully. Today only
+# UNETLoader; if a future workflow ends a MODEL chain at a model-patch
+# node without a UNETLoader above (i.e. a fully-patched chain whose head
+# is itself a patch), promote that node from passthrough to also-source.
+_MODEL_SOURCE_TYPES = frozenset({
+    "UNETLoader",
+})
+
+
+def _shipped_audio_loop_workflows() -> list[Path]:
+    """Top-level audio-loop workflows only — NOT experimental/, NOT
+    benchmark_workflows/. Those have different shapes (single-shot
+    benches don't need a per-iter CFGGuider)."""
+    return sorted(
+        p for p in (REPO_ROOT / "example_workflows").glob("*.json")
+        if p.is_file()
+    )
+
+
+def _is_bypassed(node: dict) -> bool:
+    return int(node.get("mode", 0)) == 4
+
+
+def _find_setnode_for_getnode(top_level_nodes: list[dict], get_node: dict) -> dict | None:
+    """KJNodes GetNode pulls from a SetNode by widget name. Find the
+    matching SetNode in the same top-level graph."""
+    widgets = get_node.get("widgets_values") or []
+    if not widgets:
+        return None
+    name = widgets[0]
+    for n in top_level_nodes:
+        if n.get("type") != "SetNode":
+            continue
+        wv = n.get("widgets_values") or []
+        if wv and wv[0] == name:
+            return n
+    return None
+
+
+def _find_passthrough_input_link(node: dict, want_type: str) -> int | None:
+    """Find the input link on `node` whose declared type matches
+    `want_type`. Used to step through a pass-through node."""
+    for inp in node.get("inputs", []) or []:
+        if inp.get("type") == want_type and inp.get("link") is not None:
+            return inp.get("link")
+    return None
+
+
+def _trace_to_source(
+    workflow: dict,
+    subgraph: dict,
+    subgraph_instance: dict,
+    start_node_id: int,
+    start_input_name: str,
+    start_link_id: int,
+    want_type: str,
+) -> tuple[bool, str]:
+    """Trace a CFGGuider input backward through bypassed nodes,
+    cropguides, and the subgraph boundary until it terminates at a
+    declared source for its type. Returns (ok, message).
+
+    `message` names the last node visited on failure; on success it
+    names the terminal source node type.
+    """
+    sg_links_by_id = {l["id"]: l for l in subgraph.get("links", []) or []}
+    sg_nodes_by_id = {n["id"]: n for n in subgraph.get("nodes", []) or []}
+    top_links_by_id = {l[0]: l for l in workflow.get("links", []) or []}
+    top_nodes_by_id = {n["id"]: n for n in workflow.get("nodes", []) or []}
+
+    passthrough_types = (
+        _CONDITIONING_PASSTHROUGH_TYPES if want_type == "CONDITIONING"
+        else _MODEL_PASSTHROUGH_TYPES
+    )
+    source_types = (
+        _CONDITIONING_SOURCE_TYPES if want_type == "CONDITIONING"
+        else _MODEL_SOURCE_TYPES
+    )
+
+    # `scope` is "sg" (inside subgraph) or "top" (top-level).
+    scope = "sg"
+    link_id = start_link_id
+    visited: list[str] = [
+        f"#{start_node_id}.{start_input_name} (link={start_link_id})"
+    ]
+    # Defensive step limit — shipped workflows don't exceed ~20 hops.
+    for _ in range(64):
+        if scope == "sg":
+            link = sg_links_by_id.get(link_id)
+            if link is None:
+                return False, "dangling subgraph link from " + " -> ".join(visited)
+            origin_id = link["origin_id"]
+            if origin_id == -10:
+                # Boundary crossing: subgraph input slot index == origin_slot.
+                slot = link["origin_slot"]
+                inst_inputs = subgraph_instance.get("inputs") or []
+                if slot >= len(inst_inputs):
+                    return False, (
+                        f"subgraph instance #{subgraph_instance.get('id')} "
+                        f"has no input slot {slot}; last visited: "
+                        + " -> ".join(visited)
+                    )
+                next_link = inst_inputs[slot].get("link")
+                if next_link is None:
+                    return False, (
+                        f"subgraph boundary slot {slot} "
+                        f"({inst_inputs[slot].get('name')!r}) unwired on "
+                        f"instance #{subgraph_instance.get('id')}"
+                    )
+                visited.append(
+                    f"-> boundary slot {slot} "
+                    f"({inst_inputs[slot].get('name')!r}) on "
+                    f"#{subgraph_instance.get('id')}"
+                )
+                scope = "top"
+                link_id = next_link
+                continue
+            node = sg_nodes_by_id.get(origin_id)
+            if node is None:
+                return False, (
+                    f"subgraph link {link_id} origin_id {origin_id} not "
+                    "found; last visited: " + " -> ".join(visited)
+                )
+            ntype = node.get("type", "")
+            visited.append(f"#{origin_id} ({ntype}, mode={node.get('mode', 0)})")
+            if ntype in source_types:
+                return True, f"terminated at {ntype} #{origin_id}"
+            if ntype in passthrough_types or _is_bypassed(node):
+                next_link = _find_passthrough_input_link(node, want_type)
+                if next_link is None:
+                    return False, (
+                        f"pass-through {ntype} #{origin_id} has no "
+                        f"{want_type} input link; chain: "
+                        + " -> ".join(visited)
+                    )
+                link_id = next_link
+                continue
+            return False, (
+                f"unrecognized non-source non-passthrough node "
+                f"{ntype} #{origin_id}; chain: " + " -> ".join(visited)
+            )
+        else:  # top-level scope
+            link = top_links_by_id.get(link_id)
+            if link is None:
+                return False, (
+                    f"dangling top-level link {link_id}; chain: "
+                    + " -> ".join(visited)
+                )
+            origin_id = link[1]
+            node = top_nodes_by_id.get(origin_id)
+            if node is None:
+                return False, (
+                    f"top-level link {link_id} origin {origin_id} not "
+                    "found; chain: " + " -> ".join(visited)
+                )
+            ntype = node.get("type", "")
+            visited.append(f"#{origin_id} ({ntype}, mode={node.get('mode', 0)})")
+            if ntype in source_types:
+                return True, f"terminated at {ntype} #{origin_id}"
+            # GetNode -> SetNode bridge (KJNodes name-keyed routing).
+            if ntype == "GetNode":
+                setnode = _find_setnode_for_getnode(
+                    workflow.get("nodes", []) or [], node
+                )
+                if setnode is None:
+                    return False, (
+                        f"GetNode #{origin_id} widget="
+                        f"{(node.get('widgets_values') or [None])[0]!r} "
+                        "has no matching SetNode; chain: "
+                        + " -> ".join(visited)
+                    )
+                next_link = _find_passthrough_input_link(setnode, want_type)
+                if next_link is None:
+                    return False, (
+                        f"SetNode #{setnode.get('id')} has no "
+                        f"{want_type} input link; chain: "
+                        + " -> ".join(visited)
+                    )
+                visited.append(f"-> SetNode #{setnode.get('id')}")
+                link_id = next_link
+                continue
+            if ntype in passthrough_types or _is_bypassed(node):
+                next_link = _find_passthrough_input_link(node, want_type)
+                if next_link is None:
+                    return False, (
+                        f"pass-through {ntype} #{origin_id} has no "
+                        f"{want_type} input link; chain: "
+                        + " -> ".join(visited)
+                    )
+                link_id = next_link
+                continue
+            return False, (
+                f"unrecognized non-source non-passthrough node "
+                f"{ntype} #{origin_id}; chain: " + " -> ".join(visited)
+            )
+    return False, (
+        "walker exceeded step limit; chain: " + " -> ".join(visited)
+    )
+
+
+def test_loop_cfgguider_has_traced_positive_negative_and_model_sources():
+    """For every shipped audio-loop workflow, the per-iter CFGGuider
+    (canonical id `#644` inside the subgraph) must have its positive,
+    negative, and model inputs traceable back to a real source through
+    any number of bypassed pass-through nodes.
+
+    Catches the bug class where a sampler runs with cfg=1 + null negative
+    or a NAG-patched model gets stripped from the chain. Mirrors the
+    `cfg_guider_inputs_traced_to_source` audit invariant.
+    """
+    failures: list[str] = []
+    checked = 0
+    for wf_path in _shipped_audio_loop_workflows():
+        wf = orjson.loads(wf_path.read_bytes())
+        subgraphs = wf.get("definitions", {}).get("subgraphs", []) or []
+        if not subgraphs:
+            # Single-shot workflows (no loop body) aren't required to
+            # have a per-iter CFGGuider — skip cleanly.
+            continue
+        subgraph = subgraphs[0]
+        sg_id = subgraph.get("id")
+        instance = next(
+            (n for n in wf.get("nodes", []) if n.get("type") == sg_id),
+            None,
+        )
+        if instance is None:
+            # Subgraph defined but unused (e.g. retake workflow keeps the
+            # subgraph definition for editor compatibility but runs the
+            # CFGGuider at top level as a single-shot). Not an error —
+            # the test only enforces wiring on per-iter CFGGuiders that
+            # are actually invoked.
+            continue
+        cfg_guiders = [
+            n for n in subgraph.get("nodes", [])
+            if n.get("type") == "CFGGuider"
+        ]
+        if not cfg_guiders:
+            continue
+        for cfg in cfg_guiders:
+            cfg_id = cfg.get("id")
+            inputs_by_name = {
+                inp.get("name"): inp for inp in cfg.get("inputs", []) or []
+            }
+            for slot_name, want_type in (
+                ("positive", "CONDITIONING"),
+                ("negative", "CONDITIONING"),
+                ("model", "MODEL"),
+            ):
+                inp = inputs_by_name.get(slot_name)
+                if inp is None:
+                    failures.append(
+                        f"{wf_path.name}: CFGGuider #{cfg_id} missing "
+                        f"input slot {slot_name!r}"
+                    )
+                    continue
+                link_id = inp.get("link")
+                if link_id is None:
+                    failures.append(
+                        f"{wf_path.name}: CFGGuider #{cfg_id} input "
+                        f"{slot_name!r} is unwired (link=None)"
+                    )
+                    continue
+                ok, message = _trace_to_source(
+                    wf, subgraph, instance,
+                    start_node_id=cfg_id,
+                    start_input_name=slot_name,
+                    start_link_id=link_id,
+                    want_type=want_type,
+                )
+                if not ok:
+                    failures.append(
+                        f"{wf_path.name}: CFGGuider #{cfg_id}.{slot_name} "
+                        f"trace failed: {message}"
+                    )
+                checked += 1
+    assert checked > 0, (
+        "No CFGGuider inputs were checked — workflow discovery glob "
+        "may be misconfigured or every shipped workflow lost its "
+        "subgraph."
+    )
+    assert not failures, (
+        "Per-iter CFGGuider wiring trace failed:\n  "
+        + "\n  ".join(failures)
+        + "\n\nEvery CFGGuider input (positive / negative / model) "
+        "must trace back to a real source through bypassed pass-through "
+        "nodes (LTXVCropGuides, LoRA loaders, sage/NAG/tuner patches, "
+        "etc.) and across the subgraph boundary. A dangling chain "
+        "means either a sampler runs with a null conditioning slot, "
+        "or a model-patch chain is broken at one of its links. "
+        "Mirrors the cfg_guider_inputs_traced_to_source audit check."
     )
