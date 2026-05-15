@@ -115,7 +115,17 @@ LIST_WIDGET_NODES: dict[str, int] = {
     "LTXVEmptyLatentAudio": 1,
     # LoopConfigValidator: [window_seconds, overlap_seconds, fps, length, ...]
     "LoopConfigValidator": 2,
+    # LTXVAudioVideoMask: [fps, num_audio_streams, audio_start_time,
+    #   audio_end_time, video_end_time, audio_strategy, mask_op]
+    # Lives INSIDE the loop subgraph. Builds per-iter noise_mask boundaries
+    # in pixel-frame space — if fps disagrees with the rest of the pipeline
+    # the mask edge slips by ~(fps_mismatch / actual_fps) per iter, drifting
+    # the audio-frozen / video-new boundary at every iter transition.
+    "LTXVAudioVideoMask": 0,
 }
+# Note: GetImageRangeFromBatch.widget[1] is num_frames not fps — value of
+# 25 in audio-loop's ref-video slicer is "25 frames per iter," coincidental
+# match to fps. Do NOT flip.
 
 # VHS_VideoCombine stores its widgets as a dict, not a list. Two slots
 # carry fps: the top-level `frame_rate` and the nested

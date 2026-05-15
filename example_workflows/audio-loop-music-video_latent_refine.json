@@ -1066,9 +1066,9 @@
         "Node name for S&R": "EmptyLTXVLatentVideo"
       },
       "widgets_values": [
-        832,
-        448,
-        497,
+        960,
+        544,
+        353,
         1
       ]
     },
@@ -3562,9 +3562,9 @@
         "Node name for S&R": "LTXFramePlanner"
       },
       "widgets_values": [
-        832,
-        448,
-        20,
+        960,
+        544,
+        15,
         24
       ]
     },
@@ -6943,7 +6943,7 @@
               "Node name for S&R": "LTXVAudioVideoMask"
             },
             "widgets_values": [
-              25,
+              24,
               1,
               10,
               10,
@@ -7476,7 +7476,7 @@
               "Node name for S&R": "ManualSigmas"
             },
             "widgets_values": [
-              "0.909375, 0.725, 0.421875, 0.0"
+              "0.85, 0.7250, 0.4219, 0.0"
             ],
             "title": "Refine sigmas (pass 2, 3 steps)"
           },
