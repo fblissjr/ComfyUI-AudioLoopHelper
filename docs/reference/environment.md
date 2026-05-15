@@ -1,4 +1,4 @@
-Last updated: 2026-04-27
+Last updated: 2026-05-15
 
 # Environment variables reference
 
@@ -16,6 +16,7 @@ helper.
 | `COMFYUI_EXEC_LOG` | unset → exec logger inactive | `start_experiment.sh` | `exec_logger.py::_resolve_log_target` |
 | `COMFYUI_EXEC_LOG_SHAPE_LIMIT` | unset → 8 items per list/dict shape snapshot | manual | `exec_logger.py::_shape_of` |
 | `AUDIOLOOPHELPER_SAGE_TRACE` | unset → sage tracer inactive | `start_experiment.sh` | `nodes_sage.py::resolve_trace_path` |
+| `AUDIOLOOPHELPER_FFN_ATTN_TRACE` | unset → FFN/attn forward-hook tracer inactive | manual (one-off measurement) | `ffn_attn_tracer.py::is_enabled` |
 | `AUDIOLOOPHELPER_PER_PROMPT` | unset → flat `data/runs/${RUN_ID}/` (current behavior) | manual / multi-prompt bench harnesses | `scripts/workflow_utils.py::_per_prompt_enabled` |
 | `COMFYUI_API_URL` | unset → `http://<local_comfyui_host>:<port>` (ComfyUI's loopback default, e.g. `localhost` on port `8188` for a stock install) | manual / Phase-2 harness | `internal/autoresearch/harness.py::_api_url` |
 | `COMFYUI_OUTPUT_DIR` | unset → harness skips mp4 symlinking; video-content metrics report `*_status: video_missing` | manual (point at ComfyUI's VHS output dir) | `internal/autoresearch/harness.py::_locate_and_link_output_mp4` |
@@ -112,6 +113,45 @@ does not install.
 **Auto path**: routes through `run_artifact_path("sage", "jsonl")` →
 `data/runs/${RUN_ID}/sage.jsonl` when `RUN_ID` is set, else
 `internal/analysis/runs/sage/sage_<TS>.jsonl`.
+
+### `AUDIOLOOPHELPER_FFN_ATTN_TRACE`
+
+**Values**: `auto` / `1` / `true` / `yes` (auto-generate path), or any
+other string treated as an explicit file path. Unset/empty → forward
+hooks do not install.
+
+**Read by**: `ffn_attn_tracer.py:is_enabled()` (cheap module-import-time
+check) and `ffn_attn_tracer.py:_resolve_path()` (path resolution at
+install time).
+
+**Set by**: manual only. `start_experiment.sh` does NOT auto-set this
+one — it's a one-off measurement env var, not a default-on tracer like
+sage/exec. Prefix on the command line:
+`AUDIOLOOPHELPER_FFN_ATTN_TRACE=auto bash start_experiment.sh nodynvram`.
+
+**Effect**: when set + `AudioLoopHelperSageAttention` node runs in the
+workflow, installs `register_forward_pre_hook` + `register_forward_hook`
+on every `BasicAVTransformerBlock`'s sub-modules (`attn1`, `audio_attn1`,
+`attn2`, `audio_attn2`, `video_to_audio_attn`, `ff`, `audio_ff`). Each
+call records a `torch.cuda.Event` pair; events batch-flush to JSONL
+every 256 events. Hook overhead ~5% of forward time.
+
+**Auto path**: routes through
+`run_artifact_path("ffn_attn_breakdown", "jsonl")` →
+`data/runs/${RUN_ID}/ffn_attn_breakdown.jsonl` (or with `${prompt_id}`
+inserted when `AUDIOLOOPHELPER_PER_PROMPT=1`). Falls back to
+`internal/analysis/runs/ffn_attn/ffn_attn_<TS>.jsonl` if
+`scripts/workflow_utils.run_artifact_path` is not importable.
+
+**Analyzer**: `scripts/analyze_ffn_attn_trace.py [<jsonl>]` (auto-finds
+the most recent under `data/runs/` if no path given). Outputs per-stage
+breakdown (stage-1 T≤16384, stage-2 T>16384), per-sub-module timing,
+and verdict bucket against the v0.6 FFN-fusion decision-gate thresholds.
+
+**Verify propagation** when the tracer doesn't fire: ComfyUI runs in a
+subprocess of `start_experiment.sh`; check
+`/proc/<comfyui-pid>/environ` after launch to confirm the env var
+reached the Python process (use `pgrep -f main.py` to find the PID).
 
 ### `AUDIOLOOPHELPER_PER_PROMPT`
 
