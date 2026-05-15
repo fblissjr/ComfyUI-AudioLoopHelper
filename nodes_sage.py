@@ -652,10 +652,27 @@ class AudioLoopHelperSageAttention(io.ComfyNode):
             display_name="AudioLoopHelper Sage Attention",
             category="AudioLoopHelper/experimental",
             description=(
-                "Patch ComfyUI's optimized_attention with sage, with "
-                "pytorch fallback and optional per-call telemetry (gated "
-                "by AUDIOLOOPHELPER_SAGE_TRACE env). Mode combo is "
-                "filtered to what your GPU can actually run."
+                "Patches ComfyUI's optimized_attention to route through "
+                "SageAttention. Drop-in replacement for KJNodes' "
+                "PatchSageAttentionKJ, with three additions: try/except "
+                "fallback to pytorch on per-call kernel error, an "
+                "ON_CLEANUP handler that resets state, and opt-in JSONL "
+                "telemetry (set AUDIOLOOPHELPER_SAGE_TRACE=auto).\n\n"
+                "WHICH KERNEL ACTUALLY RUNS depends on which sage package "
+                "is installed in your venv. This node calls sage's "
+                "dispatcher; the dispatcher picks the kernel. On sm89 + "
+                "CUDA>=12.8, the SageAttention-ada fork (github.com/"
+                "fblissjr/SageAttention-ada >= v0.5.5) adds a CUDA mask "
+                "kernel that the upstream package doesn't have -- masked "
+                "LTX cross-attn lands on fp8_cuda++ instead of falling "
+                "back to Triton. Upstream sage on the same card uses "
+                "Triton for masked calls (slower; per-call working set "
+                "larger). The fork is a pip install; you don't need this "
+                "specific node to benefit from it -- any sage node that "
+                "calls sage's dispatcher does. This node adds the "
+                "fallback, ON_CLEANUP, and trace-data ergonomics on top.\n\n"
+                "Mode combo is filtered to kernels your GPU can actually "
+                "run (queried via sageattention.core.get_cuda_arch_versions)."
             ),
             is_experimental=True,
             inputs=[
@@ -665,22 +682,46 @@ class AudioLoopHelperSageAttention(io.ComfyNode):
                     options=_MODE_LIST,
                     default=_DEFAULT_MODE,
                     tooltip=(
-                        "Sage kernel to use. 'auto_mask_aware' (default) "
-                        "routes masked cross-attn to fp16_triton (the one "
-                        "kernel that handles LTX cross-attn cleanly) and "
-                        "unmasked self-attn to sage auto. 'auto' delegates "
-                        "fully to sage's dispatch. 'disabled' is a no-op. "
-                        "Other options are explicit kernel choices filtered "
-                        "to those your GPU supports."
+                        "Which sage kernel to use.\n\n"
+                        "'disabled' -- no-op; ComfyUI's default attention "
+                        "runs. Useful for A/B comparisons.\n\n"
+                        "'auto_mask_aware' (default) -- splits routing: "
+                        "masked calls go to fp16_triton (the historically "
+                        "safe path for masked attention across all archs); "
+                        "unmasked calls go to sage's dispatcher. Picked "
+                        "as default before the SageAttention-ada fork "
+                        "added a masked CUDA kernel. NOTE: if you have "
+                        "the fork installed on sm89 + CUDA>=12.8, prefer "
+                        "'auto' -- this mode forces Triton for masked "
+                        "calls and skips the faster fp8_cuda++ path.\n\n"
+                        "'auto' -- delegates everything to sage's "
+                        "dispatcher. On sm89 + CUDA>=12.8 with the fork "
+                        "installed, masked calls route to fp8_cuda++ "
+                        "(faster, smaller per-call working set than "
+                        "Triton). On upstream sage or other archs, the "
+                        "dispatcher's masked routing may fall back to "
+                        "SDPA or drop the mask depending on version -- "
+                        "verify with telemetry.\n\n"
+                        "Other entries are explicit kernel selections "
+                        "(filtered to those your GPU supports). Use "
+                        "these when measuring; not recommended for "
+                        "everyday rendering."
                     ),
                 ),
                 io.Boolean.Input(
                     "fallback_on_error",
                     default=True,
                     tooltip=(
-                        "If sage raises, fall back to pytorch attention "
-                        "for that call instead of crashing. One log line "
-                        "is emitted per distinct (shape, mode, error)."
+                        "If a sage kernel call raises, catch the error "
+                        "and run pytorch's attention for that one call "
+                        "instead of crashing the render. One log line is "
+                        "emitted per distinct (shape, mode, error) so "
+                        "you find out -- it won't spam if the same call "
+                        "site keeps failing.\n\n"
+                        "Recommended: leave on. The cost when sage "
+                        "succeeds (every call) is one try/except wrap. "
+                        "Turn off only when you want crashes to surface "
+                        "loudly for debugging."
                     ),
                 ),
                 io.Int.Input(
@@ -689,14 +730,22 @@ class AudioLoopHelperSageAttention(io.ComfyNode):
                     min=0,
                     max=8192,
                     tooltip=(
-                        "Route attention calls with q.shape[1] < this "
-                        "threshold to pytorch instead of sage. 0 = "
-                        "disabled (current behavior). Recommended: 1024 "
-                        "— sage's int8 quant + kernel-launch overhead "
-                        "dominates on short sequences (sage-fork v0.4.1: "
-                        "~0.45× torch_flash at seq=497/498). Trace rows "
-                        "on the skip path carry skipped=true + "
-                        "skip_reason='under_seq_len'."
+                        "Route short attention calls to pytorch instead "
+                        "of sage. If q.shape[1] is below this threshold, "
+                        "the call skips sage and uses pytorch's "
+                        "attention. 0 disables the skip (everything goes "
+                        "to sage).\n\n"
+                        "Why: sage's int8 quantization + kernel-launch "
+                        "overhead is a flat per-call cost. On short "
+                        "sequences (e.g. text-encoder shapes at "
+                        "seq~377-500) that overhead exceeds the matmul "
+                        "speedup, and sage runs slower than pytorch. On "
+                        "long sequences (LTX video self-attn at "
+                        "seq>10000) sage wins decisively.\n\n"
+                        "Recommended: 1024. Trace rows for skipped "
+                        "calls carry skipped=true and "
+                        "skip_reason='under_seq_len' so you can verify "
+                        "the threshold is hitting what you expect."
                     ),
                 ),
             ],

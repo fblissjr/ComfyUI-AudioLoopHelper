@@ -43,9 +43,12 @@ B, H, D = 1, 32, 128
 DTYPE = torch.bfloat16
 DEVICE = "cuda"
 
-# Cross product of T values × mask kinds = 6 configs.
+# Cross product of T values × mask kinds = 4 configs.
+# "tracked" dropped: (1,1,tracked_count,T) mask can't broadcast to full-Q
+# at the same T — that shape only makes sense in a Q-sliced partition
+# pattern, which sage-fork's tests/bench/partitioned_mask_phase0/ covers.
 T_VALUES = [23296, 42240]
-MASK_KINDS: list[str | None] = [None, "noisy", "tracked"]
+MASK_KINDS: list[str | None] = [None, "noisy"]
 
 # Bound trace memory: a single kernel call records well under 20k events,
 # was 200k by default which produced ~MB-scale .bin per config.
@@ -104,11 +107,6 @@ def parse_args() -> argparse.Namespace:
         "--output-dir", type=Path, required=True,
         help="Where snapshots + summary.json land",
     )
-    parser.add_argument(
-        "--tracked-count", type=int, default=500,
-        help="tracked_count for the masked-tracked configs (default 500; "
-             "matches Comfy-Org PR 13735's typical tracked-Q budget)",
-    )
     return parser.parse_args()
 
 
@@ -127,10 +125,16 @@ def main() -> int:
         print("CUDA not available", file=sys.stderr)
         return 1
 
+    # Record the sage module location relative to its package root so the
+    # absolute venv path doesn't leak into summary.json — keep just the
+    # final two path components (`sageattention/<file>`).
+    sage_file = sageattention.__file__ or "<unknown>"
+    sage_module_short = ".../" + "/".join(Path(sage_file).parts[-2:])
+
     device_name = torch.cuda.get_device_name(0)
     print(f"Device: {device_name}")
     print(f"Sage version: {getattr(sageattention, '__version__', '<no __version__>')}")
-    print(f"Sage module: {sageattention.__file__}")
+    print(f"Sage module: {sage_module_short}")
     print()
 
     results: list[dict[str, Any]] = []
@@ -144,9 +148,6 @@ def main() -> int:
             if mask_kind == "noisy":
                 mask = make_mask(mask_q_dim=1, T=T)
                 name = f"masked_noisy_t{T}"
-            elif mask_kind == "tracked":
-                mask = make_mask(mask_q_dim=args.tracked_count, T=T)
-                name = f"masked_tracked_t{T}"
             else:
                 mask = None
                 name = f"unmasked_t{T}"
@@ -176,12 +177,11 @@ def main() -> int:
     summary = {
         "device": device_name,
         "sage_version": getattr(sageattention, "__version__", None),
-        "sage_module": sageattention.__file__,
+        "sage_module": sage_module_short,
         "dtype": str(DTYPE),
         "B": B,
         "H": H,
         "D": D,
-        "tracked_count": args.tracked_count,
         "configs": results,
     }
     summary_path = args.output_dir / "summary.json"
