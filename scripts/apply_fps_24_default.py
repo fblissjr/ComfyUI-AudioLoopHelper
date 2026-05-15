@@ -115,6 +115,13 @@ LIST_WIDGET_NODES: dict[str, int] = {
     "LTXVEmptyLatentAudio": 1,
     # LoopConfigValidator: [window_seconds, overlap_seconds, fps, length, ...]
     "LoopConfigValidator": 2,
+    # LTXHeadTrim: widgets are [trim_latent_frames, fps]
+    # (images, audio are sockets and don't count toward widgets_values).
+    "LTXHeadTrim": 1,
+    # LatentSeamZoneMask: widgets are [iteration_count, window_latents,
+    # overlap_latents, seam_band_seconds, edge_taper_seconds, fps]
+    # (latent is a socket).
+    "LatentSeamZoneMask": 5,
     # LTXVAudioVideoMask (KJNodes upstream): widgets are [video_fps,
     # video_start_time, video_end_time, audio_start_time, audio_end_time,
     # max_length, existing_mask_mode] — LATENT inputs (video_latent,

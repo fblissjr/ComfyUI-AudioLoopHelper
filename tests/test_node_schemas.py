@@ -344,3 +344,136 @@ def test_latent_seam_zone_mask_iteration_count_default_is_one():
         f"{module}:{lineno} -> io.Int.Input('iteration_count', default={default!r}, ...) "
         f"— default must be 1 (single iteration = no seams = all-zero mask = no-op)."
     )
+
+
+# Names every io.X.Input("...") call is matched against to flag an
+# fps-bearing widget. Keep this synced with the runtime widget-name
+# conventions across our nodes + the upstream allowlist (LTXVAudioVideoMask
+# uses video_fps; VHS_VideoCombine uses frame_rate; ours uses fps or
+# frame_rate). Add to this set if a new fps-alias surfaces.
+_FPS_INPUT_NAMES = frozenset({"fps", "frame_rate", "video_fps"})
+
+# Upstream node classes whose schemas we don't control but whose widgets
+# the apply script MUST sweep. Hand-maintained because we can't AST-scan
+# packages outside the tree without import-time side-effects.
+# Cross-reference with scripts/apply_fps_24_default.py LIST_WIDGET_NODES.
+_UPSTREAM_FPS_NODES = frozenset({
+    "LTXVAudioVideoMask",  # KJNodes: widget[0] = video_fps (default 25 upstream)
+    "LTXVConditioning",    # comfy-core (nodes_lt.py): widget[0] = frame_rate
+    "LTXVEmptyLatentAudio",  # comfy-core (nodes_lt_audio.py): widget[1] = frame_rate
+})
+
+# Carve-out: VHS_VideoCombine.frame_rate IS fps-bearing but uses dict-shape
+# widgets_values, handled via a separate code path in apply_fps_24_default.py
+# (not LIST_WIDGET_NODES). The list-shape coverage test below doesn't apply.
+_DICT_SHAPE_FPS_NODES = frozenset({"VHS_VideoCombine"})
+
+
+def _classes_with_fps_widgets(path: Path):
+    """Yield class names in `path` whose define_schema declares any
+    io.<Type>.Input(...) with a name in _FPS_INPUT_NAMES.
+
+    Two-pass: walk the AST once to enumerate top-level class names, then
+    reuse `_scan_io_input_records_in_class` for each. Avoids reinventing
+    the class-bounded line-range logic.
+    """
+    src = path.read_text()
+    tree = ast.parse(src, filename=str(path))
+    class_names = [
+        n.name for n in ast.iter_child_nodes(tree)
+        if isinstance(n, ast.ClassDef)
+    ]
+    for cls in class_names:
+        for _lineno, name, _kwargs in _scan_io_input_records_in_class(path, cls):
+            if name in _FPS_INPUT_NAMES:
+                yield cls
+                break  # one fps input is enough to flag the class
+
+
+def _parse_apply_script_list_widget_keys(apply_script_path: Path) -> set[str]:
+    """Extract the keys of the LIST_WIDGET_NODES dict literal in
+    apply_fps_24_default.py via AST. Text-only — does not import the
+    module (which would drag scripts/ into sys.path side-effects)."""
+    src = apply_script_path.read_text()
+    tree = ast.parse(src, filename=str(apply_script_path))
+    for node in ast.iter_child_nodes(tree):
+        # Match either `LIST_WIDGET_NODES = {...}` or `LIST_WIDGET_NODES: dict = {...}`
+        targets = []
+        value = None
+        if isinstance(node, ast.Assign):
+            targets = [t for t in node.targets if isinstance(t, ast.Name)]
+            value = node.value
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            targets = [node.target]
+            value = node.value
+        if not targets or value is None:
+            continue
+        if not any(t.id == "LIST_WIDGET_NODES" for t in targets):
+            continue
+        if not isinstance(value, ast.Dict):
+            return set()  # unexpected shape — surface as empty so test fails loudly
+        keys: set[str] = set()
+        for k in value.keys:
+            if isinstance(k, ast.Constant) and isinstance(k.value, str):
+                keys.add(k.value)
+        return keys
+    return set()
+
+
+def test_apply_fps_24_default_covers_all_fps_bearing_widgets():
+    """Property: every fps-bearing widget in our nodes_*.py plus the
+    upstream allowlist must be covered by LIST_WIDGET_NODES in
+    scripts/apply_fps_24_default.py.
+
+    Reproduces the bug class that caused 35-40s audio drift after the
+    25→24 migration: LTXVAudioVideoMask (KJNodes upstream) shipped with
+    video_fps=25 by default and was missed by the original sweep because
+    the apply script's LIST_WIDGET_NODES was a hand-curated allowlist.
+    Adding a new fps-bearing input to our source — or surfacing an upstream
+    one — must now trip this test until the apply script is extended.
+    """
+    discovered: set[str] = set()
+    for module in _NODE_FILES:
+        path = REPO_ROOT / module
+        if not path.exists():
+            continue
+        discovered.update(_classes_with_fps_widgets(path))
+
+    expected_coverage = discovered | _UPSTREAM_FPS_NODES
+    apply_script = REPO_ROOT / "scripts" / "apply_fps_24_default.py"
+    assert apply_script.exists(), f"missing: {apply_script}"
+    covered = _parse_apply_script_list_widget_keys(apply_script)
+    assert covered, (
+        f"Failed to parse LIST_WIDGET_NODES from {apply_script.name}; "
+        "the AST shape may have changed (was it converted to a function "
+        "call or moved to another module?)."
+    )
+
+    missing = expected_coverage - covered - _DICT_SHAPE_FPS_NODES
+    assert not missing, (
+        "fps-bearing widget node(s) not covered by "
+        "scripts/apply_fps_24_default.py LIST_WIDGET_NODES:\n  "
+        + "\n  ".join(sorted(missing))
+        + "\n\nWhen adding a new fps/frame_rate input to a node — or "
+        "surfacing a new upstream node that has one — add the class name "
+        "+ widget index to LIST_WIDGET_NODES in the apply script. If the "
+        "node uses dict-shape widgets_values (like VHS_VideoCombine), add "
+        "it to _DICT_SHAPE_FPS_NODES in this test instead and extend the "
+        "apply script's VHS_VideoCombine code path."
+    )
+
+    # Catch stale entries — node types listed in LIST_WIDGET_NODES that
+    # no longer correspond to anything we discovered. Forces cleanup
+    # when a node is renamed or removed.
+    stale = covered - expected_coverage
+    # Allow upstream nodes that aren't in our source files but ARE in
+    # the upstream allowlist (they'd otherwise look stale by AST-scan
+    # alone). Already excluded by construction via expected_coverage.
+    assert not stale, (
+        "Stale entries in LIST_WIDGET_NODES (no matching fps-bearing "
+        "node found in source or upstream allowlist):\n  "
+        + "\n  ".join(sorted(stale))
+        + "\n\nIf the node was renamed/removed, drop the entry from "
+        "LIST_WIDGET_NODES. If it's an upstream node we still need to "
+        "sweep, add it to _UPSTREAM_FPS_NODES in this test."
+    )
