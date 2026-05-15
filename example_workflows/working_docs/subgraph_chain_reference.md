@@ -223,7 +223,7 @@ The structurally appropriate tap point is **after `#2008 LTXVCropGuides` (LATENT
 **Per-iter wall-time impact estimate**:
 
 Pass 1 is 9 sigma values → 8 effective steps; pass 2 is 4 sigma values → 3 effective steps. Naive ratio: refine adds 3/8 = **37.5% more sampler-time** per iter at equal per-step cost. But:
-- Refine operates on a video-only latent (post-separate), so the per-step cost is roughly the same as pass 1's video-attn cost minus the audio-attn cost. Audio frames are a small fraction of the AV-concat for LTX 2.3 (16kHz / 25fps math), so per-step cost is ~80-90% of pass-1 per-step.
+- Refine operates on a video-only latent (post-separate), so the per-step cost is roughly the same as pass 1's video-attn cost minus the audio-attn cost. Audio frames are a small fraction of the AV-concat for LTX 2.3 (audio VAE emits ~25 latents/sec vs ~3 video latents/sec at 24fps), so per-step cost is ~80-90% of pass-1 per-step.
 - Realistic estimate: **+30-34% per iter wall-time** from sampling alone (3/8 × 0.85). Add ~1-2% for the extra `RandomNoise` + node-graph overhead.
 - Caveat: this is sampler-only. If your full pipeline is sampler-bound (true on 24GB+ with `LTXVTiledVAEDecode [1,1,1]`), this is the end-to-end delta. If you're VAE-decode-bound or upstream-bound, the delta drops proportionally.
 

@@ -19,7 +19,7 @@ Last updated: 2026-05-04
 - Singleton per workflow; lives top-level (not in subgraph). Loop body has only `ConditioningSelectByIteration`.
 - Pairs with: `nodes.py::ConditioningSelectByIteration`.
 - Caching: module-level `_BATCH_ENCODE_CACHE` is an `OrderedDict` LRU of size 4 (covers A/B runs). Keyed on `(id(clip), schedule, stride_seconds, audio_duration, snap_boundaries, frame_rate)`. Dies on ComfyUI restart.
-- Stamps `frame_rate` on every emitted CONDITIONING via `node_helpers.conditioning_set_values`. Default 25.0; must match the `frame_rate` set on the initial-render's `LTXVConditioning`.
+- Stamps `frame_rate` on every emitted CONDITIONING via `node_helpers.conditioning_set_values`. Default 24.0 (LTX 2.3 training distribution); must match the `frame_rate` set on the initial-render's `LTXVConditioning`.
 - Iteration count output includes **+1 headroom** beyond expected loop length so the selector's clamp absorbs overshoot.
 - Dedup: identical prompt strings encoded once regardless of how many iterations span them.
 
@@ -32,7 +32,7 @@ Last updated: 2026-05-04
 | `stride_seconds` | FLOAT (seconds) | `AudioLoopController.stride_seconds` |
 | `audio_duration` | FLOAT (seconds) | `AudioLoopController.audio_duration` |
 | `snap_boundaries` | BOOLEAN | widget (default True) |
-| `frame_rate` | FLOAT (Hz) | `LTXFramePlanner.fps_float` (default 25.0) |
+| `frame_rate` | FLOAT (Hz) | `LTXFramePlanner.fps_float` (default 24.0) |
 
 | Output | Type | Wires to |
 |---|---|---|

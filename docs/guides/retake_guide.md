@@ -43,7 +43,7 @@ detail.
 3. On the **Retake range** `LatentTemporalMask` node, set:
    - `start_time` (seconds) — where the retake region begins
    - `end_time` (seconds) — where it ends
-   - `fps` — must match the source video's frame rate (default 25.0)
+   - `fps` — must match the source video's frame rate (default 24.0)
 4. Edit the positive prompt (`CLIPTextEncode` upstream of
    `LTXVConditioning`) to describe what should appear in the retake
    region. Keep the rest of the workflow untouched.
@@ -68,7 +68,7 @@ video and the prompt:
   other actions, use the matching verb (`is dancing`,
   `is playing <instrument>`, etc.). Generic verbs (`performing`,
   `vocalizing`) dilute the cross-attention signal.
-- **`frame_rate`** stamped on `LTXVConditioning` (default 25.0).
+- **`frame_rate`** stamped on `LTXVConditioning` (default 24.0; LTX 2.3 training distribution).
 
 ## Audio behavior
 
@@ -89,12 +89,12 @@ retake regions short relative to the surrounding context.
 ## Latent quantization to 8-frame chunks
 
 The retake range snaps to LTX latent frames. With the default 8x
-temporal compression and 25 fps:
+temporal compression and 24 fps:
 
-- 1 latent frame = 8 video frames = 0.32 seconds.
-- A 1.0-second retake window covers 4 latent frames, which decode to
-  32 video frames = 1.28 seconds.
-- Sub-second retake windows snap to multiples of 0.32 seconds.
+- 1 latent frame = 8 video frames = 0.333 seconds.
+- A 1.0-second retake window covers 3 latent frames, which decode to
+  24 video frames = 1.0 second.
+- Sub-second retake windows snap to multiples of 0.333 seconds.
 
 The node's frame-index math is generous on inclusion: `start_latent =
 int(start_time * fps / 8)` and `end_latent = int(end_time * fps / 8)

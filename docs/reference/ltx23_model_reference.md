@@ -183,7 +183,7 @@ Full trace: `docs/reference/pipeline_flow_latent.md` (LATENT workflow, the prima
 
 - TrimAudioDuration (Node 567) start_index is song-dependent. It trims
   instrumental intro that doesn't contribute to lip sync.
-- Audio and video durations must match: 497 frames / 25fps = 19.88s audio.
+- Audio and video durations must match: at 24fps, 473 frames / 24 = 19.708s (snap to nearest `8n+1`). Pre-2026-05-15 examples used 497 frames @ 25fps = 19.88s; renders ran but were slightly off-distribution.
 - LTXVAudioVideoMask (Node 606): audio_start_time and audio_end_time are
   BOTH wired to window_size_seconds (19.88). This creates an empty mask
   range (start=end), so audio stays fixed as the encoded song. DO NOT change.

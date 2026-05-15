@@ -1,4 +1,4 @@
-Last updated: 2026-04-27 (AudioLoopPlanner derives stride internally — 2026-04-24 baseline: loop guide feeds from #446 LTXVPreprocess, not raw #445 ImageResizeKJv2)
+Last updated: 2026-05-15 (canonical `LTXVConditioning.frame_rate=24` per LTX 2.3 training distribution; widget snapshots below still show pre-migration `fps=25` and `497`-frame defaults — refresh after the workflow-JSON sweep lands)
 
 # Pipeline Flow: LATENT-Based Music Video Workflow
 

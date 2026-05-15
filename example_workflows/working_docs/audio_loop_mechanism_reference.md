@@ -4,6 +4,8 @@ Last updated: 2026-05-15
 
 Canonical "how the loop works" reference for the LTX 2.3 audio-driven music-video pipeline. Anchors against `example_workflows/audio-loop-music-video_latent.json` and the runtime classes in `nodes.py` / `ComfyUI-NativeLooping_testing/nodes.py`. Read this once before touching any of: stride math, `noise_mask` boundaries, init-image symmetry, prompt routing, or the sampler chain.
 
+> **Note (2026-05-15)**: LTX 2.3 was trained at 24fps and `LTXVConditioning.frame_rate=24` is the canonical default (`comfy/ldm/lightricks/av_model.py:866`). Examples below still cite the pre-2026-05-15 `fps=25` widget snapshot to match the live workflow JSON; re-derive `window_px = round(window_seconds * fps)` and downstream values at `fps=24` once the workflow-JSON migration lands. Audio-VAE math (16kHz / 160 / 4 = 25 audio latents per second) is INDEPENDENT of video fps and unaffected.
+
 ## Scope and disambiguation
 
 - **What this covers**: the `TensorLoopOpen` + `TensorLoopClose` extension loop around a sampler subgraph, fed by `AudioLoopController` math. The shipped workflow generates arbitrarily long audio-conditioned video by iterating one fixed-size window and advancing audio by an integer-latent stride.

@@ -18,12 +18,12 @@ source files / line ranges in `coderef/` or to upstream paper / repo URLs.
   banding / grid patterns dominate. This is the *quality* cliff, derived
   empirically and codified at `nodes.py::LTXFramePlanner` and
   `docs/reference/ltx23_model_reference.md:46-51`.
-- **Practical VRAM ceiling on 24GB.** At 832x448, 497 frames (~19.88s @
-  25fps) ≈ 18 GB peak with sage attention + single-tile tiled VAE decode.
+- **Practical VRAM ceiling on 24GB.** At 832x448, 473 frames (~19.7s @
+  24fps; canonical) ≈ 18 GB peak with sage attention + single-tile tiled VAE decode.
   Source: `docs/experimental/spectrogram_iclora_tutorial.md:168`,
   `docs/guides/upscale_guide.md:118`.
 - **Lightricks ship 121 frames at 960x544** in every reference 2.3
-  workflow (5.04s @ 24fps; ~4.84s @ 25fps). LTX-Desktop UI caps user-
+  workflow (5.04s @ 24fps, the training-distribution framerate). LTX-Desktop UI caps user-
   visible duration at 20s @ 1080p/24fps, 10s @ 1440p/2160p, 10s @ 48/50fps.
 - **Audio VAE has no independent length cap.** It runs at 25 latents/sec
   (`16000 / 160 / 4`) and `LTXVConcatAVLatent` packs it alongside video
@@ -101,7 +101,7 @@ Classification (codified in `nodes.py::LTXFramePlanner`):
 | `NEAR_EDGE` | 20,001 – 24,570 | Quality degrades near the cliff |
 | `OVER_EDGE` | > 24,570 | Banding, grid patterns, color loss likely |
 
-### Audio-loop default (832 x 448, 25fps)
+### Audio-loop default (832 x 448, 24fps)
 
 - 832 / 32 * 448 / 32 = 26 * 14 = 364 spatial patches per latent frame.
 - For F=497 (default): 364 * 63 = **22,932** → `NEAR_EDGE`. The shipped
@@ -163,9 +163,9 @@ LTX-Desktop UI duration alias is `Literal[5, 6, 8, 10, 12, 14, 16, 18, 20]`
 (`api_types.py:315`). 20s @ 1080p/24fps is therefore Lightricks's *upper
 bound for the in-app generator*, not just a default.
 
-The audio-loop default of 19.88s @ 832x448/25fps is right at the same
+The audio-loop default of 19.88s @ 832x448 (497 frames @ 25fps pre-2026-05-15; re-derives to 473 frames = 19.708s @ canonical 24fps) is right at the same
 edge as the 1080p/20s cap — same latent volume neighborhood (832x448
-sits between 540p and 720p, F=497 is the max that lands in NEAR_EDGE).
+sits between 540p and 720p, F≈497 is the max that lands in NEAR_EDGE).
 
 ## 3. Audio VAE ceiling
 

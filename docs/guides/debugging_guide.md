@@ -74,10 +74,10 @@ at the boundaries of adjacent tiles.
 
 With widgets `[tile_size, overlap, temporal_size, temporal_overlap]`:
 - Tile stride (pixel frames) = `temporal_size − temporal_overlap`
-- At 25 fps, tile stride in seconds = `(temporal_size − temporal_overlap) / 25`
+- At 24 fps, tile stride in seconds = `(temporal_size − temporal_overlap) / 24`
 - A seam lands at every multiple of that stride.
 
-Current workflow default is `[512, 64, 64, 8]` → `(64-8)/25 = 2.24s` per tile → a seam approximately every 2.24s. That's the symptom.
+Current workflow default is `[512, 64, 64, 8]` → `(64-8)/24 = 2.33s` per tile → a seam approximately every 2.33s. That's the symptom.
 
 **Fix (production, shipped in default workflows)**: node 1604 (and
 node 1597) are now `LTXVTiledVAEDecode` (from `ComfyUI-LTXVideo`)
@@ -124,9 +124,9 @@ temporal boundary, so the widget math is:
 `stride_seconds` is the controller's `stride_seconds` output, NOT
 `window − overlap`).
 
-Specific values at `window_seconds=19.88, fps=25`:
+Specific values shown below were derived at the pre-2026-05-15 `fps=25` default; at the canonical `fps=24` the stride seconds and decoder pairs re-derive via `(temporal_size − temporal_overlap) / fps`. Same `window_seconds=19.88`:
 
-| `overlap_seconds` (target) | Iter stride | `temporal_size, temporal_overlap` |
+| `overlap_seconds` (target) | Iter stride (@fps=25) | `temporal_size, temporal_overlap` |
 |---|---|---|
 | 1.0 | 18.88 s | `544, 72` |
 | 2.0 | 17.92 s | `512, 64` |
@@ -365,8 +365,8 @@ boundaries are.
 snaps every schedule boundary to the nearest integer multiple of the
 `stride_seconds` output from `AudioLoopController`. Stride is quantized
 to LTX's 8-pixel temporal boundary (see the lip-sync drift section
-below for the derivation). At `window=19.88, fps=25`: `overlap=2.0`
-→ stride = **17.92 s**; `overlap=3.0` → stride = **16.96 s**.
+below for the derivation). Pre-2026-05-15 example at `window=19.88, fps=25`: `overlap=2.0`
+→ stride = **17.92 s**; `overlap=3.0` → stride = **16.96 s** (re-derive at the canonical `fps=24` via `new_latents * 8 / fps`).
 
 With stride = 17.92:
 - 1:15 = 75 s → 75 / 17.92 = 4.185 → rounds to 4 → 4 × 17.92 = 71.68 s ≈ `1:12`
@@ -816,9 +816,9 @@ Widgets are in **pixel frames** at the decoder output:
 - `temporal_overlap`: pixel frames overlapped between adjacent temporal
   tiles. Same caveat as above. Constraint: ≤ temporal_size/4.
 
-At 25 fps, `temporal_size=512, temporal_overlap=64` gives tile stride
-= `(512-64)/25 = 17.92 s`, which exactly matches loop iteration stride
-at default `overlap_seconds=2` (integer-latent quantized, see
+At the canonical `fps=24`, `temporal_size=512, temporal_overlap=64` gives tile stride
+= `(512-64)/24 = 18.67 s`. Re-derive the matching loop iteration stride from
+`new_latents * 8 / fps` at `overlap_seconds=2` (integer-latent quantized, see
 `AudioLoopController`).
 
 ---

@@ -463,7 +463,7 @@
         "secondTabWidth": 65
       },
       "widgets_values": [
-        25
+        24
       ]
     },
     {
@@ -1159,7 +1159,7 @@
         "Node name for S&R": "VHS_VideoCombine"
       },
       "widgets_values": {
-        "frame_rate": 25,
+        "frame_rate": 24,
         "loop_count": 0,
         "filename_prefix": "LTX-2",
         "format": "video/h264-mp4",
@@ -1177,7 +1177,7 @@
             "subfolder": "",
             "type": "output",
             "format": "video/h264-mp4",
-            "frame_rate": 25,
+            "frame_rate": 24,
             "workflow": "workflow.png",
             "fullpath": "./output/output_video.mp4"
           }
@@ -2106,7 +2106,7 @@
       "widgets_values": [
         4.0,
         8.0,
-        25.0
+        24
       ],
       "title": "Retake range (start, end, fps)"
     },
@@ -2194,7 +2194,7 @@
         "Node name for S&R": "TrimVideoLatentToAudio"
       },
       "widgets_values": [
-        25
+        24
       ],
       "title": "Trim latent to audio"
     },
@@ -2244,7 +2244,7 @@
         "Node name for S&R": "TrimImageBatchToAudio"
       },
       "widgets_values": [
-        25
+        24
       ],
       "title": "Trim to audio"
     }
