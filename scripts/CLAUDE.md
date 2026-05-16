@@ -295,7 +295,6 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 |---|---|
 | `apply_melband_default_off.py` | Disable MelBand vocal separation by default across workflows · scripts/CLAUDE.md, `architecture_overview.md` |
 | `apply_spectrogram_iclora_minimal.py` | Build experimental spectrogram-IC-LoRA workflow · `_helpers/_apply_helpers.py`, `debug_tools.md`, `spectrogram_iclora_tutorial.md` |
-| `apply_vae_and_cleanup.py` | One-shot VAE cleanup applied to LATENT-variant workflows (2026-04-23) · `compare-workflows` skill — archive candidate (one-time migration, fully baked) |
 
 ### Apply scripts — bench / IC-LoRA bench (2)
 

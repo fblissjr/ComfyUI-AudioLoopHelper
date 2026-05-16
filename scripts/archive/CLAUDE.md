@@ -1,6 +1,6 @@
 # scripts/archive/ — retired apply-script inventory
 
-Last updated: 2026-05-05
+Last updated: 2026-05-16
 
 Apply scripts kept as design records of the topology each migration introduced. **Not for re-running.** Either:
 - the migration is permanently baked into the canonical workflow (re-running is a no-op or destructive), or
@@ -94,6 +94,31 @@ Audit-script remediation pointers reference `scripts/archive/...` paths so a rea
 - **Originally**: 2026-04-20 (commit `18ee568`). Generates `audio-loop-music-video_latent_stg.json` from the baseline. Keeps the authoritative distilled-1.1 sigma chain; swaps `CFGGuider` for `MultimodalGuider` + two `GuiderParameters` (AUDIO/VIDEO both cfg=2, stg=1, modality=1). Bypasses `LTX2_NAG`.
 - **Why built**: STG (spatio-temporal guidance) is the primary quality lift on LTX 2.3. Mild CFG forces the guider's `noise_pred_neg` branch to run (cfg=1.0 hits an unbound-variable bug in KJ's multimodal_guider at `ComfyUI-LTXVideo/guiders/multimodal_guider.py:269`).
 - **Why archived (2026-05-05)**: **generator of a shipped variant**. `audio-loop-music-video_latent_stg.json` is the shipped artifact (canonical with `MultimodalGuider` present, verified). Re-running the generator on a baseline that's drifted since 2026-04-20 would not produce the current variant cleanly anyway.
+
+### `apply_vae_and_cleanup.py`
+
+- **Originally**: 2026-04-23. One-shot VAE cleanup on LATENT-variant workflows — removed redundant `#1590 VAEEncode` + `#1585` Note, swapped any remaining generic `VAEDecode` chains for `LTXVTiledVAEDecode`.
+- **Why built**: post-sigma-migration left several workflows with dead VAE plumbing; manual cleanup across 10+ variants was error-prone.
+- **Why archived (2026-05-16)**: migration baked into 10/10 latent-variant workflows; re-running would either no-op or conflict with current canonical (which uses `LTXVTiledVAEDecode [1,1,1]`).
+- **Citations to update**: `.claude/skills/compare-workflows/SKILL.md` — pointer updated to archive path.
+
+### `apply_dedupe_initial_render_prompt.py`
+
+- **Originally**: 2026-05-07. Removed the static Node 169 (`CLIPTextEncode` for the 0:00 prompt on the initial-render path) and rewired the initial-render conditioning to flow through `ConditioningSelectByIteration` indexed at iteration 0 — so the canonical batch-encoded schedule becomes single source of truth for the 0:00 prompt.
+- **Why built**: Node 169 + the batch encoder both stamped 0:00 prompts but could drift; dedupe eliminated the drift class.
+- **Why archived (2026-05-16)**: Node 169 absent from all shipped audio-loop workflows; the dedupe is permanently baked. Re-running would refuse via `require_nodes` since Node 169 is gone.
+
+### `apply_promote_schedule_to_inputs.py`
+
+- **Originally**: 2026-05-07. Layout migration — repositioned `TimestampPromptScheduleBatchEncode #1615` into the Inputs group region (`[440, 260]`) so the prompt schedule sits next to the other user-tunable inputs in the canvas.
+- **Why built**: schedule was buried in the loop-orchestration column; promoting it to the inputs panel made it more discoverable.
+- **Why archived (2026-05-16)**: layout permanently baked; canonical workflow has the node at the target position. Pure cosmetic migration with no behavioral effect.
+
+### `apply_smart_image_resize.py`
+
+- **Originally**: 2026-05-07. Swapped `ImageResizeKJv2` (single-pass lanczos, stacks PIL float→uint8 quantization at multi-stage reductions) for `LTXSmartImageResize` (adaptive multi-stage with float32 bicubic+antialias intermediates, lanczos only at final stage). Postmortem: `internal/analysis/smart_resize_quantization_postmortem.md` (private clone only).
+- **Why built**: the chaos investigation on 2026-05-08 traced motion artifacts to multi-stage PIL quantization on >2× linear reduction; the new node solves it correctly.
+- **Why archived (2026-05-16)**: `LTXSmartImageResize` present in 10/10 shipped workflows on the init-image path; migration baked. Remaining `ImageResizeKJv2` references in some variants are for ref-video chains (different path, different requirements), not the init-image path this script touched.
 
 ---
 

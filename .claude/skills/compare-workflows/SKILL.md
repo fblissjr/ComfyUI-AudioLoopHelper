@@ -48,7 +48,7 @@ uv run --group dev python \
 cp example_workflows/audio-loop-music-video_latent.json /tmp/pre.json
 
 # Apply the migration
-uv run --group dev python scripts/apply_vae_and_cleanup.py
+uv run --group dev python scripts/archive/apply_vae_and_cleanup.py
 
 # Compare — should show only the intended changes
 uv run --group dev python \
