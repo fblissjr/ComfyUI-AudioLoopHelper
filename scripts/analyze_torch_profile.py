@@ -18,6 +18,20 @@ Designed for the LTX 2.3 cross-attention-path comparison: contrasting
 Linears are 50-100x slower per call than video's (cold L2 after the
 big video kernel), bandwidth-bound-at-small-T-after-big-kernel is
 confirmed; concurrent dispatch still overlaps that wall-time.
+
+## Module attribution path
+
+`torch.profiler.profile(with_modules=True)` is TorchScript-only per
+the pytorch docs (silent no-op on eager-mode models). For eager-mode
+LTX 2.3 we use the `record_function` annotations placed by
+`tracers/ffn_attn.py`'s pre/post hooks instead. Each sub-module
+forward emits a `cat=user_annotation` span named like
+`audio_attn1/block_5` in the chrome trace; `_build_span_index` collects
+them and `find_enclosing_span` bisects to attribute each aten op to
+its parent. Verified end-to-end on an FML2V audit render: 384 distinct
+annotation names (= 48 blocks × 8 sub-modules) emitted per render,
+with the analyzer's `--modules audio_attn1 attn1` filter returning
+properly-grouped op breakdowns.
 """
 
 from __future__ import annotations

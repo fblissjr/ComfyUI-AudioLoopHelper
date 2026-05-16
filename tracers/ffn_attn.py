@@ -8,7 +8,19 @@ When the torch.profiler tracer is also enabled, each sub-module
 forward is additionally wrapped in a `torch.profiler.record_function`
 span so `scripts/analyze_torch_profile.py` can attribute aten ops back
 to their parent sub-module. This is the eager-mode equivalent of
-`torch.profiler.profile(with_modules=True)` (which is TorchScript-only).
+`torch.profiler.profile(with_modules=True)` — which per the PyTorch
+docs is TorchScript-only and a silent no-op on eager-mode models like
+LTX 2.3.
+
+## Verified annotation emission
+
+End-to-end verified on an FML2V two-stage audit render: the chrome
+trace's `cat=user_annotation` event stream contains 2304 annotations
+in stage-2 alone (48 blocks × 8 sub-modules × 6 sampler forwards),
+named like `attn1/block_0`, `audio_to_video_attn/block_5`, etc. The
+analyzer's `_build_span_index` bisect-attribution lookup finds them
+via the `BLOCK_ANNOTATION_MARKER` substring and attributes every
+nested aten op to its parent sub-module.
 """
 
 from __future__ import annotations
