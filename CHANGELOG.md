@@ -6,6 +6,23 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **fps default reverted to 25 across audio-loop workflows.** LTX 2.3
+  audio-loop canonical inference fps is 25; the 8n+1 video-latent
+  boundary aligns cleanly at fps=25 (1 second = exactly 4 latents)
+  but not at 24. A prior sweep had flipped defaults to 24 based on a
+  misread upstream constant; reverted across workflow widgets (via
+  `scripts/apply_fps_24_default.py --revert` plus two experimental
+  workflows hand-fixed via `WorkflowEditor` that the revert had
+  skipped on an unrelated widget-shape mismatch), node defaults
+  (`nodes.py`, `nodes_validation.py`, `scripts/workflow_utils.py`),
+  audit messaging (F16), test assertions, and docs (canonical home
+  at `docs/reference/ltx23_model_reference.md`). Followups in
+  `CLAUDE.md` "Pending review": rename `apply_fps_24_default.py`
+  (now actively misleading); the F16 audit-check ID
+  `cond_frame_rate_24` is now misleading too but kept stable as a
+  referenced anchor.
+
 ### Added
 - **`LTXHeadTrim` node — composite IMAGE + AUDIO head trim.** Drops
   the first `trim_latent_frames * 8` pixel frames from the decoded
