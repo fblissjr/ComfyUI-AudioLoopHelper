@@ -23,12 +23,19 @@ confirmed; concurrent dispatch still overlaps that wall-time.
 from __future__ import annotations
 
 import argparse
+import bisect
 import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
 from workflow_utils import DATA_RUNS_DIR
+
+# Shared with `tracers/ffn_attn.py::BLOCK_ANNOTATION_MARKER` — keep in
+# sync if the producer's format changes. Duplicated inline (not
+# imported) because this script is a `scripts/`-side CLI tool and
+# doesn't import from the package.
+_BLOCK_ANNOTATION_MARKER = "/block_"
 
 
 def parse_args() -> argparse.Namespace:
@@ -99,12 +106,18 @@ def is_aten_op(ev: dict) -> bool:
 def module_path_of(ev: dict) -> str | None:
     """Extract the module path from event args.
 
-    torch.profiler stamps `Module Hierarchy` or `python frame` info into
-    each event's args. The exact key varies by torch version; we check
-    the most common ones in order.
+    `with_modules=True` is TorchScript-only; for eager-mode LTX 2.3 we
+    derive module identity from the `record_function` annotations
+    placed by `tracers/ffn_attn.py`'s pre/post hooks (named like
+    `audio_attn1/block_5`). Walk the event's parent chain via the
+    chrome trace `External id` to find the nearest enclosing
+    record_function span.
+
+    Returns None if the event isn't nested under a known annotation —
+    e.g. ops outside `BasicAVTransformerBlock` sub-modules.
     """
     args = ev.get("args") or {}
-    # Most direct: when record_shapes=True + module annotation is on
+    # TorchScript path (kept for completeness, no-op on eager)
     for key in ("Module Hierarchy", "module_hierarchy", "module"):
         val = args.get(key)
         if isinstance(val, str) and val:
@@ -129,9 +142,70 @@ def primary_input_shape(ev: dict) -> str:
     return "?"
 
 
+def find_enclosing_span(
+    starts: list[float],
+    ends: list[float],
+    names: list[str],
+    ts: float,
+) -> str | None:
+    """Binary-search the span list for one containing `ts`.
+
+    Parallel-array layout (starts/ends/names instead of list of tuples)
+    saves a tuple-unpack per probe. `bisect_right(starts, ts) - 1`
+    gives the highest span that started at or before `ts`; check its
+    end. For LTX 2.3 ~5000 spans × ~1M aten ops, linear scan blows the
+    analyzer's 30s budget; bisect is 5-7 probes per lookup.
+    """
+    if not starts:
+        return None
+    idx = bisect.bisect_right(starts, ts) - 1
+    if idx < 0:
+        return None
+    if ts <= ends[idx]:
+        return names[idx]
+    return None
+
+
+def _build_span_index(events: list[dict]) -> dict[tuple, tuple[list[float], list[float], list[str]]]:
+    """Collect `record_function` annotations into bisect-ready arrays.
+
+    Per (pid, tid) returns parallel arrays (starts, ends, names) sorted
+    by start. Spans come from `tracers/ffn_attn.py`'s pre/post hooks
+    (names match `BLOCK_ANNOTATION_MARKER`). Sort is defensive against
+    chrome traces that aren't strictly time-ordered.
+    """
+    raw: dict[tuple, list[tuple[float, float, str]]] = defaultdict(list)
+    for ev in events:
+        if ev.get("ph") != "X" or ev.get("cat") != "user_annotation":
+            continue
+        name = ev.get("name", "")
+        if _BLOCK_ANNOTATION_MARKER not in name:
+            continue
+        ts = float(ev.get("ts", 0.0))
+        dur = float(ev.get("dur", 0.0))
+        raw[(ev.get("pid"), ev.get("tid"))].append((ts, ts + dur, name))
+    index: dict[tuple, tuple[list[float], list[float], list[str]]] = {}
+    for key, spans in raw.items():
+        spans.sort(key=lambda s: s[0])
+        index[key] = (
+            [s[0] for s in spans],
+            [s[1] for s in spans],
+            [s[2] for s in spans],
+        )
+    return index
+
+
 def aggregate_by_module(events: list[dict], device: str) -> dict[str, dict[str, dict[str, Any]]]:
-    """Build {module_path: {op_name: {count, total_us, shape}}}."""
-    # Two-level dict, lazy-initialized
+    """Build {module_path: {op_name: {count, total_us, shape}}}.
+
+    Attribution sources, in order: (a) `Module Hierarchy` from
+    `with_modules=True` (TorchScript path), or (b) the
+    `record_function` annotation an aten op falls inside (eager-mode
+    path, via `tracers/ffn_attn.py`'s pre/post hooks). Falls back to
+    `<unattributed>` for ops outside any annotated span.
+    """
+    index = _build_span_index(events)
+    empty: tuple[list[float], list[float], list[str]] = ([], [], [])
     out: dict[str, dict[str, dict[str, Any]]] = defaultdict(lambda: defaultdict(lambda: {
         "count": 0,
         "total_us": 0.0,
@@ -144,10 +218,12 @@ def aggregate_by_module(events: list[dict], device: str) -> dict[str, dict[str, 
             continue
         path = module_path_of(ev)
         if path is None:
+            starts, ends, names = index.get((ev.get("pid"), ev.get("tid")), empty)
+            path = find_enclosing_span(starts, ends, names, float(ev.get("ts", 0.0)))
+        if path is None:
             path = "<unattributed>"
-        op_name = ev["name"]
         dur_us = float(ev.get("dur", 0.0))
-        entry = out[path][op_name]
+        entry = out[path][ev["name"]]
         entry["count"] += 1
         entry["total_us"] += dur_us
         entry["shapes"].add(primary_input_shape(ev))

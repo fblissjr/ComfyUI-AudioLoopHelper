@@ -78,8 +78,14 @@ def install_render_tracers(model_clone: Any) -> None:
 
 
 def on_cleanup() -> None:
-    """Fire ON_CLEANUP for every render-lifecycle tracer that's enabled."""
-    global _PROMPT_ID, _PROMPT_START_TS, _ANY_RENDER_TRACER_ACTIVE
+    """Fire ON_CLEANUP for every render-lifecycle tracer that's enabled.
+
+    Manifest gets re-written here. State is NOT reset because ON_CLEANUP
+    fires once per sampler invocation, not per render — a multi-sampler
+    workflow (FML2V two-stage, audio-loop N-iteration) needs each cleanup
+    to refresh the manifest with newly-flushed artifacts. State is reset
+    by `install_render_tracers` at the start of the next render.
+    """
     for t in _REGISTRY:
         if t.lifecycle != "render":
             continue
@@ -91,9 +97,6 @@ def on_cleanup() -> None:
             t.log(f"on_cleanup raised {type(e).__name__}: {e}")
     if _ANY_RENDER_TRACER_ACTIVE:
         _manifest.finalize_prompt(_REGISTRY, _PROMPT_ID, _PROMPT_START_TS)
-    _PROMPT_ID = None
-    _PROMPT_START_TS = None
-    _ANY_RENDER_TRACER_ACTIVE = False
 
 
 def _on_atexit() -> None:
