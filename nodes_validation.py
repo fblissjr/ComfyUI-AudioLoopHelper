@@ -140,9 +140,9 @@ class LoopConfigValidator(io.ComfyNode):
                 ),
                 io.Int.Input(
                     "fps",
-                    default=24,
+                    default=25,
                     min=1,
-                    tooltip="Video frame rate (LTX 2.3 training distribution).",
+                    tooltip="Video frame rate. LTX 2.3 canonical inference fps is 25 (Lightricks's shipped example workflows).",
                 ),
                 io.Int.Input(
                     "length",

@@ -1,4 +1,4 @@
-Last updated: 2026-04-25
+Last updated: 2026-05-16
 
 # LTX 2.3 Audio-Loop Prompt Guide
 
@@ -240,7 +240,7 @@ revisit.
 
 ### 5.2 Context-frames width (open question)
 
-Currently `overlap_latent_frames=4` (~1.33s at 24fps). Increasing to 8 or
+Currently `overlap_latent_frames=4` (~1.28s at 25fps). Increasing to 8 or
 12 would feed more prior context into each iteration's denoising.
 Plausibly reduces the residual "fresh start" feeling at boundaries
 that the §5.1 strip alone can't fully erase. Pairs cleanly with the
@@ -557,7 +557,7 @@ manually, copy the line.
 | Setting | Value | Why |
 |---------|-------|-----|
 | `window_seconds` | 19.88 | LTX 2.3 default window |
-| fps | 24 | LTX 2.3 training-distribution framerate (`comfy/ldm/lightricks/av_model.py:866`) |
+| fps | 25 | LTX 2.3 canonical inference value (`docs/reference/ltx23_model_reference.md` § "`frame_rate`: canonical inference value is 25"; pos-embed scaling site: `comfy/ldm/lightricks/av_model.py:866`) |
 | TensorLoopOpen iterations | 50 | Safety cap. Auto-stop handles actual termination. |
 | MelBand 568/569 | per workflow | Default may be bypassed; re-enable via apply script if needed for lip sync. |
 | `trim_to_audio` | true | Clip output to audio length |

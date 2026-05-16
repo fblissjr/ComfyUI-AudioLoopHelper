@@ -1,15 +1,15 @@
 # LTXFramePlanner reference
 
-Last updated: 2026-05-04
+Last updated: 2026-05-16
 
 ## Role
 
-Single source of truth for LTX 2.3 dimension config in shipped workflows. The user types human-readable target values (832, 448, 20.0, 24); the node snaps them to LTX-architectural neighborhoods and emits matched values to every downstream consumer. Replaces the pre-2026-04-27 pattern of scattering width / height / length / window_seconds / fps across five separate widgets that drifted apart.
+Single source of truth for LTX 2.3 dimension config in shipped workflows. The user types human-readable target values (832, 448, 19.88, 25); the node snaps them to LTX-architectural neighborhoods and emits matched values to every downstream consumer. Replaces the pre-2026-04-27 pattern of scattering width / height / length / window_seconds / fps across five separate widgets that drifted apart.
 
 ## Key facts
 
 - **Node ID**: `LTXFramePlanner`. Defined in `nodes.py` (~line 1505).
-- **Inputs**: `target_width` (default 832), `target_height` (default 448), `target_seconds` (default 19.88), `fps` (default 24; LTX 2.3 training distribution).
+- **Inputs**: `target_width` (default 832), `target_height` (default 448), `target_seconds` (default 19.88), `fps` (default 25; LTX 2.3 canonical inference value — see fps gotcha below).
 - **Outputs**: `width`, `height`, `frames`, `actual_seconds`, `fps_int`, `fps_float`, `latent_volume`, `status`, `summary`.
 - **One node per workflow.** All shipped workflows wire its outputs into 6 consumer inputs (see Wiring map).
 - **`fps_int` vs `fps_float` is intentional.** `LTXVConditioning.frame_rate` is FLOAT-typed; `AudioLoopController.fps` and `AudioLoopPlanner.fps` are INT-typed. Same value, two output slots, no coercion at the wire.
@@ -54,9 +54,9 @@ The `apply_frame_planner_consolidation.py` migration removes four pre-existing h
 
 ## Gotchas
 
-- **`target_seconds` is per-iteration window duration, NOT total video length.** Total length is determined by the audio. Default 19.88s @ 24fps ≈ 477 frames (snap to nearest `8n+1` = 473 frames = 19.708s) ≈ 9 iterations on a 3-min song.
+- **`target_seconds` is per-iteration window duration, NOT total video length.** Total length is determined by the audio. Default 19.88s @ 25fps = 497 frames (`(497-1)%8==0`) ≈ 9 iterations on a 3-min song.
 - **Lower `target_seconds` = more iterations = more re-anchoring.** Tradeoffs: better identity preservation, higher resolution headroom, more boundary seams. There's no universally-right value; tune per render.
-- **`fps=24` matches LTX 2.3's training distribution.** `LTXVConditioning.frame_rate` scales the model's temporal pos embed at `comfy/ldm/lightricks/av_model.py:866`; the canonical default is 24. `fps=25` was used pre-2026-05-15 across shipped workflows; renders ran but were slightly off-distribution.
+- **`fps=25` is the LTX 2.3 canonical inference value.** Lightricks's shipped ComfyUI-LTXVideo example workflows set `LTXVConditioning.frame_rate=25` across T2V/I2V distilled + full; V2V uses 24 (preserves source-video fps). 8n+1 latent boundary aligns cleanly at 25. Full evidence + mechanism + symptom of mismatch: `docs/reference/ltx23_model_reference.md` § "`frame_rate`: canonical inference value is 25". A 2026-05-15 sweep flipped widgets to 24 on a misread of a library placeholder default; reverted 2026-05-16 (production render validation pending).
 - **The wire supersedes the widget value at execution time** (verified at `apply_frame_planner_consolidation.py:44-48` source-level audit). Widget defaults exist only for orphan-node smoke testing; in shipped workflows they're never consulted.
 - **`EmptyLTXVLatentVideo` silently floors invalid `length`** with `((L-1)//8)+1`. Without the planner upstream, the user-typed length and the actual rendered length can disagree by up to 7 frames. With the planner, they always agree.
 

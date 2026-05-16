@@ -198,16 +198,17 @@ class TestFrameRateMetadata:
     the subgraph the chain was `LTXVAddLatentGuide → LTXVCropGuides →
     CFGGuider → Sampler`, which never re-applies `frame_rate`. Meanwhile
     the initial render's positive conditioning DOES pass through
-    `LTXVConditioning` (frame_rate=24 stamped) and the negative
-    conditioning DOES too (sourced from `Set_base_cond_neg` downstream
-    of the same `LTXVConditioning`). Net result: loop-iter positive was
-    the only path without `frame_rate` metadata. The model's temporal
-    scaling diverged between the initial render and loop iterations,
-    compounding identity drift (different faces, hallucinated microphones)
-    that escalated iter-over-iter regardless of NAG scale or prompt content.
+    `LTXVConditioning` (frame_rate=25 stamped — LTX 2.3 canonical
+    inference fps) and the negative conditioning DOES too (sourced from
+    `Set_base_cond_neg` downstream of the same `LTXVConditioning`). Net
+    result: loop-iter positive was the only path without `frame_rate`
+    metadata. The model's temporal scaling diverged between the initial
+    render and loop iterations, compounding identity drift (different
+    faces, hallucinated microphones) that escalated iter-over-iter
+    regardless of NAG scale or prompt content.
     """
 
-    def test_default_frame_rate_is_24_on_every_conditioning(self):
+    def test_default_frame_rate_is_25_on_every_conditioning(self):
         from nodes import TimestampPromptScheduleBatchEncode
         clip = FakeCLIP()
         conditioning_list, _ = TimestampPromptScheduleBatchEncode.execute(
@@ -224,8 +225,8 @@ class TestFrameRateMetadata:
                 assert "frame_rate" in meta, (
                     f"conditioning[{i}][{j}] missing 'frame_rate' metadata: {meta}"
                 )
-                assert meta["frame_rate"] == 24.0, (
-                    f"conditioning[{i}][{j}] frame_rate={meta['frame_rate']}, expected 24.0"
+                assert meta["frame_rate"] == 25.0, (
+                    f"conditioning[{i}][{j}] frame_rate={meta['frame_rate']}, expected 25.0"
                 )
 
     def test_custom_frame_rate_is_stamped_on_every_conditioning(self):

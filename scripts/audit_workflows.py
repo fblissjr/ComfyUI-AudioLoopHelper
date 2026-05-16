@@ -166,14 +166,17 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         if all_good:
             record("OK", "sage", "AudioLoopHelperSageAttention auto active")
 
-    # F16 — cond_frame_rate_24
-    # LTX 2.3 was trained at 24fps; `LTXVConditioning.frame_rate` scales the
-    # model's temporal positional embedding at
-    # `comfy/ldm/lightricks/av_model.py:866`. The legacy default of 25
-    # produced a ~4.2% pos-embed time-stretch error. ERR-level because the
-    # paired apply script `apply_fps_24_default.py` has been run on every
-    # shipped workflow as of 2026-05-15; any future drift back to 25 is a
-    # regression.
+    # F16 — cond_frame_rate_24 (stable legacy ID; canonical value is 25)
+    # LTX 2.3 canonical inference fps = 25 (Lightricks's shipped
+    # ComfyUI-LTXVideo example workflows under
+    # `coderef/ComfyUI-LTXVideo/example_workflows/2.3/` all use
+    # `LTXVConditioning.frame_rate=25`). `LTXVConditioning.frame_rate`
+    # scales the model's temporal positional embedding at
+    # `comfy/ldm/lightricks/av_model.py:866`. ERR-level because the
+    # paired apply script `apply_fps_24_default.py` (name retained for
+    # git-history continuity; canonical value is 25) has been run on
+    # every shipped workflow as of 2026-05-16; any future drift to 24
+    # or other values is a regression.
     cond_nodes = by_type.get("LTXVConditioning", [])
     if cond_nodes:
         all_good = True
@@ -2044,12 +2047,13 @@ def _check_cfg_guider_inputs_traced_to_source(wf, by_type, by_id, record) -> Non
 
 
 # F18 — fps_coherence.
-# F16 enforces the absolute rule `LTXVConditioning.frame_rate == 24`;
-# F18 enforces relative coherence — all fps/frame_rate widgets agreeing
-# with each other. Catches future drift between nodes even if the
-# absolute target changes. Sources: `LIST_WIDGET_NODES` from
-# `apply_fps_24_default.py` (authoritative per-node widget index table)
-# plus `VHS_VideoCombine.widgets_values["frame_rate"]` (dict-shape).
+# F16 enforces the absolute rule `LTXVConditioning.frame_rate == 25`
+# (canonical inference fps); F18 enforces relative coherence — all
+# fps/frame_rate widgets agreeing with each other. Catches future drift
+# between nodes even if the absolute target changes. Sources:
+# `LIST_WIDGET_NODES` from `apply_fps_24_default.py` (authoritative
+# per-node widget index table) plus
+# `VHS_VideoCombine.widgets_values["frame_rate"]` (dict-shape).
 def _check_fps_coherence(wf, by_type, record) -> None:
     del wf
     seen: list[tuple[str, int, int]] = []  # (description, node_id, fps)
@@ -2084,7 +2088,7 @@ def _check_fps_coherence(wf, by_type, record) -> None:
         "ERR", "fps_coherence",
         f"fps widgets disagree: {breakdown}. "
         "All fps/frame_rate widgets in a workflow must agree. F16 "
-        "(cond_frame_rate_24) enforces LTXVConditioning.frame_rate == 24 "
+        "(cond_frame_rate_24) enforces LTXVConditioning.frame_rate == 25 "
         "(load-bearing absolute rule); F18 enforces relative coherence so "
         "future drift between nodes gets caught. Run "
         "scripts/apply_fps_24_default.py to re-sweep.",

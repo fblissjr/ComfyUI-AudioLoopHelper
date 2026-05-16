@@ -1,4 +1,4 @@
-Last updated: 2026-05-03
+Last updated: 2026-05-16
 
 # LTX 2.3 Model Reference
 
@@ -183,7 +183,25 @@ Full trace: `docs/reference/pipeline_flow_latent.md` (LATENT workflow, the prima
 
 - TrimAudioDuration (Node 567) start_index is song-dependent. It trims
   instrumental intro that doesn't contribute to lip sync.
-- Audio and video durations must match: at 24fps, 473 frames / 24 = 19.708s (snap to nearest `8n+1`). Pre-2026-05-15 examples used 497 frames @ 25fps = 19.88s; renders ran but were slightly off-distribution.
+- Audio and video durations must match. Canonical LTX 2.3 inference fps = 25 (see `frame_rate` section below): 497 frames / 25 = 19.88s, satisfies `(L-1)%8==0`. A 2026-05-15 sweep briefly flipped widgets to 24 based on a misread of a library placeholder default; reverted to 25 on 2026-05-16 (production render validation pending).
+
+### `frame_rate`: canonical inference value is 25
+
+**Canonical `LTXVConditioning.frame_rate` for LTX 2.3 inference = 25.0** across T2V, I2V, and AV (audio-loop) workflows. V2V is the single exception (uses source-video fps, typically 24).
+
+Evidence:
+
+| Source | `frame_rate` | Workload |
+|---|---|---|
+| Lightricks's shipped ComfyUI-LTXVideo example workflows `LTX-2_T2V_Distilled_wLora.json`, `LTX-2_T2V_Full_wLora.json`, `LTX-2_I2V_Distilled_wLora.json`, `LTX-2_I2V_Full_wLora.json` | 25 | T2V / I2V distilled + full (`LTXVConditioning` widget) |
+| Lightricks's shipped `LTX-2_V2V_Detailer.json` | 24 | V2V (preserves source-video fps) |
+| `coderef/LTX-2/ltx-trainer/configs/ltx2_av_lora.yaml:209`, `ltx2_av_lora_low_vram.yaml:221`, `ltx2_v2v_ic_lora.yaml:222` | 25.0 | AV / V2V LoRA training configs |
+| `coderef/LTX-2/ltx-trainer/src/ltx_trainer/validation_sampler.py:83` | 25.0 | AV validation sampler (runs at `height=544, width=960, num_frames=97`) |
+| `coderef/LTX-2/ltx-pipelines/ltx_pipelines/pipelines/constants.py:36` | 24.0 | `PipelineParams` default — **Python-library placeholder, NOT canonical inference value** |
+
+Structural reason 25 holds: video latents temporally compress 8:1, so the 8n+1 video-frame boundary aligns cleanly at 25 (1 s = 25 pixel frames = exactly 4 latents). At 24, 24 pixel frames is not 8n+1, so per-second math drifts.
+
+Mechanism: `LTXVConditioning.frame_rate` scales the model's temporal positional embedding at `comfy/ldm/lightricks/av_model.py:866` (`v_pixel_coords[:, 0] *= 1.0 / frame_rate`). A mismatch shifts the time axis. Symptom of `frame_rate=24` in audio-loop workflows, observed 2026-05-15: initial render motion looked fine, then loop iterations collapsed to near-still — the loop body is geometrically constrained by two anchors (overlap-from-prev pinned via `mask=0` at start; init-image guide pinned at `latent_idx=-1` via `LTXVAddLatentGuide #1519`), so the initial render absorbs the pos-embed nudge in its motion budget while loop iterations have no slack and collapse to "minimal change."
 - LTXVAudioVideoMask (Node 606): audio_start_time and audio_end_time are
   BOTH wired to window_size_seconds (19.88). This creates an empty mask
   range (start=end), so audio stays fixed as the encoded song. DO NOT change.

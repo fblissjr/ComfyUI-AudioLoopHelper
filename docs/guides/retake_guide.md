@@ -1,4 +1,4 @@
-Last updated: 2026-04-25
+Last updated: 2026-05-16
 
 # Retake guide
 
@@ -43,7 +43,7 @@ detail.
 3. On the **Retake range** `LatentTemporalMask` node, set:
    - `start_time` (seconds) — where the retake region begins
    - `end_time` (seconds) — where it ends
-   - `fps` — must match the source video's frame rate (default 24.0)
+   - `fps` — must match the source video's frame rate. For LTX 2.3 audio-loop outputs (and T2V/I2V renders), the canonical value is 25.0; V2V outputs preserve their source-video fps (`docs/reference/ltx23_model_reference.md` § "`frame_rate`: canonical inference value is 25").
 4. Edit the positive prompt (`CLIPTextEncode` upstream of
    `LTXVConditioning`) to describe what should appear in the retake
    region. Keep the rest of the workflow untouched.
@@ -68,7 +68,7 @@ video and the prompt:
   other actions, use the matching verb (`is dancing`,
   `is playing <instrument>`, etc.). Generic verbs (`performing`,
   `vocalizing`) dilute the cross-attention signal.
-- **`frame_rate`** stamped on `LTXVConditioning` (default 24.0; LTX 2.3 training distribution).
+- **`frame_rate`** stamped on `LTXVConditioning` must match the source video. LTX 2.3 canonical inference value is 25.0 across T2V/I2V/AV; V2V uses source-video fps (`docs/reference/ltx23_model_reference.md` § "`frame_rate`: canonical inference value is 25").
 
 ## Audio behavior
 
@@ -89,12 +89,16 @@ retake regions short relative to the surrounding context.
 ## Latent quantization to 8-frame chunks
 
 The retake range snaps to LTX latent frames. With the default 8x
-temporal compression and 24 fps:
+temporal compression, the seconds-per-latent depends on fps. At the
+canonical 25 fps:
 
-- 1 latent frame = 8 video frames = 0.333 seconds.
+- 1 latent frame = 8 video frames = 0.32 seconds.
 - A 1.0-second retake window covers 3 latent frames, which decode to
-  24 video frames = 1.0 second.
-- Sub-second retake windows snap to multiples of 0.333 seconds.
+  24 video frames = 0.96 second (snaps DOWN to a multiple of 0.32).
+- Sub-second retake windows snap to multiples of 0.32 seconds.
+
+For a V2V-derived source at 24 fps the same math gives 0.333 seconds
+per latent frame.
 
 The node's frame-index math is generous on inclusion: `start_latent =
 int(start_time * fps / 8)` and `end_latent = int(end_time * fps / 8)

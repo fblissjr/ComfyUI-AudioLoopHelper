@@ -1,4 +1,4 @@
-Last updated: 2026-04-24
+Last updated: 2026-05-16
 
 # Spectrogram-as-reference IC-LoRA — experimental test rig
 
@@ -165,7 +165,7 @@ Currently the apply script always switches to generated audio. For a frozen-audi
 
 **"Audio is silent / inaudible."** Not a bug — LTX 2.3's audio head wasn't designed to generate audio from empty latent + text alone. It may produce silence, hiss, or partial sound. If you want audible audio, wire the real song audio back in (frozen-audio variant) or explore `LTXVAddAudioLatentGuide` from `ComfyUI-LTXAVTools` for true A2V conditioning.
 
-**"Sampler takes forever / OOMs."** Check `EmptyLTXVLatentVideo` widget — production default is 473 frames (~19.7s at 24fps), requires ~18 GB VRAM. Drop to 121 or 249 to reduce. Also verify `LTXVPreprocess.img_compression >= 18` (CLAUDE.md gotcha).
+**"Sampler takes forever / OOMs."** Check `EmptyLTXVLatentVideo` widget. Audio-loop workflows use 497 frames (~19.88s at the LTX 2.3 canonical `fps=25`; `docs/reference/ltx23_model_reference.md` § "`frame_rate`: canonical inference value is 25"); this experimental tutorial historically used 473 frames (~19.7s at fps=24). Either configuration requires ~18 GB VRAM. Drop to 121 or 249 to reduce. Also verify `LTXVPreprocess.img_compression >= 18` (CLAUDE.md gotcha).
 
 ---
 

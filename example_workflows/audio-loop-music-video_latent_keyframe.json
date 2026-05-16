@@ -466,7 +466,7 @@
         "secondTabWidth": 65
       },
       "widgets_values": [
-        24
+        25
       ]
     },
     {
@@ -1534,7 +1534,7 @@
         "Node name for S&R": "VHS_VideoCombine"
       },
       "widgets_values": {
-        "frame_rate": 24,
+        "frame_rate": 25,
         "loop_count": 0,
         "filename_prefix": "LTX-2",
         "format": "video/h264-mp4",
@@ -1552,7 +1552,7 @@
             "subfolder": "",
             "type": "output",
             "format": "video/h264-mp4",
-            "frame_rate": 24,
+            "frame_rate": 25,
             "workflow": "workflow.png",
             "fullpath": "./output/output_video.mp4"
           }
@@ -2622,7 +2622,7 @@
       "widgets_values": [
         19.88,
         2.0,
-        24
+        25
       ],
       "color": "#233",
       "bgcolor": "#355"
@@ -3353,7 +3353,7 @@
         19.88,
         2.0,
         344096342624943,
-        24
+        25
       ],
       "color": "#233",
       "bgcolor": "#355"
@@ -3436,7 +3436,7 @@
         "Node name for S&R": "LTXVConditioning"
       },
       "widgets_values": [
-        24
+        25
       ],
       "color": "#233",
       "bgcolor": "#355"
@@ -3774,7 +3774,7 @@
         17.92,
         180.0,
         true,
-        24
+        25
       ],
       "title": "Prompt Schedule (Batch Encode)"
     },
@@ -4354,7 +4354,7 @@
         832,
         448,
         20.0,
-        24
+        25
       ],
       "title": "LTX Frame Planner (single source for dimension config)"
     },
@@ -4517,7 +4517,7 @@
         "Node name for S&R": "TrimVideoLatentToAudio"
       },
       "widgets_values": [
-        24
+        25
       ],
       "title": "Trim latent to audio"
     },
@@ -4568,7 +4568,7 @@
         "Node name for S&R": "TrimImageBatchToAudio"
       },
       "widgets_values": [
-        24
+        25
       ],
       "title": "Trim to audio"
     }
@@ -6530,7 +6530,7 @@
               "Node name for S&R": "LTXVAudioVideoMask"
             },
             "widgets_values": [
-              24,
+              25,
               1,
               10,
               10,

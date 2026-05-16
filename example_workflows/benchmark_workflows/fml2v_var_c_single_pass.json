@@ -5869,7 +5869,7 @@
       },
       "widgets_values": [
         97,
-        24,
+        25,
         1
       ]
     },
@@ -6267,7 +6267,7 @@
         "Node name for S&R": "VHS_VideoCombine"
       },
       "widgets_values": {
-        "frame_rate": 24,
+        "frame_rate": 25,
         "loop_count": 0,
         "filename_prefix": "LTX-2",
         "format": "video/h264-mp4",
@@ -6285,7 +6285,7 @@
             "subfolder": "",
             "type": "output",
             "format": "video/h264-mp4",
-            "frame_rate": 24,
+            "frame_rate": 25,
             "workflow": "LTX-2_01647.png",
             "fullpath": "E:\\AI\\ComfyUI\\output\\LTX-2_01647-audio.mp4"
           }
@@ -6539,7 +6539,7 @@
         "secondTabWidth": 65
       },
       "widgets_values": [
-        24
+        25
       ]
     },
     {

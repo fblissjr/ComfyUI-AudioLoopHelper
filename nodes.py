@@ -698,7 +698,7 @@ class AudioLoopController(io.ComfyNode):
                 ),
                 io.Int.Input(
                     "fps",
-                    default=24,
+                    default=25,
                     min=1,
                     tooltip="Video frame rate. Used to compute overlap_frames output.",
                 ),
@@ -1088,7 +1088,7 @@ class TimestampPromptScheduleBatchEncode(io.ComfyNode):
                 ),
                 io.Float.Input(
                     "frame_rate",
-                    default=24.0,
+                    default=25.0,
                     min=0.0,
                     max=1000.0,
                     step=0.01,
@@ -1096,7 +1096,8 @@ class TimestampPromptScheduleBatchEncode(io.ComfyNode):
                         "Stamped onto every emitted CONDITIONING as "
                         "`{'frame_rate': ...}` metadata — same thing "
                         "`LTXVConditioning` does on the initial-render path. "
-                        "Default 24.0 matches LTX 2.3 training config. Keep "
+                        "Default 25.0 matches LTX 2.3's canonical inference "
+                        "fps (Lightricks's shipped example workflows). Keep "
                         "identical to the `frame_rate` set on the initial "
                         "render's `LTXVConditioning` node, otherwise the "
                         "model's temporal scaling differs between the "
@@ -1133,7 +1134,7 @@ class TimestampPromptScheduleBatchEncode(io.ComfyNode):
         stride_seconds: float,
         audio_duration: float,
         snap_boundaries: bool = True,
-        frame_rate: float = 24.0,
+        frame_rate: float = 25.0,
     ) -> str:
         # Returned string tells ComfyUI's scheduler "inputs are
         # value-stable, reuse my cached output." Uses the same key as
@@ -1151,7 +1152,7 @@ class TimestampPromptScheduleBatchEncode(io.ComfyNode):
         stride_seconds: float,
         audio_duration: float,
         snap_boundaries: bool = True,
-        frame_rate: float = 24.0,
+        frame_rate: float = 25.0,
     ) -> io.NodeOutput:
         cache_key = _batch_encode_cache_key(
             clip, schedule, stride_seconds, audio_duration,
@@ -1315,7 +1316,7 @@ class AudioLoopPlanner(io.ComfyNode):
                 ),
                 io.Int.Input(
                     "fps",
-                    default=24,
+                    default=25,
                     min=1,
                     tooltip="Video frame rate. Same value as AudioLoopController.fps.",
                 ),
@@ -1801,10 +1802,12 @@ class LTXFramePlanner(io.ComfyNode):
                     ),
                 ),
                 io.Int.Input(
-                    "fps", default=24, min=1, max=120,
+                    "fps", default=25, min=1, max=120,
                     tooltip=(
-                        "Frames per second. 24 matches LTX 2.3's training "
-                        "distribution; LTXVConditioning.frame_rate scales the "
+                        "Frames per second. 25 is LTX 2.3's canonical "
+                        "inference fps (matches Lightricks's shipped "
+                        "example workflows + the 8n+1 latent boundary); "
+                        "LTXVConditioning.frame_rate scales the "
                         "model's temporal positional embedding from this value."
                     ),
                 ),
@@ -2295,7 +2298,7 @@ class TrimVideoLatentToAudio(io.ComfyNode):
                 ),
                 io.Int.Input(
                     "fps",
-                    default=24,
+                    default=25,
                     min=1,
                     tooltip="Output frame rate. Wire from LTXFramePlanner.fps_int.",
                 ),
@@ -2373,7 +2376,7 @@ class TrimImageBatchToAudio(io.ComfyNode):
                 ),
                 io.Int.Input(
                     "fps",
-                    default=24,
+                    default=25,
                     min=1,
                     tooltip=(
                         "Output frame rate. Wire from LTXFramePlanner.fps_int "
@@ -2458,7 +2461,7 @@ class LTXHeadTrim(io.ComfyNode):
                 ),
                 io.Int.Input(
                     "fps",
-                    default=24,
+                    default=25,
                     min=1,
                     tooltip="Output frame rate. Used only to convert pixel-frame trim to audio-seconds trim.",
                 ),
@@ -2528,8 +2531,8 @@ class LatentTemporalMask(io.ComfyNode):
                     tooltip="End of the retake window in seconds. Clamped to video duration.",
                 ),
                 io.Float.Input(
-                    "fps", default=24.0, min=1.0, max=120.0, step=0.01,
-                    tooltip="Video frame rate. LTX 2.3 pipeline default is 24.",
+                    "fps", default=25.0, min=1.0, max=120.0, step=0.01,
+                    tooltip="Video frame rate. LTX 2.3 canonical inference fps is 25.",
                 ),
                 io.Float.Input(
                     "edge_taper_seconds", default=0.0, min=0.0, max=2.0, step=0.01,
@@ -2637,8 +2640,8 @@ class LatentSeamZoneMask(io.ComfyNode):
                     ),
                 ),
                 io.Float.Input(
-                    "fps", default=24.0, min=1.0, max=120.0, step=0.01,
-                    tooltip="Video frame rate. LTX 2.3 pipeline default is 24.",
+                    "fps", default=25.0, min=1.0, max=120.0, step=0.01,
+                    tooltip="Video frame rate. LTX 2.3 canonical inference fps is 25.",
                 ),
             ],
             outputs=[
@@ -3097,10 +3100,10 @@ class VideoFrameExtract(io.ComfyNode):
                 ),
                 io.Float.Input(
                     "source_fps",
-                    default=24.0,
+                    default=25.0,
                     min=0.01,
                     step=0.01,
-                    tooltip="Frame rate of the source video batch. Override if the source isn't LTX-generated.",
+                    tooltip="Frame rate of the source video batch. Override if the source isn't LTX-generated (LTX 2.3 canonical inference = 25).",
                 ),
             ],
             outputs=[

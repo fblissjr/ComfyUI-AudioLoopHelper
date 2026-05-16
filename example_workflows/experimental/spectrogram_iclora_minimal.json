@@ -494,7 +494,7 @@
         "secondTabWidth": 65
       },
       "widgets_values": [
-        24
+        25
       ]
     },
     {
@@ -1423,7 +1423,7 @@
         "Node name for S&R": "VHS_VideoCombine"
       },
       "widgets_values": {
-        "frame_rate": 24,
+        "frame_rate": 25,
         "loop_count": 0,
         "filename_prefix": "LTX-2",
         "format": "video/h264-mp4",
@@ -1441,7 +1441,7 @@
             "subfolder": "",
             "type": "output",
             "format": "video/h264-mp4",
-            "frame_rate": 24,
+            "frame_rate": 25,
             "workflow": "workflow.png",
             "fullpath": "./output/output_video.mp4"
           }
@@ -2801,7 +2801,7 @@
         "Node name for S&R": "LTXVConditioning"
       },
       "widgets_values": [
-        24
+        25
       ],
       "color": "#233",
       "bgcolor": "#355"
@@ -3355,7 +3355,7 @@
         "Node name for S&R": "TrimVideoLatentToAudio"
       },
       "widgets_values": [
-        24
+        25
       ],
       "title": "Trim latent to audio"
     },
@@ -3405,7 +3405,7 @@
         "Node name for S&R": "TrimImageBatchToAudio"
       },
       "widgets_values": [
-        24
+        25
       ],
       "title": "Trim to audio"
     }

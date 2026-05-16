@@ -427,17 +427,18 @@ def _parse_apply_script_list_widget_keys(apply_script_path: Path) -> set[str]:
     return set()
 
 
-def test_apply_fps_24_default_covers_all_fps_bearing_widgets():
+def test_apply_fps_default_covers_all_fps_bearing_widgets():
     """Property: every fps-bearing widget in our nodes_*.py plus the
     upstream allowlist must be covered by LIST_WIDGET_NODES in
-    scripts/apply_fps_24_default.py.
+    scripts/apply_fps_24_default.py (name retained for git-history
+    continuity; canonical inference value is 25, not 24).
 
-    Reproduces the bug class that caused 35-40s audio drift after the
-    25→24 migration: LTXVAudioVideoMask (KJNodes upstream) shipped with
-    video_fps=25 by default and was missed by the original sweep because
-    the apply script's LIST_WIDGET_NODES was a hand-curated allowlist.
-    Adding a new fps-bearing input to our source — or surfacing an upstream
-    one — must now trip this test until the apply script is extended.
+    Reproduces the bug class that caused fps drift: LTXVAudioVideoMask
+    (KJNodes upstream) shipped with video_fps=25 by default and was
+    missed by an earlier sweep because the apply script's
+    LIST_WIDGET_NODES was a hand-curated allowlist. Adding a new
+    fps-bearing input to our source — or surfacing an upstream one —
+    must now trip this test until the apply script is extended.
     """
     discovered: set[str] = set()
     for module in _NODE_FILES:

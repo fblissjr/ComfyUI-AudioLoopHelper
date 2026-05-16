@@ -1,22 +1,31 @@
 """apply_fps_24_default.
 
-Last updated: 2026-05-15
+Last updated: 2026-05-16
 
-Symptom it fixes: LTX 2.3 was trained at 24fps but every shipped workflow
-ran at 25fps. `LTXVConditioning.frame_rate` scales the model's temporal
+TODO: name is misleading. LTX 2.3's canonical inference fps is 25, not 24.
+The 2026-05-15 sweep that flipped widgets to 24 was based on a misread of
+the `PipelineParams.frame_rate=24.0` Python-library placeholder in
+`coderef/LTX-2/.../constants.py`; that's NOT the canonical inference
+value. Lightricks's own ComfyUI-LTXVideo example workflows
+(`LTX-2_{I2V,T2V}_{Distilled,Full}_wLora.json`) all set
+`LTXVConditioning.frame_rate=25`. V2V is the exception (preserves
+source-video fps). Postmortem: `internal/analysis/fps_24_partial_reading_postmortem.md`.
+
+The TARGET_FPS now applies = 25 (canonical inference value). The script
+name and module name are kept for git-history continuity; a renamed
+`apply_fps_25_default.py` (with WorkflowEditor + history-preserving move)
+is a followup. See companion-agent memo in `internal/` for the rename plan.
+
+Symptom this script fixes: drift between fps/frame_rate widgets across a
+workflow. `LTXVConditioning.frame_rate` scales the model's temporal
 positional embedding at `comfy/ldm/lightricks/av_model.py:866`
-(`v_pixel_coords[:, 0] = v_pixel_coords[:, 0] * (1.0 / frame_rate)`), so
-25/24 is a ~4.2% temporal-stretch error in the pos embed. Lightricks's
-own canonical workflows (under `coderef/LTX-2/` and
-`coderef/ComfyUI-LTXVideo/example_workflows/2.3/`) all use
-`frame_rate=24`. We were the outlier.
-
-Root cause: historical authoring default — initial workflows picked 25
-(common PAL/web fps) without checking the model's training fps.
+(`v_pixel_coords[:, 0] = v_pixel_coords[:, 0] * (1.0 / frame_rate)`).
+Mixed fps across nodes in a single workflow produces inconsistent
+temporal scaling between initial render and loop iterations.
 
 Fix: flip every fps/frame_rate widget that drives model-side time
-coordinates or output playback from 25 to 24, across every shipped
-workflow under `example_workflows/`. The nodes touched:
+coordinates or output playback to 25 (canonical inference fps), across
+every shipped workflow under `example_workflows/`. The nodes touched:
 
   - `LTXVConditioning.frame_rate`                          (load-bearing
         — pos-embed time-axis)
@@ -65,8 +74,9 @@ Usage:
     uv run --group dev python scripts/apply_fps_24_default.py --revert
     uv run --group dev python scripts/apply_fps_24_default.py --dry-run
 
-Idempotent. Already-24 workflows report "no change (already 24)".
-`--revert` restores fps=25 (the historical default).
+Idempotent. Already-25 workflows report "no change (already 25)".
+`--revert` restores fps=24 (the intermediate 2026-05-15 sweep value,
+retained only for emergency rollback to the just-prior state).
 """
 
 from __future__ import annotations
@@ -77,13 +87,21 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from workflow_utils import LTX23_TRAINING_FPS, WorkflowEditor
+from workflow_utils import LTX23_FPS, WorkflowEditor
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS_DIR = REPO_ROOT / "example_workflows"
 
-TARGET_FPS = LTX23_TRAINING_FPS  # 24
-LEGACY_FPS = 25
+# Canonical inference fps. LTX 2.3 Lightricks example workflows ship with
+# LTXVConditioning.frame_rate=25 across the I2V/T2V Distilled+Full set;
+# the 8n+1 video-latent boundary aligns cleanly at 25fps.
+TARGET_FPS = LTX23_FPS  # 25
+# The just-prior intermediate value (the misread 2026-05-15 sweep). Kept
+# as `--revert` target so a rollback returns to the immediately prior
+# state, not all the way back to legacy. If you need pre-2026-05-15
+# state, run with `--revert` once to land here, then re-author the
+# widget manually — there's no canonical "two-steps-back" automation.
+LEGACY_FPS = 24
 
 # Per-node fps widget index. Verified against each class's
 # `define_schema()` in nodes.py (widget order = inputs list order,

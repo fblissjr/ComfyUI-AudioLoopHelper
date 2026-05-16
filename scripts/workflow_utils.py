@@ -28,12 +28,25 @@ INTERNAL_WORKFLOWS_DIR = REPO_ROOT / "internal" / "workflows"
 RUNS_DIR = REPO_ROOT / "internal" / "analysis" / "runs"
 DATA_RUNS_DIR = REPO_ROOT / "data" / "runs"
 
-# LTX 2.3 was trained at 24fps. Used by:
-#   - scripts/apply_fps_24_default.py (the sweep)
-#   - scripts/audit_workflows.py (F16 invariant)
+# LTX 2.3 canonical inference fps = 25. Lightricks's shipped ComfyUI-LTXVideo
+# example workflows under coderef/ComfyUI-LTXVideo/example_workflows/2.3/
+# (LTX-2_{I2V,T2V}_{Distilled,Full}_wLora.json) all set
+# LTXVConditioning.frame_rate=25. The 8n+1 video-latent boundary aligns
+# cleanly at 25fps (1s = 25 px frames = exactly 4 latents). The
+# PipelineParams.frame_rate=24.0 in coderef/LTX-2/.../constants.py is a
+# Python-library placeholder default, NOT the canonical inference value.
+# V2V (coderef/.../LTX-2_V2V_Detailer.json) uses 24 because V2V preserves
+# source-video fps; that's the exception, not the rule.
 # Reference: comfy/ldm/lightricks/av_model.py:866 (frame_rate scales the
 # model's temporal positional embedding).
-LTX23_TRAINING_FPS = 24
+# Used by:
+#   - scripts/apply_fps_24_default.py (sweeps fps/frame_rate widgets)
+#   - scripts/audit_workflows.py (F16, F18 invariants)
+LTX23_FPS = 25
+# Back-compat alias. Name retained because external scripts may import it;
+# value is the canonical inference fps (25), not the training-config
+# placeholder. Migration postmortem: internal/analysis/fps_24_partial_reading_postmortem.md
+LTX23_TRAINING_FPS = LTX23_FPS
 
 
 def iter_all_workflows() -> list[Path]:

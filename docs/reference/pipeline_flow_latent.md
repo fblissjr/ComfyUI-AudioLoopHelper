@@ -1,4 +1,4 @@
-Last updated: 2026-05-15 (canonical `LTXVConditioning.frame_rate=24` per LTX 2.3 training distribution; widget snapshots below still show pre-migration `fps=25` and `497`-frame defaults — refresh after the workflow-JSON sweep lands)
+Last updated: 2026-05-16 (canonical `LTXVConditioning.frame_rate=25` per `docs/reference/ltx23_model_reference.md` § "`frame_rate`: canonical inference value is 25"; the 2026-05-15 sweep to 24 was reverted on 2026-05-16, production render validation pending. Widget snapshots below reflect the canonical `fps=25` and `497`-frame values.)
 
 # Pipeline Flow: LATENT-Based Music Video Workflow
 
