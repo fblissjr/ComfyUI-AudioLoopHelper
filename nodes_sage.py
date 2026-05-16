@@ -82,10 +82,34 @@ except ImportError:
 
 _TRACE_ENV = "AUDIOLOOPHELPER_SAGE_TRACE"
 
+# Audit-mode toggle: when set, every sage trace emit also captures
+# `out_sum` + `out_absmax` + `out_dtype` for the attention output. Forces
+# a CUDA sync per call — distorts timing, so only enable for correctness
+# audits (cross-stream bit-stability comparison), NOT perf measurements.
+_FINGERPRINT_ENV = "AUDIOLOOPHELPER_SAGE_OUTPUT_FINGERPRINT"
+
 try:
     from .tracers._base import _AUTO_TOKENS  # type: ignore
 except Exception:
     _AUTO_TOKENS = frozenset({"auto", "1", "true", "yes"})
+
+
+def _fingerprint_tensor(output: Any) -> dict[str, Any]:
+    """Capture sum + absmax + dtype of an output tensor in one CUDA sync.
+
+    Reductions stay in the tensor's native dtype (bf16 sum is fine);
+    only the final two scalars get fp32-cast for stable JSON serialization.
+    `torch.stack` + single `.tolist()` collapses the two scalar transfers
+    into one host sync.
+    """
+    s = output.sum()
+    m = output.abs().max()
+    sum_v, max_v = torch.stack([s.float(), m.float()]).tolist()
+    return {
+        "out_sum": float(sum_v),
+        "out_absmax": float(max_v),
+        "out_dtype": str(output.dtype),
+    }
 
 
 # Sage-fork's `get_last_dispatched_kernel()` returns the resolved kernel
@@ -249,6 +273,9 @@ class SageTracer:
         self._fallbacks = 0
         self._shapes: set[tuple] = set()
         self._summary_flushed = False
+        self._fingerprint = bool(
+            log_path is not None and os.environ.get(_FINGERPRINT_ENV, "").strip()
+        )
         # Stamped into every emit() so summaries can resolve 'auto' ->
         # kernel without a --arch flag.
         self._arch_tag = _detect_arch_tag() if log_path is not None else None
@@ -285,6 +312,7 @@ class SageTracer:
         prompt_id: str | None = None,
         skipped: bool = False,
         skip_reason: str | None = None,
+        output: Any = None,
     ) -> None:
         if self._fh is None:
             return
@@ -322,6 +350,11 @@ class SageTracer:
             record["skipped"] = True
             if skip_reason is not None:
                 record["skip_reason"] = skip_reason
+        if self._fingerprint and output is not None:
+            try:
+                record.update(_fingerprint_tensor(output))
+            except Exception:
+                pass
         self._fh.write(orjson.dumps(record).decode() + "\n")
 
     def flush_summary(self) -> None:
@@ -626,6 +659,7 @@ def make_sage_override(
                 prompt_id=_prompt_id_from_kwargs(kwargs),
                 skipped=skipped,
                 skip_reason="under_seq_len" if skipped else None,
+                output=out,
             )
         return out
 
