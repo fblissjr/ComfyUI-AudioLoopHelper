@@ -70,6 +70,7 @@ SUB_MODULE_NAMES = (
     "attn2",
     "audio_attn2",
     "video_to_audio_attn",
+    "audio_to_video_attn",
     "ff",
     "audio_ff",
 )
