@@ -43,10 +43,6 @@ DATA_RUNS_DIR = REPO_ROOT / "data" / "runs"
 #   - scripts/apply_fps_24_default.py (sweeps fps/frame_rate widgets)
 #   - scripts/audit_workflows.py (F16, F18 invariants)
 LTX23_FPS = 25
-# Back-compat alias. Name retained because external scripts may import it;
-# value is the canonical inference fps (25), not the training-config
-# placeholder. Migration postmortem: internal/analysis/fps_24_partial_reading_postmortem.md
-LTX23_TRAINING_FPS = LTX23_FPS
 
 
 def iter_all_workflows() -> list[Path]:

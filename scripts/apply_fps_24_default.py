@@ -2,19 +2,13 @@
 
 Last updated: 2026-05-16
 
-TODO: name is misleading. LTX 2.3's canonical inference fps is 25, not 24.
-The 2026-05-15 sweep that flipped widgets to 24 was based on a misread of
-the `PipelineParams.frame_rate=24.0` Python-library placeholder in
-`coderef/LTX-2/.../constants.py`; that's NOT the canonical inference
-value. Lightricks's own ComfyUI-LTXVideo example workflows
-(`LTX-2_{I2V,T2V}_{Distilled,Full}_wLora.json`) all set
-`LTXVConditioning.frame_rate=25`. V2V is the exception (preserves
-source-video fps). Postmortem: `internal/analysis/fps_24_partial_reading_postmortem.md`.
-
-The TARGET_FPS now applies = 25 (canonical inference value). The script
-name and module name are kept for git-history continuity; a renamed
-`apply_fps_25_default.py` (with WorkflowEditor + history-preserving move)
-is a followup. See companion-agent memo in `internal/` for the rename plan.
+TODO: rename to `apply_fps_default.py`. The "24" in the name is now
+wrong — TARGET_FPS = 25 (canonical inference value across audio-loop /
+T2V / I2V workflows). Rename needs `git mv` + paired updates in
+`tests/test_node_schemas.py::test_apply_fps_default_covers_all_fps_bearing_widgets`,
+`docs/reference/debug_tools.md` F16/F18, and the audit-check ID
+`cond_frame_rate_24` (the latter intentionally kept stable as a
+referenced anchor across docs).
 
 Symptom this script fixes: drift between fps/frame_rate widgets across a
 workflow. `LTXVConditioning.frame_rate` scales the model's temporal
@@ -48,12 +42,9 @@ every shipped workflow under `example_workflows/`. The nodes touched:
         spurious WARN reports about length/window mismatch)
   - `LTXVEmptyLatentAudio.frame_rate`                      (audio-latent
         sizing: `num_of_latents_from_frames = ceil((frames / frame_rate)
-        * latents_per_second)` at `audio_vae.py:188-189`. If video runs
-        at 24fps but this node says 25, the computed audio latent is
-        undersized by ~4% relative to the actual video duration. For
-        math self-consistency we flip this to 24 too — supersedes the
-        prior "leave at 25 per Lightricks's convention" call which was
-        an unverified inference.)
+        * latents_per_second)` at `audio_vae.py:188-189`. Must agree
+        with video fps so the computed audio latent matches video
+        duration; mismatch produces ~4% undersize/oversize drift.)
 
 Explicitly NOT touched:
 
