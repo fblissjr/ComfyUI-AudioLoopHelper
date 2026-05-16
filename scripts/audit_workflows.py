@@ -36,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from workflow_utils import (
     DECODER_TYPES,
     EXAMPLE_WORKFLOWS_DIR,
-    LTX23_TRAINING_FPS,
+    LTX23_FPS,
     is_active,
 )
 from nodes import (
@@ -183,15 +183,15 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         for n in cond_nodes:
             wv = n.get("widgets_values")
             fr = wv[0] if isinstance(wv, list) and wv else None
-            if fr != LTX23_TRAINING_FPS:
+            if fr != LTX23_FPS:
                 record(
                     "ERR",
                     "cond_frame_rate_24",
-                    f"LTXVConditioning(id={n.get('id')}).frame_rate={fr} (expected {LTX23_TRAINING_FPS} — F16; run scripts/apply_fps_24_default.py)",
+                    f"LTXVConditioning(id={n.get('id')}).frame_rate={fr} (expected {LTX23_FPS} — F16; run scripts/apply_fps_24_default.py)",
                 )
                 all_good = False
         if all_good:
-            record("OK", "cond_frame_rate_24", f"LTXVConditioning frame_rate={LTX23_TRAINING_FPS} (F16)")
+            record("OK", "cond_frame_rate_24", f"LTXVConditioning frame_rate={LTX23_FPS} (F16)")
 
     # AudioLoopController seed input name (post-2026-04-26 rename)
     # ComfyUI auto-attaches control_after_generate to any INT widget literally
