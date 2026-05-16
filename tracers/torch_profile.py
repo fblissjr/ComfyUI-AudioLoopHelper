@@ -82,6 +82,12 @@ class TorchProfileTracer(Tracer):
                 record_shapes=True,
                 with_stack=False,
                 profile_memory=False,
+                # Required for per-module aten-op attribution. Stamps each
+                # event with `Module Hierarchy` so `analyze_torch_profile.py`
+                # can group by (module_path, op_name). Without this, aten
+                # events have no parent-module label and the analyzer
+                # reports everything as `<unattributed>`.
+                with_modules=True,
             )
             prof.start()
         except Exception as e:

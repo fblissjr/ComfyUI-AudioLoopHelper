@@ -37,11 +37,13 @@ def parse_args() -> argparse.Namespace:
                    help="torch_profile.*.json (default: most recent under data/runs)")
     p.add_argument("--modules", nargs="*", default=None,
                    help="Module paths to filter by (e.g. audio_attn1 attn1). "
-                        "If omitted, reports the top-N modules by CUDA wall-time.")
+                        "If omitted, reports the top-N modules by wall-time.")
     p.add_argument("--top", type=int, default=10,
                    help="Top-N to report when --modules is omitted (default: 10)")
-    p.add_argument("--device", choices=("cuda", "cpu", "both"), default="cuda",
-                   help="Which device's events to include (default: cuda)")
+    p.add_argument("--device", choices=("cuda", "cpu", "both"), default="cpu",
+                   help="Which events to include: cpu=aten-op dispatch (default; "
+                        "right for per-aten breakdown), cuda=raw kernel time only, "
+                        "both=union.")
     return p.parse_args()
 
 
@@ -67,15 +69,25 @@ def load_trace(path: Path) -> list[dict]:
 
 
 def keep_event(ev: dict, device: str) -> bool:
-    """Filter to compute events on the requested device."""
-    if ev.get("ph") not in ("X",):  # only complete (duration) events
+    """Filter to compute events on the requested device.
+
+    Note: aten:: ops in torch.profiler chrome traces are categorized as
+    `cpu_op` (the CPU-side dispatch), even when the actual work happens
+    on GPU via async kernel launches. The aten op's `dur` reflects the
+    full wall-time from CPU perspective. For per-aten-op aggregation,
+    `device='cpu'` is the right filter.
+
+    `device='cuda'` filters to the templated kernel events (cat=kernel)
+    — useful when you want raw GPU kernel time without dispatch overhead.
+    """
+    if ev.get("ph") != "X":  # only complete (duration) events
         return False
     cat = ev.get("cat", "")
     if device == "cuda":
-        return cat in ("kernel", "cuda_runtime", "gpu_op")
+        return cat in ("kernel", "gpu_memcpy", "gpu_memset")
     if device == "cpu":
         return cat in ("cpu_op", "operator")
-    return True
+    return cat in ("cpu_op", "kernel", "gpu_memcpy", "gpu_memset", "operator")
 
 
 def is_aten_op(ev: dict) -> bool:
