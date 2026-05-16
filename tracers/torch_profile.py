@@ -5,19 +5,11 @@ exports a Chrome trace JSON. Captures op-level timing for things the
 forward-hook approach (`FfnAttnTracer`) cannot reach: AdaLN broadcast
 multiplies, RoPE rotation kernels, LayerNorm, in-sampler NAG, etc.
 
-## Reliability fix vs the original `torch_profile_tracer.py`
-
-The original module's `maybe_flush()` was a deliberate no-op (designed
-to avoid truncating multi-stage profiles mid-render). The only flush
-trigger was `atexit`. ComfyUI doesn't cleanly exit in long-running
-sessions, so atexit never fired and traces were lost on process kill.
-
-This implementation flushes **per cleanup**. Each `SamplerCustomAdvanced`
-invocation produces its own numbered file (`torch_profile.0.json`,
-`torch_profile.1.json`, ...). Multi-stage workflows like FML2V produce
-multiple files; downstream analyzers combine them. Tradeoff is one
-extra Chrome trace file per sampler call vs the prior data-loss risk —
-worth it.
+Flushes per cleanup: each `SamplerCustomAdvanced` invocation produces
+its own numbered file (`torch_profile.0.json`, `torch_profile.1.json`,
+...). Multi-stage workflows like FML2V produce multiple files; the
+analyzer combines them. atexit is the safety-net flush for the last
+invocation in a session.
 """
 
 from __future__ import annotations

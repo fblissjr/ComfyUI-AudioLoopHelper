@@ -14,14 +14,12 @@ import time
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-# Lazy `orjson` is used inside subclasses; this module is import-time
-# zero-cost beyond reading env vars in the gate.
-
-
-# Env-var grammar shared across all tracers. Matches the prior
-# behaviour of each standalone module (see git blame on the deleted
-# ffn_attn_tracer.py / exec_logger.py for provenance).
 _AUTO_TOKENS: frozenset[str] = frozenset({"auto", "1", "true", "yes"})
+
+# Sentinel returned by `resolve_path_from_env` when the env value is
+# literally "stderr". Consumers (e.g. `ExecLogTracer`) treat this as
+# "write to sys.stderr instead of a file."
+STDERR_SENTINEL: Path = Path("/dev/stderr")
 
 
 # --- shared utility: stderr observability --------------------------
@@ -37,23 +35,12 @@ def log_event(tracer_name: str, message: str) -> None:
     sys.stderr.flush()
 
 
-# --- shared utility: path resolution ------------------------------
-#
-# `scripts/workflow_utils.run_artifact_path` is the canonical resolver
-# (honors RUN_ID + AUDIOLOOPHELPER_PER_PROMPT + executing prompt_id).
-# We import it lazily via sys.path injection because `scripts/` is not
-# on the package import path.
-
-
 def _resolve_run_artifact_path(category: str, ext: str) -> Path:
     """Compute the canonical output path for a tracer artifact.
 
-    Mirrors the shape used historically by every standalone tracer:
-    `data/runs/${RUN_ID}/${prompt_id}/<category>.<ext>` when
-    `AUDIOLOOPHELPER_PER_PROMPT=1` (default) and prompt_id is resolvable;
-    `data/runs/${RUN_ID}/<category>.<ext>` otherwise.
-
-    Lazy sys.path injection used so this module stays cheap on import.
+    `scripts/workflow_utils.run_artifact_path` honors RUN_ID +
+    AUDIOLOOPHELPER_PER_PROMPT + executing prompt_id. Lazy sys.path
+    injection so this module stays cheap on import.
     """
     scripts_dir = Path(__file__).resolve().parent.parent / "scripts"
     if str(scripts_dir) not in sys.path:
@@ -62,9 +49,8 @@ def _resolve_run_artifact_path(category: str, ext: str) -> Path:
         from workflow_utils import run_artifact_path  # type: ignore
         return run_artifact_path(category, ext)
     except Exception:
-        # Fallback used only if `scripts/workflow_utils.py` is unreachable
-        # (e.g. package layout change). Keeps tracers running on a clone
-        # where the script package has moved.
+        # `workflow_utils` unreachable (package layout change). Keep
+        # tracers running with a legacy-style timestamped fallback.
         ts = time.strftime("%Y-%m-%d_%H%M%S")
         return (Path(__file__).resolve().parent.parent
                 / "internal" / "analysis" / "runs" / category
@@ -76,14 +62,14 @@ def resolve_path_from_env(env_var: str, category: str, ext: str) -> Path | None:
 
     - empty / unset -> None (tracer disabled)
     - value in `_AUTO_TOKENS` -> canonical `data/runs/.../<category>.<ext>`
+    - "stderr" -> `STDERR_SENTINEL` (see module top)
     - any other value -> treated as an explicit file path
     """
     raw = os.environ.get(env_var, "").strip()
     if not raw:
         return None
     if raw.lower() == "stderr":
-        # Sentinel — some tracers (exec_log) write to stderr instead of file.
-        return Path("/dev/stderr")
+        return STDERR_SENTINEL
     if raw.lower() in _AUTO_TOKENS:
         return _resolve_run_artifact_path(category, ext)
     return Path(raw)

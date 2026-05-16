@@ -1,18 +1,17 @@
 """Forward-hook tracer for `BasicAVTransformerBlock` sub-modules.
 
 Installs PyTorch forward pre+post hooks on every transformer block's
-sub-modules and records per-call CUDA wall-time. Output is JSONL,
-consumable by `scripts/analyze_ffn_attn_trace.py`.
-
-This is the canonical replacement for the deleted `ffn_attn_tracer.py`
-standalone module. Logic ported verbatim; framework integration is the
-only delta.
+sub-modules and records per-call CUDA wall-time via `torch.cuda.Event`.
+Output is JSONL, consumable by `scripts/analyze_ffn_attn_trace.py`.
 """
 
 from __future__ import annotations
 
 import time
 from typing import Any
+
+import orjson
+import torch
 
 from ._base import Tracer, get_executing_prompt_id
 
@@ -100,26 +99,24 @@ class FfnAttnTracer(Tracer):
 
     def _make_pre_hook(self):
         def pre_hook(module, inputs):
-            import torch
             x = inputs[0] if inputs else None
             T = None
-            if x is not None and hasattr(x, "shape") and x.shape and len(x.shape) >= 2:
+            if x is not None and getattr(x, "ndim", 0) >= 2:
                 try:
                     T = int(x.shape[1])
                 except Exception:
                     T = None
             e_start = torch.cuda.Event(enable_timing=True)
             e_start.record()
-            # Stash on the module — safe because the value is a tuple of
-            # non-Module types; if you ever extend this to carry a Tensor
-            # or another nn.Module, you'll trip `nn.Module.__setattr__`'s
-            # auto-register-as-submodule footgun.
+            # Tuple of non-Module values — safe to stash on the module.
+            # Storing a Tensor or nn.Module here would trip
+            # `nn.Module.__setattr__`'s auto-register-as-submodule footgun
+            # and double-count in `state_dict()`.
             module._ffn_attn_trace_state = (T, e_start, time.time())
         return pre_hook
 
     def _make_post_hook(self, label: str, block_idx: int):
         def post_hook(module, inputs, output):
-            import torch
             state = getattr(module, "_ffn_attn_trace_state", None)
             if state is None:
                 return
@@ -138,11 +135,6 @@ class FfnAttnTracer(Tracer):
 
     def _flush_pending(self) -> None:
         if not self._pending or self._output_path is None:
-            return
-        try:
-            import orjson
-            import torch
-        except ImportError:
             return
 
         torch.cuda.synchronize()

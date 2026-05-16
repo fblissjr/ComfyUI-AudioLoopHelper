@@ -29,15 +29,7 @@ import shutil
 import sys
 from pathlib import Path
 
-
-def find_repo_root() -> Path:
-    """Walk up from this script to the repo root (looking for `.git` or `pyproject.toml`)."""
-    cur = Path(__file__).resolve().parent
-    while cur != cur.parent:
-        if (cur / ".git").exists() or (cur / "pyproject.toml").exists():
-            return cur
-        cur = cur.parent
-    return Path(__file__).resolve().parent.parent
+from workflow_utils import DATA_RUNS_DIR
 
 
 def human_bytes(n: int) -> str:
@@ -76,7 +68,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    runs_dir = args.runs_dir or (find_repo_root() / "data" / "runs")
+    runs_dir = args.runs_dir or DATA_RUNS_DIR
     if not runs_dir.exists():
         print(f"[cleanup_traces] no runs dir at {runs_dir}", file=sys.stderr)
         return 0

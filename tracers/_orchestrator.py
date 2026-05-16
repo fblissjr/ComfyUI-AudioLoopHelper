@@ -1,38 +1,39 @@
 """Orchestrator: registry + lifecycle dispatch + atexit safety net.
 
-The orchestrator is the single entry point that consumers
-(`__init__.py`, `nodes_sage.py`) call. It maintains a registry of
-`Tracer` instances, dispatches lifecycle events to each, and ensures
-atexit fires once per process.
+Single entry point that consumers (`__init__.py`, `nodes_sage.py`)
+call. Maintains a registry of `Tracer` instances, dispatches lifecycle
+events, and ensures atexit fires once per process.
 """
 
 from __future__ import annotations
 
 import atexit
+import time
 from typing import Any
 
 from . import _manifest
-from ._base import Tracer, log_event
+from ._base import Tracer, get_executing_prompt_id, log_event
 
 
 _REGISTRY: list[Tracer] = []
 _ATEXIT_REGISTERED: bool = False
 
+# Bridge state for the current prompt. Set on `install_render_tracers`;
+# consumed on `on_cleanup` / atexit. Cleared after each finalize so the
+# next render starts fresh.
+_PROMPT_ID: str | None = None
+_PROMPT_START_TS: float | None = None
+_ANY_RENDER_TRACER_ACTIVE: bool = False
+
 
 def register(tracer: Tracer) -> None:
-    """Register a tracer instance. Idempotent by `tracer.name`.
-
-    Called from `tracers/__init__.py`. Idempotent so module reloads
-    (HotReloadHack) don't double-register and double-fire lifecycle
-    events.
+    """Register a tracer. Idempotent by `tracer.name` so module reloads
+    (HotReloadHack) don't double-register and double-fire lifecycle events.
     """
     for existing in _REGISTRY:
         if existing.name == tracer.name:
             return
     _REGISTRY.append(tracer)
-
-
-# --- lifecycle dispatchers ---
 
 
 def install_process_tracers() -> None:
@@ -55,8 +56,11 @@ def install_process_tracers() -> None:
 
 def install_render_tracers(model_clone: Any) -> None:
     """Install all `lifecycle='render'` tracers. Called per sage._patch_impl."""
+    global _PROMPT_ID, _PROMPT_START_TS, _ANY_RENDER_TRACER_ACTIVE
     _register_atexit_once()
-    _manifest.begin_prompt()
+    _PROMPT_ID = get_executing_prompt_id()
+    _PROMPT_START_TS = time.time()
+    _ANY_RENDER_TRACER_ACTIVE = False
     for t in _REGISTRY:
         if t.lifecycle != "render":
             continue
@@ -66,7 +70,7 @@ def install_render_tracers(model_clone: Any) -> None:
             ok = t.install_at_render(model_clone)
             if ok:
                 t.log(f"render install -> {t.resolve_output_path()}")
-                _manifest.record_install(t)
+                _ANY_RENDER_TRACER_ACTIVE = True
             else:
                 t.log("install_at_render declined (returned False)")
         except Exception as e:
@@ -75,6 +79,7 @@ def install_render_tracers(model_clone: Any) -> None:
 
 def on_cleanup() -> None:
     """Fire ON_CLEANUP for every render-lifecycle tracer that's enabled."""
+    global _PROMPT_ID, _PROMPT_START_TS, _ANY_RENDER_TRACER_ACTIVE
     for t in _REGISTRY:
         if t.lifecycle != "render":
             continue
@@ -84,7 +89,11 @@ def on_cleanup() -> None:
             t.on_cleanup()
         except Exception as e:
             t.log(f"on_cleanup raised {type(e).__name__}: {e}")
-    _manifest.finalize_prompt(_REGISTRY)
+    if _ANY_RENDER_TRACER_ACTIVE:
+        _manifest.finalize_prompt(_REGISTRY, _PROMPT_ID, _PROMPT_START_TS)
+    _PROMPT_ID = None
+    _PROMPT_START_TS = None
+    _ANY_RENDER_TRACER_ACTIVE = False
 
 
 def _on_atexit() -> None:
@@ -96,7 +105,8 @@ def _on_atexit() -> None:
             t.on_atexit()
         except Exception as e:
             t.log(f"on_atexit raised {type(e).__name__}: {e}")
-    _manifest.finalize_prompt(_REGISTRY)
+    if _ANY_RENDER_TRACER_ACTIVE:
+        _manifest.finalize_prompt(_REGISTRY, _PROMPT_ID, _PROMPT_START_TS)
 
 
 def _register_atexit_once() -> None:
@@ -109,8 +119,6 @@ def _register_atexit_once() -> None:
     log_event("orchestrator", "atexit handler registered")
 
 
-# --- introspection (used by tests + ad-hoc debug) ---
-
-
 def registered_tracers() -> list[Tracer]:
+    """Introspection used by tests + ad-hoc debug."""
     return list(_REGISTRY)
