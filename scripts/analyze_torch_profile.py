@@ -19,6 +19,28 @@ Linears are 50-100x slower per call than video's (cold L2 after the
 big video kernel), bandwidth-bound-at-small-T-after-big-kernel is
 confirmed; concurrent dispatch still overlaps that wall-time.
 
+## Interpreting `cpu_op.dur` vs `kernel.dur`
+
+`cat=cpu_op` aten events carry a `dur` field measuring CPU-side
+dispatch wall-clock, NOT the time the op's underlying GPU work
+consumed. For async pytorch ops (most aten ops are async on CUDA),
+the dispatcher fires, queues the kernel, returns. The `dur` is just
+the dispatcher's CPU time — typically microseconds. Summing
+`cpu_op.dur` across ~40k async ops gives a CPU-dispatch wall-clock
+total in the tens of seconds, but on a compute-overlapping render
+those ops fire concurrent with prior GPU work, so the sum DOES NOT
+represent serial render time eaten.
+
+For "X% of sampler wall-time" claims, anchor on `cat=kernel`
+(actual CUDA kernel time) plus any synchronous CPU work that blocks
+the dispatcher. NOT the sum-of-async-op-dispatch-times.
+
+Practical example: an early read of an FML2V audit's chrome trace
+showed `aten::copy_ + aten::to = 67s` on a 141s sampler. A
+nodynvram A/B (designed to eliminate dynamic VRAM offload) showed
+those numbers UNCHANGED. The 67s was CPU-dispatch wall-clock summed
+across ~40k async ops, not 47% of sampler-serial time.
+
 ## Module attribution path
 
 `torch.profiler.profile(with_modules=True)` is TorchScript-only per
