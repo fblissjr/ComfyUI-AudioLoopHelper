@@ -83,9 +83,9 @@ except ImportError:
 _TRACE_ENV = "AUDIOLOOPHELPER_SAGE_TRACE"
 
 try:
-    from exec_logger import _AUTO_TOKENS  # type: ignore
-except ImportError:
-    _AUTO_TOKENS = {"auto", "1", "true", "yes"}
+    from .tracers._base import _AUTO_TOKENS  # type: ignore
+except Exception:
+    _AUTO_TOKENS = frozenset({"auto", "1", "true", "yes"})
 
 
 # Sage-fork's `get_last_dispatched_kernel()` returns the resolved kernel
@@ -798,40 +798,24 @@ class AudioLoopHelperSageAttention(io.ComfyNode):
         transformer_options = model_clone.model_options.setdefault("transformer_options", {})
         transformer_options["optimized_attention_override"] = override_fn
 
-        # Opt-in per-sub-block GPU-time tracer (env-gated). Hooks the
-        # AVTransformerBlock sub-modules to record cuda.Event timings. See
-        # ffn_attn_tracer.py for activation env var + output format.
-        from . import ffn_attn_tracer
-        if ffn_attn_tracer.is_enabled():
-            try:
-                diffusion_model = model_clone.get_model_object("diffusion_model")
-                ffn_attn_tracer.install_hooks(diffusion_model)
-            except Exception:
-                # Defensive: tracer failures must not block rendering.
-                pass
-
-        # Opt-in torch.profiler aten-op tracer (env-gated, separate from
-        # ffn_attn_tracer). Captures broadcast multiplies, RoPE, norm,
-        # AdaLN scale-shift table ops that forward-hook-based tracing
-        # cannot reach. See torch_profile_tracer.py for env var + output.
-        from . import torch_profile_tracer
-        if torch_profile_tracer.is_enabled():
-            try:
-                torch_profile_tracer.start_profile()
-            except Exception:
-                pass
+        # Install all render-lifecycle tracers via the unified
+        # orchestrator (ffn_attn forward hooks, torch.profiler aten-op
+        # trace, plus any future tracers). Each is env-gated; orchestrator
+        # logs lifecycle events to stderr for observability. See
+        # `tracers/__init__.py` for the public API + per-tracer details.
+        from . import tracers as _tracers
+        _tracers.install_render_tracers(model_clone)
 
         def _cleanup(*_args, **_kwargs):
             opts = model_clone.model_options.get("transformer_options", {})
             if opts.get("optimized_attention_override") is override_fn:
                 opts.pop("optimized_attention_override", None)
             tracer.flush_summary()
+            # Single call drains every render-lifecycle tracer + writes
+            # the per-prompt manifest. Tracers handle their own errors
+            # (orchestrator catches + logs); failures don't block render.
             try:
-                ffn_attn_tracer.maybe_flush()
-            except Exception:
-                pass
-            try:
-                torch_profile_tracer.maybe_export()
+                _tracers.on_cleanup()
             except Exception:
                 pass
 

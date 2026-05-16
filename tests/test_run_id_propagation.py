@@ -82,16 +82,18 @@ class TestRunArtifactPath:
 
 
 class TestExecLoggerHonorsRunId:
-    def test_auto_token_with_run_id_uses_data_runs_path(self, run_id):
+    def test_auto_token_with_run_id_uses_data_runs_path(self, run_id, monkeypatch):
         """`COMFYUI_EXEC_LOG=auto` + `RUN_ID=...` should resolve to the
         data/runs path, not the legacy timestamped path."""
-        from exec_logger import _resolve_log_target
-        target = _resolve_log_target("auto")
+        monkeypatch.setenv("COMFYUI_EXEC_LOG", "auto")
+        from tracers._base import resolve_path_from_env
+        target = str(resolve_path_from_env("COMFYUI_EXEC_LOG", "exec", "jsonl"))
         assert target.endswith(f"data/runs/{run_id}/exec.jsonl"), target
 
-    def test_auto_token_without_run_id_uses_legacy(self, no_run_id):
-        from exec_logger import _resolve_log_target
-        target = _resolve_log_target("auto")
+    def test_auto_token_without_run_id_uses_legacy(self, no_run_id, monkeypatch):
+        monkeypatch.setenv("COMFYUI_EXEC_LOG", "auto")
+        from tracers._base import resolve_path_from_env
+        target = str(resolve_path_from_env("COMFYUI_EXEC_LOG", "exec", "jsonl"))
         assert "internal/analysis/runs" in target
 
 

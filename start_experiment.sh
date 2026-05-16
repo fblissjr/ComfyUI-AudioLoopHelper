@@ -71,7 +71,7 @@ export AUDIOLOOPHELPER_PER_PROMPT=${AUDIOLOOPHELPER_PER_PROMPT-1}
 
 echo "[start_experiment.sh] RUN_ID=$RUN_ID  SAGE_TRACE=$AUDIOLOOPHELPER_SAGE_TRACE  EXEC_LOG=$COMFYUI_EXEC_LOG  PER_PROMPT=$AUDIOLOOPHELPER_PER_PROMPT"
 
-PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 
 # Clean prior chrome-trace.json files (~1.8GB each) before launching.
 # Keeps summary.txt + memory_timeline.html (small, structured). Without

@@ -1,25 +1,28 @@
-"""Tests for `exec_logger.py`: opt-in execution logger.
+"""Tests for `tracers.exec_log.ExecLogTracer`: ComfyUI executor monkey-patch.
 
 Focus: the sentinel-on-execute pattern that prevents chained-wrapping
-across ComfyUI module reloads. Background: if `_INSTALLED` is the only
-guard and ComfyUI reloads `audioloophelper`, `_INSTALLED` resets to
-False, `install()` runs again, captures the previously-wrapped
-`_exec_mod.execute` as `original`, and adds a new sink in front of it.
-After N reloads you have N sinks all writing the same data to N
-different files (the 7-near-duplicate-files mystery from
-2026-04-25). Sentinel on `_exec_mod.execute` itself survives the
-reload; sentinel only goes away when `_exec_mod.execute` is replaced
-wholesale (a future ComfyUI change), which is the right behavior.
+across ComfyUI module reloads. Background: if a module-level _INSTALLED
+guard were the only thing protecting against double-wrap, ComfyUI's
+HotReloadHack would reset it to False on reload, install would run
+again, capture the previously-wrapped `_exec_mod.execute` as `original`,
+and add a new sink in front of it. After N reloads you'd have N sinks
+all writing the same data to N different files (the 7-near-duplicate-
+files mystery from 2026-04-25). The sentinel on `_exec_mod.execute`
+itself survives the reload; sentinel only goes away when ComfyUI replaces
+`_exec_mod.execute` wholesale (a future ComfyUI change), which is the
+right behaviour.
+
+After the 2026-05-16 tracer refactor this test file targets the new
+`tracers.exec_log.ExecLogTracer` class but the contract under test
+hasn't changed — same sentinel, same idempotence guarantees.
 """
 
 from __future__ import annotations
 
-import importlib
 import sys
 import types
 from pathlib import Path
 
-import orjson
 import pytest
 
 
@@ -28,8 +31,7 @@ def _stub_exec_module() -> types.ModuleType:
 
     Real ComfyUI's `execute()` is a coroutine with a long signature; we
     only need attribute presence to test the install() logic, not real
-    behavior. Tests that exercise the wrapper itself would need a richer
-    stub; the sentinel test only inspects `_exec_mod.execute`.
+    behaviour.
     """
     mod = types.ModuleType("execution")
 
@@ -41,89 +43,81 @@ def _stub_exec_module() -> types.ModuleType:
 
 
 @pytest.fixture
-def fresh_exec_logger(monkeypatch, tmp_path: Path):
-    """Provide a freshly-imported `exec_logger` with a stub `execution`
-    module and a tmp log path. Each test gets its own module instance --
-    the module's _INSTALLED state is module-global, so reusing across
-    tests would leak."""
+def fresh_tracer(monkeypatch, tmp_path: Path):
+    """Provide a fresh `ExecLogTracer` instance + stub `execution` module.
+
+    Each test gets its own tracer instance (no shared install state)
+    and its own tmp log path.
+    """
     stub = _stub_exec_module()
     monkeypatch.setitem(sys.modules, "execution", stub)
     monkeypatch.setenv("COMFYUI_EXEC_LOG", str(tmp_path / "exec.jsonl"))
 
-    # Force a fresh import so _INSTALLED starts as False.
-    if "exec_logger" in sys.modules:
-        del sys.modules["exec_logger"]
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    el = importlib.import_module("exec_logger")
-    yield el, stub
+    from tracers.exec_log import ExecLogTracer
+    tracer = ExecLogTracer()
+    yield tracer, stub
 
 
-def test_install_marks_execute_with_sentinel(fresh_exec_logger):
-    """After install(), _exec_mod.execute must carry the sentinel
-    `_audioloophelper_wrapped = True`. The sentinel lives on the
-    function object so it survives module reloads of exec_logger
+def test_install_marks_execute_with_sentinel(fresh_tracer):
+    """After install_at_import(), `_exec_mod.execute` must carry the
+    sentinel `_audioloophelper_wrapped = True`. The sentinel lives on
+    the function object so it survives module reloads of the tracer
     itself."""
-    el, stub = fresh_exec_logger
-    assert el.install() is True
+    tracer, stub = fresh_tracer
+    assert tracer.install_at_import() is True
     assert getattr(stub.execute, "_audioloophelper_wrapped", False) is True
 
 
-def test_second_install_does_not_chain_wrap(fresh_exec_logger):
-    """Module-reload simulation: reset _INSTALLED to False (as a fresh
-    import would) and call install() again. The sentinel on
-    stub.execute must short-circuit the wrap -- otherwise we get a
-    chain of wrappers each writing to its own sink."""
-    el, stub = fresh_exec_logger
-    assert el.install() is True
-    wrapped_first = stub.execute  # the wrapped function
+def test_second_install_does_not_chain_wrap(fresh_tracer):
+    """Reload simulation: build a fresh tracer instance and call
+    install_at_import() on it. The sentinel on the (already-wrapped)
+    `stub.execute` must short-circuit re-wrapping — otherwise we get a
+    chain of wrappers each writing to its own sink.
+    """
+    tracer, stub = fresh_tracer
+    assert tracer.install_at_import() is True
+    wrapped_first = stub.execute
 
-    # Simulate module reload: _INSTALLED back to False, but sentinel
-    # is still on stub.execute because it lives on the function object,
-    # not in this module's globals.
-    el._INSTALLED = False
-    second_install = el.install()
+    from tracers.exec_log import ExecLogTracer
+    second_tracer = ExecLogTracer()
+    second_install = second_tracer.install_at_import()
 
-    # Contract: install() returns True (idempotent — already wired) and
-    # stub.execute is the SAME function object — no new wrapping layer.
     assert second_install is True
     assert stub.execute is wrapped_first
-    # And the sentinel is still set (would be on the new wrapper too,
-    # but identity check above already proves no new wrapper).
     assert getattr(stub.execute, "_audioloophelper_wrapped", False) is True
 
 
-def test_install_proceeds_after_execute_is_replaced_wholesale(fresh_exec_logger):
-    """If a future ComfyUI version replaces _exec_mod.execute (not just
-    wraps it), the sentinel is gone -- and re-install should proceed.
-    The pattern survives the right reloads and yields to the right
-    replacements."""
-    el, stub = fresh_exec_logger
-    assert el.install() is True
+def test_install_proceeds_after_execute_is_replaced_wholesale(fresh_tracer):
+    """If ComfyUI replaces `_exec_mod.execute` wholesale (e.g. a future
+    upstream change), the sentinel is gone and re-install correctly
+    re-wraps the new function. This guards against accidentally getting
+    permanently stuck on the first wrap.
+    """
+    tracer, stub = fresh_tracer
+    assert tracer.install_at_import() is True
 
-    # ComfyUI replaced execute with a fresh function (no sentinel).
-    async def fresh_execute(*args, **kwargs):
-        return None
-    stub.execute = fresh_execute
-    el._INSTALLED = False
-
-    # Should proceed and wrap the new function.
-    assert el.install() is True
-    assert stub.execute is not fresh_execute  # got wrapped
-    assert getattr(stub.execute, "_audioloophelper_wrapped", False) is True
-
-
-def test_install_no_op_when_env_var_unset(monkeypatch, tmp_path: Path):
-    """No env var -> no install. Sentinel must NOT be set in this case
-    -- the absence of the sentinel is what allows install() to proceed
-    later if the env var gets set after process start."""
-    stub = _stub_exec_module()
-    monkeypatch.setitem(sys.modules, "execution", stub)
-    monkeypatch.delenv("COMFYUI_EXEC_LOG", raising=False)
-
-    if "exec_logger" in sys.modules:
-        del sys.modules["exec_logger"]
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    el = importlib.import_module("exec_logger")
-
-    assert el.install() is False
+    async def new_execute(*args, **kwargs):
+        return "replaced"
+    stub.execute = new_execute
     assert not getattr(stub.execute, "_audioloophelper_wrapped", False)
+
+    from tracers.exec_log import ExecLogTracer
+    second_tracer = ExecLogTracer()
+    assert second_tracer.install_at_import() is True
+    assert getattr(stub.execute, "_audioloophelper_wrapped", False) is True
+
+
+def test_install_no_op_when_env_var_unset(monkeypatch):
+    """install_at_import() must return False when the env var is unset.
+
+    Zero-overhead-when-disabled is a load-bearing property of the tracer
+    framework; a missing env var has to short-circuit before any
+    monkey-patch logic runs.
+    """
+    monkeypatch.delenv("COMFYUI_EXEC_LOG", raising=False)
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from tracers.exec_log import ExecLogTracer
+    tracer = ExecLogTracer()
+    assert tracer.install_at_import() is False
+    assert tracer._installed is False
