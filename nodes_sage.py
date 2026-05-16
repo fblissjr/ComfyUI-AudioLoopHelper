@@ -810,6 +810,17 @@ class AudioLoopHelperSageAttention(io.ComfyNode):
                 # Defensive: tracer failures must not block rendering.
                 pass
 
+        # Opt-in torch.profiler aten-op tracer (env-gated, separate from
+        # ffn_attn_tracer). Captures broadcast multiplies, RoPE, norm,
+        # AdaLN scale-shift table ops that forward-hook-based tracing
+        # cannot reach. See torch_profile_tracer.py for env var + output.
+        from . import torch_profile_tracer
+        if torch_profile_tracer.is_enabled():
+            try:
+                torch_profile_tracer.start_profile()
+            except Exception:
+                pass
+
         def _cleanup(*_args, **_kwargs):
             opts = model_clone.model_options.get("transformer_options", {})
             if opts.get("optimized_attention_override") is override_fn:
@@ -817,6 +828,10 @@ class AudioLoopHelperSageAttention(io.ComfyNode):
             tracer.flush_summary()
             try:
                 ffn_attn_tracer.maybe_flush()
+            except Exception:
+                pass
+            try:
+                torch_profile_tracer.maybe_export()
             except Exception:
                 pass
 
