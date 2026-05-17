@@ -274,7 +274,7 @@ class SageTracer:
     """
 
     def __init__(self, log_path: Path | None, resolve_log_path: Callable[[], Path | None] | None = None):
-        self._log_path = log_path
+        self._log_path = None
         self._resolve_log_path = resolve_log_path
         self._fh = None
         self._cached_prompt_id: str | None = None
@@ -858,10 +858,6 @@ class AudioLoopHelperSageAttention(io.ComfyNode):
 
         model_clone = model.clone()
 
-        # Pass the resolver too so SageTracer can rotate its file handle
-        # when the executing prompt_id changes across renders (ComfyUI
-        # caches `_patch_impl`'s output when inputs are unchanged, so
-        # this SageTracer instance is reused across prompts).
         tracer = SageTracer(resolve_trace_path(), resolve_log_path=resolve_trace_path)
         logger = SageFallbackLogger()
         sage_fn = _build_sage_fn(mode)

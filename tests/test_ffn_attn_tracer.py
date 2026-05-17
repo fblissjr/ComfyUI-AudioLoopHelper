@@ -205,7 +205,7 @@ def test_sage_tracer_rotates_file_handle_on_prompt_change(tmp_path):
     tracer.emit(shape=(1, 100, 2048), has_mask=False, mode="auto",
                 fell_back=False, elapsed_us=10.0, prompt_id="B")
 
-    assert path_a.read_text().splitlines() == path_a.read_text().splitlines()[:same_prompt_lines]
+    assert len(path_a.read_text().splitlines()) == same_prompt_lines
     assert path_b.exists()
     assert "prompt_id" in path_b.read_text()
     assert '"B"' in path_b.read_text()
