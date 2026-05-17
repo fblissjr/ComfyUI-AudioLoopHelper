@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._base import Tracer
+from ._base import Tracer, get_executing_prompt_id
 
 
 class TorchProfileTracer(Tracer):
@@ -29,6 +29,7 @@ class TorchProfileTracer(Tracer):
     def __init__(self) -> None:
         self._active_profiler: Any = None
         self._base_path = None
+        self._cached_prompt_id: str | None = None
         self._cleanup_count: int = 0
         self._files_written: list[str] = []
 
@@ -43,6 +44,7 @@ class TorchProfileTracer(Tracer):
         self._base_path = self.resolve_output_path()
         if self._base_path is None:
             return False
+        self._cached_prompt_id = get_executing_prompt_id()
         self._cleanup_count = 0
 
         return self._start_profiler()
@@ -52,8 +54,27 @@ class TorchProfileTracer(Tracer):
 
         Per-cleanup export is the reliability mechanism. Without it,
         long-running ComfyUI sessions never see their data written.
+
+        Also detects prompt_id rotation: ComfyUI caches the sage node's
+        `_patch_impl` output when inputs are unchanged across renders,
+        so `install_at_render` doesn't refresh `_base_path` per prompt.
+        We re-resolve the path before exporting so the chrome trace
+        lands under the correct prompt's subdir.
         """
         if self._active_profiler is None:
+            return
+        current = get_executing_prompt_id()
+        if current is not None and current != self._cached_prompt_id:
+            # Crossed a prompt boundary since install. Export the old
+            # profile to the prior path, then rebind to the new prompt's
+            # output dir before starting a fresh capture below.
+            self._export_active("on_cleanup")
+            self._cached_prompt_id = current
+            new_path = self.resolve_output_path()
+            if new_path is not None:
+                self._base_path = new_path
+            self._cleanup_count = 0
+            self._start_profiler()
             return
         self._export_active("on_cleanup")
         # Start a fresh profile so the next sampler invocation's ops

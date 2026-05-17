@@ -77,6 +77,25 @@ def install_render_tracers(model_clone: Any) -> None:
             t.log(f"install_at_render raised {type(e).__name__}: {e}")
 
 
+def _refresh_prompt_state_if_needed() -> bool:
+    """Re-read the executing prompt_id and refresh `_PROMPT_ID` if changed.
+
+    Necessary because ComfyUI caches the sage node's `_patch_impl` output
+    when inputs are unchanged across renders, so `install_render_tracers`
+    may not re-fire per prompt. Without this, the manifest written at
+    on_cleanup carries the prior render's prompt_id even though the
+    cleanup itself fired for a new render. Returns True if the state was
+    rotated.
+    """
+    global _PROMPT_ID, _PROMPT_START_TS
+    current = get_executing_prompt_id()
+    if current is None or current == _PROMPT_ID:
+        return False
+    _PROMPT_ID = current
+    _PROMPT_START_TS = time.time()
+    return True
+
+
 def on_cleanup() -> None:
     """Fire ON_CLEANUP for every render-lifecycle tracer that's enabled.
 
@@ -84,8 +103,11 @@ def on_cleanup() -> None:
     fires once per sampler invocation, not per render — a multi-sampler
     workflow (FML2V two-stage, audio-loop N-iteration) needs each cleanup
     to refresh the manifest with newly-flushed artifacts. State is reset
-    by `install_render_tracers` at the start of the next render.
+    by `install_render_tracers` at the start of the next render OR by
+    `_refresh_prompt_state_if_needed` when the prompt_id changes
+    underneath us (the ComfyUI-caches-sage-node case).
     """
+    _refresh_prompt_state_if_needed()
     for t in _REGISTRY:
         if t.lifecycle != "render":
             continue
