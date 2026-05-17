@@ -27,9 +27,16 @@ import argparse
 import fnmatch
 import shutil
 import sys
+import time
 from pathlib import Path
+from typing import Any
 
 from workflow_utils import DATA_RUNS_DIR
+
+# Suffix marker used to identify sidecars produced by `extract_module_summary`.
+# Any chrome trace `torch_profile.N.json` that already has a sibling
+# `torch_profile.N.modules_summary.json` is treated as already-extracted.
+_MODULES_SUMMARY_SUFFIX = ".modules_summary.json"
 
 
 def human_bytes(n: int) -> str:
@@ -40,6 +47,81 @@ def human_bytes(n: int) -> str:
             return f"{size:.1f}{unit}"
         size /= 1024
     return f"{size:.1f}PB"
+
+
+def extract_module_summary(chrome_trace: Path) -> Path | None:
+    """Write `<stem>.modules_summary.json` alongside a chrome trace.
+
+    Idempotent: skips if the sidecar already exists. Defensive: catches
+    every exception and returns None so a single bad trace doesn't block
+    the rest of a cleanup pass.
+
+    The sidecar carries per-module aten-op aggregations derived from the
+    `record_function` annotations placed by `tracers/ffn_attn.py`. Shape
+    sets are converted to sorted lists for JSON serializability. Source
+    trace provenance (path, size, event count) is preserved so a future
+    reader can verify which raw trace produced this summary.
+    """
+    sidecar = chrome_trace.parent / (chrome_trace.stem + _MODULES_SUMMARY_SUFFIX)
+    if sidecar.exists():
+        return sidecar
+
+    try:
+        import orjson
+        # Lazy import — keeps the analyzer dependency out of the cleanup
+        # script's startup cost for the common "no chrome traces present"
+        # case. `scripts/` is on sys.path via conftest / direct invocation.
+        from analyze_torch_profile import aggregate_by_module, load_trace
+    except Exception as e:
+        print(f"  [extract] skipped {chrome_trace.name}: import failed ({type(e).__name__}: {e})", file=sys.stderr)
+        return None
+
+    t0 = time.time()
+    try:
+        events = load_trace(chrome_trace)
+        by_module = aggregate_by_module(events, device="cpu")
+    except Exception as e:
+        print(f"  [extract] skipped {chrome_trace.name}: load/aggregate failed ({type(e).__name__}: {e})", file=sys.stderr)
+        return None
+
+    # Convert shape sets to sorted lists; keep the rest of the structure.
+    payload: dict[str, Any] = {
+        "source_trace": str(chrome_trace),
+        "source_size_bytes": chrome_trace.stat().st_size,
+        "total_events": len(events),
+        "modules": {
+            module_path: {
+                op_name: {
+                    "count": entry["count"],
+                    "total_us": round(entry["total_us"], 1),
+                    "shapes": sorted(entry["shapes"]),
+                }
+                for op_name, entry in ops.items()
+            }
+            for module_path, ops in by_module.items()
+        },
+    }
+    try:
+        sidecar.write_bytes(orjson.dumps(payload, option=orjson.OPT_INDENT_2))
+    except Exception as e:
+        print(f"  [extract] write failed for {sidecar.name}: {type(e).__name__}: {e}", file=sys.stderr)
+        return None
+
+    elapsed = time.time() - t0
+    print(f"  [extract] {chrome_trace.name} -> {sidecar.name} ({sidecar.stat().st_size//1024} KB, {elapsed:.1f}s)", file=sys.stderr)
+    return sidecar
+
+
+def find_chrome_traces(run_dir: Path) -> list[Path]:
+    """Walk a RUN_ID dir for `torch_profile.*.json` raw chrome traces.
+
+    Excludes existing `*.modules_summary.json` sidecars so we don't try
+    to recursively aggregate our own output.
+    """
+    return [
+        p for p in run_dir.rglob("torch_profile.*.json")
+        if not p.name.endswith(_MODULES_SUMMARY_SUFFIX)
+    ]
 
 
 def dir_size(path: Path) -> int:
@@ -64,6 +146,12 @@ def parse_args() -> argparse.Namespace:
                    help="Actually delete (default is dry-run)")
     p.add_argument("--runs-dir", type=Path, default=None,
                    help="Override the data/runs path (default: <repo>/data/runs)")
+    p.add_argument("--no-extract", action="store_true",
+                   help="Skip per-module sidecar extraction. Default behaviour "
+                        "runs `analyze_torch_profile.aggregate_by_module` on "
+                        "each chrome trace and writes a `*.modules_summary.json` "
+                        "alongside before deletion. This flag is the escape hatch "
+                        "for cases where the user has already extracted manually.")
     return p.parse_args()
 
 
@@ -106,6 +194,18 @@ def main() -> int:
     print(f"[cleanup_traces] total reclaimed: {human_bytes(total_to_drop)}  (dry_run={not args.apply})")
 
     if args.apply:
+        # Extract per-module sidecars BEFORE deleting raw chrome traces.
+        # Lost the per-module data once already (2026-05-16 audit cleanup)
+        # by deleting raw traces before running the analyzer; the sidecar
+        # captures the answer at retention time so it's preserved if a
+        # downstream consumer still needs it.
+        if not args.no_extract:
+            chrome_traces = [p for d in drop for p in find_chrome_traces(d)]
+            if chrome_traces:
+                print(f"[cleanup_traces] extracting per-module sidecars for {len(chrome_traces)} chrome trace(s) before delete...")
+                for ct in chrome_traces:
+                    extract_module_summary(ct)
+
         for d in drop:
             # Sanity: refuse to delete anything outside runs_dir.
             if not d.resolve().is_relative_to(runs_dir.resolve()):

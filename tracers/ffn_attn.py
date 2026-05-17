@@ -99,6 +99,16 @@ class FfnAttnTracer(Tracer):
         self._emit_annotations = bool(
             os.environ.get("AUDIOLOOPHELPER_TORCH_PROFILE", "").strip()
         )
+        # Fingerprint mode forces a CUDA sync per sage call (via `.item()`
+        # in `_fingerprint_tensor`); the surrounding sub-module forward
+        # waits on it, so `elapsed_ms` here is inflated 1.5-2× vs the
+        # non-fingerprint baseline. Surface this loudly so a future
+        # reader doesn't quote these timings as production-comparable.
+        if os.environ.get("AUDIOLOOPHELPER_SAGE_OUTPUT_FINGERPRINT", "").strip():
+            self.log(
+                "fingerprint mode also active — forward-hook elapsed_ms "
+                "inflated 1.5-2x by sage's per-call CUDA sync; audit-only."
+            )
 
         try:
             diffusion_model = model_clone.get_model_object("diffusion_model")
