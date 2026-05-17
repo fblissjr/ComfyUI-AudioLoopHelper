@@ -106,25 +106,21 @@ def test_emit_annotations_gated_on_torch_profile_env(base_env, monkeypatch, fake
 
 def test_maybe_rotate_for_new_prompt_updates_state(base_env, monkeypatch, fake_model_clone, tmp_path):
     """When the executing prompt_id changes underneath an already-installed
-    tracer (the ComfyUI-caches-sage-node case), `_maybe_rotate_for_new_prompt`
-    must flush pending events to the old path and rebind to the new one.
-    Otherwise events from later renders get attributed to the first render's
-    prompt_id (the 2026-05-17 cross-render attribution bug).
+    tracer, `_maybe_rotate_for_new_prompt` must flush pending events to
+    the old path and rebind to the new one. Otherwise events from later
+    renders get attributed to the first render's prompt_id.
     """
     from tracers.ffn_attn import FfnAttnTracer
-    import tracers.ffn_attn as ffn_attn_mod
+    import tracers._base as base_mod
 
     tracer = FfnAttnTracer()
     tracer.install_at_render(fake_model_clone)
 
-    # Simulate the first prompt's state.
     tracer._cached_prompt_id = "prompt-A"
     path_a = tmp_path / "prompt-A" / "ffn_attn_breakdown.jsonl"
     tracer._output_path = path_a
 
-    # Patch the contextvar reader + resolve_output_path so the rotation
-    # picks up the new path.
-    monkeypatch.setattr(ffn_attn_mod, "get_executing_prompt_id", lambda: "prompt-B")
+    monkeypatch.setattr(base_mod, "get_executing_prompt_id", lambda: "prompt-B")
     path_b = tmp_path / "prompt-B" / "ffn_attn_breakdown.jsonl"
     monkeypatch.setattr(tracer, "resolve_output_path", lambda: path_b)
 
@@ -139,14 +135,14 @@ def test_maybe_rotate_is_noop_when_prompt_unchanged(base_env, monkeypatch, fake_
     mutation, no flush. Verifies the hot-path optimisation (rotation
     check fires per hook call, must be skip-fast in the common case)."""
     from tracers.ffn_attn import FfnAttnTracer
-    import tracers.ffn_attn as ffn_attn_mod
+    import tracers._base as base_mod
 
     tracer = FfnAttnTracer()
     tracer.install_at_render(fake_model_clone)
     tracer._cached_prompt_id = "prompt-A"
     original_path = tracer._output_path
 
-    monkeypatch.setattr(ffn_attn_mod, "get_executing_prompt_id", lambda: "prompt-A")
+    monkeypatch.setattr(base_mod, "get_executing_prompt_id", lambda: "prompt-A")
     tracer._maybe_rotate_for_new_prompt()
 
     assert tracer._cached_prompt_id == "prompt-A"

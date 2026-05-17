@@ -50,36 +50,27 @@ class TorchProfileTracer(Tracer):
         return self._start_profiler()
 
     def on_cleanup(self) -> None:
-        """Stop+export the current profile, start a fresh one.
+        """Stop+export the current profile, optionally rotate output path
+        for a new prompt, start a fresh profile.
 
-        Per-cleanup export is the reliability mechanism. Without it,
+        Per-cleanup export is the reliability mechanism — without it,
         long-running ComfyUI sessions never see their data written.
 
-        Also detects prompt_id rotation: ComfyUI caches the sage node's
-        `_patch_impl` output when inputs are unchanged across renders,
-        so `install_at_render` doesn't refresh `_base_path` per prompt.
-        We re-resolve the path before exporting so the chrome trace
-        lands under the correct prompt's subdir.
+        Prompt-boundary handling: if the executing prompt_id has changed
+        since the last cleanup, the export still lands at the prior
+        `_base_path` (the trace it captured belongs to the prior prompt),
+        then we rebind for the next capture. ComfyUI caches the sage
+        node's output when inputs are unchanged, so `install_at_render`
+        doesn't refresh `_base_path` per prompt.
         """
         if self._active_profiler is None:
             return
-        current = get_executing_prompt_id()
-        if current is not None and current != self._cached_prompt_id:
-            # Crossed a prompt boundary since install. Export the old
-            # profile to the prior path, then rebind to the new prompt's
-            # output dir before starting a fresh capture below.
-            self._export_active("on_cleanup")
-            self._cached_prompt_id = current
+        self._export_active("on_cleanup")
+        if self._prompt_id_changed():
             new_path = self.resolve_output_path()
             if new_path is not None:
                 self._base_path = new_path
             self._cleanup_count = 0
-            self._start_profiler()
-            return
-        self._export_active("on_cleanup")
-        # Start a fresh profile so the next sampler invocation's ops
-        # are captured. If install_at_render fires before that (new
-        # render), the fresh profile is rotated out by install path.
         self._start_profiler()
 
     def on_atexit(self) -> None:

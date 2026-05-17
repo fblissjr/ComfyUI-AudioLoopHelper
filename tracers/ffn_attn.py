@@ -144,19 +144,14 @@ class FfnAttnTracer(Tracer):
     # --- per-prompt state rotation ---
 
     def _maybe_rotate_for_new_prompt(self) -> None:
-        """If the current executing prompt_id differs from the cached one,
-        flush pending events to the prior path and rebind state to the new
-        prompt's path. Necessary because ComfyUI caches `_patch_impl`'s
-        output when inputs are unchanged across renders, so
-        `install_at_render` may not re-fire per prompt — but forward hooks
-        installed during the first render keep firing for subsequent ones.
+        """On prompt-id change, flush pending events to the prior path and
+        rebind to the new prompt's output path. The base class detects the
+        change (and updates `_cached_prompt_id`); we do the side effects.
         """
-        current = get_executing_prompt_id()
-        if current is None or current == self._cached_prompt_id:
+        if not self._prompt_id_changed():
             return
         if self._pending:
             self._flush_pending()
-        self._cached_prompt_id = current
         new_path = self.resolve_output_path()
         if new_path is not None:
             self._output_path = new_path

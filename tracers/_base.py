@@ -137,6 +137,26 @@ class Tracer:
     def log(self, message: str) -> None:
         log_event(self.name, message)
 
+    def _prompt_id_changed(self) -> bool:
+        """Detect a prompt boundary crossing since the last check.
+
+        Updates `self._cached_prompt_id` on change. Returns True only
+        when the contextvar reports a non-None prompt_id different from
+        the cached value. Subclasses call this in their hot paths (per
+        hook or per cleanup) and run their rotation side effects on True.
+
+        Needed because ComfyUI caches the sage node's `_patch_impl`
+        output when inputs are unchanged across renders —
+        `install_at_render` therefore doesn't re-fire per prompt, and
+        tracers that bound output_path at install time would attribute
+        later renders' events to the first render's prompt_id.
+        """
+        current = get_executing_prompt_id()
+        if current is None or current == getattr(self, "_cached_prompt_id", None):
+            return False
+        self._cached_prompt_id = current
+        return True
+
     # --- lifecycle methods (override as needed) ---
 
     def install_at_import(self) -> bool:
