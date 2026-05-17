@@ -7,19 +7,19 @@ bookend blocks `[0, 1, 46, 47]` stay on stock `block.ff.forward` (their
 weights are bf16, not fp8 — confirmed by the 2026-05-15 safetensors
 audit).
 
-Mocking phase (pre-v0.6): when `sageattention.sage_ffn` is not available
-in the installed sage package, the patched forward falls through to the
-stock path (`self_module.net(x)`). Numerically identical to no-patch;
-exercises the patching machinery so the wiring is testable now and the
-swap to the real sage_ffn at v0.6 ship is a one-line change.
+When `sageattention.sage_ffn` is not available, this node is a
+**complete no-op**: returns the model unchanged with no patches
+applied. This preserves any prior FFN-touching patches in the chain
+(notably KJNodes `LTXVChunkFeedForward`). Adding a stock-fallback
+wrapper would overwrite the prior patch at the same
+`add_object_patch` key and silently disable upstream chunking.
 
-Compose with `LTXVChunkFeedForward`: the v0.6 design is two-kernel
-split (intermediate hits HBM, same memory footprint as un-chunked
-baseline). On 24 GiB cards you still need chunking for stage-2 memory
-management; sage_ffn provides the fp8-native matmul speedup on top.
+When sage v0.6 IS available and the node fires, the sage_ffn path
+replaces any prior FFN patch in the chain. This is intentional —
+sage_ffn's two-kernel split has the same memory footprint as the
+un-chunked baseline, so stacking chunking on top is redundant.
 
 Bookend pattern reference: `internal/reference/sage_optimization_landscape.md`
-"Day 9: our work when it fires."
 """
 
 from __future__ import annotations
@@ -77,10 +77,12 @@ BF16_FFN_BLOCKS: frozenset[int] = frozenset({0, 1, 46, 47})
 def _resolve_sage_ffn():
     """Return `sageattention.sage_ffn` if available, else None.
 
+    Mirrors the sage-symbol resolution shape used at `nodes_sage.py:125-129`;
+    a third consumer should factor these into a shared helper.
+
     Resolved fresh on every node execute so users who `pip install` v0.6
-    while ComfyUI is running can pick it up on the next render without a
-    full restart. Cost: one ImportError per node execute when sage is
-    absent (cached by `sys.modules` after first miss).
+    while ComfyUI is running can pick it up on the next render. Import
+    miss is cached by `sys.modules` after first call.
     """
     try:
         import sageattention as _sa
@@ -125,7 +127,7 @@ class _FFNPatch:
     correctly when both nodes appear in the same model patch chain.
     """
 
-    def __init__(self, sage_ffn_fn, logger: _FFNFallbackLogger | None = None):
+    def __init__(self, sage_ffn_fn, logger: _FFNFallbackLogger):
         self._sage_ffn = sage_ffn_fn
         self._logger = logger
 
@@ -134,19 +136,12 @@ class _FFNPatch:
         logger = self._logger
 
         def wrapped_forward(self_module, x, *args, **kwargs):
-            # Mock-phase fallback: sage v0.6 not installed -> stock path.
-            # Numerically identical to no-patch; lets us land the wiring
-            # and tests now, swap the implementation when v0.6 ships.
-            if sage_ffn_fn is None:
-                return self_module.net(x)
-
-            # When sage v0.6 lands, this branch hits. Expected wrapper
-            # signature (per sage's scoping doc):
+            # Wrapper signature per sage v0.6 scoping doc:
             #   sage_ffn(x, w1, s1, w2, s2, b1=None, b2=None) -> y
-            # Weight + scale access: net[0].proj is the up-projection
-            # (hidden -> inner); net[2] is the down-projection
-            # (inner -> hidden). `.weight_scale` is the per-tensor f32
-            # scalar from the comfy fp8 convention.
+            # net[0].proj is up-projection (hidden -> inner);
+            # net[2] is down-projection (inner -> hidden).
+            # `.weight_scale` is the per-tensor f32 scalar from the
+            # comfy fp8 convention.
             try:
                 proj_in = self_module.net[0].proj
                 proj_out = self_module.net[2]
@@ -161,12 +156,11 @@ class _FFNPatch:
                 b2 = getattr(proj_out, "bias", None)
                 return sage_ffn_fn(x, proj_in.weight, s1, proj_out.weight, s2, b1, b2)
             except Exception as exc:
-                # Defensive: don't crash a render if sage_ffn raises.
-                # Log once per (error_type, shape) so a real kernel bug
-                # surfaces without spamming logs per FFN call.
+                # Don't crash a render if sage_ffn raises. Log once per
+                # (error_type, shape) so a real kernel bug surfaces
+                # without spamming logs per FFN call.
                 shape = tuple(getattr(x, "shape", ()))
-                if logger is not None:
-                    logger.log_once(exc, shape)
+                logger.log_once(exc, shape)
                 return self_module.net(x)
 
         return types.MethodType(wrapped_forward, obj)
@@ -189,8 +183,9 @@ class AudioLoopHelperSageFFN(io.ComfyNode):
     fp8-native fused MLP for ComfyUI consumer-app on sm89), not a
     perf win on the current Triton stack.
 
-    When sage v0.6 is unavailable, patches fall through to the stock
-    path. Numerically identical to no-patch.
+    When sage v0.6 is unavailable, the node is a no-op: returns the
+    model unchanged with no patches applied. Prior FFN patches in the
+    chain (e.g. KJNodes LTXVChunkFeedForward) remain active.
 
     Detail: `internal/reference/sage_optimization_landscape.md`.
     """
@@ -208,9 +203,10 @@ class AudioLoopHelperSageFFN(io.ComfyNode):
                 "are bf16 in the distilled checkpoint.\n\n"
                 "REQUIRES SageAttention-ada >= v0.6 "
                 "(github.com/fblissjr/SageAttention-ada). When sage_ffn "
-                "is unavailable, patches fall through to the stock FFN "
-                "path (numerically identical to no-patch). Restart "
-                "ComfyUI after installing v0.6.\n\n"
+                "is unavailable, this node is a no-op (model passes "
+                "through unchanged; prior FFN patches in the chain like "
+                "LTXVChunkFeedForward remain active). Restart ComfyUI "
+                "after installing v0.6.\n\n"
                 "COMPOSE WITH LTXVChunkFeedForward (KJNodes), don't "
                 "replace it. The v0.6 design is a two-kernel split: "
                 "intermediate hits HBM, same memory footprint as the "
@@ -265,6 +261,19 @@ class AudioLoopHelperSageFFN(io.ComfyNode):
         a fake `sage_ffn_fn` without needing the v3 io.NodeOutput
         wrapper or the real `sageattention` import.
         """
+        if sage_ffn_fn is None:
+            # No-op: return the model unchanged so prior FFN patches in
+            # the chain (e.g. KJNodes LTXVChunkFeedForward) survive.
+            # Patching a stock-path fallback here would overwrite their
+            # patch at the same add_object_patch key. Mirrors the
+            # `mode == "disabled"` precedent at `nodes_sage.py:856-857`.
+            _LOGGER.warning(
+                "AudioLoopHelperSageFFN: sageattention.sage_ffn not available; "
+                "node is a no-op. Install SageAttention-ada >= v0.6 + restart "
+                "ComfyUI to activate."
+            )
+            return (model,)
+
         model_clone = model.clone()
         try:
             diffusion_model = model_clone.get_model_object("diffusion_model")
@@ -283,14 +292,7 @@ class AudioLoopHelperSageFFN(io.ComfyNode):
             )
             return (model_clone,)
 
-        if sage_ffn_fn is None:
-            _LOGGER.info(
-                "AudioLoopHelperSageFFN: sageattention.sage_ffn not available "
-                "(install SageAttention-ada >= v0.6 to activate). Patching "
-                "with stock-path fallback for now."
-            )
-
-        logger = _FFNFallbackLogger() if sage_ffn_fn is not None else None
+        logger = _FFNFallbackLogger()
         n_patched = 0
         for idx, block in enumerate(blocks):
             if idx in BF16_FFN_BLOCKS:

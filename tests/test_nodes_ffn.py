@@ -1,12 +1,12 @@
 """Tests for `AudioLoopHelperSageFFN` (sage v0.6 consumer-side patch).
 
-Mock phase: sage v0.6 hasn't shipped yet, so the patched forward
-falls through to the stock `self_module.net(x)` path. Tests verify:
+Tests verify:
 
 1. Dispatch: 44 blocks patched, 4 bookend blocks (`{0, 1, 46, 47}`)
-   skipped.
-2. Patched forward invokes `self_module.net(x)` when `sage_ffn_fn`
-   is None (mock-phase fallback).
+   skipped when sage_ffn is available.
+2. No-op behavior: when sage_ffn is None (v0.6 not installed), node
+   applies NO patches so prior FFN patches in the chain (KJNodes
+   LTXVChunkFeedForward) survive.
 3. Patched forward invokes `sage_ffn_fn(...)` when provided.
 4. Defensive fallback: sage_ffn raises -> stock path.
 5. Compatibility guard: model without `transformer_blocks` -> unpatched
@@ -24,7 +24,14 @@ import pytest
 from _fakes import FakeModelPatcher, _walk_callables
 
 import nodes_ffn
-from nodes_ffn import BF16_FFN_BLOCKS, AudioLoopHelperSageFFN, _FFNPatch
+from nodes_ffn import BF16_FFN_BLOCKS, AudioLoopHelperSageFFN, _FFNFallbackLogger, _FFNPatch
+
+
+@pytest.fixture
+def fake_sage_ffn():
+    """Stand-in for the real `sageattention.sage_ffn` callable. Tests that
+    assert dispatch behavior wire `return_value` / `side_effect` per-test."""
+    return MagicMock(name="fake_sage_ffn")
 
 
 # -- Test fakes ---------------------------------------------------------------
@@ -96,9 +103,11 @@ class FakeModelForFFN(FakeModelPatcher):
 # -- Dispatch correctness -----------------------------------------------------
 
 
-def test_dispatch_skips_bookend_blocks_and_patches_the_rest():
+def test_dispatch_skips_bookend_blocks_and_patches_the_rest(fake_sage_ffn):
+    """When sage_ffn is available, _patch_impl patches 44 of 48 blocks
+    (skipping the 4 bookend bf16 blocks)."""
     model = FakeModelForFFN()
-    (patched_model,) = AudioLoopHelperSageFFN._patch_impl(model, sage_ffn_fn=None)
+    (patched_model,) = AudioLoopHelperSageFFN._patch_impl(model, sage_ffn_fn=fake_sage_ffn)
 
     patched_paths = set(patched_model.object_patches.keys())
     assert len(patched_paths) == 48 - len(BF16_FFN_BLOCKS) == 44
@@ -112,6 +121,21 @@ def test_dispatch_skips_bookend_blocks_and_patches_the_rest():
         assert f"diffusion_model.transformer_blocks.{idx}.ff.forward" in patched_paths
 
 
+def test_no_patch_when_sage_ffn_unavailable():
+    """When sage v0.6 is not installed (`sage_ffn_fn=None`), _patch_impl
+    must return the model UNCHANGED (no clone, no patches). This preserves
+    prior FFN patches in the chain (e.g. KJNodes LTXVChunkFeedForward).
+    Without this, a stock-fallback wrapper would overwrite ChunkFFN's
+    patch at the same object_patches key and silently disable upstream
+    chunking. Mirrors `nodes_sage.py:856-857` "disabled" precedent."""
+    model = FakeModelForFFN()
+    (out,) = AudioLoopHelperSageFFN._patch_impl(model, sage_ffn_fn=None)
+    assert out is model, (
+        "Must return the input model directly (no clone) when sage_ffn "
+        "is unavailable. Mirrors nodes_sage.py disabled-mode precedent."
+    )
+
+
 def test_bookend_set_is_first_two_and_last_two():
     # Canary against accidental change of the bookend pattern. If the audit
     # ever revises which blocks are bf16, this test must be updated AND the
@@ -122,33 +146,18 @@ def test_bookend_set_is_first_two_and_last_two():
 # -- Patched-forward behavior -------------------------------------------------
 
 
-def test_patched_forward_mock_mode_calls_self_net():
-    """When sage_ffn_fn is None (mock phase), patched forward must call
-    `self_module.net(x)` -- numerically identical to no-patch."""
-    ff = FakeFF()
-    ff.net.return_value = "stock_path_result"
-
-    patch = _FFNPatch(sage_ffn_fn=None)
-    bound = patch.__get__(ff, type(ff))
-
-    result = bound("input_tensor")
-
-    assert result == "stock_path_result"
-    ff.net.assert_called_once_with("input_tensor")
-
-
 def test_patched_forward_with_sage_ffn_routes_through_kernel():
     ff = FakeFF()
-    fake_sage_ffn = MagicMock(name="sage_ffn", return_value="sage_path_result")
+    sage_fn = MagicMock(name="sage_ffn", return_value="sage_path_result")
 
-    patch = _FFNPatch(sage_ffn_fn=fake_sage_ffn)
+    patch = _FFNPatch(sage_ffn_fn=sage_fn, logger=_FFNFallbackLogger())
     bound = patch.__get__(ff, type(ff))
 
     result = bound("input_tensor")
 
     assert result == "sage_path_result"
-    fake_sage_ffn.assert_called_once()
-    call_args = fake_sage_ffn.call_args[0]
+    sage_fn.assert_called_once()
+    call_args = sage_fn.call_args[0]
     assert call_args[0] == "input_tensor"
     assert call_args[1] is ff.net[0].proj.weight   # W1
     assert call_args[2] is ff.net[0].proj.weight_scale  # s1
@@ -162,15 +171,15 @@ def test_patched_forward_falls_through_when_weight_scale_missing():
     through to the stock path rather than crash."""
     ff = FakeFF(has_weight_scale=False)
     ff.net.return_value = "stock_fallback"
-    fake_sage_ffn = MagicMock(name="sage_ffn", return_value="should_not_run")
+    sage_fn = MagicMock(name="sage_ffn", return_value="should_not_run")
 
-    patch = _FFNPatch(sage_ffn_fn=fake_sage_ffn)
+    patch = _FFNPatch(sage_ffn_fn=sage_fn, logger=_FFNFallbackLogger())
     bound = patch.__get__(ff, type(ff))
 
     result = bound("input_tensor")
 
     assert result == "stock_fallback"
-    fake_sage_ffn.assert_not_called()
+    sage_fn.assert_not_called()
     ff.net.assert_called_once_with("input_tensor")
 
 
@@ -178,9 +187,9 @@ def test_patched_forward_falls_through_when_sage_ffn_raises():
     """Defensive: sage_ffn raising must not crash the render."""
     ff = FakeFF()
     ff.net.return_value = "stock_fallback"
-    fake_sage_ffn = MagicMock(name="sage_ffn", side_effect=RuntimeError("kernel boom"))
+    sage_fn = MagicMock(name="sage_ffn", side_effect=RuntimeError("kernel boom"))
 
-    patch = _FFNPatch(sage_ffn_fn=fake_sage_ffn)
+    patch = _FFNPatch(sage_ffn_fn=sage_fn, logger=_FFNFallbackLogger())
     bound = patch.__get__(ff, type(ff))
 
     result = bound("input_tensor")
@@ -192,7 +201,7 @@ def test_patched_forward_falls_through_when_sage_ffn_raises():
 # -- Compatibility guards -----------------------------------------------------
 
 
-def test_model_without_diffusion_model_returns_unpatched():
+def test_model_without_diffusion_model_returns_unpatched(fake_sage_ffn):
     class FakeModelNoDM(FakeModelPatcher):
         def get_model_object(self, _name):
             raise KeyError("no diffusion_model")
@@ -201,13 +210,15 @@ def test_model_without_diffusion_model_returns_unpatched():
             return FakeModelNoDM()
 
     model = FakeModelNoDM()
-    (out,) = AudioLoopHelperSageFFN._patch_impl(model, sage_ffn_fn=None)
+    # Use a fake sage_ffn so we actually exercise the diffusion_model guard
+    # (the None path short-circuits earlier with the no-op behavior).
+    (out,) = AudioLoopHelperSageFFN._patch_impl(model, sage_ffn_fn=fake_sage_ffn)
     # No crash, returned an unpatched clone.
     assert out is not model
     assert not hasattr(out, "object_patches") or not getattr(out, "object_patches", {})
 
 
-def test_model_without_transformer_blocks_returns_unpatched():
+def test_model_without_transformer_blocks_returns_unpatched(fake_sage_ffn):
     class EmptyDM:
         pass
 
@@ -229,7 +240,7 @@ def test_model_without_transformer_blocks_returns_unpatched():
             return type(self)()
 
     model = FakeModelEmptyDM()
-    (out,) = AudioLoopHelperSageFFN._patch_impl(model, sage_ffn_fn=None)
+    (out,) = AudioLoopHelperSageFFN._patch_impl(model, sage_ffn_fn=fake_sage_ffn)
     assert out.object_patches == {}
 
 
@@ -245,10 +256,22 @@ def test_enabled_false_returns_model_unchanged():
     assert returned is model
 
 
-def test_enabled_true_patches_44_blocks():
-    """Sanity: the dispatch loop runs when enabled=True. Real execute()
-    path resolves sage_ffn fresh (likely None in CI), so patches install
-    in mock-phase mode."""
+def test_enabled_true_no_patch_when_sage_unavailable(monkeypatch):
+    """Sanity: with enabled=True but sage v0.6 unavailable, _resolve_sage_ffn
+    returns None and the node is a no-op. Model passes through unchanged
+    so prior FFN patches in the chain (LTXVChunkFeedForward) survive."""
+    monkeypatch.setattr(nodes_ffn, "_resolve_sage_ffn", lambda: None)
+    model = FakeModelForFFN()
+    out = AudioLoopHelperSageFFN.execute(model, enabled=True)
+    returned = out[0] if isinstance(out, tuple) else getattr(out, "result", out)[0]
+    assert returned is model
+
+
+def test_enabled_true_patches_44_blocks_when_sage_available(monkeypatch):
+    """When sage v0.6 IS available, _resolve_sage_ffn returns a callable
+    and the dispatch loop installs 44 patches (48 minus bookends)."""
+    monkeypatch.setattr(nodes_ffn, "_resolve_sage_ffn",
+                        lambda: MagicMock(name="fake_sage_ffn"))
     model = FakeModelForFFN()
     out = AudioLoopHelperSageFFN.execute(model, enabled=True)
     returned = out[0] if isinstance(out, tuple) else getattr(out, "result", out)[0]
