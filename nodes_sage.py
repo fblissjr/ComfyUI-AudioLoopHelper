@@ -837,7 +837,12 @@ class AudioLoopHelperSageAttention(io.ComfyNode):
         # trace, plus any future tracers). Each is env-gated; orchestrator
         # logs lifecycle events to stderr for observability. See
         # `tracers/__init__.py` for the public API + per-tracer details.
-        from . import tracers as _tracers
+        # Dual-import: relative works under the ComfyUI package load, absolute
+        # works when nodes_sage is loaded as a top-level module (pytest).
+        try:
+            from . import tracers as _tracers
+        except ImportError:
+            import tracers as _tracers  # type: ignore
         _tracers.install_render_tracers(model_clone)
 
         def _cleanup(*_args, **_kwargs):
