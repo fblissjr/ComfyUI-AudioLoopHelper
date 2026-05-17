@@ -129,6 +129,16 @@ one — it's a one-off measurement env var, not a default-on tracer like
 sage/exec. Prefix on the command line:
 `AUDIOLOOPHELPER_FFN_ATTN_TRACE=auto bash start_experiment.sh nodynvram`.
 
+**Auto-injects `--cache-none`**: `start_experiment.sh` detects this env
+var (along with `AUDIOLOOPHELPER_TORCH_PROFILE` and
+`AUDIOLOOPHELPER_SAGE_OUTPUT_FINGERPRINT`) and appends `--cache-none`
+to start.sh. Without this, ComfyUI's node-output cache short-circuits
+identical-input queues — the tracer captures the first render and zero
+events for the rest. The user-opt-in heavy tracers are the unambiguous
+"I'm doing instrumented analysis" signal; the always-on
+`AUDIOLOOPHELPER_SAGE_TRACE` does NOT auto-inject (production renders
+benefit from the cache).
+
 **Effect**: when set + `AudioLoopHelperSageAttention` node runs in the
 workflow, installs `register_forward_pre_hook` + `register_forward_hook`
 on every `BasicAVTransformerBlock`'s sub-modules (`attn1`, `audio_attn1`,

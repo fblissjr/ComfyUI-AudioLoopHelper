@@ -34,6 +34,19 @@
 # (no colon) substitutes "auto" only when the var is unset; if you set
 # it to "" explicitly, it stays empty and the tracer skips.
 #
+# Cache-none auto-injection (footgun protection): when any of
+#   AUDIOLOOPHELPER_SAGE_OUTPUT_FINGERPRINT
+#   AUDIOLOOPHELPER_FFN_ATTN_TRACE
+#   AUDIOLOOPHELPER_TORCH_PROFILE
+# is set, this wrapper auto-appends `--cache-none` to start.sh. Why:
+# ComfyUI caches node OUTPUTS by input hash. If two queues have
+# bit-identical inputs (same seed, same image, same workflow), the
+# sampler's output is reused from cache and sage NEVER RUNS on the
+# second queue — the tracer captures one render of data and zero for
+# the rest. Heavy tracers are the unambiguous "I'm doing instrumented
+# analysis" signal; SAGE_TRACE + EXEC_LOG (always-on by default) do not
+# trigger auto-cache-none — production renders should keep the cache.
+#
 # What each tracer captures:
 #   AUDIOLOOPHELPER_SAGE_TRACE  (per-attention-call sage tracer)
 #     One JSONL row per attention call: tensor shape, has_mask, mode,
@@ -99,5 +112,24 @@ fi
 # Lets users invoke this wrapper from any working directory.
 cd "$COMFYUI_DIR"
 
+# Auto-append --cache-none when heavy instrumentation is enabled. ComfyUI's
+# node-output cache short-circuits identical-input queues — so a multi-render
+# determinism audit (fingerprint mode) or per-render performance trace
+# (ffn_attn, torch_profile) silently captures data for ONLY the first render
+# and emits cache hits for the rest. The user-opt-in tracers below are the
+# unambiguous "I'm doing instrumented analysis" signal. SAGE_TRACE +
+# EXEC_LOG (always-on defaults) don't trigger this — production renders
+# benefit from the cache.
+EXTRA_ARGS=()
+if [[ -n "$AUDIOLOOPHELPER_SAGE_OUTPUT_FINGERPRINT" \
+    || -n "$AUDIOLOOPHELPER_FFN_ATTN_TRACE" \
+    || -n "$AUDIOLOOPHELPER_TORCH_PROFILE" ]]; then
+    # Skip if the user (or selected mode) already passed --cache-none.
+    if [[ " $* " != *" --cache-none "* ]]; then
+        echo "[start_experiment.sh] heavy tracer active — auto-adding --cache-none (prevents node cache short-circuiting identical-input queues)"
+        EXTRA_ARGS+=(--cache-none)
+    fi
+fi
+
 # Use bash explicitly — start.sh may not have +x.
-exec bash "$START_SH" "$@"
+exec bash "$START_SH" "$@" "${EXTRA_ARGS[@]}"

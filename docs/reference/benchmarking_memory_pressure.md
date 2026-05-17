@@ -29,7 +29,7 @@ Comparing two runs across these three signals lets you attribute differences cle
 
 | Tool | Purpose | Input | Output |
 |---|---|---|---|
-| `start_experiment.sh` | Telemetry wrapper around `start.sh`; sets `RUN_ID` + `AUDIOLOOPHELPER_SAGE_TRACE=auto` + `COMFYUI_EXEC_LOG=auto` env vars before exec'ing the underlying start script | optional `[mode]` positional, any flags forwarded | `data/runs/${RUN_ID}/sage.jsonl` (per-attn-call), `data/runs/${RUN_ID}/exec.jsonl` (per-node) |
+| `start_experiment.sh` | Telemetry wrapper around `start.sh`; sets `RUN_ID` + `AUDIOLOOPHELPER_SAGE_TRACE=auto` + `COMFYUI_EXEC_LOG=auto` env vars before exec'ing the underlying start script. Auto-appends `--cache-none` when any of `AUDIOLOOPHELPER_{SAGE_OUTPUT_FINGERPRINT,FFN_ATTN_TRACE,TORCH_PROFILE}` is set, so multi-render audits with identical inputs actually re-execute the sampler instead of hitting node cache. | optional `[mode]` positional, any flags forwarded | `data/runs/${RUN_ID}/sage.jsonl` (per-attn-call), `data/runs/${RUN_ID}/exec.jsonl` (per-node) |
 | `scripts/bench_aimdo_vram.py` | Polls `/aimdo/vram` HTTP endpoint at 1Hz, writes NDJSON | `--endpoint`, `--interval`, `--output` (required), optional `--max-duration` | NDJSON with `{ts, elapsed_s, data}` per poll; `data` is full endpoint response (per-model `loaded_size` vs `total_size`, driver-level free/total VRAM, pinned RAM, etc.) |
 | `scripts/analyze_sage_traces.py` | Aggregates per-shape kernel timing across N sage.jsonl files | one or more sage.jsonl paths; defaults to scanning `data/runs/*/*/sage.jsonl` | stdout: per-run summary table + per-shape masked/unmasked p50+p95 |
 
