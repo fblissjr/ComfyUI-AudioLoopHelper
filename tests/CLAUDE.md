@@ -21,7 +21,7 @@ uv run --group dev --group analysis python -m pytest tests/test_X.py -v --rootdi
 
 ## conftest + sys.path
 
-`tests/conftest.py` adds `scripts/` and `tests/` to `sys.path`. Effect: `from <script_module> import X` and `from <test_helper> import Y` both work without package indirection.
+`tests/conftest.py` adds **the repo root**, `scripts/`, and `tests/` to `sys.path`. Effect: `from tracers.X import Y`, `from <script_module> import X`, and `from <test_helper> import Y` all work without package indirection. The repo-root entry was added 2026-05-17 alongside the `tracers/` package tests; new tests targeting `tracers/`, `nodes_*.py`, or any other top-level module rely on this — don't add per-file `sys.path.insert` boilerplate.
 
 A root `./conftest.py` exists with `collect_ignore` that shadows `tests/conftest.py` for `from conftest import X` imports — relevant only if you're consuming the conftest directly (rare).
 
