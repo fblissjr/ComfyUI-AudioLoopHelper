@@ -259,16 +259,25 @@ def _detect_arch_tag() -> str | None:
 
 
 class SageTracer:
-    """Eagerly-opened JSONL writer. No-op when log_path is None.
+    """Lazy per-prompt JSONL writer. No-op when log_path is None.
 
     Emits one line per attention call plus a summary line on flush.
-    Counters and file writes are both short-circuited when disabled so the
-    hot-path cost is one attribute check per call.
+    The file handle is rotated when the executing prompt_id changes —
+    ComfyUI caches the sage node's `_patch_impl` output when inputs are
+    unchanged across renders, so this SageTracer instance gets reused
+    across prompts. Without rotation, all renders' events accumulate in
+    the first prompt's file.
+
+    The initial `log_path` is the seed path (resolved with whatever
+    prompt_id was current at construction); the resolver is captured so
+    `emit` can re-resolve when the prompt boundary shifts.
     """
 
-    def __init__(self, log_path: Path | None):
+    def __init__(self, log_path: Path | None, resolve_log_path: Callable[[], Path | None] | None = None):
         self._log_path = log_path
+        self._resolve_log_path = resolve_log_path
         self._fh = None
+        self._cached_prompt_id: str | None = None
         self._total = 0
         self._fallbacks = 0
         self._shapes: set[tuple] = set()
@@ -280,19 +289,53 @@ class SageTracer:
         # kernel without a --arch flag.
         self._arch_tag = _detect_arch_tag() if log_path is not None else None
         if log_path is not None:
-            log_path.parent.mkdir(parents=True, exist_ok=True)
-            # buffering=1 is line-buffered. Flush per line so a crash
-            # mid-run still leaves a useful trace -- cost is ~1 syscall
-            # per attention call, acceptable for the forensic-only path.
-            self._fh = open(log_path, "a", buffering=1)
+            self._open_handle(log_path)
+
+    def _open_handle(self, path: Path) -> None:
+        """Open the JSONL file at `path` and write the header row.
+
+        Closes any prior handle first so prompt-boundary rotation
+        doesn't leak file descriptors. buffering=1 is line-buffered:
+        flush per line so a crash mid-run still leaves a useful trace.
+        """
+        if self._fh is not None:
+            try:
+                self._fh.close()
+            except Exception:
+                pass
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._fh = open(path, "a", buffering=1)
+        self._log_path = path
+        if self._arch_tag is not None:
             # Header row: arch + ts so per-prompt joins know the trace's
             # provenance even when per-call rows are filtered out.
-            if self._arch_tag is not None:
-                self._fh.write(orjson.dumps({
-                    "ts": time.time(),
-                    "event": "header",
-                    "arch": self._arch_tag,
-                }).decode() + "\n")
+            self._fh.write(orjson.dumps({
+                "ts": time.time(),
+                "event": "header",
+                "arch": self._arch_tag,
+            }).decode() + "\n")
+
+    def _maybe_rotate_for_prompt(self, prompt_id: str | None) -> None:
+        """Rotate to a new per-prompt file if the prompt_id has changed
+        since the last emit. Cheap path when the prompt hasn't changed
+        (one attribute comparison)."""
+        if prompt_id is None or prompt_id == self._cached_prompt_id:
+            return
+        if self._resolve_log_path is None:
+            self._cached_prompt_id = prompt_id
+            return
+        new_path = self._resolve_log_path()
+        if new_path is None or new_path == self._log_path:
+            self._cached_prompt_id = prompt_id
+            return
+        self._open_handle(new_path)
+        # Reset summary counters per-prompt so flush_summary's per-file
+        # totals stay accurate to the new prompt.
+        self._total = 0
+        self._fallbacks = 0
+        self._shapes = set()
+        self._summary_flushed = False
+        self._cached_prompt_id = prompt_id
 
     @property
     def enabled(self) -> bool:
@@ -316,6 +359,9 @@ class SageTracer:
     ) -> None:
         if self._fh is None:
             return
+        # Rotate to a new per-prompt file if needed BEFORE accumulating
+        # counters — keeps per-file totals accurate to the file's prompt.
+        self._maybe_rotate_for_prompt(prompt_id)
         self._total += 1
         if fell_back:
             self._fallbacks += 1
@@ -812,7 +858,11 @@ class AudioLoopHelperSageAttention(io.ComfyNode):
 
         model_clone = model.clone()
 
-        tracer = SageTracer(resolve_trace_path())
+        # Pass the resolver too so SageTracer can rotate its file handle
+        # when the executing prompt_id changes across renders (ComfyUI
+        # caches `_patch_impl`'s output when inputs are unchanged, so
+        # this SageTracer instance is reused across prompts).
+        tracer = SageTracer(resolve_trace_path(), resolve_log_path=resolve_trace_path)
         logger = SageFallbackLogger()
         sage_fn = _build_sage_fn(mode)
         pytorch_fn = None

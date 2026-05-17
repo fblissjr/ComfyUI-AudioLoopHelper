@@ -178,3 +178,56 @@ def test_orchestrator_refresh_is_noop_when_unchanged(monkeypatch):
     assert changed is False
     assert orch._PROMPT_ID == "prompt-A"
     assert orch._PROMPT_START_TS == 100.0
+
+
+def test_sage_tracer_rotates_file_handle_on_prompt_change(tmp_path):
+    """SageTracer must rotate its file handle when the emit's prompt_id
+    differs from the cached one. ComfyUI caches the sage node's
+    `_patch_impl` output across renders, so the same SageTracer instance
+    is reused — without rotation, all renders' events accumulate in the
+    first prompt's file.
+    """
+    from nodes_sage import SageTracer
+
+    path_a = tmp_path / "prompt-A" / "sage.jsonl"
+    path_b = tmp_path / "prompt-B" / "sage.jsonl"
+    next_path = [path_a]
+
+    tracer = SageTracer(path_a, resolve_log_path=lambda: next_path[0])
+    tracer.emit(shape=(1, 100, 2048), has_mask=False, mode="auto",
+                fell_back=False, elapsed_us=10.0, prompt_id="A")
+    tracer.emit(shape=(1, 100, 2048), has_mask=False, mode="auto",
+                fell_back=False, elapsed_us=10.0, prompt_id="A")
+    same_prompt_lines = len(path_a.read_text().splitlines())
+
+    # Prompt changes; resolver returns a new path
+    next_path[0] = path_b
+    tracer.emit(shape=(1, 100, 2048), has_mask=False, mode="auto",
+                fell_back=False, elapsed_us=10.0, prompt_id="B")
+
+    assert path_a.read_text().splitlines() == path_a.read_text().splitlines()[:same_prompt_lines]
+    assert path_b.exists()
+    assert "prompt_id" in path_b.read_text()
+    assert '"B"' in path_b.read_text()
+    # path_a should not have the prompt-B event
+    assert '"B"' not in path_a.read_text()
+
+
+def test_sage_tracer_no_rotation_without_resolver(tmp_path):
+    """If no resolver is provided (legacy call sites), SageTracer must
+    not crash on prompt change — it just keeps writing to the initial
+    path. Preserves backwards compatibility for any caller that hasn't
+    been updated.
+    """
+    from nodes_sage import SageTracer
+
+    path = tmp_path / "sage.jsonl"
+    tracer = SageTracer(path, resolve_log_path=None)
+    tracer.emit(shape=(1, 100, 2048), has_mask=False, mode="auto",
+                fell_back=False, elapsed_us=10.0, prompt_id="A")
+    tracer.emit(shape=(1, 100, 2048), has_mask=False, mode="auto",
+                fell_back=False, elapsed_us=10.0, prompt_id="B")
+
+    # Both events land in the same file
+    assert '"A"' in path.read_text()
+    assert '"B"' in path.read_text()

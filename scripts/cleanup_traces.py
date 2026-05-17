@@ -194,17 +194,31 @@ def main() -> int:
     print(f"[cleanup_traces] total reclaimed: {human_bytes(total_to_drop)}  (dry_run={not args.apply})")
 
     if args.apply:
-        # Extract per-module sidecars before rm-tree. Raw chrome traces
-        # carry `record_function` annotations from ffn_attn's hooks that
-        # the analyzer needs for per-sub-module aten attribution; the
-        # sidecar captures that answer at retention time so downstream
-        # consumers don't lose it when the raw trace is deleted.
+        # Extract per-module sidecars before rm-tree, then HOIST them
+        # out of the to-be-deleted tree to a sibling archive so they
+        # survive retention. Without the hoist, sidecars inside the
+        # doomed RUN_ID dir get deleted along with the raw traces —
+        # destroying the very data the sidecar was meant to preserve.
         if not args.no_extract:
             chrome_traces = [p for d in drop for p in find_chrome_traces(d)]
             if chrome_traces:
+                archive_root = runs_dir / "_archived_sidecars"
                 print(f"[cleanup_traces] extracting per-module sidecars for {len(chrome_traces)} chrome trace(s) before delete...")
                 for ct in chrome_traces:
-                    extract_module_summary(ct)
+                    sidecar = extract_module_summary(ct)
+                    if sidecar is None:
+                        continue
+                    # Mirror the relative path under the archive root so
+                    # the sidecar's RUN_ID + prompt_id provenance is
+                    # recoverable from the archive layout alone.
+                    try:
+                        rel = sidecar.relative_to(runs_dir)
+                    except ValueError:
+                        continue
+                    target = archive_root / rel
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(sidecar, target)
+                    print(f"  [archive] {sidecar.name} -> {target.relative_to(runs_dir)}", file=sys.stderr)
 
         for d in drop:
             # Sanity: refuse to delete anything outside runs_dir.
