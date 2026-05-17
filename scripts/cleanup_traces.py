@@ -194,11 +194,11 @@ def main() -> int:
     print(f"[cleanup_traces] total reclaimed: {human_bytes(total_to_drop)}  (dry_run={not args.apply})")
 
     if args.apply:
-        # Extract per-module sidecars BEFORE deleting raw chrome traces.
-        # Lost the per-module data once already (2026-05-16 audit cleanup)
-        # by deleting raw traces before running the analyzer; the sidecar
-        # captures the answer at retention time so it's preserved if a
-        # downstream consumer still needs it.
+        # Extract per-module sidecars before rm-tree. Raw chrome traces
+        # carry `record_function` annotations from ffn_attn's hooks that
+        # the analyzer needs for per-sub-module aten attribution; the
+        # sidecar captures that answer at retention time so downstream
+        # consumers don't lose it when the raw trace is deleted.
         if not args.no_extract:
             chrome_traces = [p for d in drop for p in find_chrome_traces(d)]
             if chrome_traces:
