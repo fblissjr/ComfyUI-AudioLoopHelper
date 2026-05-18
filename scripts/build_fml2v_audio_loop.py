@@ -528,32 +528,10 @@ _PHASE4_STRIP_AFTER_REWIRE = [
 
 
 def _add_getnode(ed: WorkflowEditor, bus_name: str, pos: tuple[int, int], dtype: str) -> int:
-    """Add a KJNodes-shape GetNode (no inputs, single typed '*' output reading the bus)."""
+    """Add a KJNodes-shape GetNode via the canonical WorkflowEditor factory."""
     node_id = ed.next_node_id()
-    node = {
-        "id": node_id,
-        "type": "GetNode",
-        "pos": list(pos),
-        "size": [210, 60],
-        "flags": {},
-        "order": 0,
-        "mode": 0,
-        "inputs": [],
-        "outputs": [{"name": "*", "type": dtype, "links": []}],
-        "properties": {
-            "Node name for S&R": "GetNode",
-            "aux_id": "kijai/ComfyUI-KJNodes",
-        },
-        "widgets_values": [bus_name],
-        "title": f"Get_{bus_name}",
-    }
-    ed.add_node(node)
+    ed.add_node(WorkflowEditor.make_get_node(node_id, bus_name, dtype, list(pos)))
     return node_id
-
-
-def _unbypass(ed: WorkflowEditor, node_id: int) -> None:
-    """Set mode=0 (active) on a node previously bypassed via mode=4."""
-    ed.find_node(node_id)["mode"] = 0
 
 
 def _add_setnode(ed: WorkflowEditor, bus_name: str, pos: tuple[int, int], dtype: str) -> int:
@@ -776,7 +754,6 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
 
     phase2 = ed.wf.get("properties", {}).get("build_fml2v_phase2", {})
     phase3 = ed.wf.get("properties", {}).get("build_fml2v_phase3", {})
-    phase4 = ed.wf.get("properties", {}).get("build_fml2v_phase4", {})
     fp_id = phase2["frame_planner"]
     overlap_const_id = phase2["overlap_seconds"]
     init_strength_id = phase2["first_frame_guide_strength"]
@@ -788,7 +765,7 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     sel_loop_id = phase3["selector_loop"]
     # Phase 4 added Set_initial_latent + Set_reference_latent; loop body
     # consumes them via fresh GetNodes (added below per consumer site).
-    _ = phase4  # touched for stash-presence invariant
+    assert "build_fml2v_phase4" in ed.wf.get("properties", {}), "Phase 4 must run before Phase 5"
 
     get_vae_id = _find_get_node(ed, "vae")
     get_firstframe_id = _find_get_node(ed, "firstframe")
@@ -1066,7 +1043,7 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
                 _BENCH_PASS2_KSAMPLER, _BENCH_PASS2_SIGMAS,
                 _BENCH_PASS2_CFG_GUIDER, _BENCH_PASS2_SAMPLER,
                 _BENCH_POST_PASS2_SEPARATE]:
-        _unbypass(ed, nid)
+        ed.find_node(nid)["mode"] = 0
     log(f"  unbypassed #{_BENCH_BETWEEN_CROPGUIDES}, #{_BENCH_PASS2_UPSAMPLER}, #{_BENCH_PRE_PASS2_GUIDE_MULTI}, #{_BENCH_PRE_PASS2_CONCAT_AV}, #{_BENCH_PASS2_KSAMPLER}, #{_BENCH_PASS2_SIGMAS}, #{_BENCH_PASS2_CFG_GUIDER}, #{_BENCH_PASS2_SAMPLER}, #{_BENCH_POST_PASS2_SEPARATE}")
 
     # Between cropguides (#2222) currently has latent ← #18 (init render) +

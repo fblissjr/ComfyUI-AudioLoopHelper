@@ -7247,29 +7247,29 @@
       ],
       "size": [
         210,
-        60
+        58
       ],
       "flags": {},
-      "order": 0,
+      "order": 20,
       "mode": 0,
       "inputs": [],
       "outputs": [
         {
-          "name": "*",
+          "name": "LATENT",
           "type": "LATENT",
           "links": [
             4189
           ]
         }
       ],
+      "title": "Get_initial_latent",
       "properties": {
         "Node name for S&R": "GetNode",
         "aux_id": "kijai/ComfyUI-KJNodes"
       },
       "widgets_values": [
         "initial_latent"
-      ],
-      "title": "Get_initial_latent"
+      ]
     },
     {
       "id": 2324,
@@ -8128,29 +8128,29 @@
       ],
       "size": [
         210,
-        60
+        58
       ],
       "flags": {},
-      "order": 0,
+      "order": 20,
       "mode": 0,
       "inputs": [],
       "outputs": [
         {
-          "name": "*",
+          "name": "LATENT",
           "type": "LATENT",
           "links": [
             4228
           ]
         }
       ],
+      "title": "Get_reference_latent",
       "properties": {
         "Node name for S&R": "GetNode",
         "aux_id": "kijai/ComfyUI-KJNodes"
       },
       "widgets_values": [
         "reference_latent"
-      ],
-      "title": "Get_reference_latent"
+      ]
     },
     {
       "id": 2340,
@@ -8253,29 +8253,29 @@
       ],
       "size": [
         210,
-        60
+        58
       ],
       "flags": {},
-      "order": 0,
+      "order": 20,
       "mode": 0,
       "inputs": [],
       "outputs": [
         {
-          "name": "*",
+          "name": "MODEL",
           "type": "MODEL",
           "links": [
             4231
           ]
         }
       ],
+      "title": "Get_loop_patched_model",
       "properties": {
         "Node name for S&R": "GetNode",
         "aux_id": "kijai/ComfyUI-KJNodes"
       },
       "widgets_values": [
         "loop_patched_model"
-      ],
-      "title": "Get_loop_patched_model"
+      ]
     },
     {
       "id": 2343,
@@ -8500,29 +8500,29 @@
       ],
       "size": [
         210,
-        60
+        58
       ],
       "flags": {},
-      "order": 0,
+      "order": 20,
       "mode": 0,
       "inputs": [],
       "outputs": [
         {
-          "name": "*",
+          "name": "MODEL",
           "type": "MODEL",
           "links": [
             4245
           ]
         }
       ],
+      "title": "Get_loop_patched_model",
       "properties": {
         "Node name for S&R": "GetNode",
         "aux_id": "kijai/ComfyUI-KJNodes"
       },
       "widgets_values": [
         "loop_patched_model"
-      ],
-      "title": "Get_loop_patched_model"
+      ]
     },
     {
       "id": 2348,
@@ -8577,29 +8577,29 @@
       ],
       "size": [
         210,
-        60
+        58
       ],
       "flags": {},
-      "order": 0,
+      "order": 20,
       "mode": 0,
       "inputs": [],
       "outputs": [
         {
-          "name": "*",
+          "name": "LATENT",
           "type": "LATENT",
           "links": [
             4249
           ]
         }
       ],
+      "title": "Get_reference_latent",
       "properties": {
         "Node name for S&R": "GetNode",
         "aux_id": "kijai/ComfyUI-KJNodes"
       },
       "widgets_values": [
         "reference_latent"
-      ],
-      "title": "Get_reference_latent"
+      ]
     },
     {
       "id": 2350,
