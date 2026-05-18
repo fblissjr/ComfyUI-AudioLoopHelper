@@ -371,7 +371,21 @@ _DEFAULT_NAG_PROMPT = (
     "still image with no motion, subtitles, deformed facial features, "
     "extra limbs, disfigured hands, duplicate character, twin, clone, microphone"
 )
-_GET_CLIP_NODE_ID = 124  # benchmark's GetNode "clip" (Set_clip is #188)
+
+
+def _find_get_node(ed: WorkflowEditor, name: str) -> int:
+    """Return id of the active GetNode whose first widget value is ``name``.
+
+    Raises ValueError if not found — surfacing benchmark restructure loudly
+    instead of silently wiring to the wrong slot.
+    """
+    for n in ed.wf.get("nodes", []):
+        if n.get("type") != "GetNode":
+            continue
+        wv = n.get("widgets_values") or []
+        if wv and wv[0] == name:
+            return n["id"]
+    raise ValueError(f"No GetNode found with widget value {name!r}")
 
 
 def phase3_conditioning(ed: WorkflowEditor, *, verbose: bool = True) -> None:
@@ -407,6 +421,7 @@ def phase3_conditioning(ed: WorkflowEditor, *, verbose: bool = True) -> None:
 
     phase2 = ed.wf.get("properties", {}).get("build_fml2v_phase2", {})
     alp_id = phase2["audio_loop_planner"]
+    get_clip_id = _find_get_node(ed, "clip")
 
     # --- Bypassed static-fallback CLIPTextEncode (positive) ---
     static_pos_id = _add_from_template(
@@ -416,7 +431,7 @@ def phase3_conditioning(ed: WorkflowEditor, *, verbose: bool = True) -> None:
         size=(400, 88),
         mode=4,
     )
-    ed.add_link(_GET_CLIP_NODE_ID, 0, static_pos_id, 0, "CLIP")
+    ed.add_link(get_clip_id, 0, static_pos_id, 0, "CLIP")
     log(f"+ CLIPTextEncode #{static_pos_id}  [BYPASSED static positive fallback]")
 
     # --- Active schedule encoder (stamps frame_rate=25 on every CONDITIONING) ---
@@ -434,7 +449,7 @@ def phase3_conditioning(ed: WorkflowEditor, *, verbose: bool = True) -> None:
         title="TimestampPromptScheduleBatchEncode (schedule)",
         size=(400, 200),
     )
-    ed.add_link(_GET_CLIP_NODE_ID, 0, batch_id, 0, "CLIP")
+    ed.add_link(get_clip_id, 0, batch_id, 0, "CLIP")
     # Slot 2 = stride_seconds, slot 3 = audio_duration on AudioLoopPlanner.
     # Sourcing from AudioLoopPlanner (iter-INDEPENDENT) — NOT Controller (cycle).
     ed.add_link(alp_id, 2, batch_id, 1, "FLOAT")
@@ -448,7 +463,7 @@ def phase3_conditioning(ed: WorkflowEditor, *, verbose: bool = True) -> None:
         title="CLIPTextEncode (nag_cond_video)",
         size=(400, 88),
     )
-    ed.add_link(_GET_CLIP_NODE_ID, 0, nag_cond_id, 0, "CLIP")
+    ed.add_link(get_clip_id, 0, nag_cond_id, 0, "CLIP")
     log(f"+ CLIPTextEncode #{nag_cond_id}  [nag_cond_video — output floats until Phase 5]")
 
     # --- Two ConditioningSelectByIteration (INIT + LOOP). ---
@@ -474,7 +489,7 @@ def phase3_conditioning(ed: WorkflowEditor, *, verbose: bool = True) -> None:
 
     # Stash IDs for Phase 4/5 to find without re-grepping.
     ed.wf.setdefault("properties", {})["build_fml2v_phase3"] = {
-        "static_positive_bypassed": static_pos_id,
+        "static_positive": static_pos_id,
         "batch_encoder": batch_id,
         "nag_cond_video": nag_cond_id,
         "selector_init": sel_init_id,
