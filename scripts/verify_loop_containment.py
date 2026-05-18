@@ -29,6 +29,9 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from workflow_utils import is_active  # noqa: E402
+
 
 # TLO output slots that carry per-iter DATA (not the flow-control wire).
 _TLO_DATA_OUT_SLOTS = {1, 2, 3}  # previous_value, accumulated_count, current_iteration
@@ -59,7 +62,7 @@ def _build_graph(wf: dict) -> tuple[dict[int, dict], dict[int, set], dict[int, s
     sets_by_bus: dict[str, list[int]] = defaultdict(list)
     gets_by_bus: dict[str, list[int]] = defaultdict(list)
     for n in wf.get("nodes", []):
-        if n.get("mode") == 4:
+        if not is_active(n):
             continue
         wv = n.get("widgets_values") or []
         if not wv:
@@ -110,9 +113,9 @@ def verify(wf: dict) -> tuple[int, list[dict]]:
     nodes, forward, reverse = _build_graph(wf)
 
     tlos = [n["id"] for n in wf.get("nodes", [])
-            if n.get("type") == "TensorLoopOpen" and n.get("mode") != 4]
+            if n.get("type") == "TensorLoopOpen" and is_active(n)]
     tlcs = [n["id"] for n in wf.get("nodes", [])
-            if n.get("type") == "TensorLoopClose" and n.get("mode") != 4]
+            if n.get("type") == "TensorLoopClose" and is_active(n)]
 
     if not tlos and not tlcs:
         print("No TensorLoopOpen/Close on canvas — nothing to verify.")
@@ -147,7 +150,7 @@ def verify(wf: dict) -> tuple[int, list[dict]]:
     for nid in violation_ids:
         n = nodes[nid]
         info = {"id": nid, "type": n.get("type"), "title": n.get("title") or ""}
-        if n.get("mode") == 4:
+        if not is_active(n):
             bypassed.append(info)
         elif n.get("type") in ("SetNode", "GetNode"):
             bus_dead.append(info)

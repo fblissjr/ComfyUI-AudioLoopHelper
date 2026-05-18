@@ -11990,7 +11990,7 @@
       "empty_latent_p1": 2330,
       "vae_encode_init_guide": 2331,
       "audio_slice": 2332,
-      "latent_overlap_trim_output": 2349,
+      "overlap_trim_output": 2349,
       "av_mask": 2333,
       "add_latent_guide": 2334,
       "crop_guides_no_latent": 2335,

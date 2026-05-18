@@ -1124,7 +1124,7 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
         "empty_latent_p1": empty_p1_id,
         "vae_encode_init_guide": vae_encode_id,
         "audio_slice": audio_slice_id,
-        "latent_overlap_trim_output": overlap_trim_id,
+        "overlap_trim_output": overlap_trim_id,
         "av_mask": mask_id,
         "add_latent_guide": add_guide_id,
         "crop_guides_no_latent": nocrop_id,
