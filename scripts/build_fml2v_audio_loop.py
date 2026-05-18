@@ -498,14 +498,211 @@ def phase3_conditioning(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     log("= Stashed Phase 3 node IDs in wf['properties']['build_fml2v_phase3']")
 
 
-def phase4_initial_render(ed: WorkflowEditor, *, verbose: bool = True) -> None:  # noqa: ARG001
-    """Phase 4: EmptyLTXVLatentVideo + LTXVImgToVideoInplaceKJ + LTXVAddGuideMulti
-    (multi-frame) + LTXVConcatAVLatent + init CFGGuider + RandomNoise + sampler
-    -> Set_initial_latent + Set_reference_latent.
+# Benchmark node IDs Phase 4 rewires (not stripped — many have other purposes).
+_BENCH_EMPTY_LATENT = 32           # EmptyLTXVLatentVideo (pass1)
+_BENCH_ADD_GUIDE_MULTI = 2221      # LTXVAddGuideMulti (pass1; 3-frame init)
+_BENCH_CONCAT_AV = 24              # LTXVConcatAVLatent (pass1)
+_BENCH_LTXV_CONDITIONING = 10      # LTXVConditioning (frame_rate=25)
+_BENCH_SEPARATE_AV = 18            # LTXVSeparateAVLatent (pass1)
+_BENCH_LOAD_IMAGE_FIRST = 45       # LoadImage "FIRST FRAME"
+_BENCH_SET_WIDTH = 2073            # SetNode "width"
+_BENCH_SET_HEIGHT = 2072           # SetNode "height"
+_BENCH_SET_FRAMES = 2075           # SetNode "frames"
+_BENCH_SET_FPS = 2074              # SetNode "fps"
+_BENCH_SET_FIRSTFRAME = 75         # SetNode "firstframe"
 
-    TODO: implement.
+# Orphaned by Phase 4 dim-SSoT + image-bus rewires; strip after rewiring.
+_PHASE4_STRIP_AFTER_REWIRE = [
+    2076,  # PrimitiveFloat fps (replaced by FramePlanner.fps_float)
+    2077,  # SimpleCalculatorKJ frames calc (replaced by FramePlanner.frames)
+    2079,  # INTConstant height (replaced by FramePlanner.height)
+    2080,  # INTConstant width  (replaced by FramePlanner.width)
+    2083,  # ResizeImagesByLongerEdge (replaced by LTXSmartImageResize chain)
+    2084,  # LTXVPreprocess (redundant once Set_firstframe carries preprocessed)
+]
+
+
+def _add_setnode(ed: WorkflowEditor, bus_name: str, pos: tuple[int, int], dtype: str = "LATENT") -> int:
+    """Add a KJNodes-shape SetNode (single typed input + '*' passthrough output)."""
+    node_id = ed.next_node_id()
+    node = {
+        "id": node_id,
+        "type": "SetNode",
+        "pos": list(pos),
+        "size": [210, 60],
+        "flags": {},
+        "order": 0,
+        "mode": 0,
+        "inputs": [{"name": dtype, "type": dtype, "link": None}],
+        "outputs": [{"name": "*", "type": "*", "links": []}],
+        "properties": {
+            "Node name for S&R": "SetNode",
+            "aux_id": "kijai/ComfyUI-KJNodes",
+            "previousName": "",
+        },
+        "widgets_values": [bus_name],
+        "title": f"Set_{bus_name}",
+    }
+    ed.add_node(node)
+    return node_id
+
+
+def phase4_initial_render(ed: WorkflowEditor, *, verbose: bool = True) -> None:
+    """Phase 4: bring benchmark's pass1 chain into the canonical init-render
+    topology and add Set_initial_latent + Set_reference_latent buses for Phase 5.
+
+    Reuses benchmark pass1 nodes (EmptyLatent #32, AddGuideMulti #2221,
+    ConcatAV #24, Conditioning #10, CFGGuider #36, RandomNoise #15, Sampler #13,
+    Separate #18, KSamplerSelect #1 = euler_ancestral_cfg_pp, ManualSigmas
+    #215 = canonical 9-value) rather than rebuilding from scratch.
+
+    Surgical changes:
+      - Dim SSoT: rewire Set_width / Set_height / Set_frames / Set_fps inputs
+        to source from LTXFramePlanner #2302 outputs. EmptyLatent #32 dims wire
+        directly from FramePlanner (skipping the ``a/2`` ComfyMathExpressions
+        which are reserved for Phase 5 pass1 half-res).
+      - Audio: wire LoadAudio → TrimAudio → AudioVAEEncode chain (Phase 2
+        added these as orphans). Rewire ConcatAV #24.audio_latent ← #2309
+        (replacing dangling Get_latent_audio whose Set was stripped in Phase 1).
+      - Image bus: LoadImage #45 → LTXSmartImageResize #2310 → LTXVPreprocess
+        #2311 → Set_firstframe. Strip dead #2083 + redundant #2084. Rewire
+        AddGuideMulti.image_1 ← Get_firstframe directly (preprocess now happens
+        upstream of the bus, satisfying F2 symmetry for Phase 5).
+      - Conditioning: wire LTXVConditioning #10.positive ← selector_init #2315
+        (was unwired since Phase 1 stripped the static positive encoder).
+      - Insert LTXVImgToVideoInplaceKJ between EmptyLatent and AddGuideMulti
+        for the frame-0 anchor at strength=1 (canonical noise_mask=0 lock).
+      - Add post-sample LTXVCropGuides + Set_initial_latent + Set_reference_latent
+        buses (Phase 5 loop body consumes both: initial_latent → TLO.previous_value,
+        reference_latent → per-iter LTXVAdainLatent).
+
+    Strips: 2076 (PrimitiveFloat fps), 2077 (SimpleCalc frames), 2079/2080
+    (INTConstants benchmark dims), 2083 (ResizeImagesByLongerEdge), 2084
+    (redundant LTXVPreprocess).
     """
-    print("[Phase 4] (not yet implemented)")
+    log = (lambda *a: print("  ", *a)) if verbose else (lambda *a: None)
+
+    phase2 = ed.wf.get("properties", {}).get("build_fml2v_phase2", {})
+    phase3 = ed.wf.get("properties", {}).get("build_fml2v_phase3", {})
+    fp_id = phase2["frame_planner"]              # #2302
+    load_audio_id = phase2["load_audio"]         # #2307
+    trim_audio_id = phase2["trim_audio"]         # #2308
+    audio_vae_id = phase2["audio_vae_encode"]    # #2309
+    smart_resize_id = phase2["smart_resize"]     # #2310
+    preprocess_id = phase2["preprocess"]         # #2311
+    sel_init_id = phase3["selector_init"]        # #2315
+
+    get_vae_id = _find_get_node(ed, "vae")
+    get_vae_audio_id = _find_get_node(ed, "vae_audio")
+    get_firstframe_id = _find_get_node(ed, "firstframe")
+
+    # --- 1. Dim SSoT: Set_width / Set_height / Set_frames / Set_fps ← FramePlanner ---
+    for set_node_id, fp_slot, dtype, label in [
+        (_BENCH_SET_WIDTH, 0, "INT", "Set_width"),
+        (_BENCH_SET_HEIGHT, 1, "INT", "Set_height"),
+        (_BENCH_SET_FRAMES, 2, "INT", "Set_frames"),
+        (_BENCH_SET_FPS, 5, "FLOAT", "Set_fps"),
+    ]:
+        old_link = ed.find_node(set_node_id)["inputs"][0].get("link")
+        if old_link is not None:
+            ed.remove_link(old_link)
+        ed.add_link(fp_id, fp_slot, set_node_id, 0, dtype)
+        log(f"  rewire {label} ← FramePlanner slot {fp_slot}")
+
+    # --- 2. EmptyLatent dims direct from FramePlanner (full res, not /2) ---
+    for slot_idx, fp_slot, dtype in [(0, 0, "INT"), (1, 1, "INT"), (2, 2, "INT")]:
+        empty_node = ed.find_node(_BENCH_EMPTY_LATENT)
+        old_link = empty_node["inputs"][slot_idx].get("link")
+        if old_link is not None:
+            ed.remove_link(old_link)
+        ed.add_link(fp_id, fp_slot, _BENCH_EMPTY_LATENT, slot_idx, dtype)
+    log(f"  rewire EmptyLatent #{_BENCH_EMPTY_LATENT} dims ← FramePlanner (full res)")
+
+    # --- 3. Audio chain: LoadAudio → Trim → VAEEncode ---
+    ed.add_link(load_audio_id, 0, trim_audio_id, 0, "AUDIO")
+    ed.add_link(trim_audio_id, 0, audio_vae_id, 0, "AUDIO")
+    ed.add_link(get_vae_audio_id, 0, audio_vae_id, 1, "VAE")
+    log(f"  wire LoadAudio #{load_audio_id} → TrimAudio #{trim_audio_id} → AudioVAEEncode #{audio_vae_id}")
+
+    # Rewire ConcatAV.audio_latent ← AudioVAEEncode (Get_latent_audio was orphaned by Phase 1)
+    concat_node = ed.find_node(_BENCH_CONCAT_AV)
+    old_link = concat_node["inputs"][1].get("link")
+    if old_link is not None:
+        ed.remove_link(old_link)
+    ed.add_link(audio_vae_id, 0, _BENCH_CONCAT_AV, 1, "LATENT")
+    log(f"  rewire ConcatAV #{_BENCH_CONCAT_AV}.audio_latent ← AudioVAEEncode #{audio_vae_id}")
+
+    # --- 4. Image bus: LoadImage → SmartResize → Preprocess → Set_firstframe ---
+    ed.add_link(_BENCH_LOAD_IMAGE_FIRST, 0, smart_resize_id, 0, "IMAGE")
+    ed.add_link(smart_resize_id, 0, preprocess_id, 0, "IMAGE")
+    set_ff = ed.find_node(_BENCH_SET_FIRSTFRAME)
+    old_link = set_ff["inputs"][0].get("link")
+    if old_link is not None:
+        ed.remove_link(old_link)
+    ed.add_link(preprocess_id, 0, _BENCH_SET_FIRSTFRAME, 0, "IMAGE")
+    log(f"  wire LoadImage #{_BENCH_LOAD_IMAGE_FIRST} → SmartResize #{smart_resize_id} → Preprocess #{preprocess_id} → Set_firstframe #{_BENCH_SET_FIRSTFRAME}")
+
+    # Rewire AddGuideMulti.image_1 ← Get_firstframe (skip dead #2084 preprocess)
+    addgm = ed.find_node(_BENCH_ADD_GUIDE_MULTI)
+    old_link = addgm["inputs"][4].get("link")  # num_guides.image_1
+    if old_link is not None:
+        ed.remove_link(old_link)
+    ed.add_link(get_firstframe_id, 0, _BENCH_ADD_GUIDE_MULTI, 4, "IMAGE")
+    log(f"  rewire AddGuideMulti #{_BENCH_ADD_GUIDE_MULTI}.image_1 ← Get_firstframe #{get_firstframe_id}")
+
+    # --- 5. Conditioning: LTXVConditioning.positive ← selector_init ---
+    ed.add_link(sel_init_id, 0, _BENCH_LTXV_CONDITIONING, 0, "CONDITIONING")
+    log(f"  wire LTXVConditioning #{_BENCH_LTXV_CONDITIONING}.positive ← selector_init #{sel_init_id}")
+
+    # --- 6. Insert LTXVImgToVideoInplaceKJ between EmptyLatent and AddGuideMulti ---
+    inplace_id = _add_from_template(
+        ed, "LTXVImgToVideoInplaceKJ", (-2700, 2400),
+        widget_values=["1", 1, 0],  # [num_images=1, strength=1, frame_idx=0]
+        title="LTXVImgToVideoInplaceKJ (frame-0 anchor)",
+        size=(290, 130),
+    )
+    ed.add_link(get_vae_id, 0, inplace_id, 0, "VAE")
+    ed.add_link(_BENCH_EMPTY_LATENT, 0, inplace_id, 1, "LATENT")
+    ed.add_link(get_firstframe_id, 0, inplace_id, 2, "IMAGE")
+    # Rewire AddGuideMulti.latent (slot 3) ← InplaceKJ (was ← EmptyLatent directly)
+    old_link = addgm["inputs"][3].get("link")
+    if old_link is not None:
+        ed.remove_link(old_link)
+    ed.add_link(inplace_id, 0, _BENCH_ADD_GUIDE_MULTI, 3, "LATENT")
+    log(f"+ LTXVImgToVideoInplaceKJ #{inplace_id}  [frame-0 anchor, strength=1]")
+
+    # --- 7. Post-sample LTXVCropGuides + Set_initial_latent + Set_reference_latent ---
+    cropguides_id = _add_from_template(
+        ed, "LTXVCropGuides", (-1700, 2200),
+        widget_values=[],
+        title="LTXVCropGuides (init render — post-sample F2/F3)",
+        size=(290, 80),
+    )
+    # pos/neg flow through AddGuideMulti (where guides were added). Use those outputs.
+    ed.add_link(_BENCH_ADD_GUIDE_MULTI, 0, cropguides_id, 0, "CONDITIONING")  # positive
+    ed.add_link(_BENCH_ADD_GUIDE_MULTI, 1, cropguides_id, 1, "CONDITIONING")  # negative
+    ed.add_link(_BENCH_SEPARATE_AV, 0, cropguides_id, 2, "LATENT")            # video_latent
+    log(f"+ LTXVCropGuides #{cropguides_id}  [pos/neg from AddGuideMulti, latent from SeparateAV]")
+
+    set_initial_id = _add_setnode(ed, "initial_latent", (-1400, 2200))
+    set_reference_id = _add_setnode(ed, "reference_latent", (-1400, 2280))
+    ed.add_link(cropguides_id, 2, set_initial_id, 0, "LATENT")
+    ed.add_link(cropguides_id, 2, set_reference_id, 0, "LATENT")
+    log(f"+ Set_initial_latent #{set_initial_id}, Set_reference_latent #{set_reference_id}")
+
+    # --- 8. Strip nodes orphaned by the above rewires ---
+    for nid in _PHASE4_STRIP_AFTER_REWIRE:
+        if _strip_node_and_links(ed, nid):
+            log(f"STRIP  #{nid}")
+
+    # Stash IDs for Phase 5 to find.
+    ed.wf.setdefault("properties", {})["build_fml2v_phase4"] = {
+        "img_to_video_inplace": inplace_id,
+        "post_sample_cropguides": cropguides_id,
+        "set_initial_latent": set_initial_id,
+        "set_reference_latent": set_reference_id,
+    }
+    log("= Stashed Phase 4 node IDs in wf['properties']['build_fml2v_phase4']")
 
 
 def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:  # noqa: ARG001
