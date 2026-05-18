@@ -522,7 +522,7 @@ _PHASE4_STRIP_AFTER_REWIRE = [
 ]
 
 
-def _add_setnode(ed: WorkflowEditor, bus_name: str, pos: tuple[int, int], dtype: str = "LATENT") -> int:
+def _add_setnode(ed: WorkflowEditor, bus_name: str, pos: tuple[int, int], dtype: str) -> int:
     """Add a KJNodes-shape SetNode (single typed input + '*' passthrough output)."""
     node_id = ed.next_node_id()
     node = {
@@ -603,19 +603,12 @@ def phase4_initial_render(ed: WorkflowEditor, *, verbose: bool = True) -> None:
         (_BENCH_SET_FRAMES, 2, "INT", "Set_frames"),
         (_BENCH_SET_FPS, 5, "FLOAT", "Set_fps"),
     ]:
-        old_link = ed.find_node(set_node_id)["inputs"][0].get("link")
-        if old_link is not None:
-            ed.remove_link(old_link)
-        ed.add_link(fp_id, fp_slot, set_node_id, 0, dtype)
+        ed.rewire_input(set_node_id, 0, fp_id, fp_slot, dtype)
         log(f"  rewire {label} ← FramePlanner slot {fp_slot}")
 
     # --- 2. EmptyLatent dims direct from FramePlanner (full res, not /2) ---
-    for slot_idx, fp_slot, dtype in [(0, 0, "INT"), (1, 1, "INT"), (2, 2, "INT")]:
-        empty_node = ed.find_node(_BENCH_EMPTY_LATENT)
-        old_link = empty_node["inputs"][slot_idx].get("link")
-        if old_link is not None:
-            ed.remove_link(old_link)
-        ed.add_link(fp_id, fp_slot, _BENCH_EMPTY_LATENT, slot_idx, dtype)
+    for slot_idx, fp_slot in [(0, 0), (1, 1), (2, 2)]:
+        ed.rewire_input(_BENCH_EMPTY_LATENT, slot_idx, fp_id, fp_slot, "INT")
     log(f"  rewire EmptyLatent #{_BENCH_EMPTY_LATENT} dims ← FramePlanner (full res)")
 
     # --- 3. Audio chain: LoadAudio → Trim → VAEEncode ---
@@ -625,29 +618,17 @@ def phase4_initial_render(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     log(f"  wire LoadAudio #{load_audio_id} → TrimAudio #{trim_audio_id} → AudioVAEEncode #{audio_vae_id}")
 
     # Rewire ConcatAV.audio_latent ← AudioVAEEncode (Get_latent_audio was orphaned by Phase 1)
-    concat_node = ed.find_node(_BENCH_CONCAT_AV)
-    old_link = concat_node["inputs"][1].get("link")
-    if old_link is not None:
-        ed.remove_link(old_link)
-    ed.add_link(audio_vae_id, 0, _BENCH_CONCAT_AV, 1, "LATENT")
+    ed.rewire_input(_BENCH_CONCAT_AV, 1, audio_vae_id, 0, "LATENT")
     log(f"  rewire ConcatAV #{_BENCH_CONCAT_AV}.audio_latent ← AudioVAEEncode #{audio_vae_id}")
 
     # --- 4. Image bus: LoadImage → SmartResize → Preprocess → Set_firstframe ---
     ed.add_link(_BENCH_LOAD_IMAGE_FIRST, 0, smart_resize_id, 0, "IMAGE")
     ed.add_link(smart_resize_id, 0, preprocess_id, 0, "IMAGE")
-    set_ff = ed.find_node(_BENCH_SET_FIRSTFRAME)
-    old_link = set_ff["inputs"][0].get("link")
-    if old_link is not None:
-        ed.remove_link(old_link)
-    ed.add_link(preprocess_id, 0, _BENCH_SET_FIRSTFRAME, 0, "IMAGE")
+    ed.rewire_input(_BENCH_SET_FIRSTFRAME, 0, preprocess_id, 0, "IMAGE")
     log(f"  wire LoadImage #{_BENCH_LOAD_IMAGE_FIRST} → SmartResize #{smart_resize_id} → Preprocess #{preprocess_id} → Set_firstframe #{_BENCH_SET_FIRSTFRAME}")
 
     # Rewire AddGuideMulti.image_1 ← Get_firstframe (skip dead #2084 preprocess)
-    addgm = ed.find_node(_BENCH_ADD_GUIDE_MULTI)
-    old_link = addgm["inputs"][4].get("link")  # num_guides.image_1
-    if old_link is not None:
-        ed.remove_link(old_link)
-    ed.add_link(get_firstframe_id, 0, _BENCH_ADD_GUIDE_MULTI, 4, "IMAGE")
+    ed.rewire_input(_BENCH_ADD_GUIDE_MULTI, 4, get_firstframe_id, 0, "IMAGE")
     log(f"  rewire AddGuideMulti #{_BENCH_ADD_GUIDE_MULTI}.image_1 ← Get_firstframe #{get_firstframe_id}")
 
     # --- 5. Conditioning: LTXVConditioning.positive ← selector_init ---
@@ -665,10 +646,7 @@ def phase4_initial_render(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     ed.add_link(_BENCH_EMPTY_LATENT, 0, inplace_id, 1, "LATENT")
     ed.add_link(get_firstframe_id, 0, inplace_id, 2, "IMAGE")
     # Rewire AddGuideMulti.latent (slot 3) ← InplaceKJ (was ← EmptyLatent directly)
-    old_link = addgm["inputs"][3].get("link")
-    if old_link is not None:
-        ed.remove_link(old_link)
-    ed.add_link(inplace_id, 0, _BENCH_ADD_GUIDE_MULTI, 3, "LATENT")
+    ed.rewire_input(_BENCH_ADD_GUIDE_MULTI, 3, inplace_id, 0, "LATENT")
     log(f"+ LTXVImgToVideoInplaceKJ #{inplace_id}  [frame-0 anchor, strength=1]")
 
     # --- 7. Post-sample LTXVCropGuides + Set_initial_latent + Set_reference_latent ---
@@ -684,8 +662,8 @@ def phase4_initial_render(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     ed.add_link(_BENCH_SEPARATE_AV, 0, cropguides_id, 2, "LATENT")            # video_latent
     log(f"+ LTXVCropGuides #{cropguides_id}  [pos/neg from AddGuideMulti, latent from SeparateAV]")
 
-    set_initial_id = _add_setnode(ed, "initial_latent", (-1400, 2200))
-    set_reference_id = _add_setnode(ed, "reference_latent", (-1400, 2280))
+    set_initial_id = _add_setnode(ed, "initial_latent", (-1400, 2200), dtype="LATENT")
+    set_reference_id = _add_setnode(ed, "reference_latent", (-1400, 2280), dtype="LATENT")
     ed.add_link(cropguides_id, 2, set_initial_id, 0, "LATENT")
     ed.add_link(cropguides_id, 2, set_reference_id, 0, "LATENT")
     log(f"+ Set_initial_latent #{set_initial_id}, Set_reference_latent #{set_reference_id}")
