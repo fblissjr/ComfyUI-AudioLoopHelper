@@ -1,0 +1,1581 @@
+{
+  "CFGGuider": {
+    "type": "CFGGuider",
+    "inputs": [
+      {
+        "name": "model",
+        "type": "MODEL"
+      },
+      {
+        "name": "positive",
+        "type": "CONDITIONING"
+      },
+      {
+        "name": "negative",
+        "type": "CONDITIONING"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "GUIDER",
+        "type": "GUIDER"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfy-core",
+      "ver": "0.3.64",
+      "Node name for S&R": "CFGGuider",
+      "enableTabs": false,
+      "tabWidth": 65,
+      "tabXOffset": 10,
+      "hasSecondTab": false,
+      "secondTabText": "Send Back",
+      "secondTabOffset": 80,
+      "secondTabWidth": 65
+    },
+    "widgets_values": [
+      1
+    ],
+    "title": null
+  },
+  "RandomNoise": {
+    "type": "RandomNoise",
+    "inputs": [
+      {
+        "name": "noise_seed",
+        "type": "INT",
+        "widget": {
+          "name": "noise_seed"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name": "NOISE",
+        "type": "NOISE"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfy-core",
+      "ver": "0.16.4",
+      "Node name for S&R": "RandomNoise"
+    },
+    "widgets_values": [
+      0,
+      "fixed"
+    ],
+    "title": null
+  },
+  "LTXVConditioning": {
+    "type": "LTXVConditioning",
+    "inputs": [
+      {
+        "name": "positive",
+        "type": "CONDITIONING"
+      },
+      {
+        "name": "negative",
+        "type": "CONDITIONING"
+      },
+      {
+        "name": "frame_rate",
+        "type": "FLOAT",
+        "widget": {
+          "name": "frame_rate"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name": "positive",
+        "type": "CONDITIONING"
+      },
+      {
+        "name": "negative",
+        "type": "CONDITIONING"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfy-core",
+      "ver": "0.3.56",
+      "Node name for S&R": "LTXVConditioning",
+      "enableTabs": false,
+      "tabWidth": 65,
+      "tabXOffset": 10,
+      "hasSecondTab": false,
+      "secondTabText": "Send Back",
+      "secondTabOffset": 80,
+      "secondTabWidth": 65
+    },
+    "widgets_values": [
+      25
+    ],
+    "title": null
+  },
+  "FloatConstant": {
+    "type": "FloatConstant",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "value",
+        "type": "FLOAT"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfyui-kjnodes",
+      "ver": "ff79c7332d7ea4aa85097a88fb09359f28cb487e",
+      "Node name for S&R": "FloatConstant"
+    },
+    "widgets_values": [
+      0.7
+    ],
+    "title": "first_frame_guide_strength"
+  },
+  "LTX2_NAG": {
+    "type": "LTX2_NAG",
+    "inputs": [
+      {
+        "name": "model",
+        "type": "MODEL"
+      },
+      {
+        "name": "nag_cond_video",
+        "shape": 7,
+        "type": "CONDITIONING"
+      },
+      {
+        "name": "nag_cond_audio",
+        "shape": 7,
+        "type": "CONDITIONING"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "model",
+        "type": "MODEL"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfyui-kjnodes",
+      "ver": "0ea5ece1793263d9fb0ad97bb067f96b83a9dea3",
+      "Node name for S&R": "LTX2_NAG"
+    },
+    "widgets_values": [
+      11,
+      0.25,
+      2.5,
+      true
+    ],
+    "title": null
+  },
+  "TrimAudioDuration": {
+    "type": "TrimAudioDuration",
+    "inputs": [
+      {
+        "name": "audio",
+        "type": "AUDIO"
+      },
+      {
+        "name": "duration",
+        "type": "FLOAT",
+        "widget": {
+          "name": "duration"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name": "AUDIO",
+        "type": "AUDIO"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfy-core",
+      "ver": "0.9.2",
+      "Node name for S&R": "TrimAudioDuration"
+    },
+    "widgets_values": [
+      0,
+      10
+    ],
+    "title": "Initial-Render Audio Trim (10s context)"
+  },
+  "LTXVAudioVAEEncode": {
+    "type": "LTXVAudioVAEEncode",
+    "inputs": [
+      {
+        "name": "audio",
+        "type": "AUDIO"
+      },
+      {
+        "label": "Audio VAE",
+        "name": "audio_vae",
+        "type": "VAE"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "Audio Latent",
+        "type": "LATENT"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfy-core",
+      "ver": "0.9.2",
+      "Node name for S&R": "LTXVAudioVAEEncode"
+    },
+    "widgets_values": [],
+    "title": null
+  },
+  "LTXVImgToVideoInplaceKJ": {
+    "type": "LTXVImgToVideoInplaceKJ",
+    "inputs": [
+      {
+        "name": "vae",
+        "type": "VAE"
+      },
+      {
+        "name": "latent",
+        "type": "LATENT"
+      },
+      {
+        "label": "image_1",
+        "name": "num_images.image_1",
+        "shape": 7,
+        "type": "IMAGE"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "latent",
+        "type": "LATENT"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfyui-kjnodes",
+      "ver": "bb7227bfea7e95f35ecdecddf74caca87757cfc6",
+      "Node name for S&R": "LTXVImgToVideoInplaceKJ"
+    },
+    "widgets_values": [
+      "1",
+      1,
+      0
+    ],
+    "title": null
+  },
+  "LTXVConcatAVLatent": {
+    "type": "LTXVConcatAVLatent",
+    "inputs": [
+      {
+        "name": "video_latent",
+        "type": "LATENT"
+      },
+      {
+        "name": "audio_latent",
+        "type": "LATENT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "latent",
+        "type": "LATENT"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfy-core",
+      "ver": "0.8.0",
+      "Node name for S&R": "LTXVConcatAVLatent"
+    },
+    "widgets_values": [],
+    "title": null
+  },
+  "LTXSmartImageResize": {
+    "type": "LTXSmartImageResize",
+    "inputs": [
+      {
+        "name": "image",
+        "type": "IMAGE"
+      },
+      {
+        "name": "width",
+        "type": "INT",
+        "widget": {
+          "name": "width"
+        }
+      },
+      {
+        "name": "height",
+        "type": "INT",
+        "widget": {
+          "name": "height"
+        }
+      },
+      {
+        "name": "keep_proportion",
+        "type": "BOOLEAN",
+        "widget": {
+          "name": "keep_proportion"
+        }
+      },
+      {
+        "name": "crop_position",
+        "type": "COMBO",
+        "widget": {
+          "name": "crop_position"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name": "image",
+        "type": "IMAGE"
+      },
+      {
+        "name": "width",
+        "type": "INT"
+      },
+      {
+        "name": "height",
+        "type": "INT"
+      }
+    ],
+    "properties": {
+      "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+      "cnr_id": "comfyui-audioloophelper",
+      "Node name for S&R": "LTXSmartImageResize"
+    },
+    "widgets_values": [
+      832,
+      448,
+      true,
+      "top"
+    ],
+    "title": null
+  },
+  "LTXVSeparateAVLatent": {
+    "type": "LTXVSeparateAVLatent",
+    "inputs": [
+      {
+        "name": "av_latent",
+        "type": "LATENT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "video_latent",
+        "type": "LATENT"
+      },
+      {
+        "name": "audio_latent",
+        "type": "LATENT"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfy-core",
+      "ver": "0.7.0",
+      "Node name for S&R": "LTXVSeparateAVLatent"
+    },
+    "widgets_values": [],
+    "title": null
+  },
+  "LTXVCropGuides": {
+    "type": "LTXVCropGuides",
+    "inputs": [
+      {
+        "name": "positive",
+        "type": "CONDITIONING"
+      },
+      {
+        "name": "negative",
+        "type": "CONDITIONING"
+      },
+      {
+        "name": "latent",
+        "type": "LATENT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "positive",
+        "type": "CONDITIONING"
+      },
+      {
+        "name": "negative",
+        "type": "CONDITIONING"
+      },
+      {
+        "name": "latent",
+        "type": "LATENT"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfy-core",
+      "ver": "0.8.0",
+      "Node name for S&R": "LTXVCropGuides"
+    },
+    "widgets_values": [],
+    "title": null
+  },
+  "SamplerCustomAdvanced": {
+    "type": "SamplerCustomAdvanced",
+    "inputs": [
+      {
+        "name": "noise",
+        "type": "NOISE"
+      },
+      {
+        "name": "guider",
+        "type": "GUIDER"
+      },
+      {
+        "name": "sampler",
+        "type": "SAMPLER"
+      },
+      {
+        "name": "sigmas",
+        "type": "SIGMAS"
+      },
+      {
+        "name": "latent_image",
+        "type": "LATENT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "output",
+        "type": "LATENT"
+      },
+      {
+        "name": "denoised_output",
+        "type": "LATENT"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfy-core",
+      "ver": "0.3.60",
+      "Node name for S&R": "SamplerCustomAdvanced",
+      "enableTabs": false,
+      "tabWidth": 65,
+      "tabXOffset": 10,
+      "hasSecondTab": false,
+      "secondTabText": "Send Back",
+      "secondTabOffset": 80,
+      "secondTabWidth": 65
+    },
+    "widgets_values": [],
+    "title": null
+  },
+  "AudioLoopPlanner": {
+    "type": "AudioLoopPlanner",
+    "inputs": [
+      {
+        "name": "audio",
+        "type": "AUDIO"
+      },
+      {
+        "name": "window_seconds",
+        "type": "FLOAT",
+        "widget": {
+          "name": "window_seconds"
+        }
+      },
+      {
+        "name": "fps",
+        "type": "INT",
+        "widget": {
+          "name": "fps"
+        }
+      },
+      {
+        "name": "overlap_seconds",
+        "type": "FLOAT",
+        "widget": {
+          "name": "overlap_seconds"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name": "summary",
+        "type": "STRING"
+      },
+      {
+        "name": "total_iterations",
+        "type": "INT"
+      },
+      {
+        "name": "stride_seconds",
+        "type": "FLOAT"
+      },
+      {
+        "name": "audio_duration",
+        "type": "FLOAT"
+      }
+    ],
+    "properties": {
+      "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+      "ver": "5fdb6942bce83bd76d3ac6316944924648ae08d7",
+      "Node name for S&R": "AudioLoopPlanner"
+    },
+    "widgets_values": [
+      19.88,
+      2,
+      25,
+      0,
+      ""
+    ],
+    "title": null
+  },
+  "TensorLoopClose": {
+    "type": "TensorLoopClose",
+    "inputs": [
+      {
+        "name": "flow_control",
+        "type": "FLOW_CONTROL"
+      },
+      {
+        "name": "processed",
+        "type": "IMAGE,MASK,LATENT"
+      },
+      {
+        "name": "stop",
+        "shape": 7,
+        "type": "BOOLEAN"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "output",
+        "type": "LATENT"
+      }
+    ],
+    "properties": {
+      "aux_id": "kijai/ComfyUI-NativeLooping_testing",
+      "ver": "514fcb56456986606d51ccb00e361348313dbe49",
+      "Node name for S&R": "TensorLoopClose"
+    },
+    "widgets_values": [
+      true,
+      "disabled"
+    ],
+    "title": null
+  },
+  "TensorLoopOpen": {
+    "type": "TensorLoopOpen",
+    "inputs": [
+      {
+        "name": "initial_value",
+        "shape": 7,
+        "type": "IMAGE,MASK,LATENT"
+      },
+      {
+        "name": "iterations_in",
+        "shape": 7,
+        "type": "INT",
+        "widget": {
+          "name": "iterations_in"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name": "flow_control",
+        "type": "FLOW_CONTROL"
+      },
+      {
+        "name": "previous_value",
+        "type": "LATENT"
+      },
+      {
+        "name": "accumulated_count",
+        "type": "INT"
+      },
+      {
+        "name": "current_iteration",
+        "type": "INT"
+      }
+    ],
+    "properties": {
+      "aux_id": "kijai/ComfyUI-NativeLooping_testing",
+      "ver": "514fcb56456986606d51ccb00e361348313dbe49",
+      "Node name for S&R": "TensorLoopOpen"
+    },
+    "widgets_values": [
+      "iterations",
+      50,
+      0
+    ],
+    "title": null
+  },
+  "LTXVPreprocess": {
+    "type": "LTXVPreprocess",
+    "inputs": [
+      {
+        "name": "image",
+        "type": "IMAGE"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "output_image",
+        "type": "IMAGE"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfy-core",
+      "ver": "0.8.2",
+      "Node name for S&R": "LTXVPreprocess"
+    },
+    "widgets_values": [
+      18
+    ],
+    "title": null
+  },
+  "AudioLoopController": {
+    "type": "AudioLoopController",
+    "inputs": [
+      {
+        "name": "audio",
+        "type": "AUDIO"
+      },
+      {
+        "name": "current_iteration",
+        "type": "INT",
+        "widget": {
+          "name": "current_iteration"
+        }
+      },
+      {
+        "name": "window_seconds",
+        "type": "FLOAT",
+        "widget": {
+          "name": "window_seconds"
+        }
+      },
+      {
+        "name": "base_seed",
+        "type": "INT",
+        "widget": {
+          "name": "base_seed"
+        }
+      },
+      {
+        "name": "fps",
+        "type": "INT",
+        "widget": {
+          "name": "fps"
+        }
+      },
+      {
+        "name": "overlap_seconds",
+        "type": "FLOAT",
+        "widget": {
+          "name": "overlap_seconds"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name": "start_index",
+        "type": "FLOAT"
+      },
+      {
+        "name": "should_stop",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "audio_duration",
+        "type": "FLOAT"
+      },
+      {
+        "name": "iteration_seed",
+        "type": "INT"
+      },
+      {
+        "name": "stride_seconds",
+        "type": "FLOAT"
+      },
+      {
+        "name": "overlap_frames",
+        "type": "INT"
+      },
+      {
+        "name": "overlap_latent_frames",
+        "type": "INT",
+        "slot_index": 6
+      },
+      {
+        "name": "overlap_seconds",
+        "type": "FLOAT",
+        "slot_index": 7
+      }
+    ],
+    "properties": {
+      "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+      "ver": "7f972154e4216a7beb1839f83fb43c3b7876c457",
+      "Node name for S&R": "AudioLoopController"
+    },
+    "widgets_values": [
+      1,
+      19.88,
+      2,
+      344096342624943,
+      25
+    ],
+    "title": null
+  },
+  "LTXVTiledVAEDecode": {
+    "type": "LTXVTiledVAEDecode",
+    "inputs": [
+      {
+        "name": "vae",
+        "type": "VAE"
+      },
+      {
+        "name": "latents",
+        "type": "LATENT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "image",
+        "type": "IMAGE"
+      }
+    ],
+    "properties": {
+      "cnr_id": "ComfyUI-LTXVideo",
+      "ver": "2acf7af8991f33b5cc06ec26753cb6e88e057d04",
+      "Node name for S&R": "LTXVTiledVAEDecode"
+    },
+    "widgets_values": [
+      1,
+      1,
+      1,
+      true,
+      "auto",
+      "auto"
+    ],
+    "title": "Final VAE Decode (once)"
+  },
+  "LatentConcat": {
+    "type": "LatentConcat",
+    "inputs": [
+      {
+        "name": "samples1",
+        "type": "LATENT"
+      },
+      {
+        "name": "samples2",
+        "type": "LATENT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "LATENT",
+        "type": "LATENT"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfy-core",
+      "ver": "0.20.1",
+      "Node name for S&R": "LatentConcat"
+    },
+    "widgets_values": [
+      "t"
+    ],
+    "title": "Prepend Initial Render"
+  },
+  "ConditioningSelectByIteration": {
+    "type": "ConditioningSelectByIteration",
+    "inputs": [
+      {
+        "name": "conditioning_list",
+        "type": "*"
+      },
+      {
+        "name": "current_iteration",
+        "type": "INT",
+        "widget": {
+          "name": "current_iteration"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name": "conditioning",
+        "type": "CONDITIONING"
+      }
+    ],
+    "properties": {
+      "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+      "ver": "0e2f31043ddfab2e3a05a3295ba0772b22d8e35f",
+      "Node name for S&R": "ConditioningSelectByIteration",
+      "cnr_id": "comfyui-audioloophelper"
+    },
+    "widgets_values": [
+      0
+    ],
+    "title": null
+  },
+  "LoopIterationStamp": {
+    "type": "LoopIterationStamp",
+    "inputs": [
+      {
+        "name": "model",
+        "type": "MODEL"
+      },
+      {
+        "name": "current_iteration",
+        "type": "INT",
+        "widget": {
+          "name": "current_iteration"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name": "model",
+        "type": "MODEL"
+      }
+    ],
+    "properties": {
+      "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+      "ver": "0e2f31043ddfab2e3a05a3295ba0772b22d8e35f",
+      "Node name for S&R": "LoopIterationStamp"
+    },
+    "widgets_values": [
+      0
+    ],
+    "title": null
+  },
+  "LTXFramePlanner": {
+    "type": "LTXFramePlanner",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "width",
+        "type": "INT"
+      },
+      {
+        "name": "height",
+        "type": "INT"
+      },
+      {
+        "name": "frames",
+        "type": "INT"
+      },
+      {
+        "name": "actual_seconds",
+        "type": "FLOAT"
+      },
+      {
+        "name": "fps_int",
+        "type": "INT"
+      },
+      {
+        "name": "fps_float",
+        "type": "FLOAT"
+      },
+      {
+        "name": "latent_volume",
+        "type": "INT"
+      },
+      {
+        "name": "status",
+        "type": "STRING"
+      },
+      {
+        "name": "summary",
+        "type": "STRING"
+      }
+    ],
+    "properties": {
+      "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+      "ver": "0e2f31043ddfab2e3a05a3295ba0772b22d8e35f",
+      "Node name for S&R": "LTXFramePlanner"
+    },
+    "widgets_values": [
+      960,
+      544,
+      19.88,
+      25
+    ],
+    "title": "LTX Frame Planner (single source for dimension config)"
+  },
+  "TimestampPromptScheduleBatchEncode": {
+    "type": "TimestampPromptScheduleBatchEncode",
+    "inputs": [
+      {
+        "name": "clip",
+        "type": "CLIP"
+      },
+      {
+        "name": "stride_seconds",
+        "type": "FLOAT",
+        "widget": {
+          "name": "stride_seconds"
+        }
+      },
+      {
+        "name": "audio_duration",
+        "type": "FLOAT",
+        "widget": {
+          "name": "audio_duration"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name": "conditioning_list",
+        "type": "*"
+      },
+      {
+        "name": "iteration_count",
+        "type": "INT"
+      }
+    ],
+    "properties": {
+      "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+      "ver": "0e2f31043ddfab2e3a05a3295ba0772b22d8e35f",
+      "Node name for S&R": "TimestampPromptScheduleBatchEncode",
+      "cnr_id": "comfyui-audioloophelper"
+    },
+    "widgets_values": [
+      "0:00+: video of a man dancing",
+      17.92,
+      180,
+      true,
+      25
+    ],
+    "title": "Prompt Schedule (Batch Encode)"
+  },
+  "LoadAudio": {
+    "type": "LoadAudio",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "AUDIO",
+        "type": "AUDIO"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfy-core",
+      "ver": "0.9.2",
+      "Node name for S&R": "LoadAudio"
+    },
+    "widgets_values": [
+      "example_audio.mp3",
+      null,
+      null
+    ],
+    "title": null
+  },
+  "RunIdPrefix": {
+    "type": "RunIdPrefix",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "video_prefix",
+        "type": "STRING"
+      },
+      {
+        "name": "latent_prefix",
+        "type": "STRING"
+      }
+    ],
+    "properties": {
+      "Node name for S&R": "RunIdPrefix"
+    },
+    "widgets_values": [
+      "audio-loop-music-video_latent",
+      "%Y%m%d_%H%M%S"
+    ],
+    "title": "Run ID Prefix"
+  },
+  "TrimVideoLatentToAudio": {
+    "type": "TrimVideoLatentToAudio",
+    "inputs": [
+      {
+        "name": "latent",
+        "type": "LATENT"
+      },
+      {
+        "name": "audio",
+        "type": "AUDIO"
+      },
+      {
+        "name": "fps",
+        "type": "INT",
+        "widget": {
+          "name": "fps"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name": "latent",
+        "type": "LATENT"
+      }
+    ],
+    "properties": {
+      "Node name for S&R": "TrimVideoLatentToAudio"
+    },
+    "widgets_values": [
+      25
+    ],
+    "title": "Trim latent to audio"
+  },
+  "TrimImageBatchToAudio": {
+    "type": "TrimImageBatchToAudio",
+    "inputs": [
+      {
+        "name": "images",
+        "type": "IMAGE"
+      },
+      {
+        "name": "audio",
+        "type": "AUDIO"
+      },
+      {
+        "name": "fps",
+        "type": "INT",
+        "widget": {
+          "name": "fps"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name": "images",
+        "type": "IMAGE"
+      }
+    ],
+    "properties": {
+      "Node name for S&R": "TrimImageBatchToAudio"
+    },
+    "widgets_values": [
+      25
+    ],
+    "title": "Trim to audio"
+  },
+  "LTXVCropGuidesNoLatent": {
+    "type": "LTXVCropGuidesNoLatent",
+    "inputs": [
+      {
+        "localized_name": "positive",
+        "name": "positive",
+        "type": "CONDITIONING"
+      },
+      {
+        "localized_name": "negative",
+        "name": "negative",
+        "type": "CONDITIONING"
+      }
+    ],
+    "outputs": [
+      {
+        "localized_name": "positive",
+        "name": "positive",
+        "type": "CONDITIONING"
+      },
+      {
+        "localized_name": "negative",
+        "name": "negative",
+        "type": "CONDITIONING"
+      }
+    ],
+    "properties": {
+      "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+      "ver": "0e2f31043ddfab2e3a05a3295ba0772b22d8e35f",
+      "Node name for S&R": "LTXVCropGuidesNoLatent",
+      "cnr_id": "comfyui-audioloophelper"
+    },
+    "widgets_values": [],
+    "title": null
+  },
+  "LTXVAddLatentGuide": {
+    "type": "LTXVAddLatentGuide",
+    "inputs": [
+      {
+        "localized_name": "vae",
+        "name": "vae",
+        "type": "VAE"
+      },
+      {
+        "localized_name": "positive",
+        "name": "positive",
+        "type": "CONDITIONING"
+      },
+      {
+        "localized_name": "negative",
+        "name": "negative",
+        "type": "CONDITIONING"
+      },
+      {
+        "localized_name": "latent",
+        "name": "latent",
+        "type": "LATENT"
+      },
+      {
+        "localized_name": "guiding_latent",
+        "name": "guiding_latent",
+        "type": "LATENT"
+      },
+      {
+        "localized_name": "strength",
+        "name": "strength",
+        "type": "FLOAT",
+        "widget": {
+          "name": "strength"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "localized_name": "positive",
+        "name": "positive",
+        "type": "CONDITIONING"
+      },
+      {
+        "localized_name": "negative",
+        "name": "negative",
+        "type": "CONDITIONING"
+      },
+      {
+        "localized_name": "latent",
+        "name": "latent",
+        "type": "LATENT"
+      }
+    ],
+    "properties": {
+      "cnr_id": "ComfyUI-LTXVideo",
+      "ver": "531512f7286963dc7aff1fd8bf5556e95eae03af",
+      "Node name for S&R": "LTXVAddLatentGuide",
+      "aux_id": "Lightricks/ComfyUI-LTXVideo"
+    },
+    "widgets_values": [
+      -1,
+      1
+    ],
+    "title": null
+  },
+  "LTXVAudioVideoMask": {
+    "type": "LTXVAudioVideoMask",
+    "inputs": [
+      {
+        "localized_name": "video_latent",
+        "name": "video_latent",
+        "shape": 7,
+        "type": "LATENT"
+      },
+      {
+        "localized_name": "audio_latent",
+        "name": "audio_latent",
+        "shape": 7,
+        "type": "LATENT"
+      },
+      {
+        "localized_name": "video_start_time",
+        "name": "video_start_time",
+        "type": "FLOAT",
+        "widget": {
+          "name": "video_start_time"
+        }
+      },
+      {
+        "localized_name": "video_end_time",
+        "name": "video_end_time",
+        "type": "FLOAT",
+        "widget": {
+          "name": "video_end_time"
+        }
+      },
+      {
+        "localized_name": "audio_start_time",
+        "name": "audio_start_time",
+        "type": "FLOAT",
+        "widget": {
+          "name": "audio_start_time"
+        }
+      },
+      {
+        "localized_name": "audio_end_time",
+        "name": "audio_end_time",
+        "type": "FLOAT",
+        "widget": {
+          "name": "audio_end_time"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "localized_name": "video_latent",
+        "name": "video_latent",
+        "type": "LATENT"
+      },
+      {
+        "localized_name": "audio_latent",
+        "name": "audio_latent",
+        "type": "LATENT"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfyui-kjnodes",
+      "ver": "c8e7f48a7f68b7a31ee336bc0be54bedbca05ffa",
+      "Node name for S&R": "LTXVAudioVideoMask"
+    },
+    "widgets_values": [
+      25,
+      1,
+      10,
+      10,
+      10,
+      "pad",
+      "add"
+    ],
+    "title": null
+  },
+  "LatentContextExtract": {
+    "type": "LatentContextExtract",
+    "inputs": [
+      {
+        "localized_name": "latent",
+        "name": "latent",
+        "type": "LATENT"
+      },
+      {
+        "localized_name": "overlap_latent_frames",
+        "name": "overlap_latent_frames",
+        "type": "INT",
+        "widget": {
+          "name": "overlap_latent_frames"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "localized_name": "context",
+        "name": "context",
+        "type": "LATENT"
+      }
+    ],
+    "properties": {
+      "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+      "ver": "0e2f31043ddfab2e3a05a3295ba0772b22d8e35f",
+      "Node name for S&R": "LatentContextExtract"
+    },
+    "widgets_values": [
+      4
+    ],
+    "title": "Context Extract"
+  },
+  "LatentOverlapTrim": {
+    "type": "LatentOverlapTrim",
+    "inputs": [
+      {
+        "localized_name": "latent",
+        "name": "latent",
+        "type": "LATENT"
+      },
+      {
+        "localized_name": "overlap_latent_frames",
+        "name": "overlap_latent_frames",
+        "type": "INT",
+        "widget": {
+          "name": "overlap_latent_frames"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "localized_name": "trimmed",
+        "name": "trimmed",
+        "type": "LATENT"
+      }
+    ],
+    "properties": {
+      "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+      "ver": "0e2f31043ddfab2e3a05a3295ba0772b22d8e35f",
+      "Node name for S&R": "LatentOverlapTrim"
+    },
+    "widgets_values": [
+      4
+    ],
+    "title": "Overlap Trim"
+  },
+  "LTXVAdainLatent": {
+    "type": "LTXVAdainLatent",
+    "inputs": [
+      {
+        "localized_name": "latents",
+        "name": "latents",
+        "type": "LATENT"
+      },
+      {
+        "localized_name": "reference",
+        "name": "reference",
+        "type": "LATENT"
+      }
+    ],
+    "outputs": [
+      {
+        "localized_name": "LATENT",
+        "name": "LATENT",
+        "type": "LATENT"
+      }
+    ],
+    "properties": {
+      "cnr_id": "ComfyUI-LTXVideo",
+      "ver": "2acf7af8991f33b5cc06ec26753cb6e88e057d04",
+      "Node name for S&R": "LTXVAdainLatent"
+    },
+    "widgets_values": [
+      0.2,
+      false
+    ],
+    "title": "AdaIN Color Correction"
+  },
+  "IterationCleanup": {
+    "type": "IterationCleanup",
+    "inputs": [
+      {
+        "localized_name": "latent",
+        "name": "latent",
+        "type": "LATENT"
+      }
+    ],
+    "outputs": [
+      {
+        "localized_name": "latent",
+        "name": "latent",
+        "type": "LATENT"
+      }
+    ],
+    "properties": {
+      "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+      "ver": "0e2f31043ddfab2e3a05a3295ba0772b22d8e35f",
+      "Node name for S&R": "IterationCleanup",
+      "cnr_id": "comfyui-audioloophelper"
+    },
+    "widgets_values": [
+      "always"
+    ],
+    "title": null
+  },
+  "AudioLatentSlice": {
+    "type": "AudioLatentSlice",
+    "inputs": [
+      {
+        "name": "latent",
+        "type": "LATENT"
+      },
+      {
+        "name": "source_seconds",
+        "type": "FLOAT",
+        "widget": {
+          "name": "source_seconds"
+        }
+      },
+      {
+        "name": "start_seconds",
+        "type": "FLOAT",
+        "widget": {
+          "name": "start_seconds"
+        }
+      },
+      {
+        "name": "duration_seconds",
+        "type": "FLOAT",
+        "widget": {
+          "name": "duration_seconds"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name": "LATENT",
+        "type": "LATENT"
+      }
+    ],
+    "properties": {
+      "Node name for S&R": "AudioLatentSlice",
+      "aux_id": "fblissjr/ComfyUI-AudioLoopHelper"
+    },
+    "widgets_values": [
+      300.0,
+      0.0,
+      17.92
+    ],
+    "title": "Slice full-audio latent for this iter"
+  },
+  "LTXVAddGuideMulti": {
+    "type": "LTXVAddGuideMulti",
+    "inputs": [
+      {
+        "name": "positive",
+        "type": "CONDITIONING"
+      },
+      {
+        "name": "negative",
+        "type": "CONDITIONING"
+      },
+      {
+        "name": "vae",
+        "type": "VAE"
+      },
+      {
+        "name": "latent",
+        "type": "LATENT"
+      },
+      {
+        "label": "image_1",
+        "name": "num_guides.image_1",
+        "type": "IMAGE"
+      },
+      {
+        "name": "num_guides.strength_1",
+        "type": "FLOAT",
+        "widget": {
+          "name": "num_guides.strength_1"
+        }
+      },
+      {
+        "label": "image_2",
+        "name": "num_guides.image_2",
+        "type": "IMAGE"
+      },
+      {
+        "name": "num_guides.strength_2",
+        "type": "FLOAT",
+        "widget": {
+          "name": "num_guides.strength_2"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name": "positive",
+        "type": "CONDITIONING"
+      },
+      {
+        "name": "negative",
+        "type": "CONDITIONING"
+      },
+      {
+        "name": "latent",
+        "type": "LATENT"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfyui-kjnodes",
+      "ver": "6f9c24a5354b53c2f4b9170f8ac8d3d0c1883ee3",
+      "Node name for S&R": "LTXVAddGuideMulti"
+    },
+    "widgets_values": [
+      "2",
+      0,
+      1,
+      -1,
+      1
+    ],
+    "title": null
+  },
+  "LoopConfigValidator": {
+    "type": "LoopConfigValidator",
+    "inputs": [
+      {
+        "name": "audio",
+        "type": "AUDIO"
+      },
+      {
+        "name": "window_seconds",
+        "type": "FLOAT",
+        "widget": {
+          "name": "window_seconds"
+        }
+      },
+      {
+        "name": "length",
+        "type": "INT",
+        "widget": {
+          "name": "length"
+        }
+      },
+      {
+        "name": "width",
+        "type": "INT",
+        "widget": {
+          "name": "width"
+        }
+      },
+      {
+        "name": "height",
+        "type": "INT",
+        "widget": {
+          "name": "height"
+        }
+      },
+      {
+        "name": "overlap_seconds",
+        "type": "FLOAT",
+        "widget": {
+          "name": "overlap_seconds"
+        }
+      },
+      {
+        "name": "keyframe_schedule",
+        "type": "STRING",
+        "widget": {
+          "name": "keyframe_schedule"
+        }
+      },
+      {
+        "name": "keyframe_batch_size",
+        "type": "INT",
+        "widget": {
+          "name": "keyframe_batch_size"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name": "report",
+        "type": "STRING"
+      },
+      {
+        "name": "ok",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "warnings",
+        "type": "INT"
+      },
+      {
+        "name": "errors",
+        "type": "INT"
+      },
+      {
+        "name": "effective_stride_seconds",
+        "type": "FLOAT"
+      }
+    ],
+    "properties": {
+      "Node name for S&R": "LoopConfigValidator",
+      "aux_id": "fblissjr/ComfyUI-AudioLoopHelper"
+    },
+    "widgets_values": [
+      19.88,
+      2.0,
+      25,
+      0,
+      0,
+      0,
+      "",
+      "div_by_32",
+      0.2,
+      "",
+      0
+    ],
+    "title": "Loop Config Validator"
+  }
+}
