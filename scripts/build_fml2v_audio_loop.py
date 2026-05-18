@@ -903,24 +903,17 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     ed.add_link(alc_id, 0, audio_slice_id, 2, "FLOAT")              # start_seconds ← Controller.start_index
     ed.add_link(alc_id, 4, audio_slice_id, 3, "FLOAT")              # duration_seconds ← Controller.stride_seconds
 
-    # LatentContextExtract from TLO.previous_value; trim overlap.
-    context_id = _add_from_template(
-        ed, "LatentContextExtract", (-1500, 1800),
-        widget_values=[4],
-        title="LatentContextExtract (overlap from prev iter)",
-        size=(290, 80),
-    )
-    ed.add_link(tlo_id, 1, context_id, 0, "LATENT")                 # latent ← TLO.previous_value
-    ed.add_link(alc_id, 6, context_id, 1, "INT")                    # overlap_latent_frames
-
-    trim_id = _add_from_template(
-        ed, "LatentOverlapTrim", (-1200, 1800),
-        widget_values=[4],
-        title="LatentOverlapTrim",
-        size=(290, 80),
-    )
-    ed.add_link(empty_p1_id, 0, trim_id, 0, "LATENT")               # latent ← empty (sized for this iter)
-    ed.add_link(alc_id, 6, trim_id, 1, "INT")                       # overlap_latent_frames
+    # NOTE: canonical single-pass workflows wire
+    # ``LatentContextExtract(TLO.prev_value) → mask.video_latent`` so each
+    # iter inherits the prev iter's overlap region as a context. Two-pass
+    # refine here samples pass1 at half-res while TLO.previous_value is
+    # full-res (post-pass2 upsample), so direct ContextExtract → mask wiring
+    # would shape-mismatch. Cross-iter continuity in this build comes
+    # instead from the fixed init-image anchor (LTXVAddLatentGuide trailing
+    # frame) + frozen audio + the prompt schedule. LatentOverlapTrim is
+    # still required, but on the OUTPUT side (post-AdaIN_final) — it trims
+    # the overlap region from each iter's output so adjacent windows don't
+    # double-up when Phase 6's LatentConcat welds them.
 
     # LTXVAudioVideoMask: canonical wiring leaves audio frozen via
     # audio_start_time = audio_end_time (widget defaults [10, 10] give empty
@@ -931,7 +924,7 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
         title="LTXVAudioVideoMask (audio frozen)",
         size=(290, 180),
     )
-    ed.add_link(trim_id, 0, mask_id, 0, "LATENT")                   # video_latent
+    ed.add_link(empty_p1_id, 0, mask_id, 0, "LATENT")               # video_latent ← empty (half-res)
     ed.add_link(audio_slice_id, 0, mask_id, 1, "LATENT")            # audio_latent
 
     # LTXVAddLatentGuide: per-iter trailing init anchor (latent_idx=-1).
@@ -1091,14 +1084,27 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     ed.add_link(_BENCH_POST_PASS2_SEPARATE, 0, adain_final_id, 0, "LATENT")  # latents ← post-pass2 video
     ed.add_link(get_ref_p2_id, 0, adain_final_id, 1, "LATENT")
 
+    # LatentOverlapTrim: drop the overlap region from this iter's output so
+    # adjacent windows don't double-up when Phase 6's LatentConcat welds them.
+    # overlap_latent_frames sourced from AudioLoopController (iter-dependent
+    # alongside the controller's stride math, so it stays on the TLO→TLC path).
+    overlap_trim_id = _add_from_template(
+        ed, "LatentOverlapTrim", (1800, 1700),
+        widget_values=[4],
+        title="LatentOverlapTrim (drop overlap from output)",
+        size=(290, 80),
+    )
+    ed.add_link(adain_final_id, 0, overlap_trim_id, 0, "LATENT")
+    ed.add_link(alc_id, 6, overlap_trim_id, 1, "INT")               # overlap_latent_frames
+
     # IterationCleanup drains per-iter caches.
     cleanup_id = _add_from_template(
-        ed, "IterationCleanup", (1800, 1800),
+        ed, "IterationCleanup", (2100, 1800),
         widget_values=["always"],
         title="IterationCleanup",
         size=(290, 80),
     )
-    ed.add_link(adain_final_id, 0, cleanup_id, 0, "LATENT")
+    ed.add_link(overlap_trim_id, 0, cleanup_id, 0, "LATENT")
 
     # TLC.processed ← IterationCleanup; TLC.stop ← Controller.should_stop.
     ed.add_link(cleanup_id, 0, tlc_id, 1, "LATENT")
@@ -1118,8 +1124,7 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
         "empty_latent_p1": empty_p1_id,
         "vae_encode_init_guide": vae_encode_id,
         "audio_slice": audio_slice_id,
-        "latent_context_extract": context_id,
-        "latent_overlap_trim": trim_id,
+        "latent_overlap_trim_output": overlap_trim_id,
         "av_mask": mask_id,
         "add_latent_guide": add_guide_id,
         "crop_guides_no_latent": nocrop_id,
