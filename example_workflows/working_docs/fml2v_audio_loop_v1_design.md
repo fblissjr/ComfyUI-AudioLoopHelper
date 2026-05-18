@@ -24,7 +24,50 @@ Last updated: 2026-05-16
 
 Add tensor-loop iteration to the `fml2v_var_d_audio_input` benchmark workflow so it can render a full-length song with audio-video sync (replacing the current 4-second-audio + 15-second-video hardcode). Output lives at `example_workflows/experimental/fml2v_var_d_audio_loop.json`.
 
-V1 scope: **single-pass loop (pass1 only)** at base resolution. Pass2 + spatial upscaler kept in workflow but bypassed by default — can be re-enabled later as Option C per-iter or moved to a follow-up workflow (Option B) like canonical's `build_upscale_workflow.py` pattern.
+V1 scope (REVISED 2026-05-16 after re-reading `workflow_quality_delta_analysis.md`): **Two-pass refine + spatial upsample IN the loop body (Option B from earlier analysis)**, flat canvas, multi-keyframe (first+last only) per iter. Earlier V1 plan was single-pass-with-pass2-bypassed; revised to include pass2 because `workflow_quality_delta_analysis.md` ranks two-pass refine as the *dominant* predicted quality lever — the main reason B looks visibly better than A. Shipping V1 without it means losing the quality differentiator that motivates this work. Middle-keyframe per iter deferred to V2 as the next easy extension (~5-7 added nodes).
+
+## Why Option B (two-pass refine in the loop body)
+
+Predicted quality lever ranking (merged from the archived
+`workflow_quality_delta_analysis.md`, A=canonical loop vs B=benchmark fml2v):
+
+1. **Two-pass refine + spatial upsample (DOMINANT)** — half-res commit
+   → `LTXVLatentUpsampler` (2× spatial) → 3-step refine (sigmas
+   `0.85, 0.725, 0.4219, 0.0`). The main reason B looks visibly better than A.
+2. **`euler_cfg_pp` / `euler_ancestral_cfg_pp` samplers + NAG at cfg=1 (STRONG SECONDARY)** — at `cfg=1` vanilla `euler` IGNORES the negative path, so canonical A's NAG is effectively decorative. `_cfg_pp` engages it. So NAG in B does real work; NAG in A doesn't.
+3. **Multi-keyframe anchoring (MEANINGFUL)** — middle keyframe reduces identity drift. B uses N=3 (first/mid/last) at pass1; N=2 (first/last) at pass2.
+4. **Multi-image init resize pipeline (SMALL)** — V1 uses `LTXSmartImageResize` (anti-aliased).
+
+V1 captures #1 and #2 directly. #3 in V1 is **first+last only** (matches B's pass2 shape); middle keyframe deferred to V2 (~5-7 added nodes — easy extension).
+
+**What's NOT a quality lever** (verified — don't re-litigate):
+- `auto` vs `auto_mask_aware` sage mode — masked path doesn't fire on audio-loop workflows
+- `LTX2AttentionTunerPatch` active vs bypassed — identity widgets, no-op math
+- LoRA strength 0.5 vs 0.6 — both bypassed in canonical
+- GGUF model loaders — bypassed
+
+## Sampler chain — two-pass inside the loop body
+
+**Pass 1 (denoise at HALF resolution):**
+- `KSamplerSelect`: `euler_ancestral_cfg_pp` (B's choice; preserves benchmark fidelity)
+- `ManualSigmas`: canonical 9-value 8-step distilled chain
+- `CFGGuider cfg=1` (consumes in-loop NAG-patched model)
+- Latent volume: width/2 × height/2 — derive via `ComfyMathExpression a/2` from `LTXFramePlanner.width`/`height`
+
+**Between passes (still inside loop body):**
+- `LTXVSeparateAVLatent` (discard audio half — upscaler is video-only)
+- `LTXVCropGuides`
+- `LTXVLatentUpsampler` (2× spatial in latent space; uses `Get_upscale_model`)
+- `LTXVAddGuideMulti` (pass2, N=2: first+last keyframe images at indices 0 and -1)
+- `LTXVConcatAVLatent` (re-attach the same audio latent from Pass 1 input)
+
+**Pass 2 (refine at FULL resolution):**
+- `KSamplerSelect`: `euler_cfg_pp`
+- `ManualSigmas`: `"0.85, 0.7250, 0.4219, 0.0"` (3-step refine starting at σ=0.85)
+- `CFGGuider cfg=1` (same in-loop NAG-patched model as Pass 1)
+- F3 symmetry: BOTH guiders' positive/negative must flow through `LTXVCropGuides` before reaching the sampler.
+
+**Audio handling across the two passes**: audio attaches to Pass 1 input via `LTXVConcatAVLatent` (with `noise_mask=0` freeze on the audio half from `AudioLatentSlice` → `LTXVAudioVideoMask`). After Pass 1, `LTXVSeparateAVLatent` strips audio (upscaler is video-only). The same audio latent (cached in a local SetNode within the loop body) re-attaches before Pass 2 via a second `LTXVConcatAVLatent`. Per CLAUDE.md, this is also the canonical pattern in `build_upscale_workflow.py`.
 
 ## Design decisions (accepted)
 
