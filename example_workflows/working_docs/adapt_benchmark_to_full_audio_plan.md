@@ -2,6 +2,8 @@ Last updated: 2026-05-15
 
 # Migration plan: adapt `fml2v_var_d_audio_input.json` (B) into a full-audio-length looped workflow
 
+> **Partially stale (added 2026-05-16)**: scattered references to fps=24 as canonical OR `first_frame_guide_strength=1.0` are pre-2026-05-16. **Today's canonical: fps=25, first_frame_guide_strength=0.7, target_seconds=19.88.** Body content is otherwise current.
+
 **Status**: read-only research. This document describes the edit plan; the user implements (or commissions a follow-up apply script). No JSON has been mutated.
 
 **Premise**: B produces higher per-iteration video quality than A (`audio-loop-music-video_latent.json`). B is structurally locked to ~4s of audio because it lacks A's loop machinery. Goal is to wrap B's quality-axis decisions in A's loop spine so it can process arbitrary-length music tracks.

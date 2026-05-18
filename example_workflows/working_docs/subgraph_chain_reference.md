@@ -2,6 +2,8 @@ Last updated: 2026-05-15
 
 # Subgraph chain reference — `audio-loop-music-video_latent.json`
 
+> **Partially stale (added 2026-05-16)**: scattered references to fps=24 as canonical OR `first_frame_guide_strength=1.0` are pre-2026-05-16. **Today's canonical: fps=25, first_frame_guide_strength=0.7, target_seconds=19.88.** Body content is otherwise current.
+
 Authoritative reference for the loop-body subgraph (definitions id `b4973d68-09b9-4da5-9845-38ad62ae9aca`, name `extension`) invoked by top-level node `#843`. Source: `example_workflows/audio-loop-music-video_latent.json`. 18 internal nodes, 52 internal links, 20 input slots, 1 output slot.
 
 Companion docs: `docs/reference/audio_loop_controller.md` (controller semantics + iter-state cycle topology), `docs/reference/pipeline_flow_latent.md` (F2/F3 symmetry trace), `docs/reference/sampler_reference.md` (sigma chain + sampler choice rationale).

@@ -2,6 +2,8 @@ Last updated: 2026-05-15
 
 # Loop machinery package — what to graft from canonical onto variant B
 
+> **Partially stale (added 2026-05-16)**: scattered references to fps=24 as canonical OR `first_frame_guide_strength=1.0` are pre-2026-05-16. **Today's canonical: fps=25, first_frame_guide_strength=0.7, target_seconds=19.88.** Body content is otherwise current.
+
 Authoritative inventory of the **top-level audio-loop infrastructure** in `example_workflows/audio-loop-music-video_latent.json` (canonical) and the loop-body **subgraph definition object**. This is the COMPLEMENT to `example_workflows/working_docs/subgraph_chain_reference.md` (which documents subgraph internals); read that first.
 
 Source: `example_workflows/audio-loop-music-video_latent.json` — 99 top-level nodes, 139 top-level links, 1 subgraph (`b4973d68-09b9-4da5-9845-38ad62ae9aca` "extension", 18 internal nodes, 52 internal links, 20 inputs, 1 output).

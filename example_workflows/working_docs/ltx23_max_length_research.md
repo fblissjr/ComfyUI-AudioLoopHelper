@@ -2,6 +2,8 @@ Last updated: 2026-05-15
 
 # LTX 2.3 maximum video length per single sampler call
 
+> **Partially stale (added 2026-05-16)**: scattered references to fps=24 as canonical OR `first_frame_guide_strength=1.0` are pre-2026-05-16. **Today's canonical: fps=25, first_frame_guide_strength=0.7, target_seconds=19.88.** Body content is otherwise current.
+
 Research note answering: what caps frames-per-call on the 22B distilled
 variant, and why the audio-loop workflow exists. Numbers are cited to
 source files / line ranges in `coderef/` or to upstream paper / repo URLs.

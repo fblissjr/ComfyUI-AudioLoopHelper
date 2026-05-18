@@ -2,6 +2,8 @@ Last updated: 2026-05-15
 
 # var_d node inventory — porting `fml2v_var_d_audio_input.json` to audio-loop
 
+> **STALE WARNING (added 2026-05-16)**: this doc was written 2026-05-15 when fps=24 was framed as canonical. **The fps 25→24 sweep was reverted on 2026-05-16; canonical inference fps is now 25** (matches Lightricks shipped workflows + 8n+1 latent boundary). Canonical `first_frame_guide_strength=0.7`, canonical `target_seconds=19.88`. Full postmortem: `internal/analysis/fps_24_partial_reading_postmortem.md` (private clone only). Re-read body claims through that lens.
+
 Source: `example_workflows/benchmark_workflows/fml2v_var_d_audio_input.json`
 Canonical target reference: `example_workflows/audio-loop-music-video_latent.json`
 Companion: `example_workflows/working_docs/from_b_node_inventory.md` (same shape for variant B)
