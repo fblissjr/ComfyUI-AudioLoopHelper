@@ -291,13 +291,21 @@ class AudioLoopHelperSageFFN(io.ComfyNode):
     bf16 in the distilled checkpoint. Composes with `LTXVChunkFeedForward`
     (KJNodes) — does not replace it.
 
-    Default `enabled=False` pending a clean in-pipeline A/B against
-    chunked stock fp8-dequant.
+    Default `enabled=False` — the in-pipeline A/B (6 renders on
+    RTX 4090 / LTX 2.3 distilled fp8, 2026-05-18) measured production
+    stock (ComfyUI `fp8_linear` + KJNodes ChunkFFN) as 5-22% faster
+    than sage_ffn at the kernel level, with wall-time wash within
+    noise (+0.75%). This inverts the synthetic 1.39x/1.60x advantage
+    sage reports at the same isolated shapes — production stock has a
+    different baseline (chunked dispatch + cached compile state) than
+    sage's synthetic comparand (`torch._scaled_mm`). Ships as
+    completeness primitive + forward-compat surface, not a perf win.
 
     When sage v0.6 is unavailable, the node is a no-op: returns the
     model unchanged with no patches applied. Prior FFN patches in the
     chain (e.g. KJNodes LTXVChunkFeedForward) remain active.
 
+    Audit data: `internal/archive/audit_v06_2_sage_ffn_20260518_161346/`.
     Perf history + prior-measurement postmortems:
     `internal/reference/sage_optimization_landscape.md`.
     """
@@ -325,9 +333,15 @@ class AudioLoopHelperSageFFN(io.ComfyNode):
                 "KJNodes LTXVChunkFeedForward at the same "
                 "add_object_patch key; the chunking lives in this wrapper "
                 "instead.\n\n"
-                "Default off pending a clean in-pipeline A/B against "
-                "chunked stock fp8-dequant. Perf history in "
-                "internal/reference/sage_optimization_landscape.md."
+                "Default off based on the 6-render in-pipeline A/B "
+                "(2026-05-18): production stock (ComfyUI fp8_linear + "
+                "ChunkFFN) is 5-22% faster than sage_ffn at the kernel "
+                "level on LTX 2.3 distilled fp8; wall-time wash. "
+                "Synthetic sage advantage doesn't transfer because "
+                "production stock has a different baseline than the "
+                "synthetic comparand. Useful for A/B comparisons and "
+                "forward-compat testing. Audit data: "
+                "internal/archive/audit_v06_2_sage_ffn_20260518_161346/."
             ),
             is_experimental=True,
             inputs=[
@@ -337,10 +351,11 @@ class AudioLoopHelperSageFFN(io.ComfyNode):
                     default=False,
                     tooltip=(
                         "When False (default), the model passes through "
-                        "unchanged — recommended until a v0.6.1+ closes "
-                        "the production gap with torch reference. When "
-                        "True, routes FFN through sage_ffn. Useful for "
-                        "A/B comparisons and forward-compat testing."
+                        "unchanged — production stock fp8 path is "
+                        "faster on LTX 2.3 distilled per the 6-render "
+                        "audit (2026-05-18). When True, routes FFN "
+                        "through sage_ffn. Useful for A/B comparisons "
+                        "and forward-compat testing."
                     ),
                 ),
             ],
