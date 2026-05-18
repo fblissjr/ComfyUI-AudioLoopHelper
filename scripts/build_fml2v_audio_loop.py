@@ -387,27 +387,51 @@ def phase4_initial_render(ed: WorkflowEditor, *, verbose: bool = True) -> None:
 
 
 def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
-    """Phase 5: TensorLoopOpen + flat-canvas loop body + TensorLoopClose.
+    """Phase 5: TensorLoopOpen + flat-canvas TWO-PASS loop body + TensorLoopClose.
 
-    Loop body model chain (downstream of LoopIterationStamp):
-        Get_model -> LoopIterationStamp -> LTXVChunkFeedForward
-                                       -> LTX2AttentionTunerPatch (bypassed)
-                                       -> LTX2_NAG
-                                       -> AudioLoopHelperSageAttention
-                                       -> CFGGuider
+    REVISED 2026-05-16 to Option B scope (two-pass refine inside loop):
 
-    Loop body data path:
+    Loop body MODEL chain (downstream of LoopIterationStamp, feeds BOTH passes'
+    CFGGuiders):
+        TLO -> LoopIterationStamp -> LTXVChunkFeedForward
+                                  -> LTX2AttentionTunerPatch (bypassed default)
+                                  -> LTX2_NAG (nag_cond from top-level)
+                                  -> AudioLoopHelperSageAttention
+                                  -> Set_loop_model (consumed by both CFGGuiders)
+
+    Loop body DATA path (Pass 1 -> upsample -> Pass 2 -> assembly):
+        # Pass 1 (half-res denoise)
         AudioLatentSlice -> LatentContextExtract -> LatentOverlapTrim
-                       -> LTXVAudioVideoMask -> LTXVAddLatentGuide
-                       -> LTXVCropGuidesNoLatent (-> CFGGuider)
+                       -> LTXVAudioVideoMask
+                       -> LTXVAddLatentGuide (trailing init anchor)
+                       -> LTXVCropGuidesNoLatent (-> CFGGuider_pass1)
                        -> LTXVCropGuides (with latent, -> LTXVAdainLatent)
-                       -> LTXVConcatAVLatent -> SamplerCustomAdvanced
-                       -> LTXVSeparateAVLatent -> LTXVAdainLatent
-                       -> IterationCleanup -> TLC.processed
+                       -> LTXVConcatAVLatent (audio attaches)
+                       -> SamplerCustomAdvanced_pass1 (euler_ancestral_cfg_pp,
+                          9-value distilled sigmas, latent at width/2 x height/2)
 
-    TODO: implement.
+        # Between passes (still inside loop body)
+        -> LTXVSeparateAVLatent (audio strips off)
+        -> LTXVCropGuides
+        -> LTXVLatentUpsampler (2x spatial via Get_upscale_model)
+        -> LTXVAddGuideMulti (pass2, N=2: first+last keyframe images at idx 0/-1)
+        -> LTXVConcatAVLatent (audio re-attaches; same audio latent cached)
+
+        # Pass 2 (full-res refine)
+        -> SamplerCustomAdvanced_pass2 (euler_cfg_pp, refine sigmas
+           "0.85, 0.7250, 0.4219, 0.0")
+        -> LTXVSeparateAVLatent (final separate)
+        -> LTXVAdainLatent (color anchor against initial render reference_latent)
+        -> IterationCleanup -> TLC.processed
+
+    F3 symmetry MUST hold on BOTH passes' CFGGuiders (their pos/neg input must
+    flow through LTXVCropGuides). F2 init-image preprocess symmetry: pass1 and
+    pass2 both consume the same LTXVPreprocess(img_compression=18) output.
+
+    TODO: implement. Reference: example_workflows/working_docs/fml2v_audio_loop_v1_design.md
+    "Sampler chain — two-pass inside the loop body" section.
     """
-    print("[Phase 5] (not yet implemented)")
+    print("[Phase 5] (Option B two-pass topology, not yet implemented)")
 
 
 def phase6_assembly(ed: WorkflowEditor, *, verbose: bool = True) -> None:
