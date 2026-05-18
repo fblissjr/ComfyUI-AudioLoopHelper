@@ -300,6 +300,7 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 |---|---|
 | `apply_melband_default_off.py` | Disable MelBand vocal separation by default across workflows · scripts/CLAUDE.md, `architecture_overview.md` |
 | `apply_spectrogram_iclora_minimal.py` | Build experimental spectrogram-IC-LoRA workflow · `_helpers/_apply_helpers.py`, `debug_tools.md`, `spectrogram_iclora_tutorial.md` |
+| `apply_fml2v_smoke_toggle.py` | Stage `internal/scratch/fml2v_var_d_audio_loop_smoke.json` from the canonical fml2v build with `IterPatchInspector` un-bypassed + `TensorLoopOpen.iterations_in` short-circuited to 2 iters via widget. Pre-render smoke test for verifying per-iter model-patch survival without burning a full song's render time. Does NOT mutate the canonical (so F5 + the build's other invariants stay clean) · CLI |
 
 ### Apply scripts — bench / IC-LoRA bench (2)
 
