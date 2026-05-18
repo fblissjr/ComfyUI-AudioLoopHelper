@@ -256,13 +256,17 @@ def phase2_loop_math_and_audio(ed: WorkflowEditor, *, verbose: bool = True) -> N
     log = (lambda *a: print("  ", *a)) if verbose else (lambda *a: None)
 
     # --- Loop math infrastructure ---
+    # Resolution: 960x512 (NOT 960x544) — LTX two-pass refine requires the
+    # base resolution to be div-64 so the half-res pass1 stays div-32 and the
+    # 2x upsampler returns to a dim that matches the init-render output (which
+    # Phase 6's LatentConcat then welds across iterations).
     fp_id = _add_from_template(
         ed, "LTXFramePlanner", (-3000, 3000),
-        widget_values=[960, 544, 19.88, 25],
+        widget_values=[960, 512, 19.88, 25],
         title="LTXFramePlanner (dim SSoT)",
         size=(270, 250),
     )
-    log(f"+ LTXFramePlanner #{fp_id}  [w=960, h=544, target_seconds=19.88, fps=25]")
+    log(f"+ LTXFramePlanner #{fp_id}  [w=960, h=512, target_seconds=19.88, fps=25]")
 
     overlap_id = _add_from_template(
         ed, "FloatConstant", (-3000, 3300),
@@ -325,7 +329,8 @@ def phase2_loop_math_and_audio(ed: WorkflowEditor, *, verbose: bool = True) -> N
     smart_resize_id = _add_from_template(
         ed, "LTXSmartImageResize", (-3000, 3900),
         # widgets: [target_width, target_height, keep_proportion, crop_position]
-        widget_values=[960, 544, True, "top"],
+        # Matches FramePlanner 960x512 (two-pass div-64 base).
+        widget_values=[960, 512, True, "top"],
         title="LTXSmartImageResize (multi-stage, anti-alias)",
         size=(270, 150),
     )
@@ -522,6 +527,35 @@ _PHASE4_STRIP_AFTER_REWIRE = [
 ]
 
 
+def _add_getnode(ed: WorkflowEditor, bus_name: str, pos: tuple[int, int], dtype: str) -> int:
+    """Add a KJNodes-shape GetNode (no inputs, single typed '*' output reading the bus)."""
+    node_id = ed.next_node_id()
+    node = {
+        "id": node_id,
+        "type": "GetNode",
+        "pos": list(pos),
+        "size": [210, 60],
+        "flags": {},
+        "order": 0,
+        "mode": 0,
+        "inputs": [],
+        "outputs": [{"name": "*", "type": dtype, "links": []}],
+        "properties": {
+            "Node name for S&R": "GetNode",
+            "aux_id": "kijai/ComfyUI-KJNodes",
+        },
+        "widgets_values": [bus_name],
+        "title": f"Get_{bus_name}",
+    }
+    ed.add_node(node)
+    return node_id
+
+
+def _unbypass(ed: WorkflowEditor, node_id: int) -> None:
+    """Set mode=0 (active) on a node previously bypassed via mode=4."""
+    ed.find_node(node_id)["mode"] = 0
+
+
 def _add_setnode(ed: WorkflowEditor, bus_name: str, pos: tuple[int, int], dtype: str) -> int:
     """Add a KJNodes-shape SetNode (single typed input + '*' passthrough output)."""
     node_id = ed.next_node_id()
@@ -683,18 +717,447 @@ def phase4_initial_render(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     log("= Stashed Phase 4 node IDs in wf['properties']['build_fml2v_phase4']")
 
 
-def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:  # noqa: ARG001
-    """Phase 5: TensorLoopOpen + flat-canvas TWO-PASS loop body + TensorLoopClose.
+# Benchmark bypassed pass2 nodes Phase 5 unbypasses + rewires.
+_BENCH_PASS2_KSAMPLER = 4              # KSamplerSelect euler_cfg_pp
+_BENCH_PASS2_CFG_GUIDER = 8            # CFGGuider (pass2)
+_BENCH_PASS2_SAMPLER = 21              # SamplerCustomAdvanced (pass2)
+_BENCH_PASS2_SIGMAS = 216              # ManualSigmas 4-value canonical
+_BENCH_PASS2_UPSAMPLER = 25            # LTXVLatentUpsampler 2x spatial
+_BENCH_PRE_PASS2_CONCAT_AV = 34        # LTXVConcatAVLatent (re-attach audio)
+_BENCH_POST_PASS2_SEPARATE = 146       # LTXVSeparateAVLatent (post-pass2)
+_BENCH_PRE_PASS2_GUIDE_MULTI = 2182    # LTXVAddGuideMulti N=2 first+last
+_BENCH_BETWEEN_CROPGUIDES = 2222       # LTXVCropGuides (pre-upsample)
 
-    Option B scope (two-pass refine inside loop body). Full topology spec
-    lives in ``example_workflows/working_docs/fml2v_audio_loop_v1_design.md``
-    "Sampler chain — two-pass inside the loop body" section — use that doc
-    as the wire-level recipe. F2/F3 symmetry must hold on BOTH passes'
-    CFGGuiders (load-bearing audit invariants).
+# Existing benchmark nodes Phase 5 fans-out from (already feeding init render).
+_BENCH_PASS1_KSAMPLER = 1              # KSamplerSelect euler_ancestral_cfg_pp (fan-out)
+_BENCH_PASS1_SIGMAS = 215              # ManualSigmas 9-value canonical (fan-out)
+_BENCH_NEGATIVE_ENCODER = 11           # CLIPTextEncode (benchmark negative, fan-out)
+_BENCH_GET_MODEL = 122                 # GetNode "model" (benchmark's model bus)
 
-    TODO: implement.
+# Half-res ComfyMathExpressions for pass1 latent dims (benchmark had these,
+# Phase 4 left them wired to Get_width/Get_height which now flow from
+# FramePlanner via the dim-SSoT setters — so they automatically yield
+# FramePlanner.width/2 + FramePlanner.height/2 with no Phase 5 rewire needed).
+_BENCH_WIDTH_HALF_EXPR = 2191          # ComfyMathExpression "a/2" for width
+_BENCH_HEIGHT_HALF_EXPR = 2192         # ComfyMathExpression "a/2" for height
+
+
+def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
+    """Phase 5: flat-canvas two-pass loop body between TensorLoopOpen/Close.
+
+    Option B topology (per design doc): every iteration runs pass1 (half-res
+    denoise) → upsample → pass2 (full-res refine), all inside the TLO/TLC
+    boundary. The model patch chain (LoopIterationStamp → ChunkFFN → AttnTuner
+    → NAG → Sage) lives downstream of TLO so per-iter patches survive any
+    comfy-aimdo offload, feeding BOTH passes' CFGGuiders via the
+    ``loop_patched_model`` bus.
+
+    Substages:
+      5a. AudioLoopController/Planner input wiring + TLO/TLC boundaries +
+          model patch chain + Set_loop_patched_model bus.
+      5b. Pass 1 half-res denoise chain (EmptyLatent_p1 + AudioLatentSlice +
+          LatentContextExtract + LatentOverlapTrim + LTXVAudioVideoMask +
+          LTXVAddLatentGuide + F3 cropguides dual + AdaIN + ConcatAV +
+          Sampler). Reuses init render's KSamplerSelect #1 + ManualSigmas
+          #215 via fan-out (both iter-independent).
+      5c. Between passes + Pass 2 (unbypass + rewire benchmark's bypassed
+          pass2 chain: #4/#8/#21/#25/#34/#146/#216/#2182/#2222). Adds final
+          AdaIN + IterationCleanup.
+      5d. TLC wiring (processed ← post-pass2 chain output, stop ←
+          AudioLoopController.should_stop).
+
+    Containment rule: every iter-dependent node lies on a path TLO → TLC so
+    ComfyUI-NativeLooping's ``_WhileLoopClose._explore_dependencies`` clones
+    it per iter. Iter-independent nodes (KSamplerSelect, ManualSigmas, model
+    patch chain feeding via SetNode bus) execute ONCE statically; their
+    cached output is reused per iter.
     """
-    print("[Phase 5] (Option B two-pass topology, not yet implemented)")
+    log = (lambda *a: print("  ", *a)) if verbose else (lambda *a: None)
+
+    phase2 = ed.wf.get("properties", {}).get("build_fml2v_phase2", {})
+    phase3 = ed.wf.get("properties", {}).get("build_fml2v_phase3", {})
+    phase4 = ed.wf.get("properties", {}).get("build_fml2v_phase4", {})
+    fp_id = phase2["frame_planner"]
+    overlap_const_id = phase2["overlap_seconds"]
+    init_strength_id = phase2["first_frame_guide_strength"]
+    alc_id = phase2["audio_loop_controller"]
+    alp_id = phase2["audio_loop_planner"]
+    trim_audio_id = phase2["trim_audio"]
+    audio_vae_id = phase2["audio_vae_encode"]
+    nag_cond_id = phase3["nag_cond_video"]
+    sel_loop_id = phase3["selector_loop"]
+    # Phase 4 added Set_initial_latent + Set_reference_latent; loop body
+    # consumes them via fresh GetNodes (added below per consumer site).
+    _ = phase4  # touched for stash-presence invariant
+
+    get_vae_id = _find_get_node(ed, "vae")
+    get_firstframe_id = _find_get_node(ed, "firstframe")
+    get_model_id = _BENCH_GET_MODEL  # benchmark's #122 Get_model
+
+    # ====================================================================
+    # 5a — Controller wiring + TLO/TLC + model patch chain
+    # ====================================================================
+    log("[Phase 5a] Controller + TLO/TLC + model patch chain")
+
+    # Wire AudioLoopController + Planner inputs: audio + shared overlap_seconds.
+    # The single shared FloatConstant clears the overlap_seconds_single_source ERR.
+    ed.rewire_input(alc_id, 0, trim_audio_id, 0, "AUDIO")           # audio
+    ed.rewire_input(alc_id, 5, overlap_const_id, 0, "FLOAT")        # overlap_seconds
+    ed.rewire_input(alp_id, 0, trim_audio_id, 0, "AUDIO")           # audio
+    ed.rewire_input(alp_id, 3, overlap_const_id, 0, "FLOAT")        # overlap_seconds
+    log(f"  wire Controller#{alc_id} + Planner#{alp_id} inputs (audio + shared overlap_seconds)")
+
+    # Add TLO + TLC boundaries.
+    tlo_id = _add_from_template(
+        ed, "TensorLoopOpen", (-2400, 1200),
+        widget_values=["iterations", 50, 0],
+        title="TensorLoopOpen (loop start)",
+        size=(280, 140),
+    )
+    tlc_id = _add_from_template(
+        ed, "TensorLoopClose", (1400, 1200),
+        widget_values=[True, "disabled"],
+        title="TensorLoopClose (loop end)",
+        size=(280, 100),
+    )
+    # initial_value ← Get_initial_latent (consumes Phase 4 bus)
+    get_initial_id = _add_getnode(ed, "initial_latent", (-2700, 1200), "LATENT")
+    ed.add_link(get_initial_id, 0, tlo_id, 0, "LATENT")
+    # iterations_in ← AudioLoopPlanner.total_iterations (F5 audit invariant)
+    ed.add_link(alp_id, 1, tlo_id, 1, "INT")
+    log(f"+ TensorLoopOpen #{tlo_id}, TensorLoopClose #{tlc_id}  (iterations_in ← Planner.total_iterations, F5)")
+
+    # Wire AudioLoopController.current_iteration ← TLO.current_iteration (slot 3).
+    ed.rewire_input(alc_id, 1, tlo_id, 3, "INT")
+    # Wire selector_loop.current_iteration ← TLO.current_iteration.
+    ed.rewire_input(sel_loop_id, 1, tlo_id, 3, "INT")
+    log(f"  wire Controller#{alc_id}.current_iteration + selector_loop#{sel_loop_id}.current_iteration ← TLO.current_iteration")
+
+    # Model patch chain (downstream of LoopIterationStamp; feeds BOTH CFGGuiders
+    # via SetNode bus). Patch order per CLAUDE.md: Stamp → ChunkFFN → AttnTuner
+    # → NAG → Sage (Sage LAST so ON_CLEANUP drains first).
+    stamp_id = _add_from_template(
+        ed, "LoopIterationStamp", (-2100, 1500),
+        widget_values=[0],
+        title="LoopIterationStamp",
+        size=(280, 80),
+    )
+    ed.add_link(get_model_id, 0, stamp_id, 0, "MODEL")              # model
+    ed.add_link(tlo_id, 3, stamp_id, 1, "INT")                      # current_iteration ← TLO
+
+    chunk_id = _add_from_template(
+        ed, "LTXVChunkFeedForward", (-1800, 1500),
+        widget_values=[2, 4096],
+        title="LTXVChunkFeedForward",
+        size=(280, 80),
+    )
+    ed.add_link(stamp_id, 0, chunk_id, 0, "MODEL")
+
+    attn_id = _add_from_template(
+        ed, "LTX2AttentionTunerPatch", (-1500, 1500),
+        widget_values=["", 1, 1, 1, 1, True],
+        title="LTX2AttentionTunerPatch (bypassed default)",
+        size=(280, 130),
+        mode=4,
+    )
+    ed.add_link(chunk_id, 0, attn_id, 0, "MODEL")
+
+    nag_id = _add_from_template(
+        ed, "LTX2_NAG", (-1200, 1500),
+        widget_values=[11, 0.25, 2.5, True],
+        title="LTX2_NAG (nag_cond_video from Phase 3)",
+        size=(280, 130),
+    )
+    ed.add_link(attn_id, 0, nag_id, 0, "MODEL")
+    ed.add_link(nag_cond_id, 0, nag_id, 1, "CONDITIONING")          # nag_cond_video
+    # nag_cond_audio (slot 2) left unwired — widget-only
+
+    sage_id = _add_from_template(
+        ed, "AudioLoopHelperSageAttention", (-900, 1500),
+        widget_values=["auto", True, 1024],
+        title="AudioLoopHelperSageAttention (Sage LAST)",
+        size=(280, 100),
+    )
+    ed.add_link(nag_id, 0, sage_id, 0, "MODEL")
+
+    set_patched_id = _add_setnode(ed, "loop_patched_model", (-600, 1500), dtype="MODEL")
+    ed.add_link(sage_id, 0, set_patched_id, 0, "MODEL")
+    log(f"+ model patch chain: Stamp#{stamp_id} → ChunkFFN#{chunk_id} → AttnTuner#{attn_id} (bypassed) → NAG#{nag_id} → Sage#{sage_id} → Set_loop_patched_model#{set_patched_id}")
+
+    # ====================================================================
+    # 5b — Pass 1 half-res denoise chain
+    # ====================================================================
+    log("[Phase 5b] Pass 1 half-res denoise chain")
+
+    # EmptyLatent_p1: width/height from ComfyMathExpression "a/2" (fed from
+    # FramePlanner via existing Set_width/Set_height bus — already SSoT after
+    # Phase 4); length = FramePlanner.frames stride-sized chunk.
+    # ComfyMathExpression has FLOAT(slot 0) + INT(slot 1) outputs; INT for dims.
+    empty_p1_id = _add_from_template(
+        ed, "EmptyLTXVLatentVideo", (-2100, 1800),
+        widget_values=[480, 256, 49, 1],  # widget defaults (wired inputs win); matches 960x512 / 2
+        title="EmptyLTXVLatentVideo (loop pass1 half-res)",
+        size=(290, 110),
+    )
+    ed.add_link(_BENCH_WIDTH_HALF_EXPR, 1, empty_p1_id, 0, "INT")
+    ed.add_link(_BENCH_HEIGHT_HALF_EXPR, 1, empty_p1_id, 1, "INT")
+    ed.add_link(fp_id, 2, empty_p1_id, 2, "INT")
+    log(f"+ EmptyLatent_p1 #{empty_p1_id}  (half-res, length ← FramePlanner.frames)")
+
+    # VAEEncode for the per-iter init-anchor guide (firstframe preprocessed).
+    vae_encode_id = _add_from_template(
+        ed, "VAEEncode", (-2100, 1950),
+        widget_values=[],
+        title="VAEEncode (init image → guide_latent)",
+        size=(290, 80),
+    )
+    ed.add_link(get_firstframe_id, 0, vae_encode_id, 0, "IMAGE")
+    ed.add_link(get_vae_id, 0, vae_encode_id, 1, "VAE")
+
+    # AudioLatentSlice: per-iter audio window from full pre-encoded audio.
+    audio_slice_id = _add_from_template(
+        ed, "AudioLatentSlice", (-1800, 1800),
+        widget_values=[300.0, 0.0, 19.88],  # widgets defaults (inputs win)
+        title="AudioLatentSlice (per-iter window)",
+        size=(290, 110),
+    )
+    ed.add_link(audio_vae_id, 0, audio_slice_id, 0, "LATENT")
+    ed.add_link(alc_id, 2, audio_slice_id, 1, "FLOAT")              # source_seconds ← Controller.audio_duration
+    ed.add_link(alc_id, 0, audio_slice_id, 2, "FLOAT")              # start_seconds ← Controller.start_index
+    ed.add_link(alc_id, 4, audio_slice_id, 3, "FLOAT")              # duration_seconds ← Controller.stride_seconds
+
+    # LatentContextExtract from TLO.previous_value; trim overlap.
+    context_id = _add_from_template(
+        ed, "LatentContextExtract", (-1500, 1800),
+        widget_values=[4],
+        title="LatentContextExtract (overlap from prev iter)",
+        size=(290, 80),
+    )
+    ed.add_link(tlo_id, 1, context_id, 0, "LATENT")                 # latent ← TLO.previous_value
+    ed.add_link(alc_id, 6, context_id, 1, "INT")                    # overlap_latent_frames
+
+    trim_id = _add_from_template(
+        ed, "LatentOverlapTrim", (-1200, 1800),
+        widget_values=[4],
+        title="LatentOverlapTrim",
+        size=(290, 80),
+    )
+    ed.add_link(empty_p1_id, 0, trim_id, 0, "LATENT")               # latent ← empty (sized for this iter)
+    ed.add_link(alc_id, 6, trim_id, 1, "INT")                       # overlap_latent_frames
+
+    # LTXVAudioVideoMask: canonical wiring leaves audio frozen via
+    # audio_start_time = audio_end_time (widget defaults [10, 10] give empty
+    # mask range → audio preserved). Don't wire those inputs.
+    mask_id = _add_from_template(
+        ed, "LTXVAudioVideoMask", (-900, 1800),
+        widget_values=[25, 1, 10, 10, 10, "pad", "add"],
+        title="LTXVAudioVideoMask (audio frozen)",
+        size=(290, 180),
+    )
+    ed.add_link(trim_id, 0, mask_id, 0, "LATENT")                   # video_latent
+    ed.add_link(audio_slice_id, 0, mask_id, 1, "LATENT")            # audio_latent
+
+    # LTXVAddLatentGuide: per-iter trailing init anchor (latent_idx=-1).
+    add_guide_id = _add_from_template(
+        ed, "LTXVAddLatentGuide", (-600, 1800),
+        widget_values=[-1, 0.7],  # [latent_idx=-1, strength_widget_default]
+        title="LTXVAddLatentGuide (trailing init anchor)",
+        size=(290, 180),
+    )
+    ed.add_link(get_vae_id, 0, add_guide_id, 0, "VAE")
+    ed.add_link(sel_loop_id, 0, add_guide_id, 1, "CONDITIONING")    # positive ← selector_loop
+    ed.add_link(_BENCH_NEGATIVE_ENCODER, 0, add_guide_id, 2, "CONDITIONING")  # negative
+    ed.add_link(mask_id, 0, add_guide_id, 3, "LATENT")              # latent ← mask.video
+    ed.add_link(vae_encode_id, 0, add_guide_id, 4, "LATENT")        # guiding_latent
+    ed.add_link(init_strength_id, 0, add_guide_id, 5, "FLOAT")      # strength ← FloatConstant 0.7
+
+    # F3 dual cropguides: NoLatent for cond path; with-latent for AdaIN path.
+    nocrop_id = _add_from_template(
+        ed, "LTXVCropGuidesNoLatent", (-300, 1700),
+        widget_values=[],
+        title="LTXVCropGuidesNoLatent (cond path)",
+        size=(290, 80),
+    )
+    ed.add_link(add_guide_id, 0, nocrop_id, 0, "CONDITIONING")
+    ed.add_link(add_guide_id, 1, nocrop_id, 1, "CONDITIONING")
+
+    crop_p1_id = _add_from_template(
+        ed, "LTXVCropGuides", (-300, 1900),
+        widget_values=[],
+        title="LTXVCropGuides (latent path for AdaIN)",
+        size=(290, 100),
+    )
+    ed.add_link(add_guide_id, 0, crop_p1_id, 0, "CONDITIONING")
+    ed.add_link(add_guide_id, 1, crop_p1_id, 1, "CONDITIONING")
+    ed.add_link(add_guide_id, 2, crop_p1_id, 2, "LATENT")
+
+    # AdaIN with reference from initial-render bus.
+    get_ref_id = _add_getnode(ed, "reference_latent", (0, 1950), "LATENT")
+    adain_p1_id = _add_from_template(
+        ed, "LTXVAdainLatent", (0, 1800),
+        widget_values=[0.2, False],
+        title="LTXVAdainLatent (pass1 reference)",
+        size=(290, 100),
+    )
+    ed.add_link(crop_p1_id, 2, adain_p1_id, 0, "LATENT")
+    ed.add_link(get_ref_id, 0, adain_p1_id, 1, "LATENT")
+
+    # Re-attach audio for sampler input.
+    concat_p1_id = _add_from_template(
+        ed, "LTXVConcatAVLatent", (300, 1800),
+        widget_values=[],
+        title="LTXVConcatAVLatent (pass1 pre-sample)",
+        size=(290, 80),
+    )
+    ed.add_link(adain_p1_id, 0, concat_p1_id, 0, "LATENT")
+    ed.add_link(mask_id, 1, concat_p1_id, 1, "LATENT")              # audio_latent ← mask.audio
+
+    # Sampler with patched model from bus.
+    get_patched_p1_id = _add_getnode(ed, "loop_patched_model", (300, 1600), "MODEL")
+
+    cfg_p1_id = _add_from_template(
+        ed, "CFGGuider", (600, 1700),
+        widget_values=[1],
+        title="CFGGuider (pass1)",
+        size=(290, 100),
+    )
+    ed.add_link(get_patched_p1_id, 0, cfg_p1_id, 0, "MODEL")
+    ed.add_link(nocrop_id, 0, cfg_p1_id, 1, "CONDITIONING")
+    ed.add_link(nocrop_id, 1, cfg_p1_id, 2, "CONDITIONING")
+
+    noise_p1_id = _add_from_template(
+        ed, "RandomNoise", (600, 1850),
+        widget_values=[42, "fixed"],
+        title="RandomNoise (pass1, seed ← Controller.iteration_seed)",
+        size=(290, 80),
+    )
+    ed.add_link(alc_id, 3, noise_p1_id, 0, "INT")                   # noise_seed ← Controller.iteration_seed
+
+    sampler_p1_id = _add_from_template(
+        ed, "SamplerCustomAdvanced", (900, 1800),
+        widget_values=[],
+        title="SamplerCustomAdvanced (pass1)",
+        size=(290, 130),
+    )
+    ed.add_link(noise_p1_id, 0, sampler_p1_id, 0, "NOISE")
+    ed.add_link(cfg_p1_id, 0, sampler_p1_id, 1, "GUIDER")
+    ed.add_link(_BENCH_PASS1_KSAMPLER, 0, sampler_p1_id, 2, "SAMPLER")  # fan-out from #1
+    ed.add_link(_BENCH_PASS1_SIGMAS, 0, sampler_p1_id, 3, "SIGMAS")     # fan-out from #215
+    ed.add_link(concat_p1_id, 0, sampler_p1_id, 4, "LATENT")
+    log(f"+ Pass 1 chain (Empty#{empty_p1_id} → ... → Sampler#{sampler_p1_id}); KSamplerSelect#{_BENCH_PASS1_KSAMPLER}+Sigmas#{_BENCH_PASS1_SIGMAS} fan-out from init render")
+
+    # ====================================================================
+    # 5c — Between passes + Pass 2 (unbypass + rewire benchmark chain)
+    # ====================================================================
+    log("[Phase 5c] Between-passes + Pass 2 (unbypass benchmark chain)")
+
+    # Post-pass1 SeparateAV (strip audio; upsampler is video-only).
+    sep_p1_post_id = _add_from_template(
+        ed, "LTXVSeparateAVLatent", (1200, 1800),
+        widget_values=[],
+        title="LTXVSeparateAVLatent (post-pass1, pre-upsample)",
+        size=(290, 100),
+    )
+    ed.add_link(sampler_p1_id, 0, sep_p1_post_id, 0, "LATENT")
+
+    # Unbypass and rewire benchmark's between+pass2 chain.
+    for nid in [_BENCH_BETWEEN_CROPGUIDES, _BENCH_PASS2_UPSAMPLER,
+                _BENCH_PRE_PASS2_GUIDE_MULTI, _BENCH_PRE_PASS2_CONCAT_AV,
+                _BENCH_PASS2_KSAMPLER, _BENCH_PASS2_SIGMAS,
+                _BENCH_PASS2_CFG_GUIDER, _BENCH_PASS2_SAMPLER,
+                _BENCH_POST_PASS2_SEPARATE]:
+        _unbypass(ed, nid)
+    log(f"  unbypassed #{_BENCH_BETWEEN_CROPGUIDES}, #{_BENCH_PASS2_UPSAMPLER}, #{_BENCH_PRE_PASS2_GUIDE_MULTI}, #{_BENCH_PRE_PASS2_CONCAT_AV}, #{_BENCH_PASS2_KSAMPLER}, #{_BENCH_PASS2_SIGMAS}, #{_BENCH_PASS2_CFG_GUIDER}, #{_BENCH_PASS2_SAMPLER}, #{_BENCH_POST_PASS2_SEPARATE}")
+
+    # Between cropguides (#2222) currently has latent ← #18 (init render) +
+    # pos/neg ← benchmark namespace GetNodes. Rewire to loop-body sources.
+    ed.rewire_input(_BENCH_BETWEEN_CROPGUIDES, 0, sel_loop_id, 0, "CONDITIONING")
+    ed.rewire_input(_BENCH_BETWEEN_CROPGUIDES, 1, _BENCH_NEGATIVE_ENCODER, 0, "CONDITIONING")
+    ed.rewire_input(_BENCH_BETWEEN_CROPGUIDES, 2, sep_p1_post_id, 0, "LATENT")
+    log(f"  rewire CropGuides#{_BENCH_BETWEEN_CROPGUIDES} (latent ← post-pass1 separate.video)")
+
+    # Pre-pass2 ConcatAV (#34) currently has audio ← #18.audio (init render);
+    # rewire to loop body pass1's mask.audio (same audio across both passes).
+    ed.rewire_input(_BENCH_PRE_PASS2_CONCAT_AV, 1, mask_id, 1, "LATENT")
+    log(f"  rewire ConcatAV#{_BENCH_PRE_PASS2_CONCAT_AV}.audio_latent ← LTXVAudioVideoMask#{mask_id}.audio")
+
+    # Pass2 CFGGuider model ← Get_loop_patched_model (was dangling Get_model_nag).
+    get_patched_p2_id = _add_getnode(ed, "loop_patched_model", (300, 1300), "MODEL")
+    ed.rewire_input(_BENCH_PASS2_CFG_GUIDER, 0, get_patched_p2_id, 0, "MODEL")
+    log(f"  rewire CFGGuider#{_BENCH_PASS2_CFG_GUIDER}.model ← Get_loop_patched_model")
+
+    # Pass2 RandomNoise: benchmark's #14 is widget-only (no input slot). Add a
+    # NEW RandomNoise with iteration_seed wire; rewire Sampler.noise to it.
+    noise_p2_id = _add_from_template(
+        ed, "RandomNoise", (900, 1200),
+        widget_values=[42, "fixed"],
+        title="RandomNoise (pass2, seed ← Controller.iteration_seed)",
+        size=(290, 80),
+    )
+    ed.add_link(alc_id, 3, noise_p2_id, 0, "INT")
+    ed.rewire_input(_BENCH_PASS2_SAMPLER, 0, noise_p2_id, 0, "NOISE")
+    log(f"+ RandomNoise #{noise_p2_id} (pass2); rewire Sampler#{_BENCH_PASS2_SAMPLER}.noise")
+
+    # ====================================================================
+    # 5d — Post-pass2 AdaIN + IterationCleanup + TLC wiring
+    # ====================================================================
+    log("[Phase 5d] Post-pass2 AdaIN + IterationCleanup + TLC")
+
+    # Final AdaIN: refines pass2 video latent against reference_latent.
+    get_ref_p2_id = _add_getnode(ed, "reference_latent", (1500, 1900), "LATENT")
+    adain_final_id = _add_from_template(
+        ed, "LTXVAdainLatent", (1500, 1800),
+        widget_values=[0.2, False],
+        title="LTXVAdainLatent (post-pass2 final)",
+        size=(290, 100),
+    )
+    ed.add_link(_BENCH_POST_PASS2_SEPARATE, 0, adain_final_id, 0, "LATENT")  # latents ← post-pass2 video
+    ed.add_link(get_ref_p2_id, 0, adain_final_id, 1, "LATENT")
+
+    # IterationCleanup drains per-iter caches.
+    cleanup_id = _add_from_template(
+        ed, "IterationCleanup", (1800, 1800),
+        widget_values=["always"],
+        title="IterationCleanup",
+        size=(290, 80),
+    )
+    ed.add_link(adain_final_id, 0, cleanup_id, 0, "LATENT")
+
+    # TLC.processed ← IterationCleanup; TLC.stop ← Controller.should_stop.
+    ed.add_link(cleanup_id, 0, tlc_id, 1, "LATENT")
+    ed.add_link(alc_id, 1, tlc_id, 2, "BOOLEAN")                    # should_stop
+    log(f"+ AdaIN_final #{adain_final_id} → Cleanup #{cleanup_id} → TLC #{tlc_id}.processed; TLC.stop ← Controller.should_stop")
+
+    # Stash IDs for Phase 6 to find.
+    ed.wf.setdefault("properties", {})["build_fml2v_phase5"] = {
+        "tlo": tlo_id,
+        "tlc": tlc_id,
+        "stamp": stamp_id,
+        "chunk_ffn": chunk_id,
+        "attn_tuner": attn_id,
+        "nag": nag_id,
+        "sage": sage_id,
+        "set_patched_model": set_patched_id,
+        "empty_latent_p1": empty_p1_id,
+        "vae_encode_init_guide": vae_encode_id,
+        "audio_slice": audio_slice_id,
+        "latent_context_extract": context_id,
+        "latent_overlap_trim": trim_id,
+        "av_mask": mask_id,
+        "add_latent_guide": add_guide_id,
+        "crop_guides_no_latent": nocrop_id,
+        "crop_guides_p1": crop_p1_id,
+        "adain_p1": adain_p1_id,
+        "concat_av_p1": concat_p1_id,
+        "cfg_guider_p1": cfg_p1_id,
+        "noise_p1": noise_p1_id,
+        "sampler_p1": sampler_p1_id,
+        "separate_av_p1_post": sep_p1_post_id,
+        "noise_p2": noise_p2_id,
+        "adain_final": adain_final_id,
+        "iteration_cleanup": cleanup_id,
+    }
+    log("= Stashed Phase 5 node IDs in wf['properties']['build_fml2v_phase5']")
 
 
 def phase6_assembly(ed: WorkflowEditor, *, verbose: bool = True) -> None:  # noqa: ARG001

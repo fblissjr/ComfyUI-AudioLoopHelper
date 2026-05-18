@@ -1600,5 +1600,245 @@
     "widgets_values": [
       ""
     ]
+  },
+  "LTXVChunkFeedForward": {
+    "type": "LTXVChunkFeedForward",
+    "inputs": [
+      {
+        "name": "model",
+        "type": "MODEL"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "model",
+        "type": "MODEL"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfyui-kjnodes",
+      "ver": "0ea5ece1793263d9fb0ad97bb067f96b83a9dea3",
+      "Node name for S&R": "LTXVChunkFeedForward"
+    },
+    "widgets_values": [
+      2,
+      4096
+    ]
+  },
+  "LTX2AttentionTunerPatch": {
+    "type": "LTX2AttentionTunerPatch",
+    "inputs": [
+      {
+        "name": "model",
+        "type": "MODEL"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "model",
+        "type": "MODEL"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfyui-kjnodes",
+      "ver": "5b38397a6430fdb16c7bd14a6bd64c2b0e69a5f0",
+      "Node name for S&R": "LTX2AttentionTunerPatch"
+    },
+    "widgets_values": [
+      "",
+      1,
+      1,
+      1,
+      1,
+      true
+    ]
+  },
+  "AudioLoopHelperSageAttention": {
+    "type": "AudioLoopHelperSageAttention",
+    "inputs": [
+      {
+        "name": "model",
+        "type": "MODEL"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "model",
+        "type": "MODEL"
+      }
+    ],
+    "properties": {
+      "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+      "ver": "0e2f31043ddfab2e3a05a3295ba0772b22d8e35f",
+      "Node name for S&R": "AudioLoopHelperSageAttention"
+    },
+    "widgets_values": [
+      "auto",
+      true,
+      1024
+    ]
+  },
+  "KSamplerSelect": {
+    "type": "KSamplerSelect",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "SAMPLER",
+        "type": "SAMPLER"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfy-core",
+      "ver": "0.3.56",
+      "Node name for S&R": "KSamplerSelect",
+      "enableTabs": false,
+      "tabWidth": 65,
+      "tabXOffset": 10,
+      "hasSecondTab": false,
+      "secondTabText": "Send Back",
+      "secondTabOffset": 80,
+      "secondTabWidth": 65
+    },
+    "widgets_values": [
+      "euler"
+    ]
+  },
+  "ManualSigmas": {
+    "type": "ManualSigmas",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "SIGMAS",
+        "type": "SIGMAS"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfy-core",
+      "ver": "0.16.4",
+      "Node name for S&R": "ManualSigmas"
+    },
+    "widgets_values": [
+      "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"
+    ]
+  },
+  "EmptyLTXVLatentVideo": {
+    "type": "EmptyLTXVLatentVideo",
+    "inputs": [
+      {
+        "name": "width",
+        "type": "INT",
+        "widget": {
+          "name": "width"
+        }
+      },
+      {
+        "name": "height",
+        "type": "INT",
+        "widget": {
+          "name": "height"
+        }
+      },
+      {
+        "name": "length",
+        "type": "INT",
+        "widget": {
+          "name": "length"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name": "LATENT",
+        "type": "LATENT"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfy-core",
+      "ver": "0.8.0",
+      "Node name for S&R": "EmptyLTXVLatentVideo"
+    },
+    "widgets_values": [
+      960,
+      544,
+      353,
+      1
+    ]
+  },
+  "VAEEncode": {
+    "type": "VAEEncode",
+    "inputs": [
+      {
+        "name": "pixels",
+        "type": "IMAGE"
+      },
+      {
+        "name": "vae",
+        "type": "VAE"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "LATENT",
+        "type": "LATENT"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfy-core",
+      "ver": "0.20.1",
+      "Node name for S&R": "VAEEncode"
+    },
+    "widgets_values": []
+  },
+  "INTConstant": {
+    "type": "INTConstant",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "value",
+        "type": "INT"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfyui-kjnodes",
+      "ver": "00984d2f6eafdc2610690a0080922e7f1a6edccf",
+      "Node name for S&R": "INTConstant"
+    },
+    "widgets_values": [
+      42
+    ]
+  },
+  "ComfyMathExpression": {
+    "type": "ComfyMathExpression",
+    "inputs": [
+      {
+        "label": "a",
+        "name": "values.a",
+        "type": "FLOAT,INT"
+      },
+      {
+        "label": "b",
+        "name": "values.b",
+        "shape": 7,
+        "type": "FLOAT,INT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "FLOAT",
+        "type": "FLOAT"
+      },
+      {
+        "name": "INT",
+        "type": "INT"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfy-core",
+      "ver": "0.19.3",
+      "Node name for S&R": "ComfyMathExpression"
+    },
+    "widgets_values": [
+      "a/2"
+    ]
   }
 }
