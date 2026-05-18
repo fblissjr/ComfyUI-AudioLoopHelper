@@ -711,6 +711,8 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         _check_run_id_layout_present(wf, by_type, record)
         # F17 — loop-body CFGGuider input traceability (subgraph-scoped).
         _check_cfg_guider_inputs_traced_to_source(wf, by_type, by_id, record)
+        # Loop-body TLO/TLC containment (paired with scripts/verify_loop_containment.py).
+        _check_loop_body_containment(wf, by_type, record)
 
     # Generic invariants — apply to all workflows regardless of topology.
     _check_no_sd3_shift_node(wf, by_type, record)
@@ -1795,6 +1797,50 @@ _CONDITIONING_SOURCE_TYPES = frozenset({
     "ConditioningBlend",
     "PromptRelayEncode",
 })
+
+def _check_loop_body_containment(wf, by_type, record) -> None:
+    """F-pair with ``scripts/verify_loop_containment.py``: every active
+    iter-dependent node (forward-reachable from TLO's data outputs) must
+    also reach TensorLoopClose backward. Side branches off TLO that never
+    feed TLC execute ONCE statically — the "first iter looks right,
+    subsequent iters frozen" failure mode caused when
+    ComfyUI-NativeLooping's ``_WhileLoopClose._explore_dependencies``
+    doesn't see a dependency edge to clone the node per iteration.
+
+    Skips workflows with no TensorLoopOpen/Close (initial-render-only
+    variants don't have a loop body). Reports only the ``real`` violation
+    category (active, non-bus, non-bypassed) — bus orphans and bypassed
+    side branches are noisy-cosmetic and surface in the standalone tool
+    instead.
+    """
+    if not by_type.get("TensorLoopOpen") or not by_type.get("TensorLoopClose"):
+        return
+    # Lazy import — keeps `audit_workflows.py` runnable without the
+    # containment module if it's ever pulled out.
+    try:
+        from verify_loop_containment import analyze  # type: ignore
+    except Exception as e:
+        record("WARN", "loop_body_containment",
+               f"could not import verify_loop_containment: {e}")
+        return
+    result = analyze(wf)
+    if result is None:
+        return
+    if result.get("boundary_missing"):
+        record("ERR", "loop_body_containment",
+               "TensorLoopOpen/Close pair incomplete (one side missing or bypassed)")
+        return
+    real = result["real"]
+    if not real:
+        record("OK", "loop_body_containment",
+               f"all {len(result['iter_dep'])} iter-dependent nodes reach TLC")
+        return
+    for v in real:
+        record("ERR", "loop_body_containment",
+               f"{v['type']}({v['id']}) is iter-dependent but never reaches "
+               f"TensorLoopClose — will execute ONCE statically. "
+               f"Run scripts/verify_loop_containment.py for the full report.")
+
 
 # Top-level MODEL-producing terminal nodes. UNETLoader is canonical;
 # CheckpointLoaderSimple ships on some forks.

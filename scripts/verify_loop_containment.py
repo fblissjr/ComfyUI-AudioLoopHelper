@@ -39,6 +39,18 @@ _TLO_DATA_OUT_SLOTS = {1, 2, 3}  # previous_value, accumulated_count, current_it
 # TLC input slots that carry per-iter DATA (not the flow-control wire).
 _TLC_DATA_IN_SLOTS = {1, 2}      # processed, stop
 
+# Node types whose only role is terminal output (display, file write, canvas
+# annotation). These are LEGITIMATELY iter-dependent without reaching TLC —
+# they're side-effect sinks, not part of the per-iter dataflow that has to
+# be cloned. ComfyUI executes them as OUTPUT_NODE terminals.
+_TERMINAL_SINK_TYPES = frozenset({
+    "PreviewAny", "PreviewImage", "PreviewMask",
+    "SaveImage", "SaveLatent", "SaveAudio",
+    "VHS_VideoCombine",
+    "Note", "MarkdownNote",
+    "IterPatchInspector",  # diagnostic; outputs often left unwired
+})
+
 
 def _build_graph(wf: dict) -> tuple[dict[int, dict], dict[int, set], dict[int, set]]:
     """Build node table + forward/reverse adjacency. Each adjacency entry is a
@@ -108,8 +120,16 @@ def _walk(
     return seen
 
 
-def verify(wf: dict) -> tuple[int, list[dict]]:
-    """Return (exit_code, violations). 0 = OK, 1 = containment violation."""
+def analyze(wf: dict) -> dict | None:
+    """Run the containment analysis. Returns None if there's no loop on the
+    canvas, otherwise a dict with keys ``tlo``, ``tlc``, ``iter_dep``,
+    ``reaches_tlc``, ``real``, ``bus_dead``, ``bypassed``. Categorized
+    violations are lists of ``{"id", "type", "title"}`` info dicts.
+
+    This function is the reusable core. ``verify()`` wraps it with the CLI
+    print formatting; ``audit_workflows.py`` imports it to run the same check
+    as a CI-blocking invariant.
+    """
     nodes, forward, reverse = _build_graph(wf)
 
     tlos = [n["id"] for n in wf.get("nodes", [])
@@ -118,16 +138,13 @@ def verify(wf: dict) -> tuple[int, list[dict]]:
             if n.get("type") == "TensorLoopClose" and is_active(n)]
 
     if not tlos and not tlcs:
-        print("No TensorLoopOpen/Close on canvas — nothing to verify.")
-        return 0, []
-    if not tlos:
-        print(f"ERR: TensorLoopClose #{tlcs[0]} present but no active TensorLoopOpen")
-        return 1, []
-    if not tlcs:
-        print(f"ERR: TensorLoopOpen #{tlos[0]} present but no active TensorLoopClose")
-        return 1, []
-    if len(tlos) > 1 or len(tlcs) > 1:
-        print(f"WARN: multiple TLO ({len(tlos)}) / TLC ({len(tlcs)}); using first of each")
+        return None
+    if not tlos or not tlcs:
+        return {"tlo": tlos[0] if tlos else None,
+                "tlc": tlcs[0] if tlcs else None,
+                "iter_dep": set(), "reaches_tlc": set(),
+                "real": [], "bus_dead": [], "bypassed": [],
+                "boundary_missing": True}
 
     tlo, tlc = tlos[0], tlcs[0]
 
@@ -144,18 +161,50 @@ def verify(wf: dict) -> tuple[int, list[dict]]:
     # "executes once vs per-iter" is moot).
     violation_ids = sorted(iter_dep - reaches_tlc - {tlo, tlc})
 
-    real = []      # active non-bus nodes — these are correctness bugs
+    real = []      # active non-bus, non-sink nodes — these are correctness bugs
     bus_dead = []  # SetNode/GetNode with no live consumer — benchmark cruft
     bypassed = []  # mode=4 — won't execute regardless
+    sinks = []     # terminal output nodes — side-effect-only, no contribution to TLC
     for nid in violation_ids:
         n = nodes[nid]
         info = {"id": nid, "type": n.get("type"), "title": n.get("title") or ""}
         if not is_active(n):
             bypassed.append(info)
+        elif n.get("type") in _TERMINAL_SINK_TYPES:
+            sinks.append(info)
         elif n.get("type") in ("SetNode", "GetNode"):
             bus_dead.append(info)
         else:
             real.append(info)
+
+    return {
+        "tlo": tlo, "tlc": tlc,
+        "iter_dep": iter_dep, "reaches_tlc": reaches_tlc,
+        "real": real, "bus_dead": bus_dead, "bypassed": bypassed, "sinks": sinks,
+        "boundary_missing": False,
+    }
+
+
+def verify(wf: dict) -> tuple[int, list[dict]]:
+    """CLI wrapper around ``analyze``. Returns (exit_code, violations).
+    0 = OK, 1 = containment violation."""
+    result = analyze(wf)
+    if result is None:
+        print("No TensorLoopOpen/Close on canvas — nothing to verify.")
+        return 0, []
+
+    if result["boundary_missing"]:
+        tlo, tlc = result["tlo"], result["tlc"]
+        if tlo is None:
+            print(f"ERR: TensorLoopClose #{tlc} present but no active TensorLoopOpen")
+        else:
+            print(f"ERR: TensorLoopOpen #{tlo} present but no active TensorLoopClose")
+        return 1, []
+
+    tlo, tlc = result["tlo"], result["tlc"]
+    iter_dep, reaches_tlc = result["iter_dep"], result["reaches_tlc"]
+    real, bus_dead, bypassed, sinks = (
+        result["real"], result["bus_dead"], result["bypassed"], result["sinks"])
 
     print(f"TensorLoopOpen #{tlo}  TensorLoopClose #{tlc}")
     print(f"  iter-dependent (forward from TLO data outputs):  {len(iter_dep)} nodes")
@@ -169,6 +218,10 @@ def verify(wf: dict) -> tuple[int, list[dict]]:
         print(f"\nERR: {len(real)} active iter-dependent node(s) do NOT reach TLC")
         print(f"     (will execute ONCE statically; per-iter state will freeze):")
         print(_fmt(real))
+    if sinks:
+        print(f"\nINFO: {len(sinks)} terminal sink node(s) "
+              f"(legitimate side branches — preview/save/note):")
+        print(_fmt(sinks))
     if bus_dead:
         print(f"\nWARN: {len(bus_dead)} orphan SetNode/GetNode bus endpoint(s) "
               f"(cosmetic; no live consumer):")

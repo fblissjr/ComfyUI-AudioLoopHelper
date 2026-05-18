@@ -177,6 +177,7 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 | `validate_workflow_resolution.py` | LTX-2.3 resolution-compliance check · `debugging_guide.md`, `ltx-constraints-auditor` agent |
 | `extract_workflow_from_png.py` | Dump embedded workflow JSON from PNG · `debugging_guide.md` |
 | `diagnose_overlap_seams.py` | Detect seam-zone artifacts in assembled loop output · `build_seam_refinement_workflow.py` |
+| `verify_loop_containment.py` | TLO/TLC containment audit — walks forward from `TensorLoopOpen` data outputs + backward from `TensorLoopClose` data inputs; reports active iter-dependent nodes that never reach TLC (would execute ONCE statically per ComfyUI-NativeLooping's `_explore_dependencies`). Whitelists known terminal sinks (PreviewAny / SaveImage / VHS_VideoCombine / Note / IterPatchInspector / etc). Exposes `analyze(wf)` for `audit_workflows.py::_check_loop_body_containment` to call (F-pair) · `audit_workflows.py` |
 | `calc_ltx_resolution.py` | Offline companion to `LTXResolutionFromAspect` — resolve aspect+long-edge to LTX-valid dims · CLI-only (no callers) |
 | `promote_latent_for_upscale.py` | Find the most recent `segment_*.latent` saved by a loop's bypassed-SaveLatent toggle and copy it to ComfyUI's input dir under a deterministic name. Reads `COMFYUI_OUTPUT_DIR` / `COMFYUI_INPUT_DIR` env or `--output-dir` / `--input-dir` flags · `docs/guides/upscale_guide.md` |
 
