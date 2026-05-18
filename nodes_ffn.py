@@ -2,30 +2,30 @@
 
 Patches `block.ff.forward` on the 44 fp8-quantized transformer blocks of
 LTX 2.3 distilled checkpoints, routing them through
-`sageattention.sage_ffn` when v0.6+ of the fork is installed. The 4
-bookend blocks `[0, 1, 46, 47]` stay on stock `block.ff.forward` (their
-weights are bf16, not fp8 — confirmed by the 2026-05-15 safetensors
-audit).
+`sageattention.sage_ffn`. The 4 bookend blocks `[0, 1, 46, 47]` stay
+on stock `block.ff.forward` (their weights are bf16, not fp8).
 
-When `sageattention.sage_ffn` is not available, this node is a
-**complete no-op**: returns the model unchanged with no patches
-applied. This preserves any prior FFN-touching patches in the chain
-(notably KJNodes `LTXVChunkFeedForward`). Adding a stock-fallback
-wrapper would overwrite the prior patch at the same
-`add_object_patch` key and silently disable upstream chunking.
+When `sageattention.sage_ffn` is not available, the node is a no-op:
+returns the model unchanged with no patches applied. Prior FFN
+patches in the chain (notably KJNodes `LTXVChunkFeedForward`) remain
+active. Adding a stock-fallback wrapper would overwrite their patch
+at the same `add_object_patch` key.
 
-When sage v0.6 IS available and the node fires, the sage_ffn path
-replaces any prior FFN patch in the chain. This is intentional —
-sage_ffn's two-kernel split has the same memory footprint as the
-un-chunked baseline, so stacking chunking on top is redundant.
+When sage v0.6 IS available, the patched forward splits inputs along
+the sequence dim at `SAGE_FFN_CHUNK_SEQ` (default 4096) and calls
+sage_ffn on each chunk. The in-wrapper chunking preserves L2 locality
+against neighboring attention sub-modules' working set since our
+patch necessarily overwrites ChunkFFN's at the same key.
 
-Bookend pattern reference: `internal/reference/sage_optimization_landscape.md`
+Bookend audit + perf history: `internal/reference/sage_optimization_landscape.md`
 """
 
 from __future__ import annotations
 
 import logging
 import types
+
+import torch
 
 # Mirror the io stub pattern from nodes_sage.py + nodes_easycache.py so
 # this module imports cleanly under pytest (no ComfyUI).
@@ -72,6 +72,14 @@ _LOGGER = logging.getLogger(__name__)
 # quantization degraded accuracy at the entry/exit of the network). The
 # other 44 blocks have fp8 FFN weights and route through sage_ffn.
 BF16_FFN_BLOCKS: frozenset[int] = frozenset({0, 1, 46, 47})
+
+
+# Seq-dim chunk size for the in-wrapper chunked sage_ffn path. Matches the
+# KJNodes LTXVChunkFeedForward widget default (chunk_size=4096) so the
+# L2-locality discipline carries over even though our add_object_patch
+# replaces theirs at the same key. Sequences ≤ this length skip the chunk
+# loop and hit sage_ffn in a single call.
+SAGE_FFN_CHUNK_SEQ: int = 4096
 
 
 def _resolve_sage_ffn():
@@ -136,8 +144,7 @@ class _FFNPatch:
         logger = self._logger
 
         def wrapped_forward(self_module, x, *args, **kwargs):
-            # Wrapper signature per sage v0.6 scoping doc:
-            #   sage_ffn(x, w1, s1, w2, s2, b1=None, b2=None) -> y
+            # sage_ffn signature: (x, w1, s1, w2, s2, b1=None, b2=None) -> y
             # net[0].proj is up-projection (hidden -> inner);
             # net[2] is down-projection (inner -> hidden).
             # `.weight_scale` is the per-tensor f32 scalar from the
@@ -154,7 +161,13 @@ class _FFNPatch:
                     return self_module.net(x)
                 b1 = getattr(proj_in, "bias", None)
                 b2 = getattr(proj_out, "bias", None)
-                return sage_ffn_fn(x, proj_in.weight, s1, proj_out.weight, s2, b1, b2)
+                if x.shape[1] <= SAGE_FFN_CHUNK_SEQ:
+                    return sage_ffn_fn(x, proj_in.weight, s1, proj_out.weight, s2, b1, b2)
+                outs = [
+                    sage_ffn_fn(c, proj_in.weight, s1, proj_out.weight, s2, b1, b2)
+                    for c in x.split(SAGE_FFN_CHUNK_SEQ, dim=1)
+                ]
+                return torch.cat(outs, dim=1)
             except Exception as exc:
                 # Don't crash a render if sage_ffn raises. Log once per
                 # (error_type, shape) so a real kernel bug surfaces
@@ -174,14 +187,7 @@ class AudioLoopHelperSageFFN(io.ComfyNode):
     bf16 in the distilled checkpoint. Composes with `LTXVChunkFeedForward`
     (KJNodes) — does not replace it.
 
-    Default `enabled=False`: production A/B (2026-05-15) showed
-    sage_ffn is slower than torch's bf16-dequant reference at LTX FFN
-    shapes (3% at stage-1, 20% at stage-2 T=44880; ~1.8% e2e). The
-    synthetic-bench speedup didn't translate due to L2 cache
-    contention with attention's working set + kernel-launch overhead
-    at LTX call counts. Ships as a completeness primitive (the only
-    fp8-native fused MLP for ComfyUI consumer-app on sm89), not a
-    perf win on the current Triton stack.
+    Default `enabled=False` — opt in for A/B against chunked stock.
 
     When sage v0.6 is unavailable, the node is a no-op: returns the
     model unchanged with no patches applied. Prior FFN patches in the
@@ -207,22 +213,15 @@ class AudioLoopHelperSageFFN(io.ComfyNode):
                 "through unchanged; prior FFN patches in the chain like "
                 "LTXVChunkFeedForward remain active). Restart ComfyUI "
                 "after installing v0.6.\n\n"
-                "COMPOSE WITH LTXVChunkFeedForward (KJNodes), don't "
-                "replace it. The v0.6 design is a two-kernel split: "
-                "intermediate hits HBM, same memory footprint as the "
-                "un-chunked baseline.\n\n"
-                "STATUS (post in-pipeline validation 2026-05-15): "
-                "sage_ffn is the only fp8-native fused MLP kernel for "
-                "ComfyUI consumer-app on sm89, but production A/B on "
-                "FML2V multi-guide showed it is ~1-20% SLOWER than "
-                "torch's bf16-dequant reference path (3% at stage-1, "
-                "20% at stage-2 T=44880; ~1.8% e2e wall-time slower). "
-                "Synthetic-bench predicted a speedup; the gap closes "
-                "in production due to L2 cache contention with the "
-                "neighboring attention sub-modules + kernel-launch "
-                "overhead across ~1000 FFN calls per render. Ship "
-                "STATUS: completeness primitive — opt-in if you want "
-                "the fp8 path for forward-compat reasons. Default off."
+                "Chunks along seq dim at SAGE_FFN_CHUNK_SEQ "
+                "(default 4096) to preserve L2 locality against "
+                "neighboring attention sub-modules. Our patch overwrites "
+                "KJNodes LTXVChunkFeedForward at the same "
+                "add_object_patch key; the chunking lives in this wrapper "
+                "instead.\n\n"
+                "Default off pending in-pipeline A/B against chunked "
+                "stock. Perf history in "
+                "internal/reference/sage_optimization_landscape.md."
             ),
             is_experimental=True,
             inputs=[

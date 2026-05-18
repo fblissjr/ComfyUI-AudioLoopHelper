@@ -20,11 +20,18 @@ import copy
 from unittest.mock import MagicMock
 
 import pytest
+import torch
 
 from _fakes import FakeModelPatcher, _walk_callables
 
 import nodes_ffn
-from nodes_ffn import BF16_FFN_BLOCKS, AudioLoopHelperSageFFN, _FFNFallbackLogger, _FFNPatch
+from nodes_ffn import (
+    BF16_FFN_BLOCKS,
+    SAGE_FFN_CHUNK_SEQ,
+    AudioLoopHelperSageFFN,
+    _FFNFallbackLogger,
+    _FFNPatch,
+)
 
 
 @pytest.fixture
@@ -32,6 +39,12 @@ def fake_sage_ffn():
     """Stand-in for the real `sageattention.sage_ffn` callable. Tests that
     assert dispatch behavior wire `return_value` / `side_effect` per-test."""
     return MagicMock(name="fake_sage_ffn")
+
+
+def _make_input(seq_len: int, dim: int = 4096) -> torch.Tensor:
+    """LTX FFN input shape `[batch=1, seq, dim]`. Tests use this to drive
+    the chunked-vs-single-call branch in `_FFNPatch.wrapped_forward`."""
+    return torch.zeros(1, seq_len, dim)
 
 
 # -- Test fakes ---------------------------------------------------------------
@@ -146,23 +159,65 @@ def test_bookend_set_is_first_two_and_last_two():
 # -- Patched-forward behavior -------------------------------------------------
 
 
-def test_patched_forward_with_sage_ffn_routes_through_kernel():
+def test_patched_forward_short_seq_single_call():
+    """Sequence ≤ SAGE_FFN_CHUNK_SEQ: sage_ffn called exactly once,
+    no chunking overhead."""
     ff = FakeFF()
-    sage_fn = MagicMock(name="sage_ffn", return_value="sage_path_result")
+    short = _make_input(seq_len=100)  # well under 4096
+    expected = torch.ones(1, 100, 4096)
+    sage_fn = MagicMock(name="sage_ffn", return_value=expected)
 
     patch = _FFNPatch(sage_ffn_fn=sage_fn, logger=_FFNFallbackLogger())
     bound = patch.__get__(ff, type(ff))
 
-    result = bound("input_tensor")
+    result = bound(short)
 
-    assert result == "sage_path_result"
+    assert torch.equal(result, expected)
     sage_fn.assert_called_once()
     call_args = sage_fn.call_args[0]
-    assert call_args[0] == "input_tensor"
-    assert call_args[1] is ff.net[0].proj.weight   # W1
-    assert call_args[2] is ff.net[0].proj.weight_scale  # s1
-    assert call_args[3] is ff.net[2].weight        # W2
-    assert call_args[4] is ff.net[2].weight_scale  # s2
+    assert call_args[0] is short
+    assert call_args[1] is ff.net[0].proj.weight
+    assert call_args[2] is ff.net[0].proj.weight_scale
+    assert call_args[3] is ff.net[2].weight
+    assert call_args[4] is ff.net[2].weight_scale
+
+
+def test_patched_forward_long_seq_chunks_along_dim1():
+    """Sequence > SAGE_FFN_CHUNK_SEQ: sage_ffn called once per chunk,
+    output is the chunks concatenated along seq dim."""
+    ff = FakeFF()
+    long = _make_input(seq_len=10000)  # 10000 / 4096 → 3 chunks
+    # sage_ffn returns the same shape as its input, so per-chunk
+    # return needs to match the chunked input dims.
+    sage_fn = MagicMock(name="sage_ffn", side_effect=lambda x, *_a, **_kw: torch.full_like(x, 0.5))
+
+    patch = _FFNPatch(sage_ffn_fn=sage_fn, logger=_FFNFallbackLogger())
+    bound = patch.__get__(ff, type(ff))
+
+    result = bound(long)
+
+    # 10000 split by 4096 → 3 chunks (4096 + 4096 + 1808)
+    assert sage_fn.call_count == 3
+    assert result.shape == (1, 10000, 4096)
+    assert torch.equal(result, torch.full((1, 10000, 4096), 0.5))
+    # Per-call inputs are the seq-split chunks.
+    chunk_seq_lens = [args[0].shape[1] for args, _ in sage_fn.call_args_list]
+    assert chunk_seq_lens == [4096, 4096, 1808]
+
+
+def test_patched_forward_chunk_threshold_boundary():
+    """Sequence == SAGE_FFN_CHUNK_SEQ: single call (≤, not <). Off-by-one
+    canary on the chunk-vs-single branch condition."""
+    ff = FakeFF()
+    boundary = _make_input(seq_len=SAGE_FFN_CHUNK_SEQ)
+    sage_fn = MagicMock(name="sage_ffn", side_effect=lambda x, *_a, **_kw: x)
+
+    patch = _FFNPatch(sage_ffn_fn=sage_fn, logger=_FFNFallbackLogger())
+    bound = patch.__get__(ff, type(ff))
+
+    bound(boundary)
+
+    assert sage_fn.call_count == 1
 
 
 def test_patched_forward_falls_through_when_weight_scale_missing():
@@ -176,11 +231,12 @@ def test_patched_forward_falls_through_when_weight_scale_missing():
     patch = _FFNPatch(sage_ffn_fn=sage_fn, logger=_FFNFallbackLogger())
     bound = patch.__get__(ff, type(ff))
 
-    result = bound("input_tensor")
+    short = _make_input(seq_len=100)
+    result = bound(short)
 
     assert result == "stock_fallback"
     sage_fn.assert_not_called()
-    ff.net.assert_called_once_with("input_tensor")
+    ff.net.assert_called_once_with(short)
 
 
 def test_patched_forward_falls_through_when_sage_ffn_raises():
@@ -192,10 +248,11 @@ def test_patched_forward_falls_through_when_sage_ffn_raises():
     patch = _FFNPatch(sage_ffn_fn=sage_fn, logger=_FFNFallbackLogger())
     bound = patch.__get__(ff, type(ff))
 
-    result = bound("input_tensor")
+    short = _make_input(seq_len=100)
+    result = bound(short)
 
     assert result == "stock_fallback"
-    ff.net.assert_called_once_with("input_tensor")
+    ff.net.assert_called_once_with(short)
 
 
 # -- Compatibility guards -----------------------------------------------------
