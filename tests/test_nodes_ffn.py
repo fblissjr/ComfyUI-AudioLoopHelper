@@ -77,6 +77,8 @@ class FakeFF:
         else:
             s1 = s2 = None
         if scale_path == "scale_weight":
+            # Legacy fp8_ops convention: weight is the raw fp8 tensor,
+            # scale lives directly on Linear.
             proj_in.weight = MagicMock(name="W1_fp8")
             proj_out.weight = MagicMock(name="W2_fp8")
             proj_in.scale_weight = s1
@@ -84,9 +86,14 @@ class FakeFF:
             proj_in.weight_scale = None
             proj_out.weight_scale = None
         elif scale_path == "weight._params":
-            # Modern path: scale lives on the QuantizedTensor wrapping .weight
-            w1 = MagicMock(name="W1_fp8")
-            w2 = MagicMock(name="W2_fp8")
+            # Modern QuantizedTensor wrapping: ._qdata holds raw fp8 tensor,
+            # ._params.scale holds the per-tensor scale. `_extract_fp8_weight_and_scale`
+            # uses `isinstance(qdata, torch.Tensor)` to guard — so _qdata
+            # must be a real Tensor, not a MagicMock.
+            w1 = MagicMock(name="W1_QuantizedTensor")
+            w1._qdata = torch.empty(1, dtype=torch.uint8)  # fp8 surrogate
+            w2 = MagicMock(name="W2_QuantizedTensor")
+            w2._qdata = torch.empty(1, dtype=torch.uint8)
             w1._params = MagicMock(scale=s1) if s1 is not None else None
             w2._params = MagicMock(scale=s2) if s2 is not None else None
             proj_in.weight = w1
@@ -206,8 +213,10 @@ def test_patched_forward_short_seq_single_call():
     sage_fn.assert_called_once()
     call_args = sage_fn.call_args[0]
     assert call_args[0] is short
+    # Legacy fp8_ops path: weight is the raw fp8 tensor (no QuantizedTensor
+    # unwrap needed). sage_ffn gets Linear.weight directly + Linear.scale_weight.
     assert call_args[1] is ff.net[0].proj.weight
-    assert call_args[2] is ff.net[0].proj.scale_weight  # legacy fp8_ops path
+    assert call_args[2] is ff.net[0].proj.scale_weight
     assert call_args[3] is ff.net[2].weight
     assert call_args[4] is ff.net[2].scale_weight
 
@@ -250,11 +259,12 @@ def test_patched_forward_chunk_threshold_boundary():
     assert sage_fn.call_count == 1
 
 
-def test_patched_forward_finds_scale_on_modern_quantized_tensor_path():
-    """ComfyUI's modern fp8 path wraps weights in `QuantizedTensor` and
-    exposes the scale on `weight._params.scale` (or `weight.layout_params.scale`
-    via the public property). `_extract_fp8_scale` must find it without
-    requiring the legacy `Linear.weight_scale` attribute."""
+def test_patched_forward_unwraps_quantized_tensor_for_sage_ffn():
+    """ComfyUI's modern fp8 path wraps weights in `QuantizedTensor`.
+    sage_ffn asserts `w.dtype == float8_e4m3fn`, which fails if we pass the
+    wrapper instead of the raw fp8 storage at `weight._qdata`. The wrapper
+    must extract `_qdata` (and the scale from `_params.scale`) so sage_ffn
+    receives unwrapped tensors."""
     ff = FakeFF(scale_path="weight._params")
     short = _make_input(seq_len=100)
     sage_fn = MagicMock(name="sage_ffn", side_effect=lambda x, *_a, **_kw: x)
@@ -264,6 +274,13 @@ def test_patched_forward_finds_scale_on_modern_quantized_tensor_path():
 
     bound(short)
     sage_fn.assert_called_once()
+    call_args = sage_fn.call_args[0]
+    # Critical: sage_ffn gets the raw _qdata tensor, NOT the QuantizedTensor
+    # wrapper. Passing the wrapper would fail sage_ffn's dtype assert.
+    assert call_args[1] is ff.net[0].proj.weight._qdata
+    assert call_args[3] is ff.net[2].weight._qdata
+    assert call_args[2] is ff.net[0].proj.weight._params.scale
+    assert call_args[4] is ff.net[2].weight._params.scale
 
 
 def test_patched_forward_falls_through_when_weight_scale_missing():

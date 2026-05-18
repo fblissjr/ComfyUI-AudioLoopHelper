@@ -99,36 +99,38 @@ def _resolve_sage_ffn():
     return getattr(_sa, "sage_ffn", None)
 
 
-def _extract_fp8_scale(linear_module):
-    """Return `(scale, path_label)` for an fp8 Linear's per-tensor weight scale.
+def _extract_fp8_weight_and_scale(linear_module):
+    """Return `(raw_fp8_weight, scale, path_label)` for an fp8 Linear.
 
-    Two conventions, both probed:
-    - `Linear.scale_weight` (legacy fp8_ops, `comfy/ops.py:836`)
-    - `Linear.weight.{_params,layout_params}.scale` — modern
-      MixedPrecisionOps where weight is a `comfy_kitchen.QuantizedTensor`.
-      `_params` is the raw storage; `.layout_params` is the public property
-      that aliases it (`comfy_kitchen.tensor.base`). Probing both means we
-      survive future renames in either direction without a code change.
+    Modern ComfyUI wraps fp8 weights in `comfy_kitchen.QuantizedTensor`,
+    which stores the raw fp8 storage on `._qdata` and the per-tensor
+    scale on `._params.scale` (or `.layout_params.scale` via the public
+    property alias). sage_ffn asserts `w.dtype == float8_e4m3fn`, so
+    passing the wrapper directly fails — we need to pass `_qdata`.
 
-    Returns `(None, None)` when no convention matches — the caller treats
-    this as "not fp8-quantized in any recognised format" and installs a
-    stock-passthrough forward instead of `sage_ffn`.
+    Legacy paths (`Linear.scale_weight` / `Linear.weight_scale`) store
+    the scale as a Linear attribute and `Linear.weight` is already the
+    raw fp8 tensor; no unwrap needed.
+
+    Returns `(None, None, None)` when no convention matches.
     """
     s = getattr(linear_module, "scale_weight", None)
     if isinstance(s, torch.Tensor):
-        return s, "Linear.scale_weight"
+        return linear_module.weight, s, "Linear.scale_weight"
     s = getattr(linear_module, "weight_scale", None)
     if isinstance(s, torch.Tensor):
-        return s, "Linear.weight_scale"
+        return linear_module.weight, s, "Linear.weight_scale"
     w = getattr(linear_module, "weight", None)
     if w is not None:
-        for attr in ("_params", "layout_params"):
-            params = getattr(w, attr, None)
-            if params is not None:
-                scale = getattr(params, "scale", None)
-                if isinstance(scale, torch.Tensor):
-                    return scale, f"weight.{attr}.scale"
-    return None, None
+        qdata = getattr(w, "_qdata", None)
+        if isinstance(qdata, torch.Tensor):
+            for attr in ("_params", "layout_params"):
+                params = getattr(w, attr, None)
+                if params is not None:
+                    scale = getattr(params, "scale", None)
+                    if isinstance(scale, torch.Tensor):
+                        return qdata, scale, f"weight.{attr}.scale"
+    return None, None, None
 
 
 class _FFNFallbackLogger:
@@ -152,10 +154,13 @@ class _FFNFallbackLogger:
         if key in self._seen:
             return
         self._seen.add(key)
+        # Include str(exc) so v0.6.2+ informative assert messages (which
+        # name the failing precondition + actual value) surface in the
+        # log instead of being discarded as bare AssertionError.
         _LOGGER.warning(
-            "AudioLoopHelperSageFFN: sage_ffn raised %s at shape %r; falling "
-            "through to stock FFN path. Further identical failures suppressed.",
-            type(exc).__name__, shape,
+            "AudioLoopHelperSageFFN: sage_ffn raised %s: %s at shape %r; "
+            "falling through to stock FFN path. Further identical failures suppressed.",
+            type(exc).__name__, str(exc) or "(no message)", shape,
         )
 
     def log_scale_path_once(self, path: str) -> None:
@@ -208,10 +213,10 @@ class _FFNPatch:
         # ~1000 FFN calls per render.
         proj_in = obj.net[0].proj
         proj_out = obj.net[2]
-        s1, path1 = _extract_fp8_scale(proj_in)
-        s2, _ = _extract_fp8_scale(proj_out)
-        if s1 is None or s2 is None or path1 is None:
-            # Scale not resolvable on this block. Install a stock
+        w1, s1, path1 = _extract_fp8_weight_and_scale(proj_in)
+        w2, s2, _ = _extract_fp8_weight_and_scale(proj_out)
+        if w1 is None or w2 is None or s1 is None or s2 is None or path1 is None:
+            # Scale/weight not resolvable on this block. Install a stock
             # passthrough that respects prior patches (e.g. ChunkFFN).
             # Logged once per logger instance — a wrong-attribute-name
             # regression surfaces loudly at install, not as silent
@@ -224,8 +229,6 @@ class _FFNPatch:
             return types.MethodType(stock_passthrough, obj)
 
         logger.log_scale_path_once(path1)
-        w1 = proj_in.weight
-        w2 = proj_out.weight
         b1 = getattr(proj_in, "bias", None)
         b2 = getattr(proj_out, "bias", None)
 
