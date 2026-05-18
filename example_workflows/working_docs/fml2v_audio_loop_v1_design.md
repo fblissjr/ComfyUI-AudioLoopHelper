@@ -2,6 +2,24 @@
 
 Last updated: 2026-05-16
 
+> **HANDOFF / CURRENT STATE (2026-05-16, multi-session build)**:
+> - **Phase 1 ✅**: strip+bypass benchmark structures we don't need.
+> - **Phase 2 ✅**: added `LTXFramePlanner` (#2302), `FloatConstant overlap=2.0` (#2303), `FloatConstant init_strength=0.7` (#2304), `AudioLoopController` (#2305), `AudioLoopPlanner` (#2306), `LoadAudio` (#2307), `TrimAudioDuration` (#2308), `LTXVAudioVAEEncode` (#2309), `LTXSmartImageResize` (#2310), `LTXVPreprocess` (#2311). Fixed `PrimitiveFloat #2076` fps 24→25. **Phase 2 node IDs stashed in `wf['properties']['build_fml2v_phase2']`** for next-session reference.
+> - **Phase 3 ⏸ next**: conditioning path (`TimestampPromptScheduleBatchEncode` + bypassed parallel `CLIPTextEncode` + `nag_cond_video` CLIPTextEncode + 2× `ConditioningSelectByIteration`).
+> - **Phase 4 ⏸**: initial render path.
+> - **Phase 5 ⏸**: loop body (flat canvas).
+> - **Phase 6 ⏸**: output assembly + LoopConfigValidator.
+>
+> **How to resume**:
+> 1. `git log --oneline -10` to see recent commits.
+> 2. `uv run --group dev python scripts/build_fml2v_audio_loop.py` re-runs Phases 1+2 from benchmark source (idempotent).
+> 3. Continue implementing in `scripts/build_fml2v_audio_loop.py::phase3_conditioning(...)`.
+> 4. Helper `_add_from_template(ed, type, pos, widget_values=, title=, size=)` is already defined — uses `scripts/_node_templates_fml2v.json` for shape.
+> 5. Reference canonical loop workflow `example_workflows/audio-loop-music-video_latent.json` for wiring patterns when in doubt.
+> 6. After each phase: `uv run --group dev python scripts/audit_workflows.py example_workflows/experimental/fml2v_var_d_audio_loop.json` — partial-build ERRs (TrimImageBatchToAudio missing, RunIdPrefix missing) are EXPECTED until Phase 6.
+>
+> **Memory pointer**: the user's auto-memory holds the same handoff state under the project's `project_fml2v_audio_loop_build_state.md` entry — next-session Claude will see it via SessionStart context.
+
 ## Goal
 
 Add tensor-loop iteration to the `fml2v_var_d_audio_input` benchmark workflow so it can render a full-length song with audio-video sync (replacing the current 4-second-audio + 15-second-video hardcode). Output lives at `example_workflows/experimental/fml2v_var_d_audio_loop.json`.
