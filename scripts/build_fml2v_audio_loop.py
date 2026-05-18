@@ -1139,8 +1139,6 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
 
 # Benchmark output-chain nodes Phase 6 rewires.
 _BENCH_VAE_DECODE = 149                # LTXVTiledVAEDecode (bypassed pass2 decoder)
-_BENCH_SET_FINAL_VIDEO = 153           # SetNode "final_video"
-_BENCH_SET_FINAL_AUDIO = 154           # SetNode "final_audio"
 _BENCH_VHS_COMBINE = 43                # VHS_VideoCombine
 
 
@@ -1213,17 +1211,17 @@ def phase6_assembly(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     ed.add_link(trim_audio_id, 0, trim_img_id, 1, "AUDIO")
     ed.add_link(fp_id, 4, trim_img_id, 2, "INT")                    # fps_int
 
-    # --- 5. Rewire VHS_VideoCombine direct from trim chain (F14 audit
-    #        requires VHS.images to come directly from TrimImageBatchToAudio,
-    #        not via the Set_/Get_final_video bus); keep the bus updated
-    #        for UI inspection but VHS reads direct.
+    # --- 5. Rewire VHS_VideoCombine direct from the trim chain. F14 audit
+    #        requires VHS.images to come directly from TrimImageBatchToAudio
+    #        (not via a SetNode bus). Option B: audio also direct from
+    #        TrimAudio (skip the LTXVAudioVAEDecode round-trip; audio frozen
+    #        via mask=0 throughout, so source is bit-identical). Benchmark's
+    #        Set_final_video / Set_final_audio + their Get-side consumers
+    #        become orphan after this rewire; left on canvas as no-ops
+    #        rather than stripped (cosmetic-only).
     ed.rewire_input(_BENCH_VHS_COMBINE, 0, trim_img_id, 0, "IMAGE")
     ed.rewire_input(_BENCH_VHS_COMBINE, 1, trim_audio_id, 0, "AUDIO")
-    ed.rewire_input(_BENCH_SET_FINAL_VIDEO, 0, trim_img_id, 0, "IMAGE")
-    # Option B: source audio directly from TrimAudio (no LTXVAudioVAEDecode).
-    ed.rewire_input(_BENCH_SET_FINAL_AUDIO, 0, trim_audio_id, 0, "AUDIO")
     log(f"  rewire VHS_VideoCombine #{_BENCH_VHS_COMBINE}.images ← TrimImageBatchToAudio (F14); .audio ← TrimAudio (Option B)")
-    log(f"  also update Set_final_video / Set_final_audio buses for UI inspection")
 
     # --- 6. RunIdPrefix → VHS_VideoCombine.filename_prefix (F15) ---
     run_id_id = _add_from_template(
