@@ -1840,5 +1840,42 @@
     "widgets_values": [
       "a/2"
     ]
+  },
+  "IterPatchInspector": {
+    "type": "IterPatchInspector",
+    "inputs": [
+      {
+        "name": "model",
+        "type": "MODEL"
+      },
+      {
+        "name": "label",
+        "type": "STRING",
+        "widget": {
+          "name": "label"
+        }
+      },
+      {
+        "name": "verbose",
+        "type": "BOOLEAN",
+        "widget": {
+          "name": "verbose"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name": "model",
+        "type": "MODEL"
+      }
+    ],
+    "properties": {
+      "Node name for S&R": "IterPatchInspector",
+      "aux_id": "fblissjr/ComfyUI-AudioLoopHelper"
+    },
+    "widgets_values": [
+      "patches_loop_body",
+      false
+    ]
   }
 }

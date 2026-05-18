@@ -857,9 +857,23 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     )
     ed.add_link(nag_id, 0, sage_id, 0, "MODEL")
 
-    set_patched_id = _add_setnode(ed, "loop_patched_model", (-600, 1500), dtype="MODEL")
-    ed.add_link(sage_id, 0, set_patched_id, 0, "MODEL")
-    log(f"+ model patch chain: Stamp#{stamp_id} → ChunkFFN#{chunk_id} → AttnTuner#{attn_id} (bypassed) → NAG#{nag_id} → Sage#{sage_id} → Set_loop_patched_model#{set_patched_id}")
+    # BYPASSED-by-default diagnostic: pass-through that logs per-call patch
+    # state. Toggle mode=0 in the UI before the first live render to verify
+    # whether ComfyUI-NativeLooping's _explore_dependencies walks the
+    # SetNode/GetNode bus (= patches re-apply per iter) or treats it as
+    # opaque (= patches freeze at iter 0). Source: nodes.py::IterPatchInspector.
+    inspector_id = _add_from_template(
+        ed, "IterPatchInspector", (-600, 1400),
+        widget_values=["patches_loop_body", False],
+        title="IterPatchInspector (bypassed; toggle to diagnose per-iter patch survival)",
+        size=(290, 100),
+        mode=4,
+    )
+    ed.add_link(sage_id, 0, inspector_id, 0, "MODEL")
+
+    set_patched_id = _add_setnode(ed, "loop_patched_model", (-300, 1500), dtype="MODEL")
+    ed.add_link(inspector_id, 0, set_patched_id, 0, "MODEL")
+    log(f"+ model patch chain: Stamp#{stamp_id} → ChunkFFN#{chunk_id} → AttnTuner#{attn_id} (bypassed) → NAG#{nag_id} → Sage#{sage_id} → IterPatchInspector#{inspector_id} (bypassed) → Set_loop_patched_model#{set_patched_id}")
 
     # ====================================================================
     # 5b — Pass 1 half-res denoise chain
@@ -1120,6 +1134,7 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
         "attn_tuner": attn_id,
         "nag": nag_id,
         "sage": sage_id,
+        "iter_patch_inspector": inspector_id,
         "set_patched_model": set_patched_id,
         "empty_latent_p1": empty_p1_id,
         "vae_encode_init_guide": vae_encode_id,
