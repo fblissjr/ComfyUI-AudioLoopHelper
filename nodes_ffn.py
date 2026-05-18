@@ -218,8 +218,17 @@ class _FFNPatch:
         # live device is read.
         proj_in = obj.net[0].proj
         proj_out = obj.net[2]
-        _, _, path1 = _extract_fp8_weight_and_scale(proj_in)
-        _, _, path2 = _extract_fp8_weight_and_scale(proj_out)
+        # Install-time probe: validate the fp8 convention resolves AND
+        # extract the per-tensor scale as a Python float. sage_ffn's ABI
+        # documents `w1_scale: float, w2_scale: float` — Triton's @jit
+        # constant-folds Python scalars into the kernel; passing a 0-d
+        # tensor instead makes Triton allocate it as a pointer<fp32> arg
+        # and the kernel's `acc * W_scale` multiply fails compilation.
+        # Scales are model constants (set at safetensors load, never
+        # mutated), so the `.item()` host-sync runs once per block at
+        # install instead of twice per FFN call.
+        _, s1_tensor, path1 = _extract_fp8_weight_and_scale(proj_in)
+        _, s2_tensor, path2 = _extract_fp8_weight_and_scale(proj_out)
 
         # Single fallback policy: chain to prior add_object_patch wrapper
         # (e.g. KJNodes ChunkFFN) when present; else stock self_module.net.
@@ -233,12 +242,17 @@ class _FFNPatch:
             return types.MethodType(_fallback, obj)
 
         logger.log_scale_path_once(path1)
+        s1_float = float(s1_tensor.item())
+        s2_float = float(s2_tensor.item())
 
         def wrapped_forward(self_module, x, *args, **kwargs):
-            # Re-resolve weight/scale at call time so we pick up the
-            # device-correct storage (see __get__ comment).
-            w1, s1, _ = _extract_fp8_weight_and_scale(proj_in)
-            w2, s2, _ = _extract_fp8_weight_and_scale(proj_out)
+            # Re-resolve weight at call time so we pick up the
+            # device-correct storage (ComfyUI's vbar loader returns a
+            # fresh QuantizedTensor with cuda `_qdata` via
+            # cast_bias_weight; bind-time capture would freeze pre-load
+            # state).
+            w1, _, _ = _extract_fp8_weight_and_scale(proj_in)
+            w2, _, _ = _extract_fp8_weight_and_scale(proj_out)
             # Device guard: if a block's weights are cpu-resident
             # (partial-load offload) while the activation is on cuda,
             # sage_ffn's "all tensors must be on CUDA" assert fires.
@@ -252,9 +266,9 @@ class _FFNPatch:
             b2 = getattr(proj_out, "bias", None)
             try:
                 if x.shape[1] <= SAGE_FFN_CHUNK_SEQ:
-                    return sage_ffn_fn(x, w1, s1, w2, s2, b1, b2)
+                    return sage_ffn_fn(x, w1, s1_float, w2, s2_float, b1, b2)
                 outs = [
-                    sage_ffn_fn(c, w1, s1, w2, s2, b1, b2)
+                    sage_ffn_fn(c, w1, s1_float, w2, s2_float, b1, b2)
                     for c in x.split(SAGE_FFN_CHUNK_SEQ, dim=1)
                 ]
                 return torch.cat(outs, dim=1)

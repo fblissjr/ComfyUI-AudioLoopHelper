@@ -218,11 +218,15 @@ def test_patched_forward_short_seq_single_call():
     call_args = sage_fn.call_args[0]
     assert call_args[0] is short
     # Legacy fp8_ops path: weight is the raw fp8 tensor (no QuantizedTensor
-    # unwrap needed). sage_ffn gets Linear.weight directly + Linear.scale_weight.
+    # unwrap needed). sage_ffn gets Linear.weight directly + Linear.scale_weight
+    # as a Python float (Triton constant-folds scalars; passing a tensor
+    # makes it a pointer<fp32> arg and the kernel multiply fails).
     assert call_args[1] is ff.net[0].proj.weight
-    assert call_args[2] is ff.net[0].proj.scale_weight
+    assert call_args[2] == float(ff.net[0].proj.scale_weight.item())
+    assert isinstance(call_args[2], float)
     assert call_args[3] is ff.net[2].weight
-    assert call_args[4] is ff.net[2].scale_weight
+    assert call_args[4] == float(ff.net[2].scale_weight.item())
+    assert isinstance(call_args[4], float)
 
 
 def test_patched_forward_long_seq_chunks_along_dim1():
@@ -280,10 +284,13 @@ def test_patched_forward_unwraps_quantized_tensor_for_sage_ffn():
     call_args = sage_fn.call_args[0]
     # Critical: sage_ffn gets the raw _qdata tensor, NOT the QuantizedTensor
     # wrapper. Passing the wrapper would fail sage_ffn's dtype assert.
+    # Scales are passed as Python floats (Triton kernel ABI).
     assert call_args[1] is ff.net[0].proj.weight._qdata
     assert call_args[3] is ff.net[2].weight._qdata
-    assert call_args[2] is ff.net[0].proj.weight._params.scale
-    assert call_args[4] is ff.net[2].weight._params.scale
+    assert call_args[2] == float(ff.net[0].proj.weight._params.scale.item())
+    assert isinstance(call_args[2], float)
+    assert call_args[4] == float(ff.net[2].weight._params.scale.item())
+    assert isinstance(call_args[4], float)
 
 
 def test_patched_forward_falls_through_when_weight_scale_missing():
@@ -327,6 +334,36 @@ def test_patched_forward_fallback_chains_to_prior_forward_when_provided():
     prior.assert_called_once_with(short)
     ff.net.assert_not_called()
     sage_fn.assert_not_called()
+
+
+def test_patched_forward_passes_scale_as_python_float_not_tensor():
+    """sage_ffn's documented signature is `(x, w1, w1_scale: float, w2,
+    w2_scale: float, b1, b2)`. Triton's @jit constant-folds Python
+    scalars into the kernel; an unannotated tensor arg becomes a
+    `pointer<fp32>`, which fails compilation on `acc * W_scale` (pointer
+    × float). Hoist the `.item()` conversion to install time so the
+    per-call cost is zero (scales are model constants).
+    """
+    ff = FakeFF(scale_path="weight._params")
+    short = _make_input(seq_len=100)
+    sage_fn = MagicMock(name="sage_ffn", side_effect=lambda x, *_a, **_kw: x)
+
+    patch = _FFNPatch(sage_ffn_fn=sage_fn, logger=_FFNFallbackLogger())
+    bound = patch.__get__(ff, type(ff))
+    bound(short)
+
+    sage_fn.assert_called_once()
+    call_args = sage_fn.call_args[0]
+    # call_args = (x, w1, s1, w2, s2, b1, b2). s1 and s2 must be Python
+    # floats, NOT torch.Tensors — Triton-kernel ABI requirement.
+    assert isinstance(call_args[2], float), (
+        f"scale s1 must be a Python float (sage_ffn ABI); got "
+        f"{type(call_args[2]).__name__}"
+    )
+    assert isinstance(call_args[4], float), (
+        f"scale s2 must be a Python float (sage_ffn ABI); got "
+        f"{type(call_args[4]).__name__}"
+    )
 
 
 def test_patched_forward_falls_through_when_weight_on_different_device_than_activation():
