@@ -2,7 +2,7 @@
   "id": "0775f0bd-e4f2-40cc-85b7-45217564af17",
   "revision": 0,
   "last_node_id": 2357,
-  "last_link_id": 4268,
+  "last_link_id": 4269,
   "nodes": [
     {
       "id": 92,
@@ -750,9 +750,9 @@
           "type": "VAE",
           "links": [
             302,
-            4176,
-            4206,
-            4213
+            4177,
+            4207,
+            4214
           ]
         }
       ],
@@ -866,7 +866,7 @@
           "type": "SAMPLER",
           "links": [
             18,
-            4234
+            4235
           ]
         }
       ],
@@ -1367,7 +1367,8 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            4193
+            4176,
+            4194
           ]
         }
       ],
@@ -1503,7 +1504,7 @@
           "type": "SIGMAS",
           "links": [
             308,
-            4235
+            4236
           ]
         }
       ],
@@ -2079,7 +2080,7 @@
         {
           "name": "noise",
           "type": "NOISE",
-          "link": 4244
+          "link": 4245
         },
         {
           "name": "guider",
@@ -2171,7 +2172,7 @@
           "name": "INT",
           "type": "INT",
           "links": [
-            4203
+            4204
           ]
         }
       ],
@@ -2225,7 +2226,7 @@
           "name": "INT",
           "type": "INT",
           "links": [
-            4202
+            4203
           ]
         }
       ],
@@ -2577,7 +2578,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            4177
+            4178
           ]
         }
       ],
@@ -3047,7 +3048,7 @@
           "type": "LATENT",
           "links": [
             3936,
-            4245
+            4246
           ]
         },
         {
@@ -3161,8 +3162,8 @@
           "type": "IMAGE",
           "links": [
             4174,
-            4178,
-            4205
+            4179,
+            4206
           ]
         }
       ],
@@ -3646,74 +3647,6 @@
       "bgcolor": "rgba(24,24,27,.9)"
     },
     {
-      "id": 200,
-      "type": "GetNode",
-      "pos": [
-        2573.1058300440577,
-        3542.4376705132154
-      ],
-      "size": [
-        271.305509971064,
-        60
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 53,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "MODEL",
-          "type": "MODEL",
-          "links": [
-            265
-          ]
-        }
-      ],
-      "title": "Get_model_nag",
-      "properties": {
-        "Node name for S&R": "GetNode",
-        "aux_id": "kijai/ComfyUI-KJNodes"
-      },
-      "widgets_values": [
-        "model_nag"
-      ]
-    },
-    {
-      "id": 201,
-      "type": "GetNode",
-      "pos": [
-        3568.737671733683,
-        3536.391370220537
-      ],
-      "size": [
-        270,
-        58
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 54,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "MODEL",
-          "type": "MODEL",
-          "links": []
-        }
-      ],
-      "title": "Get_model_nag",
-      "properties": {
-        "Node name for S&R": "GetNode",
-        "aux_id": "kijai/ComfyUI-KJNodes"
-      },
-      "widgets_values": [
-        "model_nag"
-      ]
-    },
-    {
       "id": 8,
       "type": "CFGGuider",
       "pos": [
@@ -3733,7 +3666,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 4242
+          "link": 4243
         },
         {
           "name": "positive",
@@ -3841,8 +3774,8 @@
           "links": [
             4001,
             4136,
-            4215,
-            4239
+            4216,
+            4240
           ]
         }
       ],
@@ -4201,7 +4134,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 265
+          "link": 4176
         },
         {
           "name": "positive",
@@ -4303,7 +4236,7 @@
           "name": "video_latent",
           "type": "LATENT",
           "links": [
-            4182
+            4183
           ]
         },
         {
@@ -4676,7 +4609,7 @@
         {
           "name": "latents",
           "type": "LATENT",
-          "link": 4257
+          "link": 4258
         }
       ],
       "outputs": [
@@ -4685,7 +4618,7 @@
           "type": "IMAGE",
           "links": [
             304,
-            4258
+            4259
           ]
         }
       ],
@@ -4813,7 +4746,7 @@
         {
           "name": "audio_latent",
           "type": "LATENT",
-          "link": 4241
+          "link": 4242
         }
       ],
       "outputs": [
@@ -4925,17 +4858,17 @@
         {
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 4238
+          "link": 4239
         },
         {
           "name": "negative",
           "type": "CONDITIONING",
-          "link": 4239
+          "link": 4240
         },
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 4240
+          "link": 4241
         }
       ],
       "outputs": [
@@ -5436,13 +5369,13 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 4261
+          "link": 4262
         },
         {
           "name": "audio",
           "shape": 7,
           "type": "AUDIO",
-          "link": 4262
+          "link": 4263
         },
         {
           "name": "meta_batch",
@@ -5470,7 +5403,7 @@
           "widget": {
             "name": "filename_prefix"
           },
-          "link": 4263
+          "link": 4264
         }
       ],
       "outputs": [
@@ -5876,7 +5809,7 @@
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 4179
+          "link": 4180
         },
         {
           "label": "image_1",
@@ -5936,7 +5869,7 @@
           "links": [
             4140,
             4142,
-            4180
+            4181
           ]
         },
         {
@@ -5945,7 +5878,7 @@
           "links": [
             4141,
             4143,
-            4181
+            4182
           ]
         },
         {
@@ -6078,7 +6011,7 @@
           "links": [
             4160,
             4164,
-            4267
+            4268
           ]
         },
         {
@@ -6087,7 +6020,7 @@
           "links": [
             4161,
             4165,
-            4268
+            4269
           ]
         },
         {
@@ -6096,8 +6029,8 @@
           "links": [
             4162,
             4166,
-            4204,
-            4266
+            4205,
+            4267
           ]
         },
         {
@@ -6109,8 +6042,8 @@
           "name": "fps_int",
           "type": "INT",
           "links": [
-            4256,
-            4260
+            4257,
+            4261
           ]
         },
         {
@@ -6169,9 +6102,9 @@
           "name": "value",
           "type": "FLOAT",
           "links": [
-            4186,
-            4188,
-            4265
+            4187,
+            4189,
+            4266
           ]
         }
       ],
@@ -6205,7 +6138,7 @@
           "name": "value",
           "type": "FLOAT",
           "links": [
-            4218
+            4219
           ]
         }
       ],
@@ -6237,7 +6170,7 @@
         {
           "name": "audio",
           "type": "AUDIO",
-          "link": 4185
+          "link": 4186
         },
         {
           "name": "current_iteration",
@@ -6245,7 +6178,7 @@
           "widget": {
             "name": "current_iteration"
           },
-          "link": 4191
+          "link": 4192
         },
         {
           "name": "window_seconds",
@@ -6277,7 +6210,7 @@
           "widget": {
             "name": "overlap_seconds"
           },
-          "link": 4186
+          "link": 4187
         }
       ],
       "outputs": [
@@ -6285,36 +6218,36 @@
           "name": "start_index",
           "type": "FLOAT",
           "links": [
-            4209
+            4210
           ]
         },
         {
           "name": "should_stop",
           "type": "BOOLEAN",
           "links": [
-            4251
+            4252
           ]
         },
         {
           "name": "audio_duration",
           "type": "FLOAT",
           "links": [
-            4208
+            4209
           ]
         },
         {
           "name": "iteration_seed",
           "type": "INT",
           "links": [
-            4231,
-            4243
+            4232,
+            4244
           ]
         },
         {
           "name": "stride_seconds",
           "type": "FLOAT",
           "links": [
-            4210
+            4211
           ]
         },
         {
@@ -6327,7 +6260,7 @@
           "type": "INT",
           "slot_index": 6,
           "links": [
-            4248
+            4249
           ]
         },
         {
@@ -6369,7 +6302,7 @@
         {
           "name": "audio",
           "type": "AUDIO",
-          "link": 4187
+          "link": 4188
         },
         {
           "name": "window_seconds",
@@ -6393,7 +6326,7 @@
           "widget": {
             "name": "overlap_seconds"
           },
-          "link": 4188
+          "link": 4189
         }
       ],
       "outputs": [
@@ -6406,7 +6339,7 @@
           "name": "total_iterations",
           "type": "INT",
           "links": [
-            4190
+            4191
           ]
         },
         {
@@ -6507,12 +6440,12 @@
           "type": "AUDIO",
           "links": [
             4168,
-            4185,
-            4187,
-            4255,
-            4259,
-            4262,
-            4264
+            4186,
+            4188,
+            4256,
+            4260,
+            4263,
+            4265
           ]
         }
       ],
@@ -6560,7 +6493,7 @@
           "type": "LATENT",
           "links": [
             4170,
-            4207
+            4208
           ]
         }
       ],
@@ -6828,7 +6761,7 @@
           "name": "CONDITIONING",
           "type": "CONDITIONING",
           "links": [
-            4198
+            4199
           ]
         }
       ],
@@ -6917,7 +6850,7 @@
           "widget": {
             "name": "current_iteration"
           },
-          "link": 4192
+          "link": 4193
         }
       ],
       "outputs": [
@@ -6925,8 +6858,8 @@
           "name": "conditioning",
           "type": "CONDITIONING",
           "links": [
-            4214,
-            4238
+            4215,
+            4239
           ]
         }
       ],
@@ -6959,19 +6892,19 @@
         {
           "name": "vae",
           "type": "VAE",
-          "link": 4176
+          "link": 4177
         },
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 4177
+          "link": 4178
         },
         {
           "label": "image_1",
           "name": "num_images.image_1",
           "shape": 7,
           "type": "IMAGE",
-          "link": 4178
+          "link": 4179
         }
       ],
       "outputs": [
@@ -6979,7 +6912,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            4179
+            4180
           ]
         }
       ],
@@ -7013,17 +6946,17 @@
         {
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 4180
+          "link": 4181
         },
         {
           "name": "negative",
           "type": "CONDITIONING",
-          "link": 4181
+          "link": 4182
         },
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 4182
+          "link": 4183
         }
       ],
       "outputs": [
@@ -7041,8 +6974,8 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            4183,
-            4184
+            4184,
+            4185
           ]
         }
       ],
@@ -7072,7 +7005,7 @@
         {
           "name": "LATENT",
           "type": "LATENT",
-          "link": 4183
+          "link": 4184
         }
       ],
       "outputs": [
@@ -7110,7 +7043,7 @@
         {
           "name": "LATENT",
           "type": "LATENT",
-          "link": 4184
+          "link": 4185
         }
       ],
       "outputs": [
@@ -7149,7 +7082,7 @@
           "name": "initial_value",
           "shape": 7,
           "type": "IMAGE,MASK,LATENT",
-          "link": 4189
+          "link": 4190
         },
         {
           "name": "iterations_in",
@@ -7158,7 +7091,7 @@
           "widget": {
             "name": "iterations_in"
           },
-          "link": 4190
+          "link": 4191
         }
       ],
       "outputs": [
@@ -7181,9 +7114,9 @@
           "name": "current_iteration",
           "type": "INT",
           "links": [
-            4191,
             4192,
-            4194
+            4193,
+            4195
           ]
         }
       ],
@@ -7222,13 +7155,13 @@
         {
           "name": "processed",
           "type": "IMAGE,MASK,LATENT",
-          "link": 4250
+          "link": 4251
         },
         {
           "name": "stop",
           "shape": 7,
           "type": "BOOLEAN",
-          "link": 4251
+          "link": 4252
         }
       ],
       "outputs": [
@@ -7236,7 +7169,7 @@
           "name": "output",
           "type": "LATENT",
           "links": [
-            4253
+            4254
           ]
         }
       ],
@@ -7271,7 +7204,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            4189
+            4190
           ]
         }
       ],
@@ -7302,7 +7235,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 4193
+          "link": 4194
         },
         {
           "name": "current_iteration",
@@ -7310,7 +7243,7 @@
           "widget": {
             "name": "current_iteration"
           },
-          "link": 4194
+          "link": 4195
         }
       ],
       "outputs": [
@@ -7318,7 +7251,7 @@
           "name": "model",
           "type": "MODEL",
           "links": [
-            4195
+            4196
           ]
         }
       ],
@@ -7350,7 +7283,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 4195
+          "link": 4196
         }
       ],
       "outputs": [
@@ -7358,7 +7291,7 @@
           "name": "model",
           "type": "MODEL",
           "links": [
-            4196
+            4197
           ]
         }
       ],
@@ -7391,7 +7324,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 4196
+          "link": 4197
         }
       ],
       "outputs": [
@@ -7399,7 +7332,7 @@
           "name": "model",
           "type": "MODEL",
           "links": [
-            4197
+            4198
           ]
         }
       ],
@@ -7436,13 +7369,13 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 4197
+          "link": 4198
         },
         {
           "name": "nag_cond_video",
           "shape": 7,
           "type": "CONDITIONING",
-          "link": 4198
+          "link": 4199
         },
         {
           "name": "nag_cond_audio",
@@ -7456,7 +7389,7 @@
           "name": "model",
           "type": "MODEL",
           "links": [
-            4199
+            4200
           ]
         }
       ],
@@ -7491,7 +7424,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 4199
+          "link": 4200
         }
       ],
       "outputs": [
@@ -7499,7 +7432,7 @@
           "name": "model",
           "type": "MODEL",
           "links": [
-            4200
+            4201
           ]
         }
       ],
@@ -7533,7 +7466,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 4200
+          "link": 4201
         },
         {
           "name": "label",
@@ -7557,7 +7490,7 @@
           "name": "model",
           "type": "MODEL",
           "links": [
-            4201
+            4202
           ]
         }
       ],
@@ -7589,7 +7522,7 @@
         {
           "name": "MODEL",
           "type": "MODEL",
-          "link": 4201
+          "link": 4202
         }
       ],
       "outputs": [
@@ -7630,7 +7563,7 @@
           "widget": {
             "name": "width"
           },
-          "link": 4202
+          "link": 4203
         },
         {
           "name": "height",
@@ -7638,7 +7571,7 @@
           "widget": {
             "name": "height"
           },
-          "link": 4203
+          "link": 4204
         },
         {
           "name": "length",
@@ -7646,7 +7579,7 @@
           "widget": {
             "name": "length"
           },
-          "link": 4204
+          "link": 4205
         }
       ],
       "outputs": [
@@ -7654,7 +7587,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            4211
+            4212
           ]
         }
       ],
@@ -7689,12 +7622,12 @@
         {
           "name": "pixels",
           "type": "IMAGE",
-          "link": 4205
+          "link": 4206
         },
         {
           "name": "vae",
           "type": "VAE",
-          "link": 4206
+          "link": 4207
         }
       ],
       "outputs": [
@@ -7702,7 +7635,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            4217
+            4218
           ]
         }
       ],
@@ -7732,7 +7665,7 @@
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 4207
+          "link": 4208
         },
         {
           "name": "source_seconds",
@@ -7740,7 +7673,7 @@
           "widget": {
             "name": "source_seconds"
           },
-          "link": 4208
+          "link": 4209
         },
         {
           "name": "start_seconds",
@@ -7748,7 +7681,7 @@
           "widget": {
             "name": "start_seconds"
           },
-          "link": 4209
+          "link": 4210
         },
         {
           "name": "duration_seconds",
@@ -7756,7 +7689,7 @@
           "widget": {
             "name": "duration_seconds"
           },
-          "link": 4210
+          "link": 4211
         }
       ],
       "outputs": [
@@ -7764,7 +7697,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            4212
+            4213
           ]
         }
       ],
@@ -7799,14 +7732,14 @@
           "name": "video_latent",
           "shape": 7,
           "type": "LATENT",
-          "link": 4211
+          "link": 4212
         },
         {
           "localized_name": "audio_latent",
           "name": "audio_latent",
           "shape": 7,
           "type": "LATENT",
-          "link": 4212
+          "link": 4213
         },
         {
           "localized_name": "video_start_time",
@@ -7851,7 +7784,7 @@
           "name": "video_latent",
           "type": "LATENT",
           "links": [
-            4216
+            4217
           ]
         },
         {
@@ -7859,8 +7792,8 @@
           "name": "audio_latent",
           "type": "LATENT",
           "links": [
-            4227,
-            4241
+            4228,
+            4242
           ]
         }
       ],
@@ -7899,31 +7832,31 @@
           "localized_name": "vae",
           "name": "vae",
           "type": "VAE",
-          "link": 4213
+          "link": 4214
         },
         {
           "localized_name": "positive",
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 4214
+          "link": 4215
         },
         {
           "localized_name": "negative",
           "name": "negative",
           "type": "CONDITIONING",
-          "link": 4215
+          "link": 4216
         },
         {
           "localized_name": "latent",
           "name": "latent",
           "type": "LATENT",
-          "link": 4216
+          "link": 4217
         },
         {
           "localized_name": "guiding_latent",
           "name": "guiding_latent",
           "type": "LATENT",
-          "link": 4217
+          "link": 4218
         },
         {
           "localized_name": "strength",
@@ -7932,7 +7865,7 @@
           "widget": {
             "name": "strength"
           },
-          "link": 4218
+          "link": 4219
         }
       ],
       "outputs": [
@@ -7941,8 +7874,8 @@
           "name": "positive",
           "type": "CONDITIONING",
           "links": [
-            4219,
-            4221
+            4220,
+            4222
           ]
         },
         {
@@ -7950,8 +7883,8 @@
           "name": "negative",
           "type": "CONDITIONING",
           "links": [
-            4220,
-            4222
+            4221,
+            4223
           ]
         },
         {
@@ -7959,7 +7892,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            4223
+            4224
           ]
         }
       ],
@@ -7994,13 +7927,13 @@
           "localized_name": "positive",
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 4219
+          "link": 4220
         },
         {
           "localized_name": "negative",
           "name": "negative",
           "type": "CONDITIONING",
-          "link": 4220
+          "link": 4221
         }
       ],
       "outputs": [
@@ -8009,7 +7942,7 @@
           "name": "positive",
           "type": "CONDITIONING",
           "links": [
-            4229
+            4230
           ]
         },
         {
@@ -8017,7 +7950,7 @@
           "name": "negative",
           "type": "CONDITIONING",
           "links": [
-            4230
+            4231
           ]
         }
       ],
@@ -8048,17 +7981,17 @@
         {
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 4221
+          "link": 4222
         },
         {
           "name": "negative",
           "type": "CONDITIONING",
-          "link": 4222
+          "link": 4223
         },
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 4223
+          "link": 4224
         }
       ],
       "outputs": [
@@ -8076,7 +8009,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            4224
+            4225
           ]
         }
       ],
@@ -8108,7 +8041,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            4225
+            4226
           ]
         }
       ],
@@ -8140,13 +8073,13 @@
           "localized_name": "latents",
           "name": "latents",
           "type": "LATENT",
-          "link": 4224
+          "link": 4225
         },
         {
           "localized_name": "reference",
           "name": "reference",
           "type": "LATENT",
-          "link": 4225
+          "link": 4226
         }
       ],
       "outputs": [
@@ -8155,7 +8088,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            4226
+            4227
           ]
         }
       ],
@@ -8188,12 +8121,12 @@
         {
           "name": "video_latent",
           "type": "LATENT",
-          "link": 4226
+          "link": 4227
         },
         {
           "name": "audio_latent",
           "type": "LATENT",
-          "link": 4227
+          "link": 4228
         }
       ],
       "outputs": [
@@ -8201,7 +8134,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            4236
+            4237
           ]
         }
       ],
@@ -8233,7 +8166,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            4228
+            4229
           ]
         }
       ],
@@ -8264,17 +8197,17 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 4228
+          "link": 4229
         },
         {
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 4229
+          "link": 4230
         },
         {
           "name": "negative",
           "type": "CONDITIONING",
-          "link": 4230
+          "link": 4231
         }
       ],
       "outputs": [
@@ -8282,7 +8215,7 @@
           "name": "GUIDER",
           "type": "GUIDER",
           "links": [
-            4233
+            4234
           ]
         }
       ],
@@ -8324,7 +8257,7 @@
           "widget": {
             "name": "noise_seed"
           },
-          "link": 4231
+          "link": 4232
         }
       ],
       "outputs": [
@@ -8332,7 +8265,7 @@
           "name": "NOISE",
           "type": "NOISE",
           "links": [
-            4232
+            4233
           ]
         }
       ],
@@ -8365,27 +8298,27 @@
         {
           "name": "noise",
           "type": "NOISE",
-          "link": 4232
+          "link": 4233
         },
         {
           "name": "guider",
           "type": "GUIDER",
-          "link": 4233
+          "link": 4234
         },
         {
           "name": "sampler",
           "type": "SAMPLER",
-          "link": 4234
+          "link": 4235
         },
         {
           "name": "sigmas",
           "type": "SIGMAS",
-          "link": 4235
+          "link": 4236
         },
         {
           "name": "latent_image",
           "type": "LATENT",
-          "link": 4236
+          "link": 4237
         }
       ],
       "outputs": [
@@ -8393,7 +8326,7 @@
           "name": "output",
           "type": "LATENT",
           "links": [
-            4237
+            4238
           ]
         },
         {
@@ -8435,7 +8368,7 @@
         {
           "name": "av_latent",
           "type": "LATENT",
-          "link": 4237
+          "link": 4238
         }
       ],
       "outputs": [
@@ -8443,7 +8376,7 @@
           "name": "video_latent",
           "type": "LATENT",
           "links": [
-            4240
+            4241
           ]
         },
         {
@@ -8480,7 +8413,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            4242
+            4243
           ]
         }
       ],
@@ -8514,7 +8447,7 @@
           "widget": {
             "name": "noise_seed"
           },
-          "link": 4243
+          "link": 4244
         }
       ],
       "outputs": [
@@ -8522,7 +8455,7 @@
           "name": "NOISE",
           "type": "NOISE",
           "links": [
-            4244
+            4245
           ]
         }
       ],
@@ -8557,7 +8490,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            4246
+            4247
           ]
         }
       ],
@@ -8589,13 +8522,13 @@
           "localized_name": "latents",
           "name": "latents",
           "type": "LATENT",
-          "link": 4245
+          "link": 4246
         },
         {
           "localized_name": "reference",
           "name": "reference",
           "type": "LATENT",
-          "link": 4246
+          "link": 4247
         }
       ],
       "outputs": [
@@ -8604,7 +8537,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            4247
+            4248
           ]
         }
       ],
@@ -8638,7 +8571,7 @@
           "localized_name": "latent",
           "name": "latent",
           "type": "LATENT",
-          "link": 4247
+          "link": 4248
         },
         {
           "localized_name": "overlap_latent_frames",
@@ -8647,7 +8580,7 @@
           "widget": {
             "name": "overlap_latent_frames"
           },
-          "link": 4248
+          "link": 4249
         }
       ],
       "outputs": [
@@ -8656,7 +8589,7 @@
           "name": "trimmed",
           "type": "LATENT",
           "links": [
-            4249
+            4250
           ]
         }
       ],
@@ -8689,7 +8622,7 @@
           "localized_name": "latent",
           "name": "latent",
           "type": "LATENT",
-          "link": 4249
+          "link": 4250
         }
       ],
       "outputs": [
@@ -8698,7 +8631,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            4250
+            4251
           ]
         }
       ],
@@ -8733,7 +8666,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            4252
+            4253
           ]
         }
       ],
@@ -8764,12 +8697,12 @@
         {
           "name": "samples1",
           "type": "LATENT",
-          "link": 4252
+          "link": 4253
         },
         {
           "name": "samples2",
           "type": "LATENT",
-          "link": 4253
+          "link": 4254
         }
       ],
       "outputs": [
@@ -8777,7 +8710,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            4254
+            4255
           ]
         }
       ],
@@ -8809,12 +8742,12 @@
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 4254
+          "link": 4255
         },
         {
           "name": "audio",
           "type": "AUDIO",
-          "link": 4255
+          "link": 4256
         },
         {
           "name": "fps",
@@ -8822,7 +8755,7 @@
           "widget": {
             "name": "fps"
           },
-          "link": 4256
+          "link": 4257
         }
       ],
       "outputs": [
@@ -8830,7 +8763,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            4257
+            4258
           ]
         }
       ],
@@ -8860,12 +8793,12 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 4258
+          "link": 4259
         },
         {
           "name": "audio",
           "type": "AUDIO",
-          "link": 4259
+          "link": 4260
         },
         {
           "name": "fps",
@@ -8873,7 +8806,7 @@
           "widget": {
             "name": "fps"
           },
-          "link": 4260
+          "link": 4261
         }
       ],
       "outputs": [
@@ -8881,7 +8814,7 @@
           "name": "images",
           "type": "IMAGE",
           "links": [
-            4261
+            4262
           ]
         }
       ],
@@ -8913,7 +8846,7 @@
           "name": "video_prefix",
           "type": "STRING",
           "links": [
-            4263
+            4264
           ]
         },
         {
@@ -8949,7 +8882,7 @@
         {
           "name": "audio",
           "type": "AUDIO",
-          "link": 4264
+          "link": 4265
         },
         {
           "name": "window_seconds",
@@ -8965,7 +8898,7 @@
           "widget": {
             "name": "length"
           },
-          "link": 4266
+          "link": 4267
         },
         {
           "name": "width",
@@ -8973,7 +8906,7 @@
           "widget": {
             "name": "width"
           },
-          "link": 4267
+          "link": 4268
         },
         {
           "name": "height",
@@ -8981,7 +8914,7 @@
           "widget": {
             "name": "height"
           },
-          "link": 4268
+          "link": 4269
         },
         {
           "name": "overlap_seconds",
@@ -8989,7 +8922,7 @@
           "widget": {
             "name": "overlap_seconds"
           },
-          "link": 4265
+          "link": 4266
         },
         {
           "name": "keyframe_schedule",
@@ -9271,14 +9204,6 @@
       188,
       0,
       "CLIP"
-    ],
-    [
-      265,
-      200,
-      0,
-      36,
-      0,
-      "MODEL"
     ],
     [
       269,
@@ -9978,6 +9903,14 @@
     ],
     [
       4176,
+      122,
+      0,
+      36,
+      0,
+      "MODEL"
+    ],
+    [
+      4177,
       147,
       0,
       2317,
@@ -9985,7 +9918,7 @@
       "VAE"
     ],
     [
-      4177,
+      4178,
       32,
       0,
       2317,
@@ -9993,7 +9926,7 @@
       "LATENT"
     ],
     [
-      4178,
+      4179,
       225,
       0,
       2317,
@@ -10001,7 +9934,7 @@
       "IMAGE"
     ],
     [
-      4179,
+      4180,
       2317,
       0,
       2221,
@@ -10009,23 +9942,23 @@
       "LATENT"
     ],
     [
-      4180,
-      2221,
-      0,
-      2318,
-      0,
-      "CONDITIONING"
-    ],
-    [
       4181,
       2221,
-      1,
+      0,
       2318,
-      1,
+      0,
       "CONDITIONING"
     ],
     [
       4182,
+      2221,
+      1,
+      2318,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      4183,
       18,
       0,
       2318,
@@ -10033,7 +9966,7 @@
       "LATENT"
     ],
     [
-      4183,
+      4184,
       2318,
       2,
       2319,
@@ -10041,7 +9974,7 @@
       "LATENT"
     ],
     [
-      4184,
+      4185,
       2318,
       2,
       2320,
@@ -10049,7 +9982,7 @@
       "LATENT"
     ],
     [
-      4185,
+      4186,
       2308,
       0,
       2305,
@@ -10057,7 +9990,7 @@
       "AUDIO"
     ],
     [
-      4186,
+      4187,
       2303,
       0,
       2305,
@@ -10065,7 +9998,7 @@
       "FLOAT"
     ],
     [
-      4187,
+      4188,
       2308,
       0,
       2306,
@@ -10073,7 +10006,7 @@
       "AUDIO"
     ],
     [
-      4188,
+      4189,
       2303,
       0,
       2306,
@@ -10081,7 +10014,7 @@
       "FLOAT"
     ],
     [
-      4189,
+      4190,
       2323,
       0,
       2321,
@@ -10089,7 +10022,7 @@
       "LATENT"
     ],
     [
-      4190,
+      4191,
       2306,
       1,
       2321,
@@ -10097,7 +10030,7 @@
       "INT"
     ],
     [
-      4191,
+      4192,
       2321,
       3,
       2305,
@@ -10105,7 +10038,7 @@
       "INT"
     ],
     [
-      4192,
+      4193,
       2321,
       3,
       2316,
@@ -10113,7 +10046,7 @@
       "INT"
     ],
     [
-      4193,
+      4194,
       122,
       0,
       2324,
@@ -10121,7 +10054,7 @@
       "MODEL"
     ],
     [
-      4194,
+      4195,
       2321,
       3,
       2324,
@@ -10129,7 +10062,7 @@
       "INT"
     ],
     [
-      4195,
+      4196,
       2324,
       0,
       2325,
@@ -10137,7 +10070,7 @@
       "MODEL"
     ],
     [
-      4196,
+      4197,
       2325,
       0,
       2326,
@@ -10145,7 +10078,7 @@
       "MODEL"
     ],
     [
-      4197,
+      4198,
       2326,
       0,
       2327,
@@ -10153,7 +10086,7 @@
       "MODEL"
     ],
     [
-      4198,
+      4199,
       2314,
       0,
       2327,
@@ -10161,7 +10094,7 @@
       "CONDITIONING"
     ],
     [
-      4199,
+      4200,
       2327,
       0,
       2328,
@@ -10169,7 +10102,7 @@
       "MODEL"
     ],
     [
-      4200,
+      4201,
       2328,
       0,
       2329,
@@ -10177,7 +10110,7 @@
       "MODEL"
     ],
     [
-      4201,
+      4202,
       2329,
       0,
       2330,
@@ -10185,7 +10118,7 @@
       "MODEL"
     ],
     [
-      4202,
+      4203,
       2191,
       1,
       2331,
@@ -10193,7 +10126,7 @@
       "INT"
     ],
     [
-      4203,
+      4204,
       2192,
       1,
       2331,
@@ -10201,7 +10134,7 @@
       "INT"
     ],
     [
-      4204,
+      4205,
       2302,
       2,
       2331,
@@ -10209,7 +10142,7 @@
       "INT"
     ],
     [
-      4205,
+      4206,
       225,
       0,
       2332,
@@ -10217,7 +10150,7 @@
       "IMAGE"
     ],
     [
-      4206,
+      4207,
       147,
       0,
       2332,
@@ -10225,7 +10158,7 @@
       "VAE"
     ],
     [
-      4207,
+      4208,
       2309,
       0,
       2333,
@@ -10233,7 +10166,7 @@
       "LATENT"
     ],
     [
-      4208,
+      4209,
       2305,
       2,
       2333,
@@ -10241,7 +10174,7 @@
       "FLOAT"
     ],
     [
-      4209,
+      4210,
       2305,
       0,
       2333,
@@ -10249,7 +10182,7 @@
       "FLOAT"
     ],
     [
-      4210,
+      4211,
       2305,
       4,
       2333,
@@ -10257,7 +10190,7 @@
       "FLOAT"
     ],
     [
-      4211,
+      4212,
       2331,
       0,
       2334,
@@ -10265,7 +10198,7 @@
       "LATENT"
     ],
     [
-      4212,
+      4213,
       2333,
       0,
       2334,
@@ -10273,7 +10206,7 @@
       "LATENT"
     ],
     [
-      4213,
+      4214,
       147,
       0,
       2335,
@@ -10281,7 +10214,7 @@
       "VAE"
     ],
     [
-      4214,
+      4215,
       2316,
       0,
       2335,
@@ -10289,7 +10222,7 @@
       "CONDITIONING"
     ],
     [
-      4215,
+      4216,
       11,
       0,
       2335,
@@ -10297,7 +10230,7 @@
       "CONDITIONING"
     ],
     [
-      4216,
+      4217,
       2334,
       0,
       2335,
@@ -10305,7 +10238,7 @@
       "LATENT"
     ],
     [
-      4217,
+      4218,
       2332,
       0,
       2335,
@@ -10313,7 +10246,7 @@
       "LATENT"
     ],
     [
-      4218,
+      4219,
       2304,
       0,
       2335,
@@ -10321,31 +10254,31 @@
       "FLOAT"
     ],
     [
-      4219,
-      2335,
-      0,
-      2336,
-      0,
-      "CONDITIONING"
-    ],
-    [
       4220,
       2335,
-      1,
+      0,
       2336,
-      1,
+      0,
       "CONDITIONING"
     ],
     [
       4221,
       2335,
+      1,
+      2336,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      4222,
+      2335,
       0,
       2337,
       0,
       "CONDITIONING"
     ],
     [
-      4222,
+      4223,
       2335,
       1,
       2337,
@@ -10353,7 +10286,7 @@
       "CONDITIONING"
     ],
     [
-      4223,
+      4224,
       2335,
       2,
       2337,
@@ -10361,7 +10294,7 @@
       "LATENT"
     ],
     [
-      4224,
+      4225,
       2337,
       2,
       2339,
@@ -10369,7 +10302,7 @@
       "LATENT"
     ],
     [
-      4225,
+      4226,
       2338,
       0,
       2339,
@@ -10377,7 +10310,7 @@
       "LATENT"
     ],
     [
-      4226,
+      4227,
       2339,
       0,
       2340,
@@ -10385,7 +10318,7 @@
       "LATENT"
     ],
     [
-      4227,
+      4228,
       2334,
       1,
       2340,
@@ -10393,7 +10326,7 @@
       "LATENT"
     ],
     [
-      4228,
+      4229,
       2341,
       0,
       2342,
@@ -10401,7 +10334,7 @@
       "MODEL"
     ],
     [
-      4229,
+      4230,
       2336,
       0,
       2342,
@@ -10409,7 +10342,7 @@
       "CONDITIONING"
     ],
     [
-      4230,
+      4231,
       2336,
       1,
       2342,
@@ -10417,7 +10350,7 @@
       "CONDITIONING"
     ],
     [
-      4231,
+      4232,
       2305,
       3,
       2343,
@@ -10425,7 +10358,7 @@
       "INT"
     ],
     [
-      4232,
+      4233,
       2343,
       0,
       2344,
@@ -10433,7 +10366,7 @@
       "NOISE"
     ],
     [
-      4233,
+      4234,
       2342,
       0,
       2344,
@@ -10441,7 +10374,7 @@
       "GUIDER"
     ],
     [
-      4234,
+      4235,
       1,
       0,
       2344,
@@ -10449,7 +10382,7 @@
       "SAMPLER"
     ],
     [
-      4235,
+      4236,
       215,
       0,
       2344,
@@ -10457,7 +10390,7 @@
       "SIGMAS"
     ],
     [
-      4236,
+      4237,
       2340,
       0,
       2344,
@@ -10465,7 +10398,7 @@
       "LATENT"
     ],
     [
-      4237,
+      4238,
       2344,
       0,
       2345,
@@ -10473,7 +10406,7 @@
       "LATENT"
     ],
     [
-      4238,
+      4239,
       2316,
       0,
       2222,
@@ -10481,7 +10414,7 @@
       "CONDITIONING"
     ],
     [
-      4239,
+      4240,
       11,
       0,
       2222,
@@ -10489,7 +10422,7 @@
       "CONDITIONING"
     ],
     [
-      4240,
+      4241,
       2345,
       0,
       2222,
@@ -10497,7 +10430,7 @@
       "LATENT"
     ],
     [
-      4241,
+      4242,
       2334,
       1,
       34,
@@ -10505,7 +10438,7 @@
       "LATENT"
     ],
     [
-      4242,
+      4243,
       2346,
       0,
       8,
@@ -10513,7 +10446,7 @@
       "MODEL"
     ],
     [
-      4243,
+      4244,
       2305,
       3,
       2347,
@@ -10521,7 +10454,7 @@
       "INT"
     ],
     [
-      4244,
+      4245,
       2347,
       0,
       21,
@@ -10529,7 +10462,7 @@
       "NOISE"
     ],
     [
-      4245,
+      4246,
       146,
       0,
       2349,
@@ -10537,7 +10470,7 @@
       "LATENT"
     ],
     [
-      4246,
+      4247,
       2348,
       0,
       2349,
@@ -10545,7 +10478,7 @@
       "LATENT"
     ],
     [
-      4247,
+      4248,
       2349,
       0,
       2350,
@@ -10553,7 +10486,7 @@
       "LATENT"
     ],
     [
-      4248,
+      4249,
       2305,
       6,
       2350,
@@ -10561,7 +10494,7 @@
       "INT"
     ],
     [
-      4249,
+      4250,
       2350,
       0,
       2351,
@@ -10569,7 +10502,7 @@
       "LATENT"
     ],
     [
-      4250,
+      4251,
       2351,
       0,
       2322,
@@ -10577,7 +10510,7 @@
       "LATENT"
     ],
     [
-      4251,
+      4252,
       2305,
       1,
       2322,
@@ -10585,7 +10518,7 @@
       "BOOLEAN"
     ],
     [
-      4252,
+      4253,
       2352,
       0,
       2353,
@@ -10593,7 +10526,7 @@
       "LATENT"
     ],
     [
-      4253,
+      4254,
       2322,
       0,
       2353,
@@ -10601,7 +10534,7 @@
       "LATENT"
     ],
     [
-      4254,
+      4255,
       2353,
       0,
       2354,
@@ -10609,7 +10542,7 @@
       "LATENT"
     ],
     [
-      4255,
+      4256,
       2308,
       0,
       2354,
@@ -10617,7 +10550,7 @@
       "AUDIO"
     ],
     [
-      4256,
+      4257,
       2302,
       4,
       2354,
@@ -10625,7 +10558,7 @@
       "INT"
     ],
     [
-      4257,
+      4258,
       2354,
       0,
       149,
@@ -10633,7 +10566,7 @@
       "LATENT"
     ],
     [
-      4258,
+      4259,
       149,
       0,
       2355,
@@ -10641,7 +10574,7 @@
       "IMAGE"
     ],
     [
-      4259,
+      4260,
       2308,
       0,
       2355,
@@ -10649,7 +10582,7 @@
       "AUDIO"
     ],
     [
-      4260,
+      4261,
       2302,
       4,
       2355,
@@ -10657,7 +10590,7 @@
       "INT"
     ],
     [
-      4261,
+      4262,
       2355,
       0,
       43,
@@ -10665,7 +10598,7 @@
       "IMAGE"
     ],
     [
-      4262,
+      4263,
       2308,
       0,
       43,
@@ -10673,7 +10606,7 @@
       "AUDIO"
     ],
     [
-      4263,
+      4264,
       2356,
       0,
       43,
@@ -10681,7 +10614,7 @@
       "STRING"
     ],
     [
-      4264,
+      4265,
       2308,
       0,
       2357,
@@ -10689,7 +10622,7 @@
       "AUDIO"
     ],
     [
-      4265,
+      4266,
       2303,
       0,
       2357,
@@ -10697,7 +10630,7 @@
       "FLOAT"
     ],
     [
-      4266,
+      4267,
       2302,
       2,
       2357,
@@ -10705,7 +10638,7 @@
       "INT"
     ],
     [
-      4267,
+      4268,
       2302,
       0,
       2357,
@@ -10713,7 +10646,7 @@
       "INT"
     ],
     [
-      4268,
+      4269,
       2302,
       1,
       2357,

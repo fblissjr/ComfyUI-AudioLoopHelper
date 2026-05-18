@@ -515,6 +515,7 @@ _BENCH_SET_HEIGHT = 2072           # SetNode "height"
 _BENCH_SET_FRAMES = 2075           # SetNode "frames"
 _BENCH_SET_FPS = 2074              # SetNode "fps"
 _BENCH_SET_FIRSTFRAME = 75         # SetNode "firstframe"
+_BENCH_INIT_CFG_GUIDER = 36        # CFGGuider (init render, pass1)
 
 # Orphaned by Phase 4 dim-SSoT + image-bus rewires; strip after rewiring.
 _PHASE4_STRIP_AFTER_REWIRE = [
@@ -524,6 +525,10 @@ _PHASE4_STRIP_AFTER_REWIRE = [
     2080,  # INTConstant width  (replaced by FramePlanner.width)
     2083,  # ResizeImagesByLongerEdge (replaced by LTXSmartImageResize chain)
     2084,  # LTXVPreprocess (redundant once Set_firstframe carries preprocessed)
+    200,   # GetNode "model_nag" — dead bus (Phase 1 stripped Set_model_nag #199);
+    201,   #   #36 init CFGGuider rewired to Get_model below, leaving these orphan.
+           #   Stripping them prevents KJNodes' load-time bus-resolution from
+           #   throwing "No SetNode found for model_nag(GetNode)".
 ]
 
 
@@ -646,6 +651,14 @@ def phase4_initial_render(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     # --- 5. Conditioning: LTXVConditioning.positive ← selector_init ---
     ed.add_link(sel_init_id, 0, _BENCH_LTXV_CONDITIONING, 0, "CONDITIONING")
     log(f"  wire LTXVConditioning #{_BENCH_LTXV_CONDITIONING}.positive ← selector_init #{sel_init_id}")
+
+    # --- 5b. Init CFGGuider.model ← Get_model (was Get_model_nag, dead bus). ---
+    # Phase 1 stripped Set_model_nag (top-level NAG moved into loop body in
+    # Phase 5). The init render gets the UN-patched model directly; the loop
+    # body's CFGGuiders get the patched model via Get_loop_patched_model.
+    get_model_id = _find_get_node(ed, "model")
+    ed.rewire_input(_BENCH_INIT_CFG_GUIDER, 0, get_model_id, 0, "MODEL")
+    log(f"  rewire init CFGGuider #{_BENCH_INIT_CFG_GUIDER}.model ← Get_model #{get_model_id} (was dead Get_model_nag)")
 
     # --- 6. Insert LTXVImgToVideoInplaceKJ between EmptyLatent and AddGuideMulti ---
     inplace_id = _add_from_template(
