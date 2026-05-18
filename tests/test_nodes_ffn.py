@@ -41,10 +41,13 @@ def fake_sage_ffn():
     return MagicMock(name="fake_sage_ffn")
 
 
-def _make_input(seq_len: int, dim: int = 4096) -> torch.Tensor:
-    """LTX FFN input shape `[batch=1, seq, dim]`. Tests use this to drive
-    the chunked-vs-single-call branch in `_FFNPatch.wrapped_forward`."""
-    return torch.zeros(1, seq_len, dim)
+def _make_input(seq_len: int, dim: int = 8) -> torch.Tensor:
+    """LTX FFN input shape `[batch=1, seq, dim]`. Tests only read
+    `.shape[1]` to drive the chunked-vs-single-call branch; `sage_ffn` is
+    mocked so the channel dim is never touched. Defaults to dim=8 to keep
+    the boundary test's 4096-seq allocation cheap (~128 KB instead of
+    ~67 MB at production dim=4096)."""
+    return torch.empty(1, seq_len, dim)
 
 
 # -- Test fakes ---------------------------------------------------------------
@@ -191,7 +194,7 @@ def test_patched_forward_short_seq_single_call():
     no chunking overhead."""
     ff = FakeFF()
     short = _make_input(seq_len=100)  # well under 4096
-    expected = torch.ones(1, 100, 4096)
+    expected = torch.ones(1, 100, 8)
     sage_fn = MagicMock(name="sage_ffn", return_value=expected)
 
     patch = _FFNPatch(sage_ffn_fn=sage_fn, logger=_FFNFallbackLogger())
@@ -225,8 +228,8 @@ def test_patched_forward_long_seq_chunks_along_dim1():
 
     # 10000 split by 4096 → 3 chunks (4096 + 4096 + 1808)
     assert sage_fn.call_count == 3
-    assert result.shape == (1, 10000, 4096)
-    assert torch.equal(result, torch.full((1, 10000, 4096), 0.5))
+    assert result.shape == (1, 10000, 8)
+    assert torch.equal(result, torch.full((1, 10000, 8), 0.5))
     # Per-call inputs are the seq-split chunks.
     chunk_seq_lens = [args[0].shape[1] for args, _ in sage_fn.call_args_list]
     assert chunk_seq_lens == [4096, 4096, 1808]
@@ -249,10 +252,9 @@ def test_patched_forward_chunk_threshold_boundary():
 
 def test_patched_forward_finds_scale_on_modern_quantized_tensor_path():
     """ComfyUI's modern fp8 path wraps weights in `QuantizedTensor` and
-    stores the scale on `weight._params.scale`. Locks in the
-    `_extract_fp8_scale` multi-path lookup that 2026-05-18 fixed: the
-    earlier wrapper only checked the legacy `Linear.weight_scale`
-    attribute and silently fell back to stock on the modern stack."""
+    exposes the scale on `weight._params.scale` (or `weight.layout_params.scale`
+    via the public property). `_extract_fp8_scale` must find it without
+    requiring the legacy `Linear.weight_scale` attribute."""
     ff = FakeFF(scale_path="weight._params")
     short = _make_input(seq_len=100)
     sage_fn = MagicMock(name="sage_ffn", side_effect=lambda x, *_a, **_kw: x)

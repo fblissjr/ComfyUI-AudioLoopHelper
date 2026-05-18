@@ -100,67 +100,51 @@ def _resolve_sage_ffn():
 
 
 def _extract_fp8_scale(linear_module):
-    """Find the per-tensor fp8 weight scale on a Linear, trying multiple
-    storage conventions used across ComfyUI's fp8 stack versions.
+    """Return `(scale, path_label)` for an fp8 Linear's per-tensor weight scale.
 
-    Returns the scale Tensor on success, None when the layer isn't
-    fp8-quantized in any recognised format. The path that succeeded
-    is logged once per session via `_log_scale_path_once` so the next
-    render confirms which storage convention is active.
+    Two conventions, both probed:
+    - `Linear.scale_weight` (legacy fp8_ops, `comfy/ops.py:836`)
+    - `Linear.weight.{_params,layout_params}.scale` — modern
+      MixedPrecisionOps where weight is a `comfy_kitchen.QuantizedTensor`.
+      `_params` is the raw storage; `.layout_params` is the public property
+      that aliases it (`comfy_kitchen.tensor.base`). Probing both means we
+      survive future renames in either direction without a code change.
+
+    Returns `(None, None)` when no convention matches — the caller treats
+    this as "not fp8-quantized in any recognised format" and installs a
+    stock-passthrough forward instead of `sage_ffn`.
     """
-    # Legacy fp8_ops convention (comfy/ops.py:836): direct attribute on
-    # the Linear instance.
     s = getattr(linear_module, "scale_weight", None)
     if isinstance(s, torch.Tensor):
-        _log_scale_path_once("Linear.scale_weight")
-        return s
+        return s, "Linear.scale_weight"
     s = getattr(linear_module, "weight_scale", None)
     if isinstance(s, torch.Tensor):
-        _log_scale_path_once("Linear.weight_scale")
-        return s
-    # Modern MixedPrecisionOps path: weight is wrapped in a
-    # comfy_kitchen.QuantizedTensor whose .Params carries the scale.
+        return s, "Linear.weight_scale"
     w = getattr(linear_module, "weight", None)
     if w is not None:
-        # comfy_kitchen QuantizedTensor exposes its layout params under
-        # a few possible names depending on version. Try in order.
-        for attr in ("_params", "params", "layout_params", "_layout_params"):
+        for attr in ("_params", "layout_params"):
             params = getattr(w, attr, None)
             if params is not None:
                 scale = getattr(params, "scale", None)
                 if isinstance(scale, torch.Tensor):
-                    _log_scale_path_once(f"weight.{attr}.scale")
-                    return scale
-    return None
-
-
-_LOGGED_SCALE_PATHS: set[str] = set()
-
-
-def _log_scale_path_once(path: str) -> None:
-    """Logs the first time each scale-resolution path succeeds so logs
-    confirm whether `_extract_fp8_scale` is finding the scale on the
-    current ComfyUI version. One line per session per path."""
-    if path in _LOGGED_SCALE_PATHS:
-        return
-    _LOGGED_SCALE_PATHS.add(path)
-    _LOGGER.info("AudioLoopHelperSageFFN: fp8 scale found via %s", path)
+                    return scale, f"weight.{attr}.scale"
+    return None, None
 
 
 class _FFNFallbackLogger:
-    """Dedup'd warning when `sage_ffn` raises and we fall through to the
-    stock path. Mirrors `nodes_sage.SageFallbackLogger`. Prevents a v0.6
-    kernel bug from silently regressing every block to stock-path while
-    the user sees "no perf gain" with no error in the log.
+    """Per-instance dedup'd warnings + info for the sage FFN patch.
 
-    Key shape `(error_type, shape)` keeps the log small — one line per
-    distinct failure mode per shape, not per call.
+    Three keyspaces, three lifetimes — kept together so a single logger
+    instance threaded through every block's `_FFNPatch` (one per
+    `_patch_impl` call) carries all the dedup state for a render.
     """
 
     def __init__(self):
+        # Per-(exc_type, shape) for sage_ffn runtime failures.
         self._seen: set[tuple[str, tuple]] = set()
-        # Track per-block fallback-because-no-scale events. Logged once
-        # per session so a wrong-attribute-name regression surfaces loudly.
+        # Per-resolution-path for first-time scale-found messages.
+        self._seen_paths: set[str] = set()
+        # Binary: no scale path resolved for any block this render.
         self._scale_missing_logged: bool = False
 
     def log_once(self, exc: BaseException, shape: tuple) -> None:
@@ -174,18 +158,20 @@ class _FFNFallbackLogger:
             type(exc).__name__, shape,
         )
 
+    def log_scale_path_once(self, path: str) -> None:
+        if path in self._seen_paths:
+            return
+        self._seen_paths.add(path)
+        _LOGGER.info("AudioLoopHelperSageFFN: fp8 scale found via %s", path)
+
     def log_scale_missing_once(self) -> None:
-        """First time per session that no scale could be extracted from any
-        recognised attribute path. Logs once and stays quiet thereafter."""
         if self._scale_missing_logged:
             return
         self._scale_missing_logged = True
         _LOGGER.warning(
-            "AudioLoopHelperSageFFN: could not extract fp8 weight_scale via "
-            "any known attribute path (legacy scale_weight / weight_scale / "
-            "modern QuantizedTensor.{_params,params,layout_params}.scale). "
-            "Every FFN call will fall back to stock path. Check ComfyUI fp8 "
-            "ops version or the model's weight wrapper."
+            "AudioLoopHelperSageFFN: could not extract fp8 weight_scale on a "
+            "patched block. Falling back to stock path for that block. Check "
+            "ComfyUI fp8 ops version or the model's weight wrapper."
         )
 
 
@@ -215,31 +201,41 @@ class _FFNPatch:
         logger = self._logger
         prior_forward = self._prior_forward
 
-        def _fallback(self_module, x):
-            # When prior_forward is set, it's an already-bound method
-            # (captured from model_clone.object_patches). Call positionally.
-            if prior_forward is not None:
-                return prior_forward(x)
-            return self_module.net(x)
+        # Resolve scale + weights + biases ONCE at bind time. ComfyUI
+        # invokes `__get__` per block when `add_object_patch` registers
+        # the override, so this fires ~44 times per node-execute. Moving
+        # the resolution out of `wrapped_forward` saves ~6 getattrs ×
+        # ~1000 FFN calls per render.
+        proj_in = obj.net[0].proj
+        proj_out = obj.net[2]
+        s1, path1 = _extract_fp8_scale(proj_in)
+        s2, _ = _extract_fp8_scale(proj_out)
+        if s1 is None or s2 is None or path1 is None:
+            # Scale not resolvable on this block. Install a stock
+            # passthrough that respects prior patches (e.g. ChunkFFN).
+            # Logged once per logger instance — a wrong-attribute-name
+            # regression surfaces loudly at install, not as silent
+            # per-call fallback.
+            logger.log_scale_missing_once()
+            def stock_passthrough(self_module, x, *args, **kwargs):
+                if prior_forward is not None:
+                    return prior_forward(x)
+                return self_module.net(x)
+            return types.MethodType(stock_passthrough, obj)
+
+        logger.log_scale_path_once(path1)
+        w1 = proj_in.weight
+        w2 = proj_out.weight
+        b1 = getattr(proj_in, "bias", None)
+        b2 = getattr(proj_out, "bias", None)
 
         def wrapped_forward(self_module, x, *args, **kwargs):
             # sage_ffn signature: (x, w1, s1, w2, s2, b1=None, b2=None) -> y
-            # net[0].proj is up-projection (hidden -> inner);
-            # net[2] is down-projection (inner -> hidden).
             try:
-                proj_in = self_module.net[0].proj
-                proj_out = self_module.net[2]
-                s1 = _extract_fp8_scale(proj_in)
-                s2 = _extract_fp8_scale(proj_out)
-                if s1 is None or s2 is None:
-                    logger.log_scale_missing_once()
-                    return _fallback(self_module, x)
-                b1 = getattr(proj_in, "bias", None)
-                b2 = getattr(proj_out, "bias", None)
                 if x.shape[1] <= SAGE_FFN_CHUNK_SEQ:
-                    return sage_ffn_fn(x, proj_in.weight, s1, proj_out.weight, s2, b1, b2)
+                    return sage_ffn_fn(x, w1, s1, w2, s2, b1, b2)
                 outs = [
-                    sage_ffn_fn(c, proj_in.weight, s1, proj_out.weight, s2, b1, b2)
+                    sage_ffn_fn(c, w1, s1, w2, s2, b1, b2)
                     for c in x.split(SAGE_FFN_CHUNK_SEQ, dim=1)
                 ]
                 return torch.cat(outs, dim=1)
@@ -249,7 +245,9 @@ class _FFNPatch:
                 # without spamming logs per FFN call.
                 shape = tuple(getattr(x, "shape", ()))
                 logger.log_once(exc, shape)
-                return _fallback(self_module, x)
+                if prior_forward is not None:
+                    return prior_forward(x)
+                return self_module.net(x)
 
         return types.MethodType(wrapped_forward, obj)
 
@@ -262,22 +260,15 @@ class AudioLoopHelperSageFFN(io.ComfyNode):
     bf16 in the distilled checkpoint. Composes with `LTXVChunkFeedForward`
     (KJNodes) — does not replace it.
 
-    Default `enabled=False` pending a clean in-pipeline A/B. The
-    2026-05-18 measurement that suggested ~12% slowdown was invalidated
-    by a wrong-attribute-name bug in `_extract_fp8_scale`: the wrapper
-    only checked `Linear.weight_scale`, but modern ComfyUI fp8 ops store
-    the scale on a `QuantizedTensor` wrapping `Linear.weight`. sage_ffn
-    never fired; the wrapper fell back to `self_module.net(x)` on every
-    call (un-chunked stock FFN) since our `add_object_patch` overwrote
-    KJNodes ChunkFFN at the same key. The +12% delta was the lost
-    chunking, not anything to do with sage. Fix: multi-path scale lookup
-    + prior-patch chaining on fallback. Re-baseline required.
+    Default `enabled=False` pending a clean in-pipeline A/B against
+    chunked stock fp8-dequant.
 
     When sage v0.6 is unavailable, the node is a no-op: returns the
     model unchanged with no patches applied. Prior FFN patches in the
     chain (e.g. KJNodes LTXVChunkFeedForward) remain active.
 
-    Detail: `internal/reference/sage_optimization_landscape.md`.
+    Perf history + prior-measurement postmortems:
+    `internal/reference/sage_optimization_landscape.md`.
     """
 
     @classmethod
@@ -303,11 +294,8 @@ class AudioLoopHelperSageFFN(io.ComfyNode):
                 "KJNodes LTXVChunkFeedForward at the same "
                 "add_object_patch key; the chunking lives in this wrapper "
                 "instead.\n\n"
-                "Default off pending a clean A/B — earlier 2026-05-18 "
-                "result was invalidated by a wrong-attribute-name bug "
-                "that prevented sage_ffn from firing at all. Fix landed "
-                "2026-05-18; re-baseline before declaring perf direction. "
-                "Perf history in "
+                "Default off pending a clean in-pipeline A/B against "
+                "chunked stock fp8-dequant. Perf history in "
                 "internal/reference/sage_optimization_landscape.md."
             ),
             is_experimental=True,
