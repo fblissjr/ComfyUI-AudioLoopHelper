@@ -51,22 +51,49 @@ def _make_input(seq_len: int, dim: int = 4096) -> torch.Tensor:
 
 
 class FakeFF:
-    """Stand-in for `BasicAVTransformerBlock.ff` (a `FeedForward` module)."""
+    """Stand-in for `BasicAVTransformerBlock.ff` (a `FeedForward` module).
 
-    def __init__(self, has_weight_scale: bool = True):
+    `has_weight_scale=True` mirrors the legacy fp8_ops convention where the
+    scale lives as `Linear.scale_weight`. Tests covering the modern
+    `QuantizedTensor`-wrapped path set `scale_path="weight._params"` to
+    place the scale under `weight._params.scale` instead."""
+
+    def __init__(self, has_weight_scale: bool = True, scale_path: str = "scale_weight"):
         self.net = MagicMock(name="ff.net")
-        # Wire .net[0].proj and .net[2] to look like the real fp8-quantized
-        # FeedForward layout: net is nn.Sequential of (GELU_approx, Dropout,
-        # Linear). GELU_approx wraps a `proj` Linear at .proj.
         proj_in = MagicMock(name="net[0].proj")
-        proj_in.weight = MagicMock(name="W1_fp8")
-        proj_in.weight_scale = MagicMock(name="s1") if has_weight_scale else None
-        proj_in.bias = MagicMock(name="b1")
         proj_out = MagicMock(name="net[2]")
-        proj_out.weight = MagicMock(name="W2_fp8")
-        proj_out.weight_scale = MagicMock(name="s2") if has_weight_scale else None
+        # net[0].proj is up-projection (GELU_approx.proj); net[2] is the
+        # down-projection Linear. Production weights are
+        # torch.float8_e4m3fn; for these tests any Tensor works since
+        # sage_ffn_fn is mocked.
+        proj_in.bias = MagicMock(name="b1")
         proj_out.bias = MagicMock(name="b2")
-        # Wire net[0].proj and net[2] via __getitem__.
+        if has_weight_scale:
+            s1 = torch.tensor(1.0, dtype=torch.float32)
+            s2 = torch.tensor(1.0, dtype=torch.float32)
+        else:
+            s1 = s2 = None
+        if scale_path == "scale_weight":
+            proj_in.weight = MagicMock(name="W1_fp8")
+            proj_out.weight = MagicMock(name="W2_fp8")
+            proj_in.scale_weight = s1
+            proj_out.scale_weight = s2
+            proj_in.weight_scale = None
+            proj_out.weight_scale = None
+        elif scale_path == "weight._params":
+            # Modern path: scale lives on the QuantizedTensor wrapping .weight
+            w1 = MagicMock(name="W1_fp8")
+            w2 = MagicMock(name="W2_fp8")
+            w1._params = MagicMock(scale=s1) if s1 is not None else None
+            w2._params = MagicMock(scale=s2) if s2 is not None else None
+            proj_in.weight = w1
+            proj_out.weight = w2
+            proj_in.scale_weight = None
+            proj_out.scale_weight = None
+            proj_in.weight_scale = None
+            proj_out.weight_scale = None
+        else:
+            raise ValueError(f"unknown scale_path: {scale_path}")
         ff_net_0 = MagicMock(name="net[0]")
         ff_net_0.proj = proj_in
         self.net.__getitem__ = lambda _self, idx: {0: ff_net_0, 2: proj_out}[idx]
@@ -177,9 +204,9 @@ def test_patched_forward_short_seq_single_call():
     call_args = sage_fn.call_args[0]
     assert call_args[0] is short
     assert call_args[1] is ff.net[0].proj.weight
-    assert call_args[2] is ff.net[0].proj.weight_scale
+    assert call_args[2] is ff.net[0].proj.scale_weight  # legacy fp8_ops path
     assert call_args[3] is ff.net[2].weight
-    assert call_args[4] is ff.net[2].weight_scale
+    assert call_args[4] is ff.net[2].scale_weight
 
 
 def test_patched_forward_long_seq_chunks_along_dim1():
@@ -220,6 +247,23 @@ def test_patched_forward_chunk_threshold_boundary():
     assert sage_fn.call_count == 1
 
 
+def test_patched_forward_finds_scale_on_modern_quantized_tensor_path():
+    """ComfyUI's modern fp8 path wraps weights in `QuantizedTensor` and
+    stores the scale on `weight._params.scale`. Locks in the
+    `_extract_fp8_scale` multi-path lookup that 2026-05-18 fixed: the
+    earlier wrapper only checked the legacy `Linear.weight_scale`
+    attribute and silently fell back to stock on the modern stack."""
+    ff = FakeFF(scale_path="weight._params")
+    short = _make_input(seq_len=100)
+    sage_fn = MagicMock(name="sage_ffn", side_effect=lambda x, *_a, **_kw: x)
+
+    patch = _FFNPatch(sage_ffn_fn=sage_fn, logger=_FFNFallbackLogger())
+    bound = patch.__get__(ff, type(ff))
+
+    bound(short)
+    sage_fn.assert_called_once()
+
+
 def test_patched_forward_falls_through_when_weight_scale_missing():
     """If a block doesn't have weight_scale attrs (e.g. user accidentally
     enabled the node on a bf16 checkpoint), patched forward must fall
@@ -237,6 +281,30 @@ def test_patched_forward_falls_through_when_weight_scale_missing():
     assert result == "stock_fallback"
     sage_fn.assert_not_called()
     ff.net.assert_called_once_with(short)
+
+
+def test_patched_forward_fallback_chains_to_prior_forward_when_provided():
+    """When `prior_forward` is set (a previous patch at the same
+    add_object_patch key, e.g. KJNodes ChunkFFN), the scale-missing
+    fallback must call that wrapper instead of the unwrapped
+    `self_module.net(x)`. Otherwise installing this node disables
+    upstream chunking even when it can't activate sage_ffn."""
+    ff = FakeFF(has_weight_scale=False)
+    ff.net.return_value = "should_not_run"
+    prior = MagicMock(name="prior_forward", return_value="prior_chained")
+    sage_fn = MagicMock(name="sage_ffn")
+
+    patch = _FFNPatch(sage_ffn_fn=sage_fn, logger=_FFNFallbackLogger(),
+                     prior_forward=prior)
+    bound = patch.__get__(ff, type(ff))
+
+    short = _make_input(seq_len=100)
+    result = bound(short)
+
+    assert result == "prior_chained"
+    prior.assert_called_once_with(short)
+    ff.net.assert_not_called()
+    sage_fn.assert_not_called()
 
 
 def test_patched_forward_falls_through_when_sage_ffn_raises():
