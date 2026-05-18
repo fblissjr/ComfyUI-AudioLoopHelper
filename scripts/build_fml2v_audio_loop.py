@@ -100,8 +100,11 @@ def _add_from_template(
 # Phase 1: strip / bypass benchmark structures we don't need
 # ---------------------------------------------------------------------------
 
-# Pass2 sampler chain + upscaler — BYPASS (mode=4), not strip (user kept these
-# for future re-enable into Option C per-iter or Option B deferred workflow).
+# Pass2 sampler chain + upscaler — BYPASS (mode=4) in Phase 1.
+# Phase 5 (loop body) will rewire these to live inside the loop body per
+# Option B (two-pass refine inside loop). Keeping them on canvas with their
+# widgets intact means Phase 5 just needs to re-wire connections, not re-add
+# the nodes. See design doc "Sampler chain — two-pass inside the loop body".
 BYPASS_PASS2 = [
     4,     # KSamplerSelect euler_cfg_pp (refine)
     8,     # CFGGuider (refine)

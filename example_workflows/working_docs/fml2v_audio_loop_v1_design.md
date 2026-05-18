@@ -16,7 +16,7 @@ Last updated: 2026-05-16
 > 3. Continue implementing in `scripts/build_fml2v_audio_loop.py::phase3_conditioning(...)`.
 > 4. Helper `_add_from_template(ed, type, pos, widget_values=, title=, size=)` is already defined — uses `scripts/_node_templates_fml2v.json` for shape.
 > 5. Reference canonical loop workflow `example_workflows/audio-loop-music-video_latent.json` for wiring patterns when in doubt.
-> 6. After each phase: `uv run --group dev python scripts/audit_workflows.py example_workflows/experimental/fml2v_var_d_audio_loop.json` — partial-build ERRs (TrimImageBatchToAudio missing, RunIdPrefix missing) are EXPECTED until Phase 6.
+> 6. After each phase: `uv run --group dev python scripts/audit_workflows.py example_workflows/experimental/fml2v_var_d_audio_loop.json` — current partial-build ERRs (after Phase 2): `overlap_seconds_single_source` (FloatConstant exists but not wired — Phase 3 wires it through to Controller+Planner) and `trim_image_batch_to_audio_present` (Phase 6 fixes). `run_id_layout_present` is WARN-level (Phase 6 fixes). All expected — proceed.
 >
 > **Memory pointer**: the user's auto-memory holds the same handoff state under the project's `project_fml2v_audio_loop_build_state.md` entry — next-session Claude will see it via SessionStart context.
 
