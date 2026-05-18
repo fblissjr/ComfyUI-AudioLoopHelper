@@ -187,7 +187,16 @@ class AudioLoopHelperSageFFN(io.ComfyNode):
     bf16 in the distilled checkpoint. Composes with `LTXVChunkFeedForward`
     (KJNodes) — does not replace it.
 
-    Default `enabled=False` — opt in for A/B against chunked stock.
+    Default `enabled=False`. The 2026-05-18 in-pipeline A/B (chunked
+    sage_ffn vs chunked stock fp8-dequant, environment-controlled under
+    torch 2.12 + cu13.2 + sage v0.6.1) measured chunked sage_ffn ~12%
+    slower on the `ff` sub-module and ~2-9% slower across attention
+    sub-modules (L2 contention spill). sage_ffn IS firing (call counts
+    of `quantize_fp8_tensor_kernel` and `vectorized_elementwise_kernel`
+    halve under treatment — sage skips the dequant intermediate). The
+    GEMM tile selection concentrates into `tilesize64x128` which
+    dominates cost on LTX FFN dimensions. Ship as completeness
+    primitive; not a perf win on current hardware.
 
     When sage v0.6 is unavailable, the node is a no-op: returns the
     model unchanged with no patches applied. Prior FFN patches in the
@@ -219,8 +228,11 @@ class AudioLoopHelperSageFFN(io.ComfyNode):
                 "KJNodes LTXVChunkFeedForward at the same "
                 "add_object_patch key; the chunking lives in this wrapper "
                 "instead.\n\n"
-                "Default off pending in-pipeline A/B against chunked "
-                "stock. Perf history in "
+                "Default off — 2026-05-18 in-pipeline A/B measured "
+                "chunked sage_ffn ~12% slower than chunked stock "
+                "fp8-dequant on the ff sub-module (torch 2.12 + cu13.2 "
+                "+ sage v0.6.1). Ship as completeness primitive for "
+                "forward-compat. Perf history in "
                 "internal/reference/sage_optimization_landscape.md."
             ),
             is_experimental=True,
