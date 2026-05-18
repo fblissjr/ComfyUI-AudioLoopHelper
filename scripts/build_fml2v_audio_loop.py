@@ -1137,13 +1137,142 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     log("= Stashed Phase 5 node IDs in wf['properties']['build_fml2v_phase5']")
 
 
-def phase6_assembly(ed: WorkflowEditor, *, verbose: bool = True) -> None:  # noqa: ARG001
-    """Phase 6: LatentConcat + TrimVideoLatentToAudio + LTXVTiledVAEDecode +
-    TrimImageBatchToAudio + RunIdPrefix + VHS_VideoCombine. Add LoopConfigValidator.
+# Benchmark output-chain nodes Phase 6 rewires.
+_BENCH_VAE_DECODE = 149                # LTXVTiledVAEDecode (bypassed pass2 decoder)
+_BENCH_SET_FINAL_VIDEO = 153           # SetNode "final_video"
+_BENCH_SET_FINAL_AUDIO = 154           # SetNode "final_audio"
+_BENCH_VHS_COMBINE = 43                # VHS_VideoCombine
 
-    TODO: implement.
+
+def phase6_assembly(ed: WorkflowEditor, *, verbose: bool = True) -> None:
+    """Phase 6: assemble per-iter latents into final video + audio output.
+
+    Topology (top-level):
+      Get_initial_latent + TLC.output → LatentConcat (dim='t')
+        → TrimVideoLatentToAudio (snap-UP to LTX boundary; video ≥ audio)
+        → LTXVTiledVAEDecode [1,1,1,True,'auto','auto'] (24GB+ single-tile)
+        → TrimImageBatchToAudio (clips overshoot to exact int(audio*fps))
+        → Set_final_video → existing VHS_VideoCombine.images
+      TrimAudio #2308 → Set_final_audio (Option B: skip LTXVAudioVAEDecode;
+        audio frozen via mask=0 throughout the loop, so source is
+        bit-identical to a decode of the latent).
+      RunIdPrefix → VHS_VideoCombine.filename_prefix (F15 — converts the
+        widget to an input slot if needed).
+      LoopConfigValidator: optional config-consistency check fed from
+        AudioLoopPlanner + FramePlanner outputs.
+
+    Reuses benchmark's bypassed #149 LTXVTiledVAEDecode (widgets already
+    match canonical 24GB+ `[1, 1, 1, True, 'auto', 'auto']`); unbypass +
+    rewire its latents input to the new trim chain. Leaves benchmark's
+    bypassed LTXVAudioVAEDecode #150 alone (dead under Option B).
     """
-    print("[Phase 6] (not yet implemented)")
+    log = (lambda *a: print("  ", *a)) if verbose else (lambda *a: None)
+
+    phase2 = ed.wf.get("properties", {}).get("build_fml2v_phase2", {})
+    phase5 = ed.wf.get("properties", {}).get("build_fml2v_phase5", {})
+    fp_id = phase2["frame_planner"]
+    overlap_const_id = phase2["overlap_seconds"]
+    trim_audio_id = phase2["trim_audio"]
+    tlc_id = phase5["tlc"]
+
+    # --- 1. LatentConcat: init + TLC, weld across temporal dim ---
+    get_initial_id = _add_getnode(ed, "initial_latent", (2000, 1800), "LATENT")
+    concat_id = _add_from_template(
+        ed, "LatentConcat", (2300, 1800),
+        widget_values=["t"],
+        title="LatentConcat (init + TLC across t)",
+        size=(290, 80),
+    )
+    ed.add_link(get_initial_id, 0, concat_id, 0, "LATENT")
+    ed.add_link(tlc_id, 0, concat_id, 1, "LATENT")
+
+    # --- 2. TrimVideoLatentToAudio (snap-UP to LTX 8-frame boundary) ---
+    trim_latent_id = _add_from_template(
+        ed, "TrimVideoLatentToAudio", (2600, 1800),
+        widget_values=[25],
+        title="TrimVideoLatentToAudio (snap-UP)",
+        size=(290, 100),
+    )
+    ed.add_link(concat_id, 0, trim_latent_id, 0, "LATENT")
+    ed.add_link(trim_audio_id, 0, trim_latent_id, 1, "AUDIO")
+    ed.add_link(fp_id, 4, trim_latent_id, 2, "INT")                 # fps_int
+
+    # --- 3. Unbypass #149 LTXVTiledVAEDecode; rewire latents ← TrimVideoLatent ---
+    ed.find_node(_BENCH_VAE_DECODE)["mode"] = 0
+    ed.rewire_input(_BENCH_VAE_DECODE, 1, trim_latent_id, 0, "LATENT")
+    log(f"  unbypass + rewire LTXVTiledVAEDecode #{_BENCH_VAE_DECODE}.latents ← TrimVideoLatentToAudio #{trim_latent_id}")
+
+    # --- 4. TrimImageBatchToAudio (exact-frame clip post-decode) ---
+    trim_img_id = _add_from_template(
+        ed, "TrimImageBatchToAudio", (3200, 1800),
+        widget_values=[25],
+        title="TrimImageBatchToAudio (exact-frame clip)",
+        size=(290, 100),
+    )
+    ed.add_link(_BENCH_VAE_DECODE, 0, trim_img_id, 0, "IMAGE")
+    ed.add_link(trim_audio_id, 0, trim_img_id, 1, "AUDIO")
+    ed.add_link(fp_id, 4, trim_img_id, 2, "INT")                    # fps_int
+
+    # --- 5. Rewire VHS_VideoCombine direct from trim chain (F14 audit
+    #        requires VHS.images to come directly from TrimImageBatchToAudio,
+    #        not via the Set_/Get_final_video bus); keep the bus updated
+    #        for UI inspection but VHS reads direct.
+    ed.rewire_input(_BENCH_VHS_COMBINE, 0, trim_img_id, 0, "IMAGE")
+    ed.rewire_input(_BENCH_VHS_COMBINE, 1, trim_audio_id, 0, "AUDIO")
+    ed.rewire_input(_BENCH_SET_FINAL_VIDEO, 0, trim_img_id, 0, "IMAGE")
+    # Option B: source audio directly from TrimAudio (no LTXVAudioVAEDecode).
+    ed.rewire_input(_BENCH_SET_FINAL_AUDIO, 0, trim_audio_id, 0, "AUDIO")
+    log(f"  rewire VHS_VideoCombine #{_BENCH_VHS_COMBINE}.images ← TrimImageBatchToAudio (F14); .audio ← TrimAudio (Option B)")
+    log(f"  also update Set_final_video / Set_final_audio buses for UI inspection")
+
+    # --- 6. RunIdPrefix → VHS_VideoCombine.filename_prefix (F15) ---
+    run_id_id = _add_from_template(
+        ed, "RunIdPrefix", (2300, 2200),
+        widget_values=["fml2v_var_d_audio_loop", "%Y%m%d_%H%M%S"],
+        title="RunIdPrefix",
+        size=(290, 100),
+    )
+    # Convert filename_prefix widget → input on VHS_VideoCombine (idempotent).
+    vhs = ed.find_node(_BENCH_VHS_COMBINE)
+    try:
+        prefix_slot = WorkflowEditor.find_input_slot(vhs, "filename_prefix")
+    except ValueError:
+        vhs.setdefault("inputs", []).append({
+            "name": "filename_prefix",
+            "type": "STRING",
+            "widget": {"name": "filename_prefix"},
+            "link": None,
+        })
+        prefix_slot = len(vhs["inputs"]) - 1
+    ed.add_link(run_id_id, 0, _BENCH_VHS_COMBINE, prefix_slot, "STRING")
+    log(f"+ RunIdPrefix #{run_id_id} → VHS_VideoCombine #{_BENCH_VHS_COMBINE}.filename_prefix (slot {prefix_slot})")
+
+    # --- 7. LoopConfigValidator (config-consistency sanity check) ---
+    validator_id = _add_from_template(
+        ed, "LoopConfigValidator", (2600, 2200),
+        # widgets: [window_seconds, overlap_seconds, fps, length_widget,
+        #          width_widget, height_widget, schedule, dim_rule,
+        #          fudge_factor, audio_path, kf_batch]
+        widget_values=[19.88, 2.0, 25, 0, 0, 0, "", "div_by_32", 0.2, "", 0],
+        title="LoopConfigValidator",
+        size=(290, 240),
+    )
+    ed.add_link(trim_audio_id, 0, validator_id, 0, "AUDIO")
+    ed.add_link(overlap_const_id, 0, validator_id, 5, "FLOAT")      # overlap_seconds
+    ed.add_link(fp_id, 2, validator_id, 2, "INT")                   # length ← FramePlanner.frames
+    ed.add_link(fp_id, 0, validator_id, 3, "INT")                   # width
+    ed.add_link(fp_id, 1, validator_id, 4, "INT")                   # height
+
+    # Stash IDs.
+    ed.wf.setdefault("properties", {})["build_fml2v_phase6"] = {
+        "get_initial_for_concat": get_initial_id,
+        "latent_concat": concat_id,
+        "trim_video_latent_to_audio": trim_latent_id,
+        "trim_image_batch_to_audio": trim_img_id,
+        "run_id_prefix": run_id_id,
+        "loop_config_validator": validator_id,
+    }
+    log("= Stashed Phase 6 node IDs in wf['properties']['build_fml2v_phase6']")
 
 
 def build(*, dry_run: bool = False, verbose: bool = True) -> None:

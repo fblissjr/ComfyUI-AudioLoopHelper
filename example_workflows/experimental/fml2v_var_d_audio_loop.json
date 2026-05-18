@@ -1,8 +1,8 @@
 {
   "id": "0775f0bd-e4f2-40cc-85b7-45217564af17",
   "revision": 0,
-  "last_node_id": 2351,
-  "last_link_id": 4252,
+  "last_node_id": 2357,
+  "last_link_id": 4271,
   "nodes": [
     {
       "id": 92,
@@ -682,9 +682,7 @@
         {
           "name": "AUDIO",
           "type": "AUDIO",
-          "links": [
-            270
-          ]
+          "links": []
         }
       ],
       "title": "Get_final_audio",
@@ -717,9 +715,7 @@
         {
           "name": "IMAGE",
           "type": "IMAGE",
-          "links": [
-            271
-          ]
+          "links": []
         }
       ],
       "title": "Get_final_video",
@@ -789,7 +785,7 @@
         {
           "name": "IMAGE",
           "type": "IMAGE",
-          "link": 304
+          "link": 4264
         }
       ],
       "outputs": [
@@ -829,7 +825,7 @@
         {
           "name": "AUDIO",
           "type": "AUDIO",
-          "link": 230
+          "link": 4265
         }
       ],
       "outputs": [
@@ -3901,9 +3897,7 @@
         {
           "name": "Audio",
           "type": "AUDIO",
-          "links": [
-            230
-          ]
+          "links": []
         }
       ],
       "properties": {
@@ -4645,9 +4639,7 @@
         {
           "name": "latent",
           "type": "LATENT",
-          "links": [
-            4099
-          ]
+          "links": []
         }
       ],
       "properties": {
@@ -4672,7 +4664,7 @@
         "collapsed": false
       },
       "order": 157,
-      "mode": 4,
+      "mode": 0,
       "inputs": [
         {
           "name": "vae",
@@ -4682,7 +4674,7 @@
         {
           "name": "latents",
           "type": "LATENT",
-          "link": 4099
+          "link": 4258
         }
       ],
       "outputs": [
@@ -4690,7 +4682,7 @@
           "name": "image",
           "type": "IMAGE",
           "links": [
-            304
+            4259
           ]
         }
       ],
@@ -5441,13 +5433,13 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 271
+          "link": 4262
         },
         {
           "name": "audio",
           "shape": 7,
           "type": "AUDIO",
-          "link": 270
+          "link": 4263
         },
         {
           "name": "meta_batch",
@@ -5468,6 +5460,14 @@
             "name": "frame_rate"
           },
           "link": 201
+        },
+        {
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": 4266
         }
       ],
       "outputs": [
@@ -6074,7 +6074,8 @@
           "type": "INT",
           "links": [
             4160,
-            4164
+            4164,
+            4270
           ]
         },
         {
@@ -6082,7 +6083,8 @@
           "type": "INT",
           "links": [
             4161,
-            4165
+            4165,
+            4271
           ]
         },
         {
@@ -6091,7 +6093,8 @@
           "links": [
             4162,
             4166,
-            4203
+            4203,
+            4269
           ]
         },
         {
@@ -6102,7 +6105,10 @@
         {
           "name": "fps_int",
           "type": "INT",
-          "links": []
+          "links": [
+            4257,
+            4261
+          ]
         },
         {
           "name": "fps_float",
@@ -6161,7 +6167,8 @@
           "type": "FLOAT",
           "links": [
             4186,
-            4188
+            4188,
+            4268
           ]
         }
       ],
@@ -6499,7 +6506,12 @@
           "links": [
             4168,
             4185,
-            4187
+            4187,
+            4256,
+            4260,
+            4263,
+            4265,
+            4267
           ]
         }
       ],
@@ -7224,7 +7236,9 @@
         {
           "name": "output",
           "type": "LATENT",
-          "links": []
+          "links": [
+            4254
+          ]
         }
       ],
       "properties": {
@@ -8692,6 +8706,348 @@
         "always"
       ],
       "title": "IterationCleanup"
+    },
+    {
+      "id": 2352,
+      "type": "GetNode",
+      "pos": [
+        2000,
+        1800
+      ],
+      "size": [
+        210,
+        58
+      ],
+      "flags": {},
+      "order": 20,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            4253
+          ]
+        }
+      ],
+      "title": "Get_initial_latent",
+      "properties": {
+        "Node name for S&R": "GetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes"
+      },
+      "widgets_values": [
+        "initial_latent"
+      ]
+    },
+    {
+      "id": 2353,
+      "type": "LatentConcat",
+      "pos": [
+        2300,
+        1800
+      ],
+      "size": [
+        290,
+        80
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples1",
+          "type": "LATENT",
+          "link": 4253
+        },
+        {
+          "name": "samples2",
+          "type": "LATENT",
+          "link": 4254
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            4255
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.20.1",
+        "Node name for S&R": "LatentConcat"
+      },
+      "widgets_values": [
+        "t"
+      ],
+      "title": "LatentConcat (init + TLC across t)"
+    },
+    {
+      "id": 2354,
+      "type": "TrimVideoLatentToAudio",
+      "pos": [
+        2600,
+        1800
+      ],
+      "size": [
+        290,
+        100
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "link": 4255
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 4256
+        },
+        {
+          "name": "fps",
+          "type": "INT",
+          "widget": {
+            "name": "fps"
+          },
+          "link": 4257
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "links": [
+            4258
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TrimVideoLatentToAudio"
+      },
+      "widgets_values": [
+        25
+      ],
+      "title": "TrimVideoLatentToAudio (snap-UP)"
+    },
+    {
+      "id": 2355,
+      "type": "TrimImageBatchToAudio",
+      "pos": [
+        3200,
+        1800
+      ],
+      "size": [
+        290,
+        100
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 4259
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 4260
+        },
+        {
+          "name": "fps",
+          "type": "INT",
+          "widget": {
+            "name": "fps"
+          },
+          "link": 4261
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            4262,
+            4264
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TrimImageBatchToAudio"
+      },
+      "widgets_values": [
+        25
+      ],
+      "title": "TrimImageBatchToAudio (exact-frame clip)"
+    },
+    {
+      "id": 2356,
+      "type": "RunIdPrefix",
+      "pos": [
+        2300,
+        2200
+      ],
+      "size": [
+        290,
+        100
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "video_prefix",
+          "type": "STRING",
+          "links": [
+            4266
+          ]
+        },
+        {
+          "name": "latent_prefix",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "RunIdPrefix"
+      },
+      "widgets_values": [
+        "fml2v_var_d_audio_loop",
+        "%Y%m%d_%H%M%S"
+      ],
+      "title": "RunIdPrefix"
+    },
+    {
+      "id": 2357,
+      "type": "LoopConfigValidator",
+      "pos": [
+        2600,
+        2200
+      ],
+      "size": [
+        290,
+        240
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 4267
+        },
+        {
+          "name": "window_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "window_seconds"
+          },
+          "link": null
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "widget": {
+            "name": "length"
+          },
+          "link": 4269
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          },
+          "link": 4270
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          },
+          "link": 4271
+        },
+        {
+          "name": "overlap_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "overlap_seconds"
+          },
+          "link": 4268
+        },
+        {
+          "name": "keyframe_schedule",
+          "type": "STRING",
+          "widget": {
+            "name": "keyframe_schedule"
+          },
+          "link": null
+        },
+        {
+          "name": "keyframe_batch_size",
+          "type": "INT",
+          "widget": {
+            "name": "keyframe_batch_size"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "report",
+          "type": "STRING",
+          "links": []
+        },
+        {
+          "name": "ok",
+          "type": "BOOLEAN",
+          "links": []
+        },
+        {
+          "name": "warnings",
+          "type": "INT",
+          "links": []
+        },
+        {
+          "name": "errors",
+          "type": "INT",
+          "links": []
+        },
+        {
+          "name": "effective_stride_seconds",
+          "type": "FLOAT",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoopConfigValidator",
+        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper"
+      },
+      "widgets_values": [
+        19.88,
+        2.0,
+        25,
+        0,
+        0,
+        0,
+        "",
+        "div_by_32",
+        0.2,
+        "",
+        0
+      ],
+      "title": "LoopConfigValidator"
     }
   ],
   "links": [
@@ -8856,14 +9212,6 @@
       "VAE"
     ],
     [
-      230,
-      150,
-      0,
-      154,
-      0,
-      "AUDIO"
-    ],
-    [
       244,
       182,
       0,
@@ -8928,22 +9276,6 @@
       "LATENT"
     ],
     [
-      270,
-      204,
-      0,
-      43,
-      1,
-      "AUDIO"
-    ],
-    [
-      271,
-      203,
-      0,
-      43,
-      0,
-      "IMAGE"
-    ],
-    [
       300,
       44,
       1,
@@ -8958,14 +9290,6 @@
       149,
       0,
       "VAE"
-    ],
-    [
-      304,
-      149,
-      0,
-      153,
-      0,
-      "IMAGE"
     ],
     [
       307,
@@ -9342,14 +9666,6 @@
       2182,
       7,
       "FLOAT"
-    ],
-    [
-      4099,
-      2156,
-      2,
-      149,
-      1,
-      "LATENT"
     ],
     [
       4119,
@@ -10254,6 +10570,158 @@
       2322,
       2,
       "BOOLEAN"
+    ],
+    [
+      4253,
+      2352,
+      0,
+      2353,
+      0,
+      "LATENT"
+    ],
+    [
+      4254,
+      2322,
+      0,
+      2353,
+      1,
+      "LATENT"
+    ],
+    [
+      4255,
+      2353,
+      0,
+      2354,
+      0,
+      "LATENT"
+    ],
+    [
+      4256,
+      2308,
+      0,
+      2354,
+      1,
+      "AUDIO"
+    ],
+    [
+      4257,
+      2302,
+      4,
+      2354,
+      2,
+      "INT"
+    ],
+    [
+      4258,
+      2354,
+      0,
+      149,
+      1,
+      "LATENT"
+    ],
+    [
+      4259,
+      149,
+      0,
+      2355,
+      0,
+      "IMAGE"
+    ],
+    [
+      4260,
+      2308,
+      0,
+      2355,
+      1,
+      "AUDIO"
+    ],
+    [
+      4261,
+      2302,
+      4,
+      2355,
+      2,
+      "INT"
+    ],
+    [
+      4262,
+      2355,
+      0,
+      43,
+      0,
+      "IMAGE"
+    ],
+    [
+      4263,
+      2308,
+      0,
+      43,
+      1,
+      "AUDIO"
+    ],
+    [
+      4264,
+      2355,
+      0,
+      153,
+      0,
+      "IMAGE"
+    ],
+    [
+      4265,
+      2308,
+      0,
+      154,
+      0,
+      "AUDIO"
+    ],
+    [
+      4266,
+      2356,
+      0,
+      43,
+      5,
+      "STRING"
+    ],
+    [
+      4267,
+      2308,
+      0,
+      2357,
+      0,
+      "AUDIO"
+    ],
+    [
+      4268,
+      2303,
+      0,
+      2357,
+      5,
+      "FLOAT"
+    ],
+    [
+      4269,
+      2302,
+      2,
+      2357,
+      2,
+      "INT"
+    ],
+    [
+      4270,
+      2302,
+      0,
+      2357,
+      3,
+      "INT"
+    ],
+    [
+      4271,
+      2302,
+      1,
+      2357,
+      4,
+      "INT"
     ]
   ],
   "groups": [
@@ -11604,6 +12072,14 @@
       "noise_p2": 2348,
       "adain_final": 2350,
       "iteration_cleanup": 2351
+    },
+    "build_fml2v_phase6": {
+      "get_initial_for_concat": 2352,
+      "latent_concat": 2353,
+      "trim_video_latent_to_audio": 2354,
+      "trim_image_batch_to_audio": 2355,
+      "run_id_prefix": 2356,
+      "loop_config_validator": 2357
     }
   }
 }
