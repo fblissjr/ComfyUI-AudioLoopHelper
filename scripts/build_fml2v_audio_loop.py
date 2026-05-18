@@ -800,7 +800,6 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     assert "build_fml2v_phase4" in ed.wf.get("properties", {}), "Phase 4 must run before Phase 5"
 
     get_vae_id = _find_get_node(ed, "vae")
-    get_firstframe_id = _find_get_node(ed, "firstframe")
     get_model_id = _BENCH_GET_MODEL  # benchmark's #122 Get_model
 
     # ====================================================================
@@ -927,14 +926,38 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     ed.add_link(fp_id, 2, empty_p1_id, 2, "INT")
     log(f"+ EmptyLatent_p1 #{empty_p1_id}  (half-res, length ← FramePlanner.frames)")
 
-    # VAEEncode for the per-iter init-anchor guide (firstframe preprocessed).
+    # Half-res init image chain for pass1's AddLatentGuide. LTXVAddLatentGuide
+    # asserts ``latent.shape[3,4] % guide.shape[3,4] == 0`` — the guide latent
+    # spatial dims must divide the sampler latent dims. Pass1 samples at
+    # half-res (480x256 → latent 60x32); a full-res firstframe encode would
+    # produce a 120x64 guide which fails the divisibility check at runtime
+    # (60 % 120 != 0). Build a dedicated half-res resize+preprocess+encode
+    # so the guide matches pass1's sampler dims (60 % 60 == 0).
+    smart_resize_p1_id = _add_from_template(
+        ed, "LTXSmartImageResize", (-2400, 1950),
+        widget_values=[480, 256, True, "top"],  # widget defaults; inputs win
+        title="LTXSmartImageResize (half-res for pass1 guide)",
+        size=(290, 150),
+    )
+    ed.add_link(_BENCH_LOAD_IMAGE_FIRST, 0, smart_resize_p1_id, 0, "IMAGE")
+    ed.add_link(_BENCH_WIDTH_HALF_EXPR, 1, smart_resize_p1_id, 1, "INT")
+    ed.add_link(_BENCH_HEIGHT_HALF_EXPR, 1, smart_resize_p1_id, 2, "INT")
+
+    preprocess_p1_id = _add_from_template(
+        ed, "LTXVPreprocess", (-2400, 2120),
+        widget_values=[18],
+        title="LTXVPreprocess (half-res; img_compression=18)",
+        size=(270, 80),
+    )
+    ed.add_link(smart_resize_p1_id, 0, preprocess_p1_id, 0, "IMAGE")
+
     vae_encode_id = _add_from_template(
         ed, "VAEEncode", (-2100, 1950),
         widget_values=[],
-        title="VAEEncode (init image → guide_latent)",
+        title="VAEEncode (half-res init image → pass1 guide_latent)",
         size=(290, 80),
     )
-    ed.add_link(get_firstframe_id, 0, vae_encode_id, 0, "IMAGE")
+    ed.add_link(preprocess_p1_id, 0, vae_encode_id, 0, "IMAGE")
     ed.add_link(get_vae_id, 0, vae_encode_id, 1, "VAE")
 
     # AudioLatentSlice: per-iter audio window from full pre-encoded audio.
@@ -1172,6 +1195,8 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
         "iter_patch_inspector": inspector_id,
         "set_patched_model": set_patched_id,
         "empty_latent_p1": empty_p1_id,
+        "smart_resize_p1": smart_resize_p1_id,
+        "preprocess_p1": preprocess_p1_id,
         "vae_encode_init_guide": vae_encode_id,
         "audio_slice": audio_slice_id,
         "overlap_trim_output": overlap_trim_id,
