@@ -260,11 +260,10 @@ def test_patched_forward_chunk_threshold_boundary():
 
 
 def test_patched_forward_unwraps_quantized_tensor_for_sage_ffn():
-    """ComfyUI's modern fp8 path wraps weights in `QuantizedTensor`.
-    sage_ffn asserts `w.dtype == float8_e4m3fn`, which fails if we pass the
-    wrapper instead of the raw fp8 storage at `weight._qdata`. The wrapper
-    must extract `_qdata` (and the scale from `_params.scale`) so sage_ffn
-    receives unwrapped tensors."""
+    """ComfyUI's modern fp8 path wraps weights in `QuantizedTensor`. sage_ffn
+    asserts `w.dtype == float8_e4m3fn`; the raw fp8 storage lives on
+    `weight._qdata` and the per-tensor scale on `weight._params.scale`. The
+    wrapper must pass the unwrapped tensors, not the QuantizedTensor."""
     ff = FakeFF(scale_path="weight._params")
     short = _make_input(seq_len=100)
     sage_fn = MagicMock(name="sage_ffn", side_effect=lambda x, *_a, **_kw: x)

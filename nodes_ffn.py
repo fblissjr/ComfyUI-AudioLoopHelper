@@ -174,8 +174,8 @@ class _FFNFallbackLogger:
             return
         self._scale_missing_logged = True
         _LOGGER.warning(
-            "AudioLoopHelperSageFFN: could not extract fp8 weight_scale on a "
-            "patched block. Falling back to stock path for that block. Check "
+            "AudioLoopHelperSageFFN: could not extract fp8 weight or scale on "
+            "a patched block. Falling back to stock path for that block. Check "
             "ComfyUI fp8 ops version or the model's weight wrapper."
         )
 
@@ -215,8 +215,11 @@ class _FFNPatch:
         proj_out = obj.net[2]
         w1, s1, path1 = _extract_fp8_weight_and_scale(proj_in)
         w2, s2, _ = _extract_fp8_weight_and_scale(proj_out)
-        if w1 is None or w2 is None or s1 is None or s2 is None or path1 is None:
-            # Scale/weight not resolvable on this block. Install a stock
+        # `_extract_fp8_weight_and_scale` returns (None, None, None) atomically
+        # when no fp8 storage convention matches — checking path1 alone is
+        # sufficient. proj_in / proj_out checks are independent though.
+        if path1 is None or s2 is None:
+            # Storage / scale not resolvable on this block. Install a stock
             # passthrough that respects prior patches (e.g. ChunkFFN).
             # Logged once per logger instance — a wrong-attribute-name
             # regression surfaces loudly at install, not as silent
