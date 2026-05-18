@@ -39,6 +39,65 @@ from workflow_utils import WorkflowEditor  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCE = REPO_ROOT / "example_workflows" / "benchmark_workflows" / "fml2v_var_d_audio_input.json"
 OUTPUT = REPO_ROOT / "example_workflows" / "experimental" / "fml2v_var_d_audio_loop.json"
+TEMPLATES_PATH = Path(__file__).parent / "_node_templates_fml2v.json"
+
+# Cached on first load; templates are static JSON shapes copied from canonical workflows.
+_TEMPLATES: dict[str, dict] | None = None
+
+
+def _templates() -> dict[str, dict]:
+    global _TEMPLATES
+    if _TEMPLATES is None:
+        _TEMPLATES = json.loads(TEMPLATES_PATH.read_text())
+    return _TEMPLATES
+
+
+def _add_from_template(
+    ed: WorkflowEditor,
+    type_name: str,
+    pos: tuple[int, int],
+    *,
+    widget_values: list | None = None,
+    title: str | None = None,
+    size: tuple[int, int] = (270, 100),
+    mode: int = 0,
+) -> int:
+    """Insert a new top-level node from the saved template JSON.
+
+    Slot dicts copy from template, but every input ``link`` is reset to None
+    and every output ``links`` to an empty list — caller wires after.
+    """
+    tmpl = _templates()[type_name]
+    node_id = ed.next_node_id()
+    inputs = []
+    for inp in tmpl.get("inputs", []):
+        inp_copy = {k: v for k, v in inp.items() if k != "link"}
+        inp_copy["link"] = None
+        inputs.append(inp_copy)
+    outputs = []
+    for out in tmpl.get("outputs", []):
+        out_copy = {k: v for k, v in out.items() if k != "links"}
+        out_copy["links"] = []
+        outputs.append(out_copy)
+    node = {
+        "id": node_id,
+        "type": type_name,
+        "pos": list(pos),
+        "size": list(size),
+        "flags": {},
+        "order": 0,
+        "mode": mode,
+        "inputs": inputs,
+        "outputs": outputs,
+        "properties": dict(tmpl.get("properties", {})),
+        "widgets_values": list(widget_values) if widget_values is not None else (
+            list(tmpl.get("widgets_values") or [])
+        ),
+    }
+    if title:
+        node["title"] = title
+    ed.add_node(node)
+    return node_id
 
 
 # ---------------------------------------------------------------------------
@@ -177,13 +236,135 @@ def phase1_strip_and_bypass(ed: WorkflowEditor, *, verbose: bool = True) -> None
 
 
 def phase2_loop_math_and_audio(ed: WorkflowEditor, *, verbose: bool = True) -> None:
-    """Phase 2: add LTXFramePlanner + AudioLoopController + AudioLoopPlanner +
-    FloatConstants. Fix fps=25 globally. Replace audio chain with full-song
-    pre-encode. Swap ImageResizeKJv2 -> LTXSmartImageResize. Add LTXVPreprocess.
+    """Phase 2: add loop-math infrastructure + audio pre-encode + image preprocess.
 
-    TODO: implement.
+    Nodes added at top level (not yet wired to consumers — Phase 5 wires them
+    into the loop body):
+
+    - LTXFramePlanner (fps=25, target_seconds=19.88, w=960, h=544) — dim SSoT
+    - AudioLoopController (current_iteration wires from TLO in Phase 5)
+    - AudioLoopPlanner (iter-INDEPENDENT outputs feed TLO + schedule encoder)
+    - FloatConstant ``overlap_seconds=2.0`` (shared between controller + planner)
+    - FloatConstant ``first_frame_guide_strength=0.7`` (per-iter trailing anchor)
+    - LoadAudio + TrimAudioDuration + LTXVAudioVAEEncode (full-song pre-encode)
+    - LTXSmartImageResize (replaces benchmark's ImageResizeKJv2, fixes quantization
+      aliasing per smart_resize_quantization_postmortem)
+    - LTXVPreprocess(img_compression=18) (canonical F2/F3 init-image preprocess)
+
+    Also fixes ``PrimitiveFloat #2076`` (fps global) widget 24 -> 25 to match
+    the canonical inference fps.
     """
-    print("[Phase 2] (not yet implemented)")
+    log = (lambda *a: print("  ", *a)) if verbose else (lambda *a: None)
+
+    # --- Loop math infrastructure ---
+    fp_id = _add_from_template(
+        ed, "LTXFramePlanner", (-3000, 3000),
+        widget_values=[960, 544, 19.88, 25],
+        title="LTXFramePlanner (dim SSoT)",
+        size=(270, 250),
+    )
+    log(f"+ LTXFramePlanner #{fp_id}  [w=960, h=544, target_seconds=19.88, fps=25]")
+
+    overlap_id = _add_from_template(
+        ed, "FloatConstant", (-3000, 3300),
+        widget_values=[2.0],
+        title="overlap_seconds",
+    )
+    log(f"+ FloatConstant #{overlap_id}  [overlap_seconds=2.0]")
+
+    init_strength_id = _add_from_template(
+        ed, "FloatConstant", (-3000, 3400),
+        widget_values=[0.7],
+        title="first_frame_guide_strength",
+    )
+    log(f"+ FloatConstant #{init_strength_id}  [first_frame_guide_strength=0.7]")
+
+    alc_id = _add_from_template(
+        ed, "AudioLoopController", (-2700, 3000),
+        # widgets: [current_iteration, window_seconds, overlap_seconds, base_seed, fps]
+        widget_values=[1, 19.88, 2.0, 42, 25],
+        title="AudioLoopController (iter-DEPENDENT outputs)",
+        size=(270, 200),
+    )
+    log(f"+ AudioLoopController #{alc_id}  [window=19.88, overlap=2.0, seed=42, fps=25]")
+
+    alp_id = _add_from_template(
+        ed, "AudioLoopPlanner", (-2700, 3250),
+        # widgets: [window_seconds, overlap_seconds, fps, max_iterations, schedule]
+        widget_values=[19.88, 2.0, 25, 0, ""],
+        title="AudioLoopPlanner (iter-INDEPENDENT outputs)",
+        size=(270, 200),
+    )
+    log(f"+ AudioLoopPlanner #{alp_id}  [window=19.88, overlap=2.0, fps=25]")
+
+    # --- Audio path: full-song pre-encode (replaces benchmark's hardcoded 4s) ---
+    load_audio_id = _add_from_template(
+        ed, "LoadAudio", (-3000, 3700),
+        widget_values=["your_audio.mp3"],
+        title="LoadAudio (full song)",
+        size=(270, 100),
+    )
+    log(f"+ LoadAudio #{load_audio_id}")
+
+    trim_id = _add_from_template(
+        ed, "TrimAudioDuration", (-2700, 3700),
+        widget_values=[0, 600],  # full song, capped at 10 min
+        title="TrimAudioDuration (full-song clamp)",
+        size=(270, 80),
+    )
+    log(f"+ TrimAudioDuration #{trim_id}  [start=0, duration=600]")
+
+    audio_vae_id = _add_from_template(
+        ed, "LTXVAudioVAEEncode", (-2400, 3700),
+        widget_values=[],
+        title="LTXVAudioVAEEncode (full-song)",
+        size=(270, 80),
+    )
+    log(f"+ LTXVAudioVAEEncode #{audio_vae_id}")
+
+    # --- Image preprocess: replace ImageResizeKJv2 with LTXSmartImageResize ---
+    smart_resize_id = _add_from_template(
+        ed, "LTXSmartImageResize", (-3000, 3900),
+        # widgets: [target_width, target_height, keep_proportion, crop_position]
+        widget_values=[960, 544, True, "top"],
+        title="LTXSmartImageResize (multi-stage, anti-alias)",
+        size=(270, 150),
+    )
+    log(f"+ LTXSmartImageResize #{smart_resize_id}")
+
+    preprocess_id = _add_from_template(
+        ed, "LTXVPreprocess", (-2700, 3900),
+        widget_values=[18],
+        title="LTXVPreprocess (img_compression=18)",
+        size=(270, 80),
+    )
+    log(f"+ LTXVPreprocess #{preprocess_id}")
+
+    # --- Fix benchmark fps global (PrimitiveFloat #2076 widget 24 -> 25) ---
+    for n in ed.wf["nodes"]:
+        if n.get("id") == 2076 and n.get("type") == "PrimitiveFloat":
+            wv = n.get("widgets_values") or []
+            if wv and wv[0] != 25:
+                old = wv[0]
+                n["widgets_values"][0] = 25
+                log(f"= PrimitiveFloat #2076 (Set_fps source): {old} -> 25")
+            break
+
+    # Stash the new node IDs in the workflow's `properties` so later phases /
+    # next-session Claude can find them without re-grepping by title.
+    ed.wf.setdefault("properties", {})["build_fml2v_phase2"] = {
+        "frame_planner": fp_id,
+        "overlap_seconds": overlap_id,
+        "first_frame_guide_strength": init_strength_id,
+        "audio_loop_controller": alc_id,
+        "audio_loop_planner": alp_id,
+        "load_audio": load_audio_id,
+        "trim_audio": trim_id,
+        "audio_vae_encode": audio_vae_id,
+        "smart_resize": smart_resize_id,
+        "preprocess": preprocess_id,
+    }
+    log(f"= Stashed Phase 2 node IDs in wf['properties']['build_fml2v_phase2']")
 
 
 def phase3_conditioning(ed: WorkflowEditor, *, verbose: bool = True) -> None:
