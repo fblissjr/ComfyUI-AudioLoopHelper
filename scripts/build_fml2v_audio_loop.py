@@ -518,6 +518,7 @@ _BENCH_SET_FRAMES = 2075           # SetNode "frames"
 _BENCH_SET_FPS = 2074              # SetNode "fps"
 _BENCH_SET_FIRSTFRAME = 75         # SetNode "firstframe"
 _BENCH_INIT_CFG_GUIDER = 36        # CFGGuider (init render, pass1)
+_BENCH_TOP_LEVEL_CHUNK_FFN = 228   # benchmark's top-level LTXVChunkFeedForward (model chain head)
 
 # Orphaned by Phase 4 dim-SSoT + image-bus rewires; strip after rewiring.
 _PHASE4_STRIP_AFTER_REWIRE = [
@@ -674,10 +675,9 @@ def phase4_initial_render(ed: WorkflowEditor, *, verbose: bool = True) -> None:
                     if n.get("type") == "UNETLoader" and n.get("mode", 0) != 4]
     if not unet_loaders:
         raise SystemExit("No active UNETLoader found — benchmark workflow shape changed")
-    bench_chunk_ffn_id = 228  # top-level benchmark LTXVChunkFeedForward
-    if ed.has_node(bench_chunk_ffn_id):
-        ed.rewire_input(bench_chunk_ffn_id, 0, unet_loaders[0], 0, "MODEL")
-        log(f"  wire benchmark ChunkFFN #{bench_chunk_ffn_id}.model ← UNETLoader #{unet_loaders[0]} (was unwired)")
+    if ed.has_node(_BENCH_TOP_LEVEL_CHUNK_FFN):
+        ed.rewire_input(_BENCH_TOP_LEVEL_CHUNK_FFN, 0, unet_loaders[0], 0, "MODEL")
+        log(f"  wire benchmark ChunkFFN #{_BENCH_TOP_LEVEL_CHUNK_FFN}.model ← UNETLoader #{unet_loaders[0]} (was unwired)")
 
     # --- 6. Insert LTXVImgToVideoInplaceKJ between EmptyLatent and AddGuideMulti ---
     inplace_id = _add_from_template(
