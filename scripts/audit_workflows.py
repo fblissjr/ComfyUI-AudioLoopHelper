@@ -720,6 +720,7 @@ def _audit_one(wf_path: Path) -> list[Finding]:
     _check_link_integrity(wf, by_id, links_by_id, record)
     _check_widget_shape(wf, record)
     _check_layout_no_orphans(wf, record)
+    _check_set_get_bus_integrity(wf, by_type, record)
     # F18 — fps coherence (runs on every workflow with fps widgets).
     _check_fps_coherence(wf, by_type, record)
 
@@ -1797,6 +1798,67 @@ _CONDITIONING_SOURCE_TYPES = frozenset({
     "ConditioningBlend",
     "PromptRelayEncode",
 })
+
+def _check_set_get_bus_integrity(wf, by_type, record) -> None:
+    """KJNodes SetNode/GetNode buses are resolved at workflow LOAD time, not
+    at execute time — an active GetNode with no matching active SetNode
+    throws "No SetNode found for <name>(GetNode)" before the prompt ever
+    runs. The standard link_integrity check validates physical wire
+    bookkeeping but doesn't see the bus-resolution layer.
+
+    Walks active GetNodes; ERRs on any whose bus name has no matching
+    active SetNode. WARNs on active SetNodes with no matching active
+    GetNode (cosmetic — bus value is computed but unread). Scans both
+    top-level and subgraph nodes since KJNodes resolves across both.
+    """
+    sets_by_bus: dict[str, list[int]] = {}
+    gets_by_bus: dict[str, list[tuple[int, str]]] = {}
+
+    def _collect(node_iter, scope: str) -> None:
+        for n in node_iter:
+            if n.get("mode") == 4:
+                continue
+            if n.get("type") not in ("SetNode", "GetNode"):
+                continue
+            wv = n.get("widgets_values")
+            # KJNodes Set/Get always use list-shaped widgets_values with the
+            # bus name at index 0. Some other node types (e.g. VHS_VideoCombine)
+            # use dict-shaped widgets_values; defensively skip if shape doesn't
+            # match (would indicate a malformed Set/Get node anyway).
+            if not isinstance(wv, list) or not wv or not isinstance(wv[0], str):
+                continue
+            bus = wv[0]
+            if n.get("type") == "SetNode":
+                sets_by_bus.setdefault(bus, []).append(n.get("id"))
+            else:
+                gets_by_bus.setdefault(bus, []).append((n.get("id"), scope))
+
+    _collect(wf.get("nodes", []), "top-level")
+    for sg in wf.get("definitions", {}).get("subgraphs", []) or []:
+        _collect(sg.get("nodes", []), "subgraph")
+
+    err_count = 0
+    for bus, get_entries in gets_by_bus.items():
+        if bus not in sets_by_bus:
+            for gid, scope in get_entries:
+                record("ERR", "set_get_bus_integrity",
+                       f"Get_{bus}(#{gid}, {scope}) has no active SetNode for bus "
+                       f"'{bus}' — KJNodes will throw at workflow load.")
+                err_count += 1
+
+    warn_count = 0
+    for bus, set_ids in sets_by_bus.items():
+        if bus not in gets_by_bus:
+            for sid in set_ids:
+                record("WARN", "set_get_bus_integrity",
+                       f"Set_{bus}(#{sid}) bus has no active GetNode reader "
+                       f"(cosmetic; bus value computed but unread).")
+                warn_count += 1
+
+    if err_count == 0 and warn_count == 0:
+        record("OK", "set_get_bus_integrity",
+               f"{len(sets_by_bus)} Set/Get bus pair(s) consistent")
+
 
 def _check_loop_body_containment(wf, by_type, record) -> None:
     """F-pair with ``scripts/verify_loop_containment.py``: every active

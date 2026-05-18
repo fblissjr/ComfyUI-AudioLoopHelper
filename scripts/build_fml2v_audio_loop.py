@@ -143,6 +143,8 @@ STRIP_HARDCODED_AUDIO = [
     2300,  # SolidMask (audio freeze)
     2301,  # SetLatentNoiseMask
     2215,  # SetNode "latent_audio"
+    2214,  # GetNode "latent_audio" — orphan after Set_latent_audio strip;
+           # KJNodes would throw "No SetNode found for latent_audio(GetNode)" at load.
 ]
 
 # LTX2SamplingPreviewOverride — drop (preview during iter is slow + adds VRAM)
@@ -660,6 +662,23 @@ def phase4_initial_render(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     ed.rewire_input(_BENCH_INIT_CFG_GUIDER, 0, get_model_id, 0, "MODEL")
     log(f"  rewire init CFGGuider #{_BENCH_INIT_CFG_GUIDER}.model ← Get_model #{get_model_id} (was dead Get_model_nag)")
 
+    # --- 5c. Wire benchmark's top-level model patch chain head to UNETLoader. ---
+    # The benchmark workflow had the chain UNETLoader → ChunkFFN(#228) →
+    # AttnTuner(#229, bypassed) → PowerLoraLoader → Set_model(#192) but the
+    # head link (UNETLoader.MODEL → #228.model) is absent in the source JSON,
+    # leaving #228 unwired and ComfyUI rejecting the prompt at validation.
+    # Set_model is consumed by init CFGGuider above, so this chain IS live —
+    # wire it. Loop-body model patches live on a separate (Phase 5) chain
+    # downstream of Get_model, so this only affects top-level setup.
+    unet_loaders = [n["id"] for n in ed.wf.get("nodes", [])
+                    if n.get("type") == "UNETLoader" and n.get("mode", 0) != 4]
+    if not unet_loaders:
+        raise SystemExit("No active UNETLoader found — benchmark workflow shape changed")
+    bench_chunk_ffn_id = 228  # top-level benchmark LTXVChunkFeedForward
+    if ed.has_node(bench_chunk_ffn_id):
+        ed.rewire_input(bench_chunk_ffn_id, 0, unet_loaders[0], 0, "MODEL")
+        log(f"  wire benchmark ChunkFFN #{bench_chunk_ffn_id}.model ← UNETLoader #{unet_loaders[0]} (was unwired)")
+
     # --- 6. Insert LTXVImgToVideoInplaceKJ between EmptyLatent and AddGuideMulti ---
     inplace_id = _add_from_template(
         ed, "LTXVImgToVideoInplaceKJ", (-2700, 2400),
@@ -1133,10 +1152,13 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     )
     ed.add_link(overlap_trim_id, 0, cleanup_id, 0, "LATENT")
 
-    # TLC.processed ← IterationCleanup; TLC.stop ← Controller.should_stop.
+    # TLC wires: flow_control pairs the close to its open (the loop-boundary
+    # signal NativeLooping reads to drive iteration), processed carries the
+    # per-iter output, stop carries the controller's terminate flag.
+    ed.add_link(tlo_id, 0, tlc_id, 0, "FLOW_CONTROL")               # flow_control ← TLO
     ed.add_link(cleanup_id, 0, tlc_id, 1, "LATENT")
     ed.add_link(alc_id, 1, tlc_id, 2, "BOOLEAN")                    # should_stop
-    log(f"+ AdaIN_final #{adain_final_id} → Cleanup #{cleanup_id} → TLC #{tlc_id}.processed; TLC.stop ← Controller.should_stop")
+    log(f"+ AdaIN_final #{adain_final_id} → Cleanup #{cleanup_id} → TLC #{tlc_id}.processed; TLC.flow_control ← TLO #{tlo_id}; TLC.stop ← Controller.should_stop")
 
     # Stash IDs for Phase 6 to find.
     ed.wf.setdefault("properties", {})["build_fml2v_phase5"] = {
