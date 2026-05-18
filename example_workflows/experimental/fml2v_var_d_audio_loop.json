@@ -1,8 +1,8 @@
 {
   "id": "0775f0bd-e4f2-40cc-85b7-45217564af17",
   "revision": 0,
-  "last_node_id": 2311,
-  "last_link_id": 4152,
+  "last_node_id": 2316,
+  "last_link_id": 4159,
   "nodes": [
     {
       "id": 92,
@@ -952,7 +952,10 @@
           "name": "CLIP",
           "type": "CLIP",
           "links": [
-            187
+            187,
+            4153,
+            4154,
+            4157
           ]
         }
       ],
@@ -6649,12 +6652,16 @@
         {
           "name": "stride_seconds",
           "type": "FLOAT",
-          "links": []
+          "links": [
+            4155
+          ]
         },
         {
           "name": "audio_duration",
           "type": "FLOAT",
-          "links": []
+          "links": [
+            4156
+          ]
         }
       ],
       "properties": {
@@ -6912,6 +6919,243 @@
         18
       ],
       "title": "LTXVPreprocess (img_compression=18)"
+    },
+    {
+      "id": 2312,
+      "type": "CLIPTextEncode",
+      "pos": [
+        -2100,
+        3000
+      ],
+      "size": [
+        400,
+        88
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 4153
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": []
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.56",
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "video of a man dancing and singing"
+      ],
+      "title": "CLIPTextEncode (positive static fallback — bypassed)"
+    },
+    {
+      "id": 2313,
+      "type": "TimestampPromptScheduleBatchEncode",
+      "pos": [
+        -2100,
+        3200
+      ],
+      "size": [
+        400,
+        200
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 4154
+        },
+        {
+          "name": "stride_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "stride_seconds"
+          },
+          "link": 4155
+        },
+        {
+          "name": "audio_duration",
+          "type": "FLOAT",
+          "widget": {
+            "name": "audio_duration"
+          },
+          "link": 4156
+        }
+      ],
+      "outputs": [
+        {
+          "name": "conditioning_list",
+          "type": "*",
+          "links": [
+            4158,
+            4159
+          ]
+        },
+        {
+          "name": "iteration_count",
+          "type": "INT",
+          "links": []
+        }
+      ],
+      "properties": {
+        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+        "ver": "0e2f31043ddfab2e3a05a3295ba0772b22d8e35f",
+        "Node name for S&R": "TimestampPromptScheduleBatchEncode",
+        "cnr_id": "comfyui-audioloophelper"
+      },
+      "widgets_values": [
+        "0:00+: video of a man dancing and singing",
+        19.88,
+        600,
+        true,
+        25
+      ],
+      "title": "TimestampPromptScheduleBatchEncode (schedule)"
+    },
+    {
+      "id": 2314,
+      "type": "CLIPTextEncode",
+      "pos": [
+        -2100,
+        3450
+      ],
+      "size": [
+        400,
+        88
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 4157
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": []
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.56",
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "still image with no motion, subtitles, deformed facial features, extra limbs, disfigured hands, duplicate character, twin, clone, microphone"
+      ],
+      "title": "CLIPTextEncode (nag_cond_video)"
+    },
+    {
+      "id": 2315,
+      "type": "ConditioningSelectByIteration",
+      "pos": [
+        -1700,
+        3200
+      ],
+      "size": [
+        290,
+        80
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "conditioning_list",
+          "type": "*",
+          "link": 4158
+        },
+        {
+          "name": "current_iteration",
+          "type": "INT",
+          "widget": {
+            "name": "current_iteration"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "links": []
+        }
+      ],
+      "properties": {
+        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+        "ver": "0e2f31043ddfab2e3a05a3295ba0772b22d8e35f",
+        "Node name for S&R": "ConditioningSelectByIteration",
+        "cnr_id": "comfyui-audioloophelper"
+      },
+      "widgets_values": [
+        0
+      ],
+      "title": "ConditioningSelectByIteration (INIT — iter=0 default)"
+    },
+    {
+      "id": 2316,
+      "type": "ConditioningSelectByIteration",
+      "pos": [
+        -1700,
+        3320
+      ],
+      "size": [
+        290,
+        80
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "conditioning_list",
+          "type": "*",
+          "link": 4159
+        },
+        {
+          "name": "current_iteration",
+          "type": "INT",
+          "widget": {
+            "name": "current_iteration"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "links": []
+        }
+      ],
+      "properties": {
+        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+        "ver": "0e2f31043ddfab2e3a05a3295ba0772b22d8e35f",
+        "Node name for S&R": "ConditioningSelectByIteration",
+        "cnr_id": "comfyui-audioloophelper"
+      },
+      "widgets_values": [
+        0
+      ],
+      "title": "ConditioningSelectByIteration (LOOP — wired to TLO in Phase 5)"
     }
   ],
   "links": [
@@ -7842,6 +8086,62 @@
       2296,
       0,
       "MODEL"
+    ],
+    [
+      4153,
+      124,
+      0,
+      2312,
+      0,
+      "CLIP"
+    ],
+    [
+      4154,
+      124,
+      0,
+      2313,
+      0,
+      "CLIP"
+    ],
+    [
+      4155,
+      2306,
+      2,
+      2313,
+      1,
+      "FLOAT"
+    ],
+    [
+      4156,
+      2306,
+      3,
+      2313,
+      2,
+      "FLOAT"
+    ],
+    [
+      4157,
+      124,
+      0,
+      2314,
+      0,
+      "CLIP"
+    ],
+    [
+      4158,
+      2313,
+      0,
+      2315,
+      0,
+      "*"
+    ],
+    [
+      4159,
+      2313,
+      0,
+      2316,
+      0,
+      "*"
     ]
   ],
   "groups": [
@@ -9151,6 +9451,13 @@
       "audio_vae_encode": 2309,
       "smart_resize": 2310,
       "preprocess": 2311
+    },
+    "build_fml2v_phase3": {
+      "static_positive_bypassed": 2312,
+      "batch_encoder": 2313,
+      "nag_cond_video": 2314,
+      "selector_init": 2315,
+      "selector_loop": 2316
     }
   }
 }

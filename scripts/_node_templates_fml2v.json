@@ -1577,5 +1577,28 @@
       0
     ],
     "title": "Loop Config Validator"
+  },
+  "CLIPTextEncode": {
+    "type": "CLIPTextEncode",
+    "inputs": [
+      {
+        "name": "clip",
+        "type": "CLIP"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "CONDITIONING",
+        "type": "CONDITIONING"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfy-core",
+      "ver": "0.3.56",
+      "Node name for S&R": "CLIPTextEncode"
+    },
+    "widgets_values": [
+      ""
+    ]
   }
 }

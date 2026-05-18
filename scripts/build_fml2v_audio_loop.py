@@ -366,13 +366,121 @@ def phase2_loop_math_and_audio(ed: WorkflowEditor, *, verbose: bool = True) -> N
     log(f"= Stashed Phase 2 node IDs in wf['properties']['build_fml2v_phase2']")
 
 
-def phase3_conditioning(ed: WorkflowEditor, *, verbose: bool = True) -> None:  # noqa: ARG001
-    """Phase 3: TimestampPromptScheduleBatchEncode + bypassed parallel CLIPTextEncode
-    + nag_cond_video CLIPTextEncode + two ConditioningSelectByIteration.
+_DEFAULT_POSITIVE_PROMPT = "video of a man dancing and singing"
+_DEFAULT_NAG_PROMPT = (
+    "still image with no motion, subtitles, deformed facial features, "
+    "extra limbs, disfigured hands, duplicate character, twin, clone, microphone"
+)
+_GET_CLIP_NODE_ID = 124  # benchmark's GetNode "clip" (Set_clip is #188)
 
-    TODO: implement.
+
+def phase3_conditioning(ed: WorkflowEditor, *, verbose: bool = True) -> None:
+    """Phase 3: top-level conditioning nodes (CLIP must NOT enter loop body).
+
+    Adds:
+      - Bypassed parallel ``CLIPTextEncode`` (positive static fallback). User
+        can swap into CFGGuider.positive manually for A/B against the schedule.
+      - Active ``TimestampPromptScheduleBatchEncode`` — stride/duration sourced
+        from ``AudioLoopPlanner`` (NOT ``AudioLoopController``; sourcing from
+        the controller closes a cycle through ``TensorLoopOpen``, caught by
+        the ``graph_acyclic`` audit).
+      - Active ``CLIPTextEncode`` for ``nag_cond_video`` (negative concepts);
+        output left floating — Phase 5 wires into in-loop ``LTX2_NAG``.
+      - Two ``ConditioningSelectByIteration`` instances:
+          * INIT: ``current_iteration`` unwired (defaults to 0; Phase 4 uses it).
+          * LOOP: ``current_iteration`` unwired (Phase 5 wires from TLO).
+
+    Wiring this phase does:
+      - ``Get_clip #124`` → all 3 CLIP encoders' ``clip`` inputs.
+      - ``AudioLoopPlanner #2306`` slot 2 (``stride_seconds``) →
+        batch_encoder.stride_seconds.
+      - ``AudioLoopPlanner #2306`` slot 3 (``audio_duration``) →
+        batch_encoder.audio_duration.
+      - batch_encoder.conditioning_list → both selectors' ``conditioning_list``.
+
+    Wiring deferred:
+      - Selectors → CFGGuider positives (Phase 4 init, Phase 5 loop body).
+      - LOOP selector's ``current_iteration`` ← TLO output (Phase 5).
+      - nag_cond_video output → in-loop LTX2_NAG (Phase 5).
     """
-    print("[Phase 3] (not yet implemented)")
+    log = (lambda *a: print("  ", *a)) if verbose else (lambda *a: None)
+
+    phase2 = ed.wf.get("properties", {}).get("build_fml2v_phase2", {})
+    alp_id = phase2["audio_loop_planner"]
+
+    # --- Bypassed static-fallback CLIPTextEncode (positive) ---
+    static_pos_id = _add_from_template(
+        ed, "CLIPTextEncode", (-2100, 3000),
+        widget_values=[_DEFAULT_POSITIVE_PROMPT],
+        title="CLIPTextEncode (positive static fallback — bypassed)",
+        size=(400, 88),
+        mode=4,
+    )
+    ed.add_link(_GET_CLIP_NODE_ID, 0, static_pos_id, 0, "CLIP")
+    log(f"+ CLIPTextEncode #{static_pos_id}  [BYPASSED static positive fallback]")
+
+    # --- Active schedule encoder (stamps frame_rate=25 on every CONDITIONING) ---
+    # widgets: [schedule, stride_seconds_default, audio_duration_default,
+    #           prefix_with_anchor, frame_rate]
+    batch_id = _add_from_template(
+        ed, "TimestampPromptScheduleBatchEncode", (-2100, 3200),
+        widget_values=[
+            f"0:00+: {_DEFAULT_POSITIVE_PROMPT}",
+            19.88,   # stride_seconds default (overridden by Planner wire)
+            600,     # audio_duration default (overridden by Planner wire)
+            True,    # prefix_with_anchor
+            25,      # frame_rate (load-bearing — see CLAUDE.md frame_rate=25)
+        ],
+        title="TimestampPromptScheduleBatchEncode (schedule)",
+        size=(400, 200),
+    )
+    ed.add_link(_GET_CLIP_NODE_ID, 0, batch_id, 0, "CLIP")
+    # Slot 2 = stride_seconds, slot 3 = audio_duration on AudioLoopPlanner.
+    # Sourcing from AudioLoopPlanner (iter-INDEPENDENT) — NOT Controller (cycle).
+    ed.add_link(alp_id, 2, batch_id, 1, "FLOAT")
+    ed.add_link(alp_id, 3, batch_id, 2, "FLOAT")
+    log(f"+ TimestampPromptScheduleBatchEncode #{batch_id}  [schedule, frame_rate=25]")
+
+    # --- Active nag_cond_video encoder (output floating, Phase 5 consumes) ---
+    nag_cond_id = _add_from_template(
+        ed, "CLIPTextEncode", (-2100, 3450),
+        widget_values=[_DEFAULT_NAG_PROMPT],
+        title="CLIPTextEncode (nag_cond_video)",
+        size=(400, 88),
+    )
+    ed.add_link(_GET_CLIP_NODE_ID, 0, nag_cond_id, 0, "CLIP")
+    log(f"+ CLIPTextEncode #{nag_cond_id}  [nag_cond_video — output floats until Phase 5]")
+
+    # --- Two ConditioningSelectByIteration (INIT + LOOP). ---
+    # INIT: current_iteration defaults to 0 (Phase 4 consumes for initial render).
+    # LOOP: current_iteration wired from TLO in Phase 5; meanwhile widget=0.
+    sel_init_id = _add_from_template(
+        ed, "ConditioningSelectByIteration", (-1700, 3200),
+        widget_values=[0],
+        title="ConditioningSelectByIteration (INIT — iter=0 default)",
+        size=(290, 80),
+    )
+    ed.add_link(batch_id, 0, sel_init_id, 0, "*")
+    log(f"+ ConditioningSelectByIteration #{sel_init_id}  [INIT]")
+
+    sel_loop_id = _add_from_template(
+        ed, "ConditioningSelectByIteration", (-1700, 3320),
+        widget_values=[0],
+        title="ConditioningSelectByIteration (LOOP — wired to TLO in Phase 5)",
+        size=(290, 80),
+    )
+    ed.add_link(batch_id, 0, sel_loop_id, 0, "*")
+    log(f"+ ConditioningSelectByIteration #{sel_loop_id}  [LOOP — current_iteration wired in Phase 5]")
+
+    # Stash IDs for Phase 4/5 to find without re-grepping.
+    ed.wf.setdefault("properties", {})["build_fml2v_phase3"] = {
+        "static_positive_bypassed": static_pos_id,
+        "batch_encoder": batch_id,
+        "nag_cond_video": nag_cond_id,
+        "selector_init": sel_init_id,
+        "selector_loop": sel_loop_id,
+    }
+    log("= Stashed Phase 3 node IDs in wf['properties']['build_fml2v_phase3']")
 
 
 def phase4_initial_render(ed: WorkflowEditor, *, verbose: bool = True) -> None:  # noqa: ARG001
