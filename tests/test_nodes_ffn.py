@@ -78,9 +78,13 @@ class FakeFF:
             s1 = s2 = None
         if scale_path == "scale_weight":
             # Legacy fp8_ops convention: weight is the raw fp8 tensor,
-            # scale lives directly on Linear.
+            # scale lives directly on Linear. Stamp `.device` to a real
+            # torch.device so the wrapper's device-mismatch guard sees a
+            # real comparand (MagicMock auto-attrs would break equality).
             proj_in.weight = MagicMock(name="W1_fp8")
             proj_out.weight = MagicMock(name="W2_fp8")
+            proj_in.weight.device = torch.device("cpu")
+            proj_out.weight.device = torch.device("cpu")
             proj_in.scale_weight = s1
             proj_out.scale_weight = s2
             proj_in.weight_scale = None
@@ -323,6 +327,39 @@ def test_patched_forward_fallback_chains_to_prior_forward_when_provided():
     prior.assert_called_once_with(short)
     ff.net.assert_not_called()
     sage_fn.assert_not_called()
+
+
+def test_patched_forward_falls_through_when_weight_on_different_device_than_activation():
+    """ComfyUI's model loader moves fp8 weights to cuda AFTER our patch
+    installs; partial-load offload (the 2.6 GB "offloaded" portion seen
+    in the v06_2 audit log) can also leave a specific block's weights on
+    CPU at call time. Resolving weights at install time captures stale
+    storage and triggers `sage_ffn: all tensors must be on CUDA, got
+    x=cuda:0 w1=cpu w2=cpu` at every FFN call.
+
+    The wrapper must (a) resolve weights at call time, not install time,
+    so the live device is read; (b) compare against `x.device` and fall
+    through to prior_forward when they don't match. ChunkFFN's wrapper
+    (prior_forward) routes through ComfyUI's `cast_bias_weight` which
+    handles the cpu→cuda move correctly via `fp8_linear`.
+    """
+    ff = FakeFF(scale_path="weight._params")
+    # Activation on `meta` device, weights stay on cpu via the FakeFF
+    # default `torch.empty(1, dtype=torch.uint8)`. Device mismatch →
+    # wrapper must fall through to prior_forward.
+    short = torch.empty(1, 100, 8, device="meta")
+    prior = MagicMock(name="prior_forward", return_value="prior_chained")
+    sage_fn = MagicMock(name="sage_ffn", return_value="should_not_run")
+
+    patch = _FFNPatch(sage_ffn_fn=sage_fn, logger=_FFNFallbackLogger(),
+                     prior_forward=prior)
+    bound = patch.__get__(ff, type(ff))
+
+    result = bound(short)
+
+    assert result == "prior_chained"
+    sage_fn.assert_not_called()
+    prior.assert_called_once_with(short)
 
 
 def test_patched_forward_falls_through_when_sage_ffn_raises():

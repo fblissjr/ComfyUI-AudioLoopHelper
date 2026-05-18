@@ -206,37 +206,50 @@ class _FFNPatch:
         logger = self._logger
         prior_forward = self._prior_forward
 
-        # Resolve scale + weights + biases ONCE at bind time. ComfyUI
-        # invokes `__get__` per block when `add_object_patch` registers
-        # the override, so this fires ~44 times per node-execute. Moving
-        # the resolution out of `wrapped_forward` saves ~6 getattrs ×
-        # ~1000 FFN calls per render.
+        # Install-time probe ONLY validates the fp8 convention resolves on
+        # this block (logs path + emits "missing" warning early). We do
+        # NOT capture the tensors here — ComfyUI's model loader moves
+        # weights to cuda AFTER our patch installs (the loader runs at
+        # "Requested to load LTXAV" time, our patch runs earlier during
+        # AudioLoopHelperSageFFN.execute), and dynamic-VRAM partial-load
+        # can leave a specific block's weights on cpu indefinitely. A
+        # bind-time capture freezes the stale cpu reference; ComfyUI's
+        # cuda-side storage lives elsewhere. Resolve at call time so the
+        # live device is read.
         proj_in = obj.net[0].proj
         proj_out = obj.net[2]
-        w1, s1, path1 = _extract_fp8_weight_and_scale(proj_in)
-        w2, s2, _ = _extract_fp8_weight_and_scale(proj_out)
-        # `_extract_fp8_weight_and_scale` returns (None, None, None) atomically
-        # when no fp8 storage convention matches — checking path1 alone is
-        # sufficient. proj_in / proj_out checks are independent though.
-        if path1 is None or s2 is None:
-            # Storage / scale not resolvable on this block. Install a stock
-            # passthrough that respects prior patches (e.g. ChunkFFN).
-            # Logged once per logger instance — a wrong-attribute-name
-            # regression surfaces loudly at install, not as silent
-            # per-call fallback.
+        _, _, path1 = _extract_fp8_weight_and_scale(proj_in)
+        _, _, path2 = _extract_fp8_weight_and_scale(proj_out)
+
+        # Single fallback policy: chain to prior add_object_patch wrapper
+        # (e.g. KJNodes ChunkFFN) when present; else stock self_module.net.
+        def _fallback(self_module, x):
+            if prior_forward is not None:
+                return prior_forward(x)
+            return self_module.net(x)
+
+        if path1 is None or path2 is None:
             logger.log_scale_missing_once()
-            def stock_passthrough(self_module, x, *args, **kwargs):
-                if prior_forward is not None:
-                    return prior_forward(x)
-                return self_module.net(x)
-            return types.MethodType(stock_passthrough, obj)
+            return types.MethodType(_fallback, obj)
 
         logger.log_scale_path_once(path1)
-        b1 = getattr(proj_in, "bias", None)
-        b2 = getattr(proj_out, "bias", None)
 
         def wrapped_forward(self_module, x, *args, **kwargs):
-            # sage_ffn signature: (x, w1, s1, w2, s2, b1=None, b2=None) -> y
+            # Re-resolve weight/scale at call time so we pick up the
+            # device-correct storage (see __get__ comment).
+            w1, s1, _ = _extract_fp8_weight_and_scale(proj_in)
+            w2, s2, _ = _extract_fp8_weight_and_scale(proj_out)
+            # Device guard: if a block's weights are cpu-resident
+            # (partial-load offload) while the activation is on cuda,
+            # sage_ffn's "all tensors must be on CUDA" assert fires.
+            # Fall through to prior_forward (e.g. ChunkFFN's wrapper)
+            # which routes through ComfyUI's `cast_bias_weight` →
+            # `fp8_linear`, the canonical path for offloaded blocks.
+            if (w1 is None or w2 is None
+                    or w1.device != x.device or w2.device != x.device):
+                return _fallback(self_module, x)
+            b1 = getattr(proj_in, "bias", None)
+            b2 = getattr(proj_out, "bias", None)
             try:
                 if x.shape[1] <= SAGE_FFN_CHUNK_SEQ:
                     return sage_ffn_fn(x, w1, s1, w2, s2, b1, b2)
@@ -251,9 +264,7 @@ class _FFNPatch:
                 # without spamming logs per FFN call.
                 shape = tuple(getattr(x, "shape", ()))
                 logger.log_once(exc, shape)
-                if prior_forward is not None:
-                    return prior_forward(x)
-                return self_module.net(x)
+                return _fallback(self_module, x)
 
         return types.MethodType(wrapped_forward, obj)
 
