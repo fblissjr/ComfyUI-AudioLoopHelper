@@ -12,6 +12,8 @@ Top-level helpers: `find_node`, `has_node`, `require_nodes`, `find_link_to_slot(
 
 Slot-dict shape helpers (static methods): `WorkflowEditor.io_in(name, dtype, link=None)`, `widget_in(name, dtype, link=None)`, `out(name, dtype)`. Use these in `from_scratch` builders (`scripts/build_*_workflow.py`) instead of open-coding the `{"name": ..., "type": ..., "link": ...}` dict literals. The helpers preserve the slot-dict contract that `add_top_level_node` consumes.
 
+Node-dict factories (static methods): `WorkflowEditor.make_get_node(node_id, var_name, dtype, pos, title=None)` builds a KJNodes-shape `GetNode` dict; `WorkflowEditor.make_node(node_id, node_type, pos, ...)` is the generic builder. Use these from `build_*` and `apply_*` scripts instead of hand-rolling the dict; the KJNodes property keys (`aux_id`, `Node name for S&R`) are easy to miss otherwise.
+
 `scripts/_helpers/_apply_helpers.py` is for **RAW-orjson fork-and-strip scripts only** (debug-tool stability when `WorkflowEditor` itself is suspect) — NOT a general utility module. Apply scripts that use `WorkflowEditor` (the canonical path) don't import from it. Confirm by reading its docstring before extracting helpers there.
 
 **Helper modules live under `scripts/_helpers/`** (underscore-prefix = private helper). Import via qualified path: `from _helpers._apply_helpers import ...`, `from _helpers._layout_grid import ...`, `from _helpers._layout_classifications import ...`. PEP 420 namespace package — no `__init__.py` needed. `scripts/workflow_utils.py` stays at `scripts/` because it's the canonical edit API, not a private helper.

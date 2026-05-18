@@ -1,24 +1,56 @@
 # fml2v_var_d_audio_loop V1 — design
 
-Last updated: 2026-05-16
+Last updated: 2026-05-18
 
-> **HANDOFF / CURRENT STATE (2026-05-16, multi-session build)**:
-> - **Phase 1 ✅**: strip+bypass benchmark structures we don't need.
-> - **Phase 2 ✅**: added `LTXFramePlanner` (#2302), `FloatConstant overlap=2.0` (#2303), `FloatConstant init_strength=0.7` (#2304), `AudioLoopController` (#2305), `AudioLoopPlanner` (#2306), `LoadAudio` (#2307), `TrimAudioDuration` (#2308), `LTXVAudioVAEEncode` (#2309), `LTXSmartImageResize` (#2310), `LTXVPreprocess` (#2311). Fixed `PrimitiveFloat #2076` fps 24→25. **Phase 2 node IDs stashed in `wf['properties']['build_fml2v_phase2']`** for next-session reference.
-> - **Phase 3 ⏸ next**: conditioning path (`TimestampPromptScheduleBatchEncode` + bypassed parallel `CLIPTextEncode` + `nag_cond_video` CLIPTextEncode + 2× `ConditioningSelectByIteration`).
-> - **Phase 4 ⏸**: initial render path.
-> - **Phase 5 ⏸**: loop body (flat canvas).
-> - **Phase 6 ⏸**: output assembly + LoopConfigValidator.
+> **STATUS: BUILD COMPLETE as of 2026-05-18.** All six phases of
+> `scripts/build_fml2v_audio_loop.py` implemented; workflow at
+> `example_workflows/experimental/fml2v_var_d_audio_loop.json`
+> (~239k bytes). Audit: 33 OK / 3 WARN / 0 ERR (WARNs are intentional
+> two-pass design — pass2 `euler_cfg_pp` + pass1 `euler_ancestral_cfg_pp`
+> + 4-value pass2 ManualSigmas, all deviation from single-stage
+> canonical). Containment: clean via `scripts/verify_loop_containment.py`.
 >
-> **How to resume**:
-> 1. `git log --oneline -10` to see recent commits.
-> 2. `uv run --group dev python scripts/build_fml2v_audio_loop.py` re-runs Phases 1+2 from benchmark source (idempotent).
-> 3. Continue implementing in `scripts/build_fml2v_audio_loop.py::phase3_conditioning(...)`.
-> 4. Helper `_add_from_template(ed, type, pos, widget_values=, title=, size=)` is already defined — uses `scripts/_node_templates_fml2v.json` for shape.
-> 5. Reference canonical loop workflow `example_workflows/audio-loop-music-video_latent.json` for wiring patterns when in doubt.
-> 6. After each phase: `uv run --group dev python scripts/audit_workflows.py example_workflows/experimental/fml2v_var_d_audio_loop.json` — current partial-build ERRs (after Phase 2): `overlap_seconds_single_source` (FloatConstant exists but not wired — Phase 3 wires it through to Controller+Planner) and `trim_image_batch_to_audio_present` (Phase 6 fixes). `run_id_layout_present` is WARN-level (Phase 6 fixes). All expected — proceed.
+> **Two architectural deltas vs the design below** (don't revert these
+> when re-reading the doc; the recipe text is preserved for intent +
+> rationale):
 >
-> **Memory pointer**: the user's auto-memory holds the same handoff state under the project's `project_fml2v_audio_loop_build_state.md` entry — next-session Claude will see it via SessionStart context.
+> 1. **Resolution: 960×512, not 960×544.** Two-pass refine requires
+>    div-by-64 base so half-res pass1 stays div-by-32 and the 2× upsampler
+>    returns to a dim matching the init-render output (Phase 6's
+>    `LatentConcat` welds across iters). 544 fails (272 not div-32 at
+>    half-res); 512 is the closest div-64. Touches `LTXFramePlanner` +
+>    `LTXSmartImageResize` widgets.
+> 2. **`LatentContextExtract` removed from loop pass1.** The doc's
+>    topology shows ContextExtract→OverlapTrim→mask on the INPUT side
+>    (mirroring canonical single-pass). That doesn't translate to
+>    two-pass: `TLO.previous_value` is full-res (post-pass2 upsample)
+>    while pass1 samples at half-res, so the direct context→mask wire
+>    shape-mismatches with no clean latent-space downscale. Removed
+>    entirely; cross-iter continuity now comes from (a) fixed init-image
+>    anchor via `LTXVAddLatentGuide` trailing frame at strength 0.7,
+>    (b) frozen audio driving motion via cross-attention, (c) prompt-
+>    schedule evolution. `LatentOverlapTrim` moved to OUTPUT side
+>    (post-AdaIN_final, pre-IterationCleanup) per canonical placement —
+>    trims the overlap region from per-iter output so adjacent windows
+>    don't double-up at Phase 6's `LatentConcat`. **Open question for
+>    live render**: does this trade-off produce visible seams between
+>    iters? V2 enhancement is to re-add ContextExtract on the pass2
+>    (full-res) side instead, or add a downscale node for pass1.
+>
+> **How to re-verify on a fresh clone**:
+> 1. `uv run --group dev python scripts/build_fml2v_audio_loop.py` — all six phases log + write ~239k workflow.
+> 2. `uv run --group dev python scripts/audit_workflows.py example_workflows/experimental/fml2v_var_d_audio_loop.json` — 33 OK / 3 WARN / 0 ERR expected.
+> 3. `uv run --group dev python scripts/verify_loop_containment.py` — should report "OK: every active iter-dependent node reaches TensorLoopClose."
+>
+> **What's NOT done**: live-render verification in ComfyUI. Audit +
+> containment script verify it structurally; only a real render
+> confirms (a) prompt validation succeeds, (b) latent shapes flow
+> across init→pass1→upsample→pass2→assembly, (c) the no-ContextExtract
+> trade-off doesn't produce visible iter-boundary seams.
+>
+> Original design recipe follows. The topology diagrams reflect the
+> doc's intent; the actual build is per the script. Both line up
+> modulo the two deltas above.
 
 ## Goal
 
@@ -142,8 +174,9 @@ Loop boundary demarcated by `TensorLoopOpen` (start) and `TensorLoopClose` (end)
 │    ↓ MODEL → CFGGuider.model                                     │
 │                                                                  │
 │  AudioLatentSlice (per-iter slice of pre-encoded full song)      │
-│  LatentContextExtract (overlap from prev iter)                   │
-│  LatentOverlapTrim                                               │
+│  [LatentContextExtract REMOVED — see status banner; full-res     │
+│   prev-iter vs half-res pass1 shape-mismatches in two-pass build]│
+│  [LatentOverlapTrim moved to OUTPUT side — see status banner]    │
 │  LTXVAudioVideoMask (canonical: start=end=window, audio frozen)  │
 │  LTXVAddLatentGuide (per-iter trailing init anchor at latent_-1) │
 │  LTXVCropGuidesNoLatent → CFGGuider.positive/negative (F3)       │
@@ -271,7 +304,8 @@ CLIPTextEncode #NAG_COND_VIDEO ("still image with no motion, ...")
 ### Loop math wiring
 
 ```
-LTXFramePlanner widgets [width=960, height=544, target_seconds=19.88, fps=25]
+LTXFramePlanner widgets [width=960, height=512, target_seconds=19.88, fps=25]
+  (note: 512 not 544 — two-pass refine requires div-64 base; see status banner)
   → fps_int → AudioLoopController.fps, AudioLoopPlanner.fps
   → actual_seconds → AudioLoopController.window_seconds, AudioLoopPlanner.window_seconds
   → width/height/frames → EmptyLTXVLatentVideo, smart resize targets
@@ -293,7 +327,7 @@ AudioLoopController (iter-DEPENDENT outputs)
        should_stop → TensorLoopClose.stop
        audio_duration → AudioLatentSlice.source_seconds (inside loop)
        iteration_seed → RandomNoise.noise_seed (inside loop)
-       overlap_latent_frames → LatentContextExtract.frame_count (inside loop)
+       overlap_latent_frames → LatentOverlapTrim.overlap_latent_frames (output-side, post-AdaIN; ContextExtract removed — see status banner)
        overlap_seconds → LTXVAudioVideoMask.video_start_time (inside loop)
 ```
 

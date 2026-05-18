@@ -24,6 +24,9 @@ uv run --group dev --group analysis python -m pytest tests/ -v --rootdir=.
 # Workflow audit (sweeps example_workflows/ + audited subset of experimental/)
 uv run --group dev python scripts/audit_workflows.py
 
+# Loop containment check (per-file; also runs under audit_workflows as F-pair)
+uv run --group dev python scripts/verify_loop_containment.py <workflow.json>
+
 # Apply script — typical shape (every apply_*.py supports these)
 uv run --group dev python scripts/apply_<X>.py            # apply
 uv run --group dev python scripts/apply_<X>.py --dry-run  # show changes
@@ -87,7 +90,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 ### Resolution + dimensions
 
 - **Dimension config flows from `LTXFramePlanner` (single source of truth).** All shipped workflows wire its outputs to consumers. See `docs/reference/frame_planner_reference.md` for snap rules, latent-volume ceiling, wiring map, migration. Audit: `frame_planner_present` (F8).
-- **Resolution div-by-32** (single-stage) or **div-by-64** (two-stage). `scripts/audit_workflows.py` checks.
+- **Resolution div-by-32** (single-stage) or **div-by-64** (two-stage). Two-stage = anything with `LTXVLatentUpsampler` + half-res pass1 → 2x → full-res pass2 (e.g. fml2v variants). For two-stage, init-render dim must equal pass2 output dim so downstream `LatentConcat` welds across iters — 960x544 fails (272 not div-32 at half-res); 960x512 works. `scripts/audit_workflows.py` checks the div constraint.
 - **`snap_boundaries=True`** (default) lets `overlap_seconds` change without schedule re-authoring.
 - **Iterations auto-track audio length.** `AudioLoopPlanner.total_iterations → TensorLoopOpen.iterations_in` is wired in every shipped workflow. For short tests, drag in an `INTConstant` and rewire — recipe in `docs/guides/debugging_guide.md`. Audit: `iterations_autowired` (F5).
 

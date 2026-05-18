@@ -19,6 +19,7 @@ Single source of truth for LTX 2.3 dimension config in shipped workflows. The us
 | Rule | Source | Why |
 |---|---|---|
 | `width % 32 == 0`, `height % 32 == 0` (snap DOWN) | LTX 2.3 single-stage architecture | Patch-size-32 spatial transformer; off-grid dimensions break the conv stem |
+| `width % 64 == 0`, `height % 64 == 0` (two-stage only) | LTX 2.3 two-pass refine (`LTXVLatentUpsampler` workflows) | Half-res pass1 = full-res / 2 must itself stay div-32; full must be div-64. 960×544 fails (272 not div-32); 960×512 works. fml2v variants need this; canonical single-pass loop doesn't. |
 | `(frames - 1) % 8 == 0` (snap DOWN) | Video VAE temporal compression | Encoder formula `latent = (pixel - 1) // 8 + 1`; non-conforming `length` is silently floored by `EmptyLTXVLatentVideo` (verified at `comfy_extras/nodes_lt.py:36`) |
 | `actual_seconds = frames / fps` (always self-consistent) | Internal | Eliminates `length / fps != window_seconds` drift between consumer widgets |
 
