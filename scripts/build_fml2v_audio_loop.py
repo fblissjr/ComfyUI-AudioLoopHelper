@@ -363,7 +363,7 @@ def phase2_loop_math_and_audio(ed: WorkflowEditor, *, verbose: bool = True) -> N
     log(f"= Stashed Phase 2 node IDs in wf['properties']['build_fml2v_phase2']")
 
 
-def phase3_conditioning(_ed: WorkflowEditor, *, _verbose: bool = True) -> None:
+def phase3_conditioning(ed: WorkflowEditor, *, verbose: bool = True) -> None:  # noqa: ARG001
     """Phase 3: TimestampPromptScheduleBatchEncode + bypassed parallel CLIPTextEncode
     + nag_cond_video CLIPTextEncode + two ConditioningSelectByIteration.
 
@@ -372,7 +372,7 @@ def phase3_conditioning(_ed: WorkflowEditor, *, _verbose: bool = True) -> None:
     print("[Phase 3] (not yet implemented)")
 
 
-def phase4_initial_render(_ed: WorkflowEditor, *, _verbose: bool = True) -> None:
+def phase4_initial_render(ed: WorkflowEditor, *, verbose: bool = True) -> None:  # noqa: ARG001
     """Phase 4: EmptyLTXVLatentVideo + LTXVImgToVideoInplaceKJ + LTXVAddGuideMulti
     (multi-frame) + LTXVConcatAVLatent + init CFGGuider + RandomNoise + sampler
     -> Set_initial_latent + Set_reference_latent.
@@ -382,7 +382,7 @@ def phase4_initial_render(_ed: WorkflowEditor, *, _verbose: bool = True) -> None
     print("[Phase 4] (not yet implemented)")
 
 
-def phase5_loop_body(_ed: WorkflowEditor, *, _verbose: bool = True) -> None:
+def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:  # noqa: ARG001
     """Phase 5: TensorLoopOpen + flat-canvas TWO-PASS loop body + TensorLoopClose.
 
     Option B scope (two-pass refine inside loop body). Full topology spec
@@ -396,7 +396,7 @@ def phase5_loop_body(_ed: WorkflowEditor, *, _verbose: bool = True) -> None:
     print("[Phase 5] (Option B two-pass topology, not yet implemented)")
 
 
-def phase6_assembly(_ed: WorkflowEditor, *, _verbose: bool = True) -> None:
+def phase6_assembly(ed: WorkflowEditor, *, verbose: bool = True) -> None:  # noqa: ARG001
     """Phase 6: LatentConcat + TrimVideoLatentToAudio + LTXVTiledVAEDecode +
     TrimImageBatchToAudio + RunIdPrefix + VHS_VideoCombine. Add LoopConfigValidator.
 
