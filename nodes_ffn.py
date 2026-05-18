@@ -242,8 +242,8 @@ class _FFNPatch:
             return types.MethodType(_fallback, obj)
 
         logger.log_scale_path_once(path1)
-        s1_float = float(s1_tensor.item())
-        s2_float = float(s2_tensor.item())
+        s1_float = s1_tensor.item()
+        s2_float = s2_tensor.item()
 
         def wrapped_forward(self_module, x, *args, **kwargs):
             # Re-resolve weight at call time so we pick up the

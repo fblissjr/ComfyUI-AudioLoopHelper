@@ -222,10 +222,10 @@ def test_patched_forward_short_seq_single_call():
     # as a Python float (Triton constant-folds scalars; passing a tensor
     # makes it a pointer<fp32> arg and the kernel multiply fails).
     assert call_args[1] is ff.net[0].proj.weight
-    assert call_args[2] == float(ff.net[0].proj.scale_weight.item())
+    assert call_args[2] == ff.net[0].proj.scale_weight.item()
     assert isinstance(call_args[2], float)
     assert call_args[3] is ff.net[2].weight
-    assert call_args[4] == float(ff.net[2].scale_weight.item())
+    assert call_args[4] == ff.net[2].scale_weight.item()
     assert isinstance(call_args[4], float)
 
 
@@ -287,9 +287,9 @@ def test_patched_forward_unwraps_quantized_tensor_for_sage_ffn():
     # Scales are passed as Python floats (Triton kernel ABI).
     assert call_args[1] is ff.net[0].proj.weight._qdata
     assert call_args[3] is ff.net[2].weight._qdata
-    assert call_args[2] == float(ff.net[0].proj.weight._params.scale.item())
+    assert call_args[2] == ff.net[0].proj.weight._params.scale.item()
     assert isinstance(call_args[2], float)
-    assert call_args[4] == float(ff.net[2].weight._params.scale.item())
+    assert call_args[4] == ff.net[2].weight._params.scale.item()
     assert isinstance(call_args[4], float)
 
 
