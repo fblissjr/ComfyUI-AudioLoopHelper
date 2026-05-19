@@ -1408,6 +1408,7 @@ def phase6_assembly(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     )
     ed.add_link(_BENCH_VAE_DECODE, 0, head_trim_id, 0, "IMAGE")
     ed.add_link(trim_audio_id, 0, head_trim_id, 1, "AUDIO")
+    ed.add_link(fp_id, 4, head_trim_id, 3, "INT")                   # fps ← FramePlanner.fps_int (SSoT)
 
     # --- 5. TrimImageBatchToAudio (exact-frame clip post-decode + post-warmup-trim) ---
     trim_img_id = _add_from_template(
