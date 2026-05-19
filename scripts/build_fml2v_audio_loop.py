@@ -1078,6 +1078,26 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     ed.add_link(empty_p1_id, 0, mask_id, 0, "LATENT")               # video_latent ← empty (half-res)
     ed.add_link(audio_slice_id, 0, mask_id, 1, "LATENT")            # audio_latent
 
+    # LTXVConditioning for the loop body: stamps frame_rate on BOTH pos
+    # and neg per CLAUDE.md's loop-body invariant — "Loop-body CONDITIONING
+    # must carry frame_rate=25.0. Missing → identity drift iter-over-iter."
+    # The selector_loop's positive output already carries frame_rate via the
+    # batch encoder's stamp, but the benchmark's #11 negative CLIPTextEncode
+    # does not — without this wrap, only positive has the temporal pos-embed
+    # scale, the model's audio/video cross-attention positions misalign
+    # between iters, and the output looks like "bleeding/blending of other
+    # images" instead of coherent per-iter content. Init render does the
+    # same stamping via LTXVConditioning #10 — this is its loop-body twin.
+    ltxv_cond_loop_id = _add_from_template(
+        ed, "LTXVConditioning", (-1000, 1700),
+        widget_values=[25],
+        title="LTXVConditioning (loop body — stamp frame_rate on pos/neg)",
+        size=(290, 100),
+    )
+    ed.add_link(sel_loop_id, 0, ltxv_cond_loop_id, 0, "CONDITIONING")
+    ed.add_link(_BENCH_NEGATIVE_ENCODER, 0, ltxv_cond_loop_id, 1, "CONDITIONING")
+    ed.add_link(fp_id, 5, ltxv_cond_loop_id, 2, "FLOAT")            # frame_rate ← FramePlanner.fps_float (SSoT)
+
     # LTXVAddLatentGuide: per-iter trailing init anchor (latent_idx=-1).
     add_guide_id = _add_from_template(
         ed, "LTXVAddLatentGuide", (-600, 1800),
@@ -1086,8 +1106,8 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
         size=(290, 180),
     )
     ed.add_link(get_vae_id, 0, add_guide_id, 0, "VAE")
-    ed.add_link(sel_loop_id, 0, add_guide_id, 1, "CONDITIONING")    # positive ← selector_loop
-    ed.add_link(_BENCH_NEGATIVE_ENCODER, 0, add_guide_id, 2, "CONDITIONING")  # negative
+    ed.add_link(ltxv_cond_loop_id, 0, add_guide_id, 1, "CONDITIONING")    # positive ← LTXVConditioning_loop.pos (stamped)
+    ed.add_link(ltxv_cond_loop_id, 1, add_guide_id, 2, "CONDITIONING")    # negative ← LTXVConditioning_loop.neg (stamped)
     ed.add_link(mask_id, 0, add_guide_id, 3, "LATENT")              # latent ← mask.video
     ed.add_link(vae_encode_id, 0, add_guide_id, 4, "LATENT")        # guiding_latent
     ed.add_link(init_strength_id, 0, add_guide_id, 5, "FLOAT")      # strength ← FloatConstant 0.7
@@ -1215,10 +1235,12 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
 
     # Between cropguides (#2222) currently has latent ← #18 (init render) +
     # pos/neg ← benchmark namespace GetNodes. Rewire to loop-body sources.
-    ed.rewire_input(_BENCH_BETWEEN_CROPGUIDES, 0, sel_loop_id, 0, "CONDITIONING")
-    ed.rewire_input(_BENCH_BETWEEN_CROPGUIDES, 1, _BENCH_NEGATIVE_ENCODER, 0, "CONDITIONING")
+    # Use the loop-body LTXVConditioning (#ltxv_cond_loop_id) so both pos and
+    # neg carry frame_rate=25 — same invariant as the pass1 wiring above.
+    ed.rewire_input(_BENCH_BETWEEN_CROPGUIDES, 0, ltxv_cond_loop_id, 0, "CONDITIONING")
+    ed.rewire_input(_BENCH_BETWEEN_CROPGUIDES, 1, ltxv_cond_loop_id, 1, "CONDITIONING")
     ed.rewire_input(_BENCH_BETWEEN_CROPGUIDES, 2, sep_p1_post_id, 0, "LATENT")
-    log(f"  rewire CropGuides#{_BENCH_BETWEEN_CROPGUIDES} (latent ← post-pass1 separate.video)")
+    log(f"  rewire CropGuides#{_BENCH_BETWEEN_CROPGUIDES} (pos/neg ← LTXVConditioning_loop #{ltxv_cond_loop_id}, latent ← post-pass1 separate)")
 
     # Pre-pass2 ConcatAV (#34) currently has audio ← #18.audio (init render);
     # rewire to loop body pass1's mask.audio (same audio across both passes).
@@ -1310,6 +1332,7 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
         "smart_resize_p1": smart_resize_p1_id,
         "preprocess_p1": preprocess_p1_id,
         "vae_encode_init_guide": vae_encode_id,
+        "ltxv_conditioning_loop": ltxv_cond_loop_id,
         "audio_slice": audio_slice_id,
         "overlap_trim_output": overlap_trim_id,
         "av_mask": mask_id,
