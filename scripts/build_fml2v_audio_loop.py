@@ -733,6 +733,7 @@ _BENCH_PASS2_CFG_GUIDER = 8            # CFGGuider (pass2)
 _BENCH_PASS2_SAMPLER = 21              # SamplerCustomAdvanced (pass2)
 _BENCH_PASS2_SIGMAS = 216              # ManualSigmas 4-value canonical
 _BENCH_PASS2_UPSAMPLER = 25            # LTXVLatentUpsampler 2x spatial
+_BENCH_PASS2_UPSCALE_MODEL_LOADER = 182  # LatentUpscaleModelLoader feeding the upsampler
 _BENCH_PRE_PASS2_CONCAT_AV = 34        # LTXVConcatAVLatent (re-attach audio)
 _BENCH_POST_PASS2_SEPARATE = 146       # LTXVSeparateAVLatent (post-pass2)
 _BENCH_PRE_PASS2_GUIDE_MULTI = 2182    # LTXVAddGuideMulti N=2 first+last
@@ -1099,14 +1100,22 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     )
     ed.add_link(sampler_p1_id, 0, sep_p1_post_id, 0, "LATENT")
 
-    # Unbypass and rewire benchmark's between+pass2 chain.
-    for nid in [_BENCH_BETWEEN_CROPGUIDES, _BENCH_PASS2_UPSAMPLER,
-                _BENCH_PRE_PASS2_GUIDE_MULTI, _BENCH_PRE_PASS2_CONCAT_AV,
-                _BENCH_PASS2_KSAMPLER, _BENCH_PASS2_SIGMAS,
-                _BENCH_PASS2_CFG_GUIDER, _BENCH_PASS2_SAMPLER,
-                _BENCH_POST_PASS2_SEPARATE]:
+    # Unbypass and rewire benchmark's between+pass2 chain. The upscale
+    # model loader #182 must un-bypass alongside the upsampler that consumes
+    # it via Set_/Get_upscale_model — without the loader, the bus carries
+    # None, the upsampler silently passes its input through, and pass2
+    # ends up sampling at half-res (= phase 6 LatentConcat shape mismatch).
+    pass2_unbypass = [
+        _BENCH_BETWEEN_CROPGUIDES, _BENCH_PASS2_UPSAMPLER,
+        _BENCH_PASS2_UPSCALE_MODEL_LOADER,
+        _BENCH_PRE_PASS2_GUIDE_MULTI, _BENCH_PRE_PASS2_CONCAT_AV,
+        _BENCH_PASS2_KSAMPLER, _BENCH_PASS2_SIGMAS,
+        _BENCH_PASS2_CFG_GUIDER, _BENCH_PASS2_SAMPLER,
+        _BENCH_POST_PASS2_SEPARATE,
+    ]
+    for nid in pass2_unbypass:
         ed.find_node(nid)["mode"] = 0
-    log(f"  unbypassed #{_BENCH_BETWEEN_CROPGUIDES}, #{_BENCH_PASS2_UPSAMPLER}, #{_BENCH_PRE_PASS2_GUIDE_MULTI}, #{_BENCH_PRE_PASS2_CONCAT_AV}, #{_BENCH_PASS2_KSAMPLER}, #{_BENCH_PASS2_SIGMAS}, #{_BENCH_PASS2_CFG_GUIDER}, #{_BENCH_PASS2_SAMPLER}, #{_BENCH_POST_PASS2_SEPARATE}")
+    log("  unbypassed " + ", ".join(f"#{n}" for n in pass2_unbypass))
 
     # Between cropguides (#2222) currently has latent ← #18 (init render) +
     # pos/neg ← benchmark namespace GetNodes. Rewire to loop-body sources.
