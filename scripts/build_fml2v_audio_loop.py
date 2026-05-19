@@ -1113,12 +1113,27 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     ed.add_link(add_guide_id, 2, crop_p1_id, 2, "LATENT")
 
     # AdaIN with reference from initial-render bus.
+    #
+    # BYPASSED-BY-DEFAULT. AdaIN normalizes pass1's latent against the init
+    # render's reference (per-channel std/mean match). When the loop body's
+    # pass1 produces a low-variance output for any channel (= std near 0),
+    # AdaIN divides by ~zero and emits inf/NaN that propagates through pass2
+    # and lands in the final pixel batch as NaN-cast-to-zero = BLACK frames.
+    # Observed empirically: 59 s render → first 16 s lip-synced (init render)
+    # → remainder pure black with VHS warning "invalid value encountered in
+    # cast" on uint8 conversion. The loop body lacks LatentContextExtract
+    # priming (removed earlier for half-res/full-res shape reasons) so pass1
+    # starts from a near-empty latent and the sampler often doesn't develop
+    # enough per-channel variance for AdaIN to operate safely. Leaving the
+    # node on canvas so users can opt in once a more variance-rich pass1
+    # path is wired (e.g. ContextExtract via pass2-side downscale).
     get_ref_id = _add_getnode(ed, "reference_latent", (0, 1950), "LATENT")
     adain_p1_id = _add_from_template(
         ed, "LTXVAdainLatent", (0, 1800),
         widget_values=[0.2, False],
-        title="LTXVAdainLatent (pass1 reference)",
+        title="LTXVAdainLatent (BYPASSED; toggle on once variance-rich pass1 is in place)",
         size=(290, 100),
+        mode=4,
     )
     ed.add_link(crop_p1_id, 2, adain_p1_id, 0, "LATENT")
     ed.add_link(get_ref_id, 0, adain_p1_id, 1, "LATENT")
@@ -1233,12 +1248,19 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     log("[Phase 5d] Post-pass2 AdaIN + IterationCleanup + TLC")
 
     # Final AdaIN: refines pass2 video latent against reference_latent.
+    #
+    # BYPASSED-BY-DEFAULT. Same NaN risk as the pass1 AdaIN above — if any
+    # channel of pass2's output has near-zero std (especially likely when
+    # pass1 already produced low-variance output that got upsampled), the
+    # divide-by-std produces inf/NaN that ends up in the saved mp4 as
+    # black frames. Re-enable when a variance-rich pass1/pass2 path is wired.
     get_ref_p2_id = _add_getnode(ed, "reference_latent", (1500, 1900), "LATENT")
     adain_final_id = _add_from_template(
         ed, "LTXVAdainLatent", (1500, 1800),
         widget_values=[0.2, False],
-        title="LTXVAdainLatent (post-pass2 final)",
+        title="LTXVAdainLatent (BYPASSED; toggle on once variance-rich pass2 is in place)",
         size=(290, 100),
+        mode=4,
     )
     ed.add_link(_BENCH_POST_PASS2_SEPARATE, 0, adain_final_id, 0, "LATENT")  # latents ← post-pass2 video
     ed.add_link(get_ref_p2_id, 0, adain_final_id, 1, "LATENT")

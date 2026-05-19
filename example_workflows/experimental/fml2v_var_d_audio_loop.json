@@ -8352,7 +8352,7 @@
       ],
       "flags": {},
       "order": 0,
-      "mode": 0,
+      "mode": 4,
       "inputs": [
         {
           "localized_name": "latents",
@@ -8386,7 +8386,7 @@
         0.2,
         false
       ],
-      "title": "LTXVAdainLatent (pass1 reference)"
+      "title": "LTXVAdainLatent (BYPASSED; toggle on once variance-rich pass1 is in place)"
     },
     {
       "id": 2346,
@@ -8801,7 +8801,7 @@
       ],
       "flags": {},
       "order": 0,
-      "mode": 0,
+      "mode": 4,
       "inputs": [
         {
           "localized_name": "latents",
@@ -8835,7 +8835,7 @@
         0.2,
         false
       ],
-      "title": "LTXVAdainLatent (post-pass2 final)"
+      "title": "LTXVAdainLatent (BYPASSED; toggle on once variance-rich pass2 is in place)"
     },
     {
       "id": 2356,
