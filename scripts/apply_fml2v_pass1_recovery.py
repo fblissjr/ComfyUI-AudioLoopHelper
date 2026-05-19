@@ -29,14 +29,6 @@ alone recovers pass1 variance, pass2 should produce variance-rich output
 naturally — layering AdaIN_final on a still-broken pass1 confuses the
 signal.
 
-Diagnostic outcomes for loop body frames (~20-37s):
-  - Coherent video → variance starvation was the cause; AdaIN_p1
-    normalizes acceptable variance into a usable latent.
-  - Yellow stripes persist → variance wasn't the bottleneck;
-    issue is elsewhere (sigmas, conditioning routing, etc).
-  - Black frames (NaN) → confirms variance starvation; divide-by-
-    near-zero std produces NaN that propagates through pass2.
-
 Usage:
     uv run --group dev python scripts/apply_fml2v_pass1_recovery.py
     uv run --group dev python scripts/apply_fml2v_pass1_recovery.py --revert

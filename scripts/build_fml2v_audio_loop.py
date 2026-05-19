@@ -28,8 +28,6 @@ Usage::
 from __future__ import annotations
 
 import argparse
-import functools
-import json
 import shutil
 import sys
 from pathlib import Path
@@ -40,60 +38,8 @@ from workflow_utils import WorkflowEditor  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCE = REPO_ROOT / "example_workflows" / "benchmark_workflows" / "fml2v_var_d_audio_input.json"
 OUTPUT = REPO_ROOT / "example_workflows" / "experimental" / "fml2v_var_d_audio_loop.json"
-TEMPLATES_PATH = Path(__file__).parent / "_node_templates_fml2v.json"
 
-
-@functools.lru_cache(maxsize=1)
-def _templates() -> dict[str, dict]:
-    return json.loads(TEMPLATES_PATH.read_text())
-
-
-def _add_from_template(
-    ed: WorkflowEditor,
-    type_name: str,
-    pos: tuple[int, int],
-    *,
-    widget_values: list | None = None,
-    title: str | None = None,
-    size: tuple[int, int] = (270, 100),
-    mode: int = 0,
-) -> int:
-    """Insert a new top-level node from the saved template JSON.
-
-    Slot dicts copy from template, but every input ``link`` is reset to None
-    and every output ``links`` to an empty list — caller wires after.
-    """
-    tmpl = _templates()[type_name]
-    node_id = ed.next_node_id()
-    inputs = []
-    for inp in tmpl.get("inputs", []):
-        inp_copy = {k: v for k, v in inp.items() if k != "link"}
-        inp_copy["link"] = None
-        inputs.append(inp_copy)
-    outputs = []
-    for out in tmpl.get("outputs", []):
-        out_copy = {k: v for k, v in out.items() if k != "links"}
-        out_copy["links"] = []
-        outputs.append(out_copy)
-    node = {
-        "id": node_id,
-        "type": type_name,
-        "pos": list(pos),
-        "size": list(size),
-        "flags": {},
-        "order": 0,
-        "mode": mode,
-        "inputs": inputs,
-        "outputs": outputs,
-        "properties": dict(tmpl.get("properties", {})),
-        "widgets_values": list(widget_values) if widget_values is not None else (
-            list(tmpl.get("widgets_values") or [])
-        ),
-    }
-    if title:
-        node["title"] = title
-    ed.add_node(node)
-    return node_id
+from _helpers._fml2v_helpers import _add_from_template  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
