@@ -129,11 +129,22 @@ def _apply(ed: WorkflowEditor) -> None:
     print(f"    .latent ← TLO #{tlo_id} previous_value (slot 1)")
     print(f"    .overlap_latent_frames ← AudioLoopController #{alc_id}.overlap_latent_frames (slot 6)")
 
-    vst_slot = WorkflowEditor.find_input_slot(ed.find_node(AUDIO_VIDEO_MASK), "video_start_time")
-    ed.add_link(alc_id, 7, AUDIO_VIDEO_MASK, vst_slot, "FLOAT")
-    print(f"  + AudioVideoMask #{AUDIO_VIDEO_MASK}.video_start_time ← AudioLoopController.overlap_seconds (slot 7)")
-
+    # AudioVideoMask timing: equal audio_start/end = empty range = audio
+    # frozen across the whole window. CLAUDE.md flags this as a footgun
+    # ("audio_start_time = audio_end_time = window_size ... Don't change").
+    fp_id = ed.wf["properties"]["build_fml2v_phase2"]["frame_planner"]
     avm = ed.find_node(AUDIO_VIDEO_MASK)
+    print(f"  wire AudioVideoMask #{AUDIO_VIDEO_MASK} timing inputs:")
+    for slot_name, src_id, src_slot, src_label in [
+        ("video_start_time", alc_id, 7, "AudioLoopController.overlap_seconds"),
+        ("video_end_time", fp_id, 3, "FramePlanner.actual_seconds"),
+        ("audio_start_time", fp_id, 3, "FramePlanner.actual_seconds"),
+        ("audio_end_time", fp_id, 3, "FramePlanner.actual_seconds"),
+    ]:
+        slot = WorkflowEditor.find_input_slot(avm, slot_name)
+        ed.add_link(src_id, src_slot, AUDIO_VIDEO_MASK, slot, "FLOAT")
+        print(f"    .{slot_name} ← #{src_id}.{src_label}")
+
     vl_slot = WorkflowEditor.find_input_slot(avm, "video_latent")
     ed.rewire_input(AUDIO_VIDEO_MASK, vl_slot, extract_id, 0, "LATENT")
     print(f"  rewire AudioVideoMask #{AUDIO_VIDEO_MASK}.video_latent ← ContextExtract (was ← EmptyLatent_p1 #{empty_p1_id})")
