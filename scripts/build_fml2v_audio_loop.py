@@ -741,12 +741,31 @@ def phase4_initial_render(ed: WorkflowEditor, *, verbose: bool = True) -> None:
         ed.rewire_input(_BENCH_TOP_LEVEL_SET_MODEL, 0, top_sage_id, 0, "MODEL")
         log(f"+ AudioLoopHelperSageAttention #{top_sage_id} top-level (between PowerLoraLoader #{_BENCH_TOP_LEVEL_POWER_LORA} and Set_model #{_BENCH_TOP_LEVEL_SET_MODEL})")
 
-    # --- 6. Insert LTXVImgToVideoInplaceKJ between EmptyLatent and AddGuideMulti ---
+    # --- 6. Insert LTXVImgToVideoInplaceKJ between EmptyLatent and AddGuideMulti.
+    #
+    #    BYPASSED BY DEFAULT. The benchmark fml2v_var_d_audio_input.json that
+    #    this build is forked from uses ONLY AddGuideMulti #2221 for init-image
+    #    anchoring (widgets [3, 0, 0.7, ...] — first frame as a SOFT guide at
+    #    strength 0.7). It does NOT use an additional InplaceKJ hard anchor.
+    #
+    #    Adding InplaceKJ (strength=1 HARD at frame 0) on top of AddGuideMulti's
+    #    soft guide produces a ~3 s "easing out" warmup at the start of each
+    #    render — the sampler reconciles the hard anchor with the rest of the
+    #    distribution over the first ~10 latent frames. Observed empirically
+    #    (first 3 s of mp4 = no synced motion, then audio + lips snap on).
+    #    Benchmark renders don't have this because they don't double-anchor.
+    #
+    #    Keeping the node on canvas (mode=4) lets users toggle it on if a
+    #    particular init image / song combination benefits from the harder
+    #    anchor. Phase 4's `inplace_id` is preserved in the stash for the
+    #    same reason; the latent wire to AddGuideMulti.latent still routes
+    #    through it (bypass passes LATENT through unchanged).
     inplace_id = _add_from_template(
         ed, "LTXVImgToVideoInplaceKJ", (-2700, 2400),
         widget_values=["1", 1, 0],  # [num_images=1, strength=1, frame_idx=0]
-        title="LTXVImgToVideoInplaceKJ (frame-0 anchor)",
+        title="LTXVImgToVideoInplaceKJ (BYPASSED; toggle to add hard frame-0 anchor)",
         size=(290, 130),
+        mode=4,
     )
     ed.add_link(get_vae_id, 0, inplace_id, 0, "VAE")
     ed.add_link(_BENCH_EMPTY_LATENT, 0, inplace_id, 1, "LATENT")
@@ -1351,28 +1370,45 @@ def phase6_assembly(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     ed.rewire_input(_BENCH_VAE_DECODE, 1, trim_latent_id, 0, "LATENT")
     log(f"  unbypass + rewire LTXVTiledVAEDecode #{_BENCH_VAE_DECODE}.latents ← TrimVideoLatentToAudio #{trim_latent_id}")
 
-    # --- 4. TrimImageBatchToAudio (exact-frame clip post-decode) ---
+    # --- 4. LTXHeadTrim: drops first N latent-frames' worth of pixel + the
+    #        matching audio span. Default widget=0 = no-op pass-through.
+    #
+    #        Originally added to combat a ~3 s warmup at the start of saved
+    #        mp4s, traced to InplaceKJ + AddGuideMulti double-anchoring frame
+    #        0. Root cause fixed in Phase 4 (InplaceKJ now bypassed-by-default).
+    #        Kept on canvas as a tunable safety net if a particular init
+    #        image / song still produces visible filler frames.
+    head_trim_id = _add_from_template(
+        ed, "LTXHeadTrim", (3200, 1950),
+        widget_values=[0, 25],  # 0 latent frames = no-op pass-through
+        title="LTXHeadTrim (filler-frame safety net; default 0 = no-op)",
+        size=(290, 130),
+    )
+    ed.add_link(_BENCH_VAE_DECODE, 0, head_trim_id, 0, "IMAGE")
+    ed.add_link(trim_audio_id, 0, head_trim_id, 1, "AUDIO")
+
+    # --- 5. TrimImageBatchToAudio (exact-frame clip post-decode + post-warmup-trim) ---
     trim_img_id = _add_from_template(
-        ed, "TrimImageBatchToAudio", (3200, 1800),
+        ed, "TrimImageBatchToAudio", (3500, 1800),
         widget_values=[25],
         title="TrimImageBatchToAudio (exact-frame clip)",
         size=(290, 100),
     )
-    ed.add_link(_BENCH_VAE_DECODE, 0, trim_img_id, 0, "IMAGE")
-    ed.add_link(trim_audio_id, 0, trim_img_id, 1, "AUDIO")
+    ed.add_link(head_trim_id, 0, trim_img_id, 0, "IMAGE")           # ← warmup-trimmed pixels
+    ed.add_link(head_trim_id, 1, trim_img_id, 1, "AUDIO")           # ← warmup-trimmed audio
     ed.add_link(fp_id, 4, trim_img_id, 2, "INT")                    # fps_int
 
-    # --- 5. Rewire VHS_VideoCombine direct from the trim chain. F14 audit
+    # --- 6. Rewire VHS_VideoCombine direct from the trim chain. F14 audit
     #        requires VHS.images to come directly from TrimImageBatchToAudio
-    #        (not via a SetNode bus). Option B: audio also direct from
-    #        TrimAudio (skip the LTXVAudioVAEDecode round-trip; audio frozen
-    #        via mask=0 throughout, so source is bit-identical). Benchmark's
-    #        Set_final_video / Set_final_audio + their Get-side consumers
-    #        become orphan after this rewire; left on canvas as no-ops
-    #        rather than stripped (cosmetic-only).
+    #        (not via a SetNode bus). VHS.audio sources from LTXHeadTrim's
+    #        trimmed audio (Option B passthrough, now post-warmup-trim so
+    #        audio + video stay in lockstep). Benchmark's Set_final_video /
+    #        Set_final_audio + their Get-side consumers become orphan after
+    #        this rewire; left on canvas as no-ops rather than stripped.
     ed.rewire_input(_BENCH_VHS_COMBINE, 0, trim_img_id, 0, "IMAGE")
-    ed.rewire_input(_BENCH_VHS_COMBINE, 1, trim_audio_id, 0, "AUDIO")
-    log(f"  rewire VHS_VideoCombine #{_BENCH_VHS_COMBINE}.images ← TrimImageBatchToAudio (F14); .audio ← TrimAudio (Option B)")
+    ed.rewire_input(_BENCH_VHS_COMBINE, 1, head_trim_id, 1, "AUDIO")
+    log(f"+ LTXHeadTrim #{head_trim_id} (widget default 0 = no-op pass-through; safety net)")
+    log(f"  rewire VHS_VideoCombine #{_BENCH_VHS_COMBINE}.images ← TrimImageBatchToAudio (F14); .audio ← LTXHeadTrim (Option B, warmup-trimmed)")
 
     # --- 6. RunIdPrefix → VHS_VideoCombine.filename_prefix (F15) ---
     run_id_id = _add_from_template(

@@ -1922,5 +1922,50 @@
       "Node name for S&R": "SetLatentNoiseMask"
     },
     "widgets_values": []
+  },
+  "LTXHeadTrim": {
+    "type": "LTXHeadTrim",
+    "inputs": [
+      {
+        "name": "images",
+        "type": "IMAGE"
+      },
+      {
+        "name": "audio",
+        "type": "AUDIO"
+      },
+      {
+        "name": "trim_latent_frames",
+        "type": "INT",
+        "widget": {
+          "name": "trim_latent_frames"
+        }
+      },
+      {
+        "name": "fps",
+        "type": "INT",
+        "widget": {
+          "name": "fps"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name": "images",
+        "type": "IMAGE"
+      },
+      {
+        "name": "audio",
+        "type": "AUDIO"
+      }
+    ],
+    "properties": {
+      "Node name for S&R": "LTXHeadTrim",
+      "aux_id": "fblissjr/ComfyUI-AudioLoopHelper"
+    },
+    "widgets_values": [
+      0,
+      25
+    ]
   }
 }

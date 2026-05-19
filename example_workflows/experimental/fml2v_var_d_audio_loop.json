@@ -1,8 +1,8 @@
 {
   "id": "0775f0bd-e4f2-40cc-85b7-45217564af17",
   "revision": 0,
-  "last_node_id": 2363,
-  "last_link_id": 4282,
+  "last_node_id": 2364,
+  "last_link_id": 4284,
   "nodes": [
     {
       "id": 92,
@@ -5339,13 +5339,13 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 4275
+          "link": 4277
         },
         {
           "name": "audio",
           "shape": 7,
           "type": "AUDIO",
-          "link": 4276
+          "link": 4278
         },
         {
           "name": "meta_batch",
@@ -5373,7 +5373,7 @@
           "widget": {
             "name": "filename_prefix"
           },
-          "link": 4277
+          "link": 4279
         }
       ],
       "outputs": [
@@ -5981,7 +5981,7 @@
           "links": [
             4160,
             4164,
-            4281
+            4283
           ]
         },
         {
@@ -5990,7 +5990,7 @@
           "links": [
             4161,
             4165,
-            4282
+            4284
           ]
         },
         {
@@ -6000,7 +6000,7 @@
             4162,
             4166,
             4213,
-            4280
+            4282
           ]
         },
         {
@@ -6015,7 +6015,7 @@
           "type": "INT",
           "links": [
             4270,
-            4274
+            4276
           ]
         },
         {
@@ -6076,7 +6076,7 @@
           "links": [
             4195,
             4197,
-            4279
+            4281
           ]
         }
       ],
@@ -6417,8 +6417,7 @@
             4196,
             4269,
             4273,
-            4276,
-            4278
+            4280
           ]
         }
       ],
@@ -7046,7 +7045,7 @@
       ],
       "flags": {},
       "order": 0,
-      "mode": 0,
+      "mode": 4,
       "inputs": [
         {
           "name": "vae",
@@ -7085,7 +7084,7 @@
         1,
         0
       ],
-      "title": "LTXVImgToVideoInplaceKJ (frame-0 anchor)"
+      "title": "LTXVImgToVideoInplaceKJ (BYPASSED; toggle to add hard frame-0 anchor)"
     },
     {
       "id": 2322,
@@ -9063,14 +9062,14 @@
     },
     {
       "id": 2361,
-      "type": "TrimImageBatchToAudio",
+      "type": "LTXHeadTrim",
       "pos": [
         3200,
-        1800
+        1950
       ],
       "size": [
         290,
-        100
+        130
       ],
       "flags": {},
       "order": 0,
@@ -9087,12 +9086,20 @@
           "link": 4273
         },
         {
+          "name": "trim_latent_frames",
+          "type": "INT",
+          "widget": {
+            "name": "trim_latent_frames"
+          },
+          "link": null
+        },
+        {
           "name": "fps",
           "type": "INT",
           "widget": {
             "name": "fps"
           },
-          "link": 4274
+          "link": null
         }
       ],
       "outputs": [
@@ -9100,7 +9107,68 @@
           "name": "images",
           "type": "IMAGE",
           "links": [
-            4275
+            4274
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            4275,
+            4278
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LTXHeadTrim",
+        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper"
+      },
+      "widgets_values": [
+        0,
+        25
+      ],
+      "title": "LTXHeadTrim (filler-frame safety net; default 0 = no-op)"
+    },
+    {
+      "id": 2362,
+      "type": "TrimImageBatchToAudio",
+      "pos": [
+        3500,
+        1800
+      ],
+      "size": [
+        290,
+        100
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 4274
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 4275
+        },
+        {
+          "name": "fps",
+          "type": "INT",
+          "widget": {
+            "name": "fps"
+          },
+          "link": 4276
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            4277
           ]
         }
       ],
@@ -9113,7 +9181,7 @@
       "title": "TrimImageBatchToAudio (exact-frame clip)"
     },
     {
-      "id": 2362,
+      "id": 2363,
       "type": "RunIdPrefix",
       "pos": [
         2300,
@@ -9132,7 +9200,7 @@
           "name": "video_prefix",
           "type": "STRING",
           "links": [
-            4277
+            4279
           ]
         },
         {
@@ -9151,7 +9219,7 @@
       "title": "RunIdPrefix"
     },
     {
-      "id": 2363,
+      "id": 2364,
       "type": "LoopConfigValidator",
       "pos": [
         2600,
@@ -9168,7 +9236,7 @@
         {
           "name": "audio",
           "type": "AUDIO",
-          "link": 4278
+          "link": 4280
         },
         {
           "name": "window_seconds",
@@ -9184,7 +9252,7 @@
           "widget": {
             "name": "length"
           },
-          "link": 4280
+          "link": 4282
         },
         {
           "name": "width",
@@ -9192,7 +9260,7 @@
           "widget": {
             "name": "width"
           },
-          "link": 4281
+          "link": 4283
         },
         {
           "name": "height",
@@ -9200,7 +9268,7 @@
           "widget": {
             "name": "height"
           },
-          "link": 4282
+          "link": 4284
         },
         {
           "name": "overlap_seconds",
@@ -9208,7 +9276,7 @@
           "widget": {
             "name": "overlap_seconds"
           },
-          "link": 4279
+          "link": 4281
         },
         {
           "name": "keyframe_schedule",
@@ -10965,73 +11033,89 @@
     ],
     [
       4274,
-      2302,
-      4,
-      2361,
-      2,
-      "INT"
-    ],
-    [
-      4275,
       2361,
       0,
-      43,
+      2362,
       0,
       "IMAGE"
     ],
     [
-      4276,
-      2308,
-      0,
-      43,
+      4275,
+      2361,
+      1,
+      2362,
       1,
       "AUDIO"
+    ],
+    [
+      4276,
+      2302,
+      4,
+      2362,
+      2,
+      "INT"
     ],
     [
       4277,
       2362,
       0,
       43,
-      5,
-      "STRING"
+      0,
+      "IMAGE"
     ],
     [
       4278,
-      2308,
-      0,
-      2363,
-      0,
+      2361,
+      1,
+      43,
+      1,
       "AUDIO"
     ],
     [
       4279,
+      2363,
+      0,
+      43,
+      5,
+      "STRING"
+    ],
+    [
+      4280,
+      2308,
+      0,
+      2364,
+      0,
+      "AUDIO"
+    ],
+    [
+      4281,
       2303,
       0,
-      2363,
+      2364,
       5,
       "FLOAT"
     ],
     [
-      4280,
+      4282,
       2302,
       2,
-      2363,
+      2364,
       2,
       "INT"
     ],
     [
-      4281,
+      4283,
       2302,
       0,
-      2363,
+      2364,
       3,
       "INT"
     ],
     [
-      4282,
+      4284,
       2302,
       1,
-      2363,
+      2364,
       4,
       "INT"
     ]
@@ -12391,9 +12475,9 @@
       "get_initial_for_concat": 2358,
       "latent_concat": 2359,
       "trim_video_latent_to_audio": 2360,
-      "trim_image_batch_to_audio": 2361,
-      "run_id_prefix": 2362,
-      "loop_config_validator": 2363
+      "trim_image_batch_to_audio": 2362,
+      "run_id_prefix": 2363,
+      "loop_config_validator": 2364
     }
   }
 }

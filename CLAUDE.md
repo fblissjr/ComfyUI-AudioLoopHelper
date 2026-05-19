@@ -145,6 +145,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 ## Working with Claude across sessions
 
 - **GPU contention check before any bench/render.** `mtime` of `data/runs/*/*/sage.jsonl` (per-prompt routing) within last few minutes ⇒ a sibling-repo render is likely active. Ask before starting GPU work.
+- **ComfyUI console log path**: `coderef/comfy_user/comfyui_8188.log` (current) + `coderef/comfy_user/comfyui_8188.prev.log` (previous render). Symlinked to ComfyUI's user dir; available without piping `start.sh` output to `tee`. Tail this when diagnosing a render that already crashed.
 - **`AUDIOLOOPHELPER_PER_PROMPT=1` is default in `start_experiment.sh`** (since 2026-05-01). Artifacts route under `data/runs/${RUN_ID}/${prompt_id}/`. Reader scripts auto-detect both layouts.
 - **Run `/simplify` after non-trivial code changes.** Three-agent review (reuse / quality / efficiency) catches data-flow correctness bugs that shape-only tests miss.
 - **Behavioral-regression debugging starts with workflow diff, not code.** Extract embedded workflows from the working + broken PNGs via `scripts/extract_workflow_from_png.py <png> -o <json>` (positional arg, no `--workflow` flag) and structural-diff. Code-level analysis after.
