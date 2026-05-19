@@ -1146,18 +1146,52 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     ed.add_link(_BENCH_NEGATIVE_ENCODER, 0, ltxv_cond_loop_id, 1, "CONDITIONING")
     ed.add_link(fp_id, 5, ltxv_cond_loop_id, 2, "FLOAT")            # frame_rate ← FramePlanner.fps_float (SSoT)
 
-    # LTXVAddLatentGuide: per-iter trailing init anchor (latent_idx=-1).
+    # Per-iter anchors: TWO LTXVAddLatentGuide nodes for frame 0 (hard
+    # start-frame anchor) AND frame -1 (trailing end anchor). Mirrors
+    # canonical's pattern but expressed via two AddLatentGuide calls instead
+    # of InplaceKJ+AddLatentGuide.
+    #
+    # WHY both endpoints anchored: without LatentContextExtract (removed
+    # earlier due to half-res / full-res shape mismatch in this build's
+    # two-pass topology), the loop body's pass1 starts from an empty latent
+    # plus audio cross-attn. With only ONE anchor (canonical's trailing
+    # frame), the 8-step sampler can't develop ~63 latent frames of coherent
+    # video from nothing — output drifts into the LTX 2.3 prior (yellow/
+    # black abstract patterns). Adding a frame-0 anchor at strength 1.0
+    # gives the model a hard start-of-window reference; combined with the
+    # trailing anchor at strength 0.7 it's the closest we can get to
+    # canonical's InplaceKJ+ContextExtract+AddLatentGuide triplet without
+    # a context-extract redesign.
+    #
+    # Trade-off: every iter's frame 0 = init image (same image as iter
+    # boundary), so cross-iter motion across the boundary will be slightly
+    # jerky (re-starts toward init image each iter). Acceptable for V1;
+    # the proper fix is option C (full ContextExtract reintroduction) in V2.
+    add_guide_frame0_id = _add_from_template(
+        ed, "LTXVAddLatentGuide", (-700, 1800),
+        widget_values=[0, 1.0],  # [latent_idx=0, strength=1.0 HARD start anchor]
+        title="LTXVAddLatentGuide (start-frame anchor; idx=0 strength=1.0)",
+        size=(290, 180),
+    )
+    ed.add_link(get_vae_id, 0, add_guide_frame0_id, 0, "VAE")
+    ed.add_link(ltxv_cond_loop_id, 0, add_guide_frame0_id, 1, "CONDITIONING")
+    ed.add_link(ltxv_cond_loop_id, 1, add_guide_frame0_id, 2, "CONDITIONING")
+    ed.add_link(mask_id, 0, add_guide_frame0_id, 3, "LATENT")
+    ed.add_link(vae_encode_id, 0, add_guide_frame0_id, 4, "LATENT")
+    # strength_5 widget=1.0 = HARD; no FloatConstant wire (input left at widget value)
+
     add_guide_id = _add_from_template(
-        ed, "LTXVAddLatentGuide", (-600, 1800),
-        widget_values=[-1, 0.7],  # [latent_idx=-1, strength_widget_default]
-        title="LTXVAddLatentGuide (trailing init anchor)",
+        ed, "LTXVAddLatentGuide", (-400, 1800),
+        widget_values=[-1, 0.7],  # [latent_idx=-1, strength_widget_default 0.7]
+        title="LTXVAddLatentGuide (trailing init anchor; idx=-1)",
         size=(290, 180),
     )
     ed.add_link(get_vae_id, 0, add_guide_id, 0, "VAE")
-    ed.add_link(ltxv_cond_loop_id, 0, add_guide_id, 1, "CONDITIONING")    # positive ← LTXVConditioning_loop.pos (stamped)
-    ed.add_link(ltxv_cond_loop_id, 1, add_guide_id, 2, "CONDITIONING")    # negative ← LTXVConditioning_loop.neg (stamped)
-    ed.add_link(mask_id, 0, add_guide_id, 3, "LATENT")              # latent ← mask.video
-    ed.add_link(vae_encode_id, 0, add_guide_id, 4, "LATENT")        # guiding_latent
+    # pos/neg/latent chain from the frame-0 guide's outputs (guides accumulate)
+    ed.add_link(add_guide_frame0_id, 0, add_guide_id, 1, "CONDITIONING")
+    ed.add_link(add_guide_frame0_id, 1, add_guide_id, 2, "CONDITIONING")
+    ed.add_link(add_guide_frame0_id, 2, add_guide_id, 3, "LATENT")
+    ed.add_link(vae_encode_id, 0, add_guide_id, 4, "LATENT")
     ed.add_link(init_strength_id, 0, add_guide_id, 5, "FLOAT")      # strength ← FloatConstant 0.7
 
     # F3 dual cropguides: NoLatent for cond path; with-latent for AdaIN path.
@@ -1448,6 +1482,7 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
         "audio_slice": audio_slice_id,
         "overlap_trim_output": overlap_trim_id,
         "av_mask": mask_id,
+        "add_latent_guide_frame0": add_guide_frame0_id,
         "add_latent_guide": add_guide_id,
         "crop_guides_no_latent": nocrop_id,
         "crop_guides_p1": crop_p1_id,

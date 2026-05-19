@@ -1,8 +1,8 @@
 {
   "id": "0775f0bd-e4f2-40cc-85b7-45217564af17",
   "revision": 0,
-  "last_node_id": 2373,
-  "last_link_id": 4299,
+  "last_node_id": 2374,
+  "last_link_id": 4304,
   "nodes": [
     {
       "id": 92,
@@ -752,7 +752,8 @@
             302,
             4185,
             4219,
-            4229
+            4229,
+            4234
           ]
         }
       ],
@@ -866,7 +867,7 @@
           "type": "SAMPLER",
           "links": [
             18,
-            4250
+            4255
           ]
         }
       ],
@@ -1369,7 +1370,7 @@
           "links": [
             4181,
             4202,
-            4257
+            4262
           ]
         }
       ],
@@ -1506,7 +1507,7 @@
           "type": "SIGMAS",
           "links": [
             308,
-            4251
+            4256
           ]
         }
       ],
@@ -2082,7 +2083,7 @@
         {
           "name": "noise",
           "type": "NOISE",
-          "link": 4271
+          "link": 4276
         },
         {
           "name": "guider",
@@ -3052,7 +3053,7 @@
           "type": "LATENT",
           "links": [
             3936,
-            4272
+            4277
           ]
         },
         {
@@ -3669,7 +3670,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 4269
+          "link": 4274
         },
         {
           "name": "positive",
@@ -4611,7 +4612,7 @@
         {
           "name": "latents",
           "type": "LATENT",
-          "link": 4285
+          "link": 4290
         }
       ],
       "outputs": [
@@ -4620,7 +4621,7 @@
           "type": "IMAGE",
           "links": [
             304,
-            4286
+            4291
           ]
         }
       ],
@@ -4748,7 +4749,7 @@
         {
           "name": "audio_latent",
           "type": "LATENT",
-          "link": 4268
+          "link": 4273
         }
       ],
       "outputs": [
@@ -4860,17 +4861,17 @@
         {
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 4265
+          "link": 4270
         },
         {
           "name": "negative",
           "type": "CONDITIONING",
-          "link": 4266
+          "link": 4271
         },
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 4267
+          "link": 4272
         }
       ],
       "outputs": [
@@ -5339,13 +5340,13 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 4292
+          "link": 4297
         },
         {
           "name": "audio",
           "shape": 7,
           "type": "AUDIO",
-          "link": 4293
+          "link": 4298
         },
         {
           "name": "meta_batch",
@@ -5373,7 +5374,7 @@
           "widget": {
             "name": "filename_prefix"
           },
-          "link": 4294
+          "link": 4299
         }
       ],
       "outputs": [
@@ -5981,7 +5982,7 @@
           "links": [
             4160,
             4164,
-            4298
+            4303
           ]
         },
         {
@@ -5990,7 +5991,7 @@
           "links": [
             4161,
             4165,
-            4299
+            4304
           ]
         },
         {
@@ -6000,7 +6001,7 @@
             4162,
             4166,
             4213,
-            4297
+            4302
           ]
         },
         {
@@ -6014,9 +6015,9 @@
           "name": "fps_int",
           "type": "INT",
           "links": [
-            4284,
-            4288,
-            4291
+            4289,
+            4293,
+            4296
           ]
         },
         {
@@ -6078,7 +6079,7 @@
           "links": [
             4195,
             4197,
-            4296
+            4301
           ]
         }
       ],
@@ -6112,7 +6113,7 @@
           "name": "value",
           "type": "FLOAT",
           "links": [
-            4234
+            4239
           ]
         }
       ],
@@ -6199,7 +6200,7 @@
           "name": "should_stop",
           "type": "BOOLEAN",
           "links": [
-            4279
+            4284
           ]
         },
         {
@@ -6213,8 +6214,8 @@
           "name": "iteration_seed",
           "type": "INT",
           "links": [
-            4247,
-            4270
+            4252,
+            4275
           ]
         },
         {
@@ -6234,7 +6235,7 @@
           "type": "INT",
           "slot_index": 6,
           "links": [
-            4275
+            4280
           ]
         },
         {
@@ -6417,9 +6418,9 @@
             4168,
             4194,
             4196,
-            4283,
-            4287,
-            4295
+            4288,
+            4292,
+            4300
           ]
         }
       ],
@@ -6736,7 +6737,7 @@
           "type": "CONDITIONING",
           "links": [
             4207,
-            4262
+            4267
           ]
         }
       ],
@@ -7259,7 +7260,7 @@
           "name": "flow_control",
           "type": "FLOW_CONTROL",
           "links": [
-            4277
+            4282
           ]
         },
         {
@@ -7279,7 +7280,7 @@
             4200,
             4201,
             4203,
-            4255
+            4260
           ]
         }
       ],
@@ -7313,18 +7314,18 @@
         {
           "name": "flow_control",
           "type": "FLOW_CONTROL",
-          "link": 4277
+          "link": 4282
         },
         {
           "name": "processed",
           "type": "IMAGE,MASK,LATENT",
-          "link": 4278
+          "link": 4283
         },
         {
           "name": "stop",
           "shape": 7,
           "type": "BOOLEAN",
-          "link": 4279
+          "link": 4284
         }
       ],
       "outputs": [
@@ -7332,7 +7333,7 @@
           "name": "output",
           "type": "LATENT",
           "links": [
-            4281
+            4286
           ]
         }
       ],
@@ -7923,7 +7924,8 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            4233
+            4233,
+            4238
           ]
         }
       ],
@@ -8080,8 +8082,8 @@
           "name": "audio_latent",
           "type": "LATENT",
           "links": [
-            4243,
-            4268
+            4248,
+            4273
           ]
         }
       ],
@@ -8141,7 +8143,7 @@
           "type": "CONDITIONING",
           "links": [
             4230,
-            4265
+            4270
           ]
         },
         {
@@ -8149,7 +8151,7 @@
           "type": "CONDITIONING",
           "links": [
             4231,
-            4266
+            4271
           ]
         }
       ],
@@ -8174,7 +8176,7 @@
       "id": 2342,
       "type": "LTXVAddLatentGuide",
       "pos": [
-        -600,
+        -700,
         1800
       ],
       "size": [
@@ -8222,7 +8224,7 @@
           "widget": {
             "name": "strength"
           },
-          "link": 4234
+          "link": null
         }
       ],
       "outputs": [
@@ -8231,8 +8233,7 @@
           "name": "positive",
           "type": "CONDITIONING",
           "links": [
-            4235,
-            4237
+            4235
           ]
         },
         {
@@ -8240,8 +8241,7 @@
           "name": "negative",
           "type": "CONDITIONING",
           "links": [
-            4236,
-            4238
+            4236
           ]
         },
         {
@@ -8249,7 +8249,102 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            4239
+            4237
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI-LTXVideo",
+        "ver": "531512f7286963dc7aff1fd8bf5556e95eae03af",
+        "Node name for S&R": "LTXVAddLatentGuide",
+        "aux_id": "Lightricks/ComfyUI-LTXVideo"
+      },
+      "widgets_values": [
+        0,
+        1.0
+      ],
+      "title": "LTXVAddLatentGuide (start-frame anchor; idx=0 strength=1.0)"
+    },
+    {
+      "id": 2343,
+      "type": "LTXVAddLatentGuide",
+      "pos": [
+        -400,
+        1800
+      ],
+      "size": [
+        290,
+        180
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "vae",
+          "name": "vae",
+          "type": "VAE",
+          "link": 4234
+        },
+        {
+          "localized_name": "positive",
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 4235
+        },
+        {
+          "localized_name": "negative",
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 4236
+        },
+        {
+          "localized_name": "latent",
+          "name": "latent",
+          "type": "LATENT",
+          "link": 4237
+        },
+        {
+          "localized_name": "guiding_latent",
+          "name": "guiding_latent",
+          "type": "LATENT",
+          "link": 4238
+        },
+        {
+          "localized_name": "strength",
+          "name": "strength",
+          "type": "FLOAT",
+          "widget": {
+            "name": "strength"
+          },
+          "link": 4239
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "positive",
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            4240,
+            4242
+          ]
+        },
+        {
+          "localized_name": "negative",
+          "name": "negative",
+          "type": "CONDITIONING",
+          "links": [
+            4241,
+            4243
+          ]
+        },
+        {
+          "localized_name": "latent",
+          "name": "latent",
+          "type": "LATENT",
+          "links": [
+            4244
           ]
         }
       ],
@@ -8263,10 +8358,10 @@
         -1,
         0.7
       ],
-      "title": "LTXVAddLatentGuide (trailing init anchor)"
+      "title": "LTXVAddLatentGuide (trailing init anchor; idx=-1)"
     },
     {
-      "id": 2343,
+      "id": 2344,
       "type": "LTXVCropGuidesNoLatent",
       "pos": [
         -300,
@@ -8284,13 +8379,13 @@
           "localized_name": "positive",
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 4235
+          "link": 4240
         },
         {
           "localized_name": "negative",
           "name": "negative",
           "type": "CONDITIONING",
-          "link": 4236
+          "link": 4241
         }
       ],
       "outputs": [
@@ -8299,7 +8394,7 @@
           "name": "positive",
           "type": "CONDITIONING",
           "links": [
-            4245
+            4250
           ]
         },
         {
@@ -8307,7 +8402,7 @@
           "name": "negative",
           "type": "CONDITIONING",
           "links": [
-            4246
+            4251
           ]
         }
       ],
@@ -8321,7 +8416,7 @@
       "title": "LTXVCropGuidesNoLatent (cond path)"
     },
     {
-      "id": 2344,
+      "id": 2345,
       "type": "LTXVCropGuides",
       "pos": [
         -300,
@@ -8338,17 +8433,17 @@
         {
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 4237
+          "link": 4242
         },
         {
           "name": "negative",
           "type": "CONDITIONING",
-          "link": 4238
+          "link": 4243
         },
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 4239
+          "link": 4244
         }
       ],
       "outputs": [
@@ -8366,7 +8461,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            4240
+            4245
           ]
         }
       ],
@@ -8379,7 +8474,7 @@
       "title": "LTXVCropGuides (latent path for AdaIN)"
     },
     {
-      "id": 2345,
+      "id": 2346,
       "type": "GetNode",
       "pos": [
         0,
@@ -8398,7 +8493,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            4241
+            4246
           ]
         }
       ],
@@ -8412,7 +8507,7 @@
       ]
     },
     {
-      "id": 2346,
+      "id": 2347,
       "type": "LTXVAdainLatent",
       "pos": [
         0,
@@ -8430,13 +8525,13 @@
           "localized_name": "latents",
           "name": "latents",
           "type": "LATENT",
-          "link": 4240
+          "link": 4245
         },
         {
           "localized_name": "reference",
           "name": "reference",
           "type": "LATENT",
-          "link": 4241
+          "link": 4246
         }
       ],
       "outputs": [
@@ -8445,7 +8540,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            4242
+            4247
           ]
         }
       ],
@@ -8461,7 +8556,7 @@
       "title": "LTXVAdainLatent (BYPASSED; toggle on once variance-rich pass1 is in place)"
     },
     {
-      "id": 2347,
+      "id": 2348,
       "type": "LTXVConcatAVLatent",
       "pos": [
         300,
@@ -8478,12 +8573,12 @@
         {
           "name": "video_latent",
           "type": "LATENT",
-          "link": 4242
+          "link": 4247
         },
         {
           "name": "audio_latent",
           "type": "LATENT",
-          "link": 4243
+          "link": 4248
         }
       ],
       "outputs": [
@@ -8491,7 +8586,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            4252
+            4257
           ]
         }
       ],
@@ -8504,7 +8599,7 @@
       "title": "LTXVConcatAVLatent (pass1 pre-sample)"
     },
     {
-      "id": 2348,
+      "id": 2349,
       "type": "GetNode",
       "pos": [
         300,
@@ -8523,7 +8618,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            4244
+            4249
           ]
         }
       ],
@@ -8537,7 +8632,7 @@
       ]
     },
     {
-      "id": 2349,
+      "id": 2350,
       "type": "CFGGuider",
       "pos": [
         600,
@@ -8554,17 +8649,17 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 4244
+          "link": 4249
         },
         {
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 4245
+          "link": 4250
         },
         {
           "name": "negative",
           "type": "CONDITIONING",
-          "link": 4246
+          "link": 4251
         }
       ],
       "outputs": [
@@ -8572,7 +8667,7 @@
           "name": "GUIDER",
           "type": "GUIDER",
           "links": [
-            4249
+            4254
           ]
         }
       ],
@@ -8594,7 +8689,7 @@
       "title": "CFGGuider (pass1)"
     },
     {
-      "id": 2350,
+      "id": 2351,
       "type": "RandomNoise",
       "pos": [
         600,
@@ -8614,7 +8709,7 @@
           "widget": {
             "name": "noise_seed"
           },
-          "link": 4247
+          "link": 4252
         }
       ],
       "outputs": [
@@ -8622,7 +8717,7 @@
           "name": "NOISE",
           "type": "NOISE",
           "links": [
-            4248
+            4253
           ]
         }
       ],
@@ -8638,7 +8733,7 @@
       "title": "RandomNoise (pass1, seed ← Controller.iteration_seed)"
     },
     {
-      "id": 2351,
+      "id": 2352,
       "type": "SamplerCustomAdvanced",
       "pos": [
         900,
@@ -8655,27 +8750,27 @@
         {
           "name": "noise",
           "type": "NOISE",
-          "link": 4248
+          "link": 4253
         },
         {
           "name": "guider",
           "type": "GUIDER",
-          "link": 4249
+          "link": 4254
         },
         {
           "name": "sampler",
           "type": "SAMPLER",
-          "link": 4250
+          "link": 4255
         },
         {
           "name": "sigmas",
           "type": "SIGMAS",
-          "link": 4251
+          "link": 4256
         },
         {
           "name": "latent_image",
           "type": "LATENT",
-          "link": 4252
+          "link": 4257
         }
       ],
       "outputs": [
@@ -8683,7 +8778,7 @@
           "name": "output",
           "type": "LATENT",
           "links": [
-            4253
+            4258
           ]
         },
         {
@@ -8708,7 +8803,7 @@
       "title": "SamplerCustomAdvanced (pass1)"
     },
     {
-      "id": 2352,
+      "id": 2353,
       "type": "LTXVSeparateAVLatent",
       "pos": [
         1200,
@@ -8725,7 +8820,7 @@
         {
           "name": "av_latent",
           "type": "LATENT",
-          "link": 4253
+          "link": 4258
         }
       ],
       "outputs": [
@@ -8733,8 +8828,8 @@
           "name": "video_latent",
           "type": "LATENT",
           "links": [
-            4254,
-            4267
+            4259,
+            4272
           ]
         },
         {
@@ -8752,7 +8847,7 @@
       "title": "LTXVSeparateAVLatent (post-pass1, pre-upsample)"
     },
     {
-      "id": 2353,
+      "id": 2354,
       "type": "LatentFrameCount",
       "pos": [
         1200,
@@ -8769,7 +8864,7 @@
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 4254
+          "link": 4259
         }
       ],
       "outputs": [
@@ -8782,7 +8877,7 @@
           "name": "latent_frames",
           "type": "INT",
           "links": [
-            4256
+            4261
           ]
         }
       ],
@@ -8794,7 +8889,7 @@
       "title": "LatentFrameCount (sync point: forces patch_chain_p2 after pass1)"
     },
     {
-      "id": 2354,
+      "id": 2355,
       "type": "ComfyMathExpression",
       "pos": [
         1500,
@@ -8812,14 +8907,14 @@
           "label": "a",
           "name": "values.a",
           "type": "FLOAT,INT",
-          "link": 4255
+          "link": 4260
         },
         {
           "label": "b",
           "name": "values.b",
           "shape": 7,
           "type": "FLOAT,INT",
-          "link": 4256
+          "link": 4261
         }
       ],
       "outputs": [
@@ -8832,7 +8927,7 @@
           "name": "INT",
           "type": "INT",
           "links": [
-            4258
+            4263
           ]
         }
       ],
@@ -8847,7 +8942,7 @@
       "title": "ComfyMathExpression (a + b*0; output=a, depends on b for ordering)"
     },
     {
-      "id": 2355,
+      "id": 2356,
       "type": "LoopIterationStamp",
       "pos": [
         1500,
@@ -8864,7 +8959,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 4257
+          "link": 4262
         },
         {
           "name": "current_iteration",
@@ -8872,7 +8967,7 @@
           "widget": {
             "name": "current_iteration"
           },
-          "link": 4258
+          "link": 4263
         }
       ],
       "outputs": [
@@ -8880,7 +8975,7 @@
           "name": "model",
           "type": "MODEL",
           "links": [
-            4259
+            4264
           ]
         }
       ],
@@ -8895,7 +8990,7 @@
       "title": "LoopIterationStamp (pass2 re-arm)"
     },
     {
-      "id": 2356,
+      "id": 2357,
       "type": "LTXVChunkFeedForward",
       "pos": [
         1800,
@@ -8912,7 +9007,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 4259
+          "link": 4264
         }
       ],
       "outputs": [
@@ -8920,7 +9015,7 @@
           "name": "model",
           "type": "MODEL",
           "links": [
-            4260
+            4265
           ]
         }
       ],
@@ -8936,7 +9031,7 @@
       "title": "LTXVChunkFeedForward (pass2 re-arm)"
     },
     {
-      "id": 2357,
+      "id": 2358,
       "type": "LTX2AttentionTunerPatch",
       "pos": [
         2100,
@@ -8953,7 +9048,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 4260
+          "link": 4265
         }
       ],
       "outputs": [
@@ -8961,7 +9056,7 @@
           "name": "model",
           "type": "MODEL",
           "links": [
-            4261
+            4266
           ]
         }
       ],
@@ -8981,7 +9076,7 @@
       "title": "LTX2AttentionTunerPatch (pass2 re-arm; bypassed)"
     },
     {
-      "id": 2358,
+      "id": 2359,
       "type": "LTX2_NAG",
       "pos": [
         2400,
@@ -8998,13 +9093,13 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 4261
+          "link": 4266
         },
         {
           "name": "nag_cond_video",
           "shape": 7,
           "type": "CONDITIONING",
-          "link": 4262
+          "link": 4267
         },
         {
           "name": "nag_cond_audio",
@@ -9018,7 +9113,7 @@
           "name": "model",
           "type": "MODEL",
           "links": [
-            4263
+            4268
           ]
         }
       ],
@@ -9036,7 +9131,7 @@
       "title": "LTX2_NAG (pass2 re-arm; nag_cond_video from Phase 3)"
     },
     {
-      "id": 2359,
+      "id": 2360,
       "type": "AudioLoopHelperSageAttention",
       "pos": [
         2700,
@@ -9053,7 +9148,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 4263
+          "link": 4268
         }
       ],
       "outputs": [
@@ -9061,7 +9156,7 @@
           "name": "model",
           "type": "MODEL",
           "links": [
-            4264
+            4269
           ]
         }
       ],
@@ -9078,7 +9173,7 @@
       "title": "AudioLoopHelperSageAttention (pass2 re-arm; Sage LAST)"
     },
     {
-      "id": 2360,
+      "id": 2361,
       "type": "SetNode",
       "pos": [
         3000,
@@ -9095,7 +9190,7 @@
         {
           "name": "MODEL",
           "type": "MODEL",
-          "link": 4264
+          "link": 4269
         }
       ],
       "outputs": [
@@ -9116,7 +9211,7 @@
       "title": "Set_loop_patched_model_pass2"
     },
     {
-      "id": 2361,
+      "id": 2362,
       "type": "GetNode",
       "pos": [
         3300,
@@ -9135,7 +9230,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            4269
+            4274
           ]
         }
       ],
@@ -9149,7 +9244,7 @@
       ]
     },
     {
-      "id": 2362,
+      "id": 2363,
       "type": "RandomNoise",
       "pos": [
         900,
@@ -9169,7 +9264,7 @@
           "widget": {
             "name": "noise_seed"
           },
-          "link": 4270
+          "link": 4275
         }
       ],
       "outputs": [
@@ -9177,7 +9272,7 @@
           "name": "NOISE",
           "type": "NOISE",
           "links": [
-            4271
+            4276
           ]
         }
       ],
@@ -9193,7 +9288,7 @@
       "title": "RandomNoise (pass2, seed ← Controller.iteration_seed)"
     },
     {
-      "id": 2363,
+      "id": 2364,
       "type": "GetNode",
       "pos": [
         1500,
@@ -9212,7 +9307,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            4273
+            4278
           ]
         }
       ],
@@ -9226,7 +9321,7 @@
       ]
     },
     {
-      "id": 2364,
+      "id": 2365,
       "type": "LTXVAdainLatent",
       "pos": [
         1500,
@@ -9244,13 +9339,13 @@
           "localized_name": "latents",
           "name": "latents",
           "type": "LATENT",
-          "link": 4272
+          "link": 4277
         },
         {
           "localized_name": "reference",
           "name": "reference",
           "type": "LATENT",
-          "link": 4273
+          "link": 4278
         }
       ],
       "outputs": [
@@ -9259,7 +9354,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            4274
+            4279
           ]
         }
       ],
@@ -9275,7 +9370,7 @@
       "title": "LTXVAdainLatent (BYPASSED; toggle on once variance-rich pass2 is in place)"
     },
     {
-      "id": 2365,
+      "id": 2366,
       "type": "LatentOverlapTrim",
       "pos": [
         1800,
@@ -9293,7 +9388,7 @@
           "localized_name": "latent",
           "name": "latent",
           "type": "LATENT",
-          "link": 4274
+          "link": 4279
         },
         {
           "localized_name": "overlap_latent_frames",
@@ -9302,7 +9397,7 @@
           "widget": {
             "name": "overlap_latent_frames"
           },
-          "link": 4275
+          "link": 4280
         }
       ],
       "outputs": [
@@ -9311,7 +9406,7 @@
           "name": "trimmed",
           "type": "LATENT",
           "links": [
-            4276
+            4281
           ]
         }
       ],
@@ -9326,7 +9421,7 @@
       "title": "LatentOverlapTrim (drop overlap from output)"
     },
     {
-      "id": 2366,
+      "id": 2367,
       "type": "IterationCleanup",
       "pos": [
         2100,
@@ -9344,7 +9439,7 @@
           "localized_name": "latent",
           "name": "latent",
           "type": "LATENT",
-          "link": 4276
+          "link": 4281
         }
       ],
       "outputs": [
@@ -9353,7 +9448,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            4278
+            4283
           ]
         }
       ],
@@ -9369,7 +9464,7 @@
       "title": "IterationCleanup"
     },
     {
-      "id": 2367,
+      "id": 2368,
       "type": "GetNode",
       "pos": [
         2000,
@@ -9388,7 +9483,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            4280
+            4285
           ]
         }
       ],
@@ -9402,7 +9497,7 @@
       ]
     },
     {
-      "id": 2368,
+      "id": 2369,
       "type": "LatentConcat",
       "pos": [
         2300,
@@ -9419,12 +9514,12 @@
         {
           "name": "samples1",
           "type": "LATENT",
-          "link": 4280
+          "link": 4285
         },
         {
           "name": "samples2",
           "type": "LATENT",
-          "link": 4281
+          "link": 4286
         }
       ],
       "outputs": [
@@ -9432,7 +9527,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            4282
+            4287
           ]
         }
       ],
@@ -9447,7 +9542,7 @@
       "title": "LatentConcat (init + TLC across t)"
     },
     {
-      "id": 2369,
+      "id": 2370,
       "type": "TrimVideoLatentToAudio",
       "pos": [
         2600,
@@ -9464,12 +9559,12 @@
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 4282
+          "link": 4287
         },
         {
           "name": "audio",
           "type": "AUDIO",
-          "link": 4283
+          "link": 4288
         },
         {
           "name": "fps",
@@ -9477,7 +9572,7 @@
           "widget": {
             "name": "fps"
           },
-          "link": 4284
+          "link": 4289
         }
       ],
       "outputs": [
@@ -9485,7 +9580,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            4285
+            4290
           ]
         }
       ],
@@ -9498,7 +9593,7 @@
       "title": "TrimVideoLatentToAudio (snap-UP)"
     },
     {
-      "id": 2370,
+      "id": 2371,
       "type": "LTXHeadTrim",
       "pos": [
         3200,
@@ -9515,12 +9610,12 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 4286
+          "link": 4291
         },
         {
           "name": "audio",
           "type": "AUDIO",
-          "link": 4287
+          "link": 4292
         },
         {
           "name": "trim_latent_frames",
@@ -9536,7 +9631,7 @@
           "widget": {
             "name": "fps"
           },
-          "link": 4288
+          "link": 4293
         }
       ],
       "outputs": [
@@ -9544,15 +9639,15 @@
           "name": "images",
           "type": "IMAGE",
           "links": [
-            4289
+            4294
           ]
         },
         {
           "name": "audio",
           "type": "AUDIO",
           "links": [
-            4290,
-            4293
+            4295,
+            4298
           ]
         }
       ],
@@ -9567,7 +9662,7 @@
       "title": "LTXHeadTrim (filler-frame safety net; default 0 = no-op)"
     },
     {
-      "id": 2371,
+      "id": 2372,
       "type": "TrimImageBatchToAudio",
       "pos": [
         3500,
@@ -9584,12 +9679,12 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 4289
+          "link": 4294
         },
         {
           "name": "audio",
           "type": "AUDIO",
-          "link": 4290
+          "link": 4295
         },
         {
           "name": "fps",
@@ -9597,7 +9692,7 @@
           "widget": {
             "name": "fps"
           },
-          "link": 4291
+          "link": 4296
         }
       ],
       "outputs": [
@@ -9605,7 +9700,7 @@
           "name": "images",
           "type": "IMAGE",
           "links": [
-            4292
+            4297
           ]
         }
       ],
@@ -9618,7 +9713,7 @@
       "title": "TrimImageBatchToAudio (exact-frame clip)"
     },
     {
-      "id": 2372,
+      "id": 2373,
       "type": "RunIdPrefix",
       "pos": [
         2300,
@@ -9637,7 +9732,7 @@
           "name": "video_prefix",
           "type": "STRING",
           "links": [
-            4294
+            4299
           ]
         },
         {
@@ -9656,7 +9751,7 @@
       "title": "RunIdPrefix"
     },
     {
-      "id": 2373,
+      "id": 2374,
       "type": "LoopConfigValidator",
       "pos": [
         2600,
@@ -9673,7 +9768,7 @@
         {
           "name": "audio",
           "type": "AUDIO",
-          "link": 4295
+          "link": 4300
         },
         {
           "name": "window_seconds",
@@ -9689,7 +9784,7 @@
           "widget": {
             "name": "length"
           },
-          "link": 4297
+          "link": 4302
         },
         {
           "name": "width",
@@ -9697,7 +9792,7 @@
           "widget": {
             "name": "width"
           },
-          "link": 4298
+          "link": 4303
         },
         {
           "name": "height",
@@ -9705,7 +9800,7 @@
           "widget": {
             "name": "height"
           },
-          "link": 4299
+          "link": 4304
         },
         {
           "name": "overlap_seconds",
@@ -9713,7 +9808,7 @@
           "widget": {
             "name": "overlap_seconds"
           },
-          "link": 4296
+          "link": 4301
         },
         {
           "name": "keyframe_schedule",
@@ -11150,18 +11245,18 @@
     ],
     [
       4234,
-      2304,
+      147,
       0,
-      2342,
-      5,
-      "FLOAT"
+      2343,
+      0,
+      "VAE"
     ],
     [
       4235,
       2342,
       0,
       2343,
-      0,
+      1,
       "CONDITIONING"
     ],
     [
@@ -11169,136 +11264,136 @@
       2342,
       1,
       2343,
-      1,
+      2,
       "CONDITIONING"
     ],
     [
       4237,
       2342,
-      0,
-      2344,
-      0,
-      "CONDITIONING"
+      2,
+      2343,
+      3,
+      "LATENT"
     ],
     [
       4238,
-      2342,
-      1,
-      2344,
-      1,
-      "CONDITIONING"
+      2338,
+      0,
+      2343,
+      4,
+      "LATENT"
     ],
     [
       4239,
-      2342,
-      2,
-      2344,
-      2,
-      "LATENT"
+      2304,
+      0,
+      2343,
+      5,
+      "FLOAT"
     ],
     [
       4240,
-      2344,
-      2,
-      2346,
+      2343,
       0,
-      "LATENT"
+      2344,
+      0,
+      "CONDITIONING"
     ],
     [
       4241,
-      2345,
-      0,
-      2346,
+      2343,
       1,
-      "LATENT"
+      2344,
+      1,
+      "CONDITIONING"
     ],
     [
       4242,
-      2346,
+      2343,
       0,
-      2347,
+      2345,
       0,
-      "LATENT"
+      "CONDITIONING"
     ],
     [
       4243,
-      2340,
+      2343,
       1,
+      2345,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      4244,
+      2343,
+      2,
+      2345,
+      2,
+      "LATENT"
+    ],
+    [
+      4245,
+      2345,
+      2,
+      2347,
+      0,
+      "LATENT"
+    ],
+    [
+      4246,
+      2346,
+      0,
       2347,
       1,
       "LATENT"
     ],
     [
-      4244,
+      4247,
+      2347,
+      0,
       2348,
       0,
-      2349,
-      0,
-      "MODEL"
-    ],
-    [
-      4245,
-      2343,
-      0,
-      2349,
-      1,
-      "CONDITIONING"
-    ],
-    [
-      4246,
-      2343,
-      1,
-      2349,
-      2,
-      "CONDITIONING"
-    ],
-    [
-      4247,
-      2305,
-      3,
-      2350,
-      0,
-      "INT"
+      "LATENT"
     ],
     [
       4248,
-      2350,
-      0,
-      2351,
-      0,
-      "NOISE"
+      2340,
+      1,
+      2348,
+      1,
+      "LATENT"
     ],
     [
       4249,
       2349,
       0,
-      2351,
-      1,
-      "GUIDER"
+      2350,
+      0,
+      "MODEL"
     ],
     [
       4250,
-      1,
+      2344,
       0,
-      2351,
-      2,
-      "SAMPLER"
+      2350,
+      1,
+      "CONDITIONING"
     ],
     [
       4251,
-      215,
-      0,
-      2351,
-      3,
-      "SIGMAS"
+      2344,
+      1,
+      2350,
+      2,
+      "CONDITIONING"
     ],
     [
       4252,
-      2347,
-      0,
+      2305,
+      3,
       2351,
-      4,
-      "LATENT"
+      0,
+      "INT"
     ],
     [
       4253,
@@ -11306,10 +11401,42 @@
       0,
       2352,
       0,
-      "LATENT"
+      "NOISE"
     ],
     [
       4254,
+      2350,
+      0,
+      2352,
+      1,
+      "GUIDER"
+    ],
+    [
+      4255,
+      1,
+      0,
+      2352,
+      2,
+      "SAMPLER"
+    ],
+    [
+      4256,
+      215,
+      0,
+      2352,
+      3,
+      "SIGMAS"
+    ],
+    [
+      4257,
+      2348,
+      0,
+      2352,
+      4,
+      "LATENT"
+    ],
+    [
+      4258,
       2352,
       0,
       2353,
@@ -11317,47 +11444,47 @@
       "LATENT"
     ],
     [
-      4255,
-      2325,
-      3,
-      2354,
-      0,
-      "INT"
-    ],
-    [
-      4256,
-      2353,
-      1,
-      2354,
-      1,
-      "INT"
-    ],
-    [
-      4257,
-      122,
-      0,
-      2355,
-      0,
-      "MODEL"
-    ],
-    [
-      4258,
-      2354,
-      1,
-      2355,
-      1,
-      "INT"
-    ],
-    [
       4259,
-      2355,
+      2353,
       0,
-      2356,
+      2354,
       0,
-      "MODEL"
+      "LATENT"
     ],
     [
       4260,
+      2325,
+      3,
+      2355,
+      0,
+      "INT"
+    ],
+    [
+      4261,
+      2354,
+      1,
+      2355,
+      1,
+      "INT"
+    ],
+    [
+      4262,
+      122,
+      0,
+      2356,
+      0,
+      "MODEL"
+    ],
+    [
+      4263,
+      2355,
+      1,
+      2356,
+      1,
+      "INT"
+    ],
+    [
+      4264,
       2356,
       0,
       2357,
@@ -11365,7 +11492,7 @@
       "MODEL"
     ],
     [
-      4261,
+      4265,
       2357,
       0,
       2358,
@@ -11373,15 +11500,7 @@
       "MODEL"
     ],
     [
-      4262,
-      2314,
-      0,
-      2358,
-      1,
-      "CONDITIONING"
-    ],
-    [
-      4263,
+      4266,
       2358,
       0,
       2359,
@@ -11389,7 +11508,15 @@
       "MODEL"
     ],
     [
-      4264,
+      4267,
+      2314,
+      0,
+      2359,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      4268,
       2359,
       0,
       2360,
@@ -11397,7 +11524,15 @@
       "MODEL"
     ],
     [
-      4265,
+      4269,
+      2360,
+      0,
+      2361,
+      0,
+      "MODEL"
+    ],
+    [
+      4270,
       2341,
       0,
       2222,
@@ -11405,7 +11540,7 @@
       "CONDITIONING"
     ],
     [
-      4266,
+      4271,
       2341,
       1,
       2222,
@@ -11413,15 +11548,15 @@
       "CONDITIONING"
     ],
     [
-      4267,
-      2352,
+      4272,
+      2353,
       0,
       2222,
       2,
       "LATENT"
     ],
     [
-      4268,
+      4273,
       2340,
       1,
       34,
@@ -11429,63 +11564,47 @@
       "LATENT"
     ],
     [
-      4269,
-      2361,
+      4274,
+      2362,
       0,
       8,
       0,
       "MODEL"
     ],
     [
-      4270,
+      4275,
       2305,
       3,
-      2362,
+      2363,
       0,
       "INT"
     ],
     [
-      4271,
-      2362,
+      4276,
+      2363,
       0,
       21,
       0,
       "NOISE"
     ],
     [
-      4272,
+      4277,
       146,
       0,
-      2364,
-      0,
-      "LATENT"
-    ],
-    [
-      4273,
-      2363,
-      0,
-      2364,
-      1,
-      "LATENT"
-    ],
-    [
-      4274,
-      2364,
-      0,
       2365,
       0,
       "LATENT"
     ],
     [
-      4275,
-      2305,
-      6,
+      4278,
+      2364,
+      0,
       2365,
       1,
-      "INT"
+      "LATENT"
     ],
     [
-      4276,
+      4279,
       2365,
       0,
       2366,
@@ -11493,7 +11612,23 @@
       "LATENT"
     ],
     [
-      4277,
+      4280,
+      2305,
+      6,
+      2366,
+      1,
+      "INT"
+    ],
+    [
+      4281,
+      2366,
+      0,
+      2367,
+      0,
+      "LATENT"
+    ],
+    [
+      4282,
       2325,
       0,
       2326,
@@ -11501,15 +11636,15 @@
       "FLOW_CONTROL"
     ],
     [
-      4278,
-      2366,
+      4283,
+      2367,
       0,
       2326,
       1,
       "LATENT"
     ],
     [
-      4279,
+      4284,
       2305,
       1,
       2326,
@@ -11517,63 +11652,31 @@
       "BOOLEAN"
     ],
     [
-      4280,
-      2367,
-      0,
-      2368,
-      0,
-      "LATENT"
-    ],
-    [
-      4281,
-      2326,
-      0,
-      2368,
-      1,
-      "LATENT"
-    ],
-    [
-      4282,
-      2368,
-      0,
-      2369,
-      0,
-      "LATENT"
-    ],
-    [
-      4283,
-      2308,
-      0,
-      2369,
-      1,
-      "AUDIO"
-    ],
-    [
-      4284,
-      2302,
-      4,
-      2369,
-      2,
-      "INT"
-    ],
-    [
       4285,
+      2368,
+      0,
       2369,
       0,
-      149,
-      1,
       "LATENT"
     ],
     [
       4286,
-      149,
+      2326,
       0,
-      2370,
-      0,
-      "IMAGE"
+      2369,
+      1,
+      "LATENT"
     ],
     [
       4287,
+      2369,
+      0,
+      2370,
+      0,
+      "LATENT"
+    ],
+    [
+      4288,
       2308,
       0,
       2370,
@@ -11581,98 +11684,130 @@
       "AUDIO"
     ],
     [
-      4288,
-      2302,
-      4,
-      2370,
-      3,
-      "INT"
-    ],
-    [
       4289,
-      2370,
-      0,
-      2371,
-      0,
-      "IMAGE"
-    ],
-    [
-      4290,
-      2370,
-      1,
-      2371,
-      1,
-      "AUDIO"
-    ],
-    [
-      4291,
       2302,
       4,
-      2371,
+      2370,
       2,
       "INT"
     ],
     [
-      4292,
+      4290,
+      2370,
+      0,
+      149,
+      1,
+      "LATENT"
+    ],
+    [
+      4291,
+      149,
+      0,
       2371,
+      0,
+      "IMAGE"
+    ],
+    [
+      4292,
+      2308,
+      0,
+      2371,
+      1,
+      "AUDIO"
+    ],
+    [
+      4293,
+      2302,
+      4,
+      2371,
+      3,
+      "INT"
+    ],
+    [
+      4294,
+      2371,
+      0,
+      2372,
+      0,
+      "IMAGE"
+    ],
+    [
+      4295,
+      2371,
+      1,
+      2372,
+      1,
+      "AUDIO"
+    ],
+    [
+      4296,
+      2302,
+      4,
+      2372,
+      2,
+      "INT"
+    ],
+    [
+      4297,
+      2372,
       0,
       43,
       0,
       "IMAGE"
     ],
     [
-      4293,
-      2370,
+      4298,
+      2371,
       1,
       43,
       1,
       "AUDIO"
     ],
     [
-      4294,
-      2372,
+      4299,
+      2373,
       0,
       43,
       5,
       "STRING"
     ],
     [
-      4295,
+      4300,
       2308,
       0,
-      2373,
+      2374,
       0,
       "AUDIO"
     ],
     [
-      4296,
+      4301,
       2303,
       0,
-      2373,
+      2374,
       5,
       "FLOAT"
     ],
     [
-      4297,
+      4302,
       2302,
       2,
-      2373,
+      2374,
       2,
       "INT"
     ],
     [
-      4298,
+      4303,
       2302,
       0,
-      2373,
+      2374,
       3,
       "INT"
     ],
     [
-      4299,
+      4304,
       2302,
       1,
-      2373,
+      2374,
       4,
       "INT"
     ]
@@ -13014,36 +13149,37 @@
       "vae_encode_init_guide": 2338,
       "ltxv_conditioning_loop": 2341,
       "audio_slice": 2339,
-      "overlap_trim_output": 2365,
+      "overlap_trim_output": 2366,
       "av_mask": 2340,
-      "add_latent_guide": 2342,
-      "crop_guides_no_latent": 2343,
-      "crop_guides_p1": 2344,
-      "adain_p1": 2346,
-      "concat_av_p1": 2347,
-      "cfg_guider_p1": 2349,
-      "noise_p1": 2350,
-      "sampler_p1": 2351,
-      "separate_av_p1_post": 2352,
-      "noise_p2": 2362,
-      "p1_frame_count": 2353,
-      "iter_after_pass1": 2354,
-      "stamp_p2": 2355,
-      "chunk_p2": 2356,
-      "attn_tuner_p2": 2357,
-      "nag_p2": 2358,
-      "sage_p2": 2359,
-      "set_patched_model_pass2": 2360,
-      "adain_final": 2364,
-      "iteration_cleanup": 2366
+      "add_latent_guide_frame0": 2342,
+      "add_latent_guide": 2343,
+      "crop_guides_no_latent": 2344,
+      "crop_guides_p1": 2345,
+      "adain_p1": 2347,
+      "concat_av_p1": 2348,
+      "cfg_guider_p1": 2350,
+      "noise_p1": 2351,
+      "sampler_p1": 2352,
+      "separate_av_p1_post": 2353,
+      "noise_p2": 2363,
+      "p1_frame_count": 2354,
+      "iter_after_pass1": 2355,
+      "stamp_p2": 2356,
+      "chunk_p2": 2357,
+      "attn_tuner_p2": 2358,
+      "nag_p2": 2359,
+      "sage_p2": 2360,
+      "set_patched_model_pass2": 2361,
+      "adain_final": 2365,
+      "iteration_cleanup": 2367
     },
     "build_fml2v_phase6": {
-      "get_initial_for_concat": 2367,
-      "latent_concat": 2368,
-      "trim_video_latent_to_audio": 2369,
-      "trim_image_batch_to_audio": 2371,
-      "run_id_prefix": 2372,
-      "loop_config_validator": 2373
+      "get_initial_for_concat": 2368,
+      "latent_concat": 2369,
+      "trim_video_latent_to_audio": 2370,
+      "trim_image_batch_to_audio": 2372,
+      "run_id_prefix": 2373,
+      "loop_config_validator": 2374
     }
   }
 }
