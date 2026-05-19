@@ -612,6 +612,7 @@ def phase4_initial_render(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     audio_vae_id = phase2["audio_vae_encode"]    # #2309
     smart_resize_id = phase2["smart_resize"]     # #2310
     preprocess_id = phase2["preprocess"]         # #2311
+    alp_id = phase2["audio_loop_planner"]        # #2306 — needed for init audio slice source_seconds wire
     sel_init_id = phase3["selector_init"]        # #2315
 
     get_vae_id = _find_get_node(ed, "vae")
@@ -639,9 +640,47 @@ def phase4_initial_render(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     ed.add_link(get_vae_audio_id, 0, audio_vae_id, 1, "VAE")
     log(f"  wire LoadAudio #{load_audio_id} → TrimAudio #{trim_audio_id} → AudioVAEEncode #{audio_vae_id}")
 
-    # Rewire ConcatAV.audio_latent ← AudioVAEEncode (Get_latent_audio was orphaned by Phase 1)
-    ed.rewire_input(_BENCH_CONCAT_AV, 1, audio_vae_id, 0, "LATENT")
-    log(f"  rewire ConcatAV #{_BENCH_CONCAT_AV}.audio_latent ← AudioVAEEncode #{audio_vae_id}")
+    # Rewire ConcatAV.audio_latent path. Phase 1 stripped the benchmark's
+    # SolidMask + SetLatentNoiseMask + Set_latent_audio chain that wrapped
+    # the hardcoded-4s audio. The replacement here mirrors the canonical
+    # init-render pattern:
+    #   AudioLatentSlice (trim full-song latent to init window) →
+    #   SetLatentNoiseMask (mask = SolidMask value=0; freezes audio so the
+    #     sampler doesn't denoise it) →
+    #   ConcatAV.audio_latent
+    # Without the noise-mask wrap, the sampler treats audio as denoiseable
+    # and the model lip-syncs the video to a garbled audio context — when
+    # the mp4 plays the SOURCE audio (Phase 6 Option B passthrough), lips
+    # don't match. The init-window slice keeps audio length == video length
+    # so the audio cross-attention positions align 1:1 with the init video.
+    init_audio_slice_id = _add_from_template(
+        ed, "AudioLatentSlice", (-2400, 3700),
+        widget_values=[300.0, 0.0, 19.88],  # widget defaults; inputs win
+        title="AudioLatentSlice (init render = [0, FramePlanner.actual_seconds])",
+        size=(290, 110),
+    )
+    ed.add_link(audio_vae_id, 0, init_audio_slice_id, 0, "LATENT")
+    ed.add_link(alp_id, 3, init_audio_slice_id, 1, "FLOAT")   # source_seconds ← Planner.audio_duration
+    # start_seconds left at widget default 0.0 (init render always starts at 0)
+    ed.add_link(fp_id, 3, init_audio_slice_id, 3, "FLOAT")    # duration_seconds ← FramePlanner.actual_seconds
+
+    init_solid_mask_id = _add_from_template(
+        ed, "SolidMask", (-2400, 3850),
+        widget_values=[0, 512, 512],  # value=0 freezes; H/W are placeholder (mask is broadcast)
+        title="SolidMask (audio freeze; value=0)",
+        size=(270, 100),
+    )
+    init_noise_mask_id = _add_from_template(
+        ed, "SetLatentNoiseMask", (-2100, 3850),
+        widget_values=[],
+        title="SetLatentNoiseMask (init audio frozen)",
+        size=(270, 80),
+    )
+    ed.add_link(init_audio_slice_id, 0, init_noise_mask_id, 0, "LATENT")
+    ed.add_link(init_solid_mask_id, 0, init_noise_mask_id, 1, "MASK")
+
+    ed.rewire_input(_BENCH_CONCAT_AV, 1, init_noise_mask_id, 0, "LATENT")
+    log(f"  rewire ConcatAV #{_BENCH_CONCAT_AV}.audio_latent: now via AudioLatentSlice #{init_audio_slice_id} → SetLatentNoiseMask #{init_noise_mask_id} (was: direct from AudioVAEEncode, missing freeze mask → garbled audio context → broken lip sync)")
 
     # --- 4. Image bus: LoadImage → SmartResize → Preprocess → Set_firstframe ---
     ed.add_link(_BENCH_LOAD_IMAGE_FIRST, 0, smart_resize_id, 0, "IMAGE")

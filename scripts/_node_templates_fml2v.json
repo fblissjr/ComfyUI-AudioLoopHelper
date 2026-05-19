@@ -1877,5 +1877,50 @@
       "patches_loop_body",
       false
     ]
+  },
+  "SolidMask": {
+    "type": "SolidMask",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "MASK",
+        "type": "MASK"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfy-core",
+      "ver": "0.9.2",
+      "Node name for S&R": "SolidMask"
+    },
+    "widgets_values": [
+      0,
+      512,
+      512
+    ]
+  },
+  "SetLatentNoiseMask": {
+    "type": "SetLatentNoiseMask",
+    "inputs": [
+      {
+        "name": "samples",
+        "type": "LATENT"
+      },
+      {
+        "name": "mask",
+        "type": "MASK"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "LATENT",
+        "type": "LATENT"
+      }
+    ],
+    "properties": {
+      "cnr_id": "comfy-core",
+      "ver": "0.9.2",
+      "Node name for S&R": "SetLatentNoiseMask"
+    },
+    "widgets_values": []
   }
 }
