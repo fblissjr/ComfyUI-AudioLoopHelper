@@ -519,6 +519,8 @@ _BENCH_SET_FPS = 2074              # SetNode "fps"
 _BENCH_SET_FIRSTFRAME = 75         # SetNode "firstframe"
 _BENCH_INIT_CFG_GUIDER = 36        # CFGGuider (init render, pass1)
 _BENCH_TOP_LEVEL_CHUNK_FFN = 228   # benchmark's top-level LTXVChunkFeedForward (model chain head)
+_BENCH_TOP_LEVEL_POWER_LORA = 2107 # rgthree Power Lora Loader feeding Set_model
+_BENCH_TOP_LEVEL_SET_MODEL = 192   # SetNode "model" — bus consumed by init CFGGuider and loop patch chain
 
 # Orphaned by Phase 4 dim-SSoT + image-bus rewires; strip after rewiring.
 _PHASE4_STRIP_AFTER_REWIRE = [
@@ -678,6 +680,27 @@ def phase4_initial_render(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     if ed.has_node(_BENCH_TOP_LEVEL_CHUNK_FFN):
         ed.rewire_input(_BENCH_TOP_LEVEL_CHUNK_FFN, 0, unet_loaders[0], 0, "MODEL")
         log(f"  wire benchmark ChunkFFN #{_BENCH_TOP_LEVEL_CHUNK_FFN}.model ← UNETLoader #{unet_loaders[0]} (was unwired)")
+
+    # --- 5d. Splice AudioLoopHelperSageAttention into the top-level model
+    #         chain so init render gets sage too. Without this, init render's
+    #         CFGGuider #36.model reads Get_model which routes through
+    #         UNETLoader → ChunkFFN → AttnTuner(bypassed) → PowerLoraLoader
+    #         → Set_model with no sage attention, costing ~30 s/step (vs
+    #         3.4 s/step in the loop body where sage IS active). 5-iter
+    #         render saves ~3 min total.
+    #         New chain: ... → PowerLoraLoader → SageAttention_top → Set_model
+    #         Loop body re-applies sage downstream (idempotent: same class,
+    #         same widgets, override just gets re-installed).
+    if ed.has_node(_BENCH_TOP_LEVEL_POWER_LORA) and ed.has_node(_BENCH_TOP_LEVEL_SET_MODEL):
+        top_sage_id = _add_from_template(
+            ed, "AudioLoopHelperSageAttention", (-2700, 2800),
+            widget_values=["auto", True, 1024],
+            title="AudioLoopHelperSageAttention (top-level; init render speedup)",
+            size=(280, 100),
+        )
+        ed.add_link(_BENCH_TOP_LEVEL_POWER_LORA, 0, top_sage_id, 0, "MODEL")
+        ed.rewire_input(_BENCH_TOP_LEVEL_SET_MODEL, 0, top_sage_id, 0, "MODEL")
+        log(f"+ AudioLoopHelperSageAttention #{top_sage_id} top-level (between PowerLoraLoader #{_BENCH_TOP_LEVEL_POWER_LORA} and Set_model #{_BENCH_TOP_LEVEL_SET_MODEL})")
 
     # --- 6. Insert LTXVImgToVideoInplaceKJ between EmptyLatent and AddGuideMulti ---
     inplace_id = _add_from_template(

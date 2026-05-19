@@ -22,11 +22,15 @@ Root cause / what this variant tests: the canonical build leaves the
 that question can be answered in 2 iterations.
 
 Fix / change applied (idempotent):
-  1. Toggle the ``IterPatchInspector`` from ``mode=4`` to ``mode=0``
-     so per-call patch state lands in the console log on every iter.
-  2. Strip the wire from ``TensorLoopOpen.iterations_in`` and set the
+  1. Strip the wire from ``TensorLoopOpen.iterations_in`` and set the
      ``iterations`` widget value to 2. With the input unwired, the
      widget value takes effect at runtime.
+  2. *(opt-in via* ``--with-inspector`` *)* Toggle the
+     ``IterPatchInspector`` from ``mode=4`` to ``mode=0`` so per-call
+     patch state lands in the console log on every iter. Off by
+     default — once per-iter patch survival has been verified empirically,
+     the inspector's per-call CUDA sync just slows down subsequent
+     smoke runs.
 
 Compatibility with other apply scripts:
   - Operates only on the OUTPUT (staging) copy; does NOT mutate the
@@ -71,7 +75,7 @@ def _phase5_ids(ed: WorkflowEditor) -> dict:
     return stash
 
 
-def _already_toggled(ed: WorkflowEditor) -> bool:
+def _already_toggled(ed: WorkflowEditor, *, with_inspector: bool) -> bool:
     """True iff the smoke-test mutations are already applied."""
     stash = ed.wf.get("properties", {}).get("build_fml2v_phase5") or {}
     inspector_id = stash.get("iter_patch_inspector")
@@ -83,22 +87,27 @@ def _already_toggled(ed: WorkflowEditor) -> bool:
         tlo = ed.find_node(tlo_id)
     except ValueError:
         return False
-    inspector_on = inspector.get("mode", 0) == 0
     iter_input = next((i for i in tlo.get("inputs", [])
                        if i.get("name") == "iterations_in"), None)
     iter_unwired = iter_input is not None and iter_input.get("link") is None
     widget_short = (tlo.get("widgets_values") or [None, None])[1] == SMOKE_ITERATIONS
-    return inspector_on and iter_unwired and widget_short
+    expected_inspector_mode = 0 if with_inspector else 4
+    inspector_matches = inspector.get("mode", 4) == expected_inspector_mode
+    return iter_unwired and widget_short and inspector_matches
 
 
-def _apply(ed: WorkflowEditor) -> None:
+def _apply(ed: WorkflowEditor, *, with_inspector: bool) -> None:
     stash = _phase5_ids(ed)
     inspector_id = stash["iter_patch_inspector"]
     tlo_id = stash["tlo"]
 
     inspector = ed.find_node(inspector_id)
-    inspector["mode"] = 0
-    print(f"  IterPatchInspector #{inspector_id}: mode 4 -> 0 (active)")
+    if with_inspector:
+        inspector["mode"] = 0
+        print(f"  IterPatchInspector #{inspector_id}: mode 4 -> 0 (active; opt-in diagnostic)")
+    else:
+        inspector["mode"] = 4
+        print(f"  IterPatchInspector #{inspector_id}: mode=4 (bypassed; performance default)")
 
     tlo = ed.find_node(tlo_id)
     iter_slot = WorkflowEditor.find_input_slot(tlo, "iterations_in")
@@ -115,21 +124,21 @@ def _apply(ed: WorkflowEditor) -> None:
     print(f"  TensorLoopOpen #{tlo_id}.widgets[1] (iterations): {old_iters} -> {SMOKE_ITERATIONS}")
 
 
-def _migrate(input_path: Path, output_path: Path, dry_run: bool) -> None:
+def _migrate(input_path: Path, output_path: Path, dry_run: bool, with_inspector: bool) -> None:
     if not input_path.exists():
         raise SystemExit(f"Input workflow missing: {input_path}")
 
     if output_path.exists() and input_path != output_path:
         ed_existing = WorkflowEditor(output_path)
-        if _already_toggled(ed_existing):
-            print(f"{output_path.name}: already toggled, skipping. Run --revert to reset.")
+        if _already_toggled(ed_existing, with_inspector=with_inspector):
+            print(f"{output_path.name}: already toggled for this mode, skipping. Run --revert to reset.")
             return
 
     if dry_run:
         ed = WorkflowEditor(input_path)
         print(f"would copy {input_path} -> {output_path}")
         print("would apply smoke-toggle ops:")
-        _apply(ed)
+        _apply(ed, with_inspector=with_inspector)
         return
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -137,11 +146,11 @@ def _migrate(input_path: Path, output_path: Path, dry_run: bool) -> None:
     print(f"  copied {input_path} -> {output_path}")
 
     ed = WorkflowEditor(output_path)
-    if _already_toggled(ed):
-        print(f"{output_path.name}: already toggled (from input), skipping mutations.")
+    if _already_toggled(ed, with_inspector=with_inspector):
+        print(f"{output_path.name}: already toggled for this mode (from input), skipping mutations.")
         return
 
-    _apply(ed)
+    _apply(ed, with_inspector=with_inspector)
     ed.save()
     print(f"  wrote {output_path}")
     print()
@@ -175,6 +184,11 @@ def main() -> None:
                     help="Delete the output staging file (does not touch --input).")
     ap.add_argument("--dry-run", action="store_true",
                     help="Report what would be copied/changed without writing.")
+    ap.add_argument("--with-inspector", action="store_true",
+                    help="Activate IterPatchInspector (opt-in diagnostic). "
+                         "Default is bypassed — once per-iter patch survival "
+                         "has been verified, the per-call CUDA sync overhead "
+                         "just slows down subsequent smoke runs.")
     args = ap.parse_args()
 
     output_path = Path(args.output)
@@ -182,7 +196,8 @@ def main() -> None:
         _revert(output_path)
         return
 
-    _migrate(Path(args.input), output_path, dry_run=args.dry_run)
+    _migrate(Path(args.input), output_path, dry_run=args.dry_run,
+             with_inspector=args.with_inspector)
 
 
 if __name__ == "__main__":
