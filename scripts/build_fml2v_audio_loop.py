@@ -544,6 +544,83 @@ def _add_getnode(ed: WorkflowEditor, bus_name: str, pos: tuple[int, int], dtype:
     return node_id
 
 
+def _add_loop_model_patch_chain(
+    ed: WorkflowEditor,
+    *,
+    x: int,
+    y: int,
+    label: str,
+    model_source_id: int,
+    iter_source_id: int,
+    iter_source_slot: int,
+    nag_cond_source_id: int,
+) -> dict:
+    """Build the canonical loop-body model patch chain
+    ``Stamp → ChunkFFN → AttnTuner (bypassed) → NAG → Sage``.
+
+    Used by Phase 5a (primary chain at the top of the loop body) and Phase
+    5c.1 (the pass2 re-arm chain — same node sequence but synchronized to
+    fire after pass1's offload boundary). The only behavioral difference
+    between callers is where ``current_iteration`` comes from; everything
+    else (widget values, wiring pattern, Sage-last ordering for ON_CLEANUP
+    drain priority) is identical.
+
+    Returns a dict of the new node ids keyed by role; caller is responsible
+    for adding the downstream SetNode bus (and an optional IterPatchInspector
+    diagnostic between Sage and the SetNode).
+    """
+    stamp_id = _add_from_template(
+        ed, "LoopIterationStamp", (x, y),
+        widget_values=[0],
+        title=f"LoopIterationStamp ({label})",
+        size=(280, 80),
+    )
+    ed.add_link(model_source_id, 0, stamp_id, 0, "MODEL")
+    ed.add_link(iter_source_id, iter_source_slot, stamp_id, 1, "INT")
+
+    chunk_id = _add_from_template(
+        ed, "LTXVChunkFeedForward", (x + 300, y),
+        widget_values=[2, 4096],
+        title=f"LTXVChunkFeedForward ({label})",
+        size=(280, 80),
+    )
+    ed.add_link(stamp_id, 0, chunk_id, 0, "MODEL")
+
+    attn_id = _add_from_template(
+        ed, "LTX2AttentionTunerPatch", (x + 600, y),
+        widget_values=["", 1, 1, 1, 1, True],
+        title=f"LTX2AttentionTunerPatch ({label}; bypassed)",
+        size=(280, 130),
+        mode=4,
+    )
+    ed.add_link(chunk_id, 0, attn_id, 0, "MODEL")
+
+    nag_id = _add_from_template(
+        ed, "LTX2_NAG", (x + 900, y),
+        widget_values=[11, 0.25, 2.5, True],
+        title=f"LTX2_NAG ({label}; nag_cond_video from Phase 3)",
+        size=(280, 130),
+    )
+    ed.add_link(attn_id, 0, nag_id, 0, "MODEL")
+    ed.add_link(nag_cond_source_id, 0, nag_id, 1, "CONDITIONING")
+
+    sage_id = _add_from_template(
+        ed, "AudioLoopHelperSageAttention", (x + 1200, y),
+        widget_values=["auto", True, 1024],
+        title=f"AudioLoopHelperSageAttention ({label}; Sage LAST)",
+        size=(280, 100),
+    )
+    ed.add_link(nag_id, 0, sage_id, 0, "MODEL")
+
+    return {
+        "stamp": stamp_id,
+        "chunk_ffn": chunk_id,
+        "attn_tuner": attn_id,
+        "nag": nag_id,
+        "sage": sage_id,
+    }
+
+
 def _add_setnode(ed: WorkflowEditor, bus_name: str, pos: tuple[int, int], dtype: str) -> int:
     """Add a KJNodes-shape SetNode (single typed input + '*' passthrough output)."""
     node_id = ed.next_node_id()
@@ -925,50 +1002,21 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
 
     # Model patch chain (downstream of LoopIterationStamp; feeds BOTH CFGGuiders
     # via SetNode bus). Patch order per CLAUDE.md: Stamp → ChunkFFN → AttnTuner
-    # → NAG → Sage (Sage LAST so ON_CLEANUP drains first).
-    stamp_id = _add_from_template(
-        ed, "LoopIterationStamp", (-2100, 1500),
-        widget_values=[0],
-        title="LoopIterationStamp",
-        size=(280, 80),
+    # → NAG → Sage (Sage LAST so ON_CLEANUP drains first). nag_cond_audio
+    # (slot 2 on NAG) left unwired — widget-only.
+    chain_primary = _add_loop_model_patch_chain(
+        ed,
+        x=-2100, y=1500,
+        label="loop body",
+        model_source_id=get_model_id,
+        iter_source_id=tlo_id, iter_source_slot=3,
+        nag_cond_source_id=nag_cond_id,
     )
-    ed.add_link(get_model_id, 0, stamp_id, 0, "MODEL")              # model
-    ed.add_link(tlo_id, 3, stamp_id, 1, "INT")                      # current_iteration ← TLO
-
-    chunk_id = _add_from_template(
-        ed, "LTXVChunkFeedForward", (-1800, 1500),
-        widget_values=[2, 4096],
-        title="LTXVChunkFeedForward",
-        size=(280, 80),
-    )
-    ed.add_link(stamp_id, 0, chunk_id, 0, "MODEL")
-
-    attn_id = _add_from_template(
-        ed, "LTX2AttentionTunerPatch", (-1500, 1500),
-        widget_values=["", 1, 1, 1, 1, True],
-        title="LTX2AttentionTunerPatch (bypassed default)",
-        size=(280, 130),
-        mode=4,
-    )
-    ed.add_link(chunk_id, 0, attn_id, 0, "MODEL")
-
-    nag_id = _add_from_template(
-        ed, "LTX2_NAG", (-1200, 1500),
-        widget_values=[11, 0.25, 2.5, True],
-        title="LTX2_NAG (nag_cond_video from Phase 3)",
-        size=(280, 130),
-    )
-    ed.add_link(attn_id, 0, nag_id, 0, "MODEL")
-    ed.add_link(nag_cond_id, 0, nag_id, 1, "CONDITIONING")          # nag_cond_video
-    # nag_cond_audio (slot 2) left unwired — widget-only
-
-    sage_id = _add_from_template(
-        ed, "AudioLoopHelperSageAttention", (-900, 1500),
-        widget_values=["auto", True, 1024],
-        title="AudioLoopHelperSageAttention (Sage LAST)",
-        size=(280, 100),
-    )
-    ed.add_link(nag_id, 0, sage_id, 0, "MODEL")
+    stamp_id = chain_primary["stamp"]
+    chunk_id = chain_primary["chunk_ffn"]
+    attn_id = chain_primary["attn_tuner"]
+    nag_id = chain_primary["nag"]
+    sage_id = chain_primary["sage"]
 
     # BYPASSED-by-default diagnostic: pass-through that logs per-call patch
     # state. Toggle mode=0 in the UI before the first live render to verify
@@ -1258,48 +1306,19 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     ed.add_link(tlo_id, 3, iter_after_pass1_id, 0, "INT")              # a ← TLO.current_iteration
     ed.add_link(p1_frame_count_id, 1, iter_after_pass1_id, 1, "INT")   # b ← LatentFrameCount.latent_frames
 
-    stamp_p2_id = _add_from_template(
-        ed, "LoopIterationStamp", (1500, 2100),
-        widget_values=[0],
-        title="LoopIterationStamp (pass2 re-arm)",
-        size=(280, 80),
+    chain_pass2 = _add_loop_model_patch_chain(
+        ed,
+        x=1500, y=2100,
+        label="pass2 re-arm",
+        model_source_id=get_model_id,
+        iter_source_id=iter_after_pass1_id, iter_source_slot=1,
+        nag_cond_source_id=nag_cond_id,
     )
-    ed.add_link(get_model_id, 0, stamp_p2_id, 0, "MODEL")
-    ed.add_link(iter_after_pass1_id, 1, stamp_p2_id, 1, "INT")          # current_iteration ← ComfyMath.INT
-
-    chunk_p2_id = _add_from_template(
-        ed, "LTXVChunkFeedForward", (1800, 2100),
-        widget_values=[2, 4096],
-        title="LTXVChunkFeedForward (pass2 re-arm)",
-        size=(280, 80),
-    )
-    ed.add_link(stamp_p2_id, 0, chunk_p2_id, 0, "MODEL")
-
-    attn_p2_id = _add_from_template(
-        ed, "LTX2AttentionTunerPatch", (2100, 2100),
-        widget_values=["", 1, 1, 1, 1, True],
-        title="LTX2AttentionTunerPatch (pass2 re-arm; bypassed)",
-        size=(280, 130),
-        mode=4,
-    )
-    ed.add_link(chunk_p2_id, 0, attn_p2_id, 0, "MODEL")
-
-    nag_p2_id = _add_from_template(
-        ed, "LTX2_NAG", (2400, 2100),
-        widget_values=[11, 0.25, 2.5, True],
-        title="LTX2_NAG (pass2 re-arm; nag_cond_video from Phase 3)",
-        size=(280, 130),
-    )
-    ed.add_link(attn_p2_id, 0, nag_p2_id, 0, "MODEL")
-    ed.add_link(nag_cond_id, 0, nag_p2_id, 1, "CONDITIONING")
-
-    sage_p2_id = _add_from_template(
-        ed, "AudioLoopHelperSageAttention", (2700, 2100),
-        widget_values=["auto", True, 1024],
-        title="AudioLoopHelperSageAttention (pass2 re-arm; Sage LAST)",
-        size=(280, 100),
-    )
-    ed.add_link(nag_p2_id, 0, sage_p2_id, 0, "MODEL")
+    stamp_p2_id = chain_pass2["stamp"]
+    chunk_p2_id = chain_pass2["chunk_ffn"]
+    attn_p2_id = chain_pass2["attn_tuner"]
+    nag_p2_id = chain_pass2["nag"]
+    sage_p2_id = chain_pass2["sage"]
 
     set_patched_p2_id = _add_setnode(ed, "loop_patched_model_pass2", (3000, 2100), dtype="MODEL")
     ed.add_link(sage_p2_id, 0, set_patched_p2_id, 0, "MODEL")

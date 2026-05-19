@@ -7426,7 +7426,7 @@
       "widgets_values": [
         0
       ],
-      "title": "LoopIterationStamp"
+      "title": "LoopIterationStamp (loop body)"
     },
     {
       "id": 2329,
@@ -7467,7 +7467,7 @@
         2,
         4096
       ],
-      "title": "LTXVChunkFeedForward"
+      "title": "LTXVChunkFeedForward (loop body)"
     },
     {
       "id": 2330,
@@ -7512,7 +7512,7 @@
         1,
         true
       ],
-      "title": "LTX2AttentionTunerPatch (bypassed default)"
+      "title": "LTX2AttentionTunerPatch (loop body; bypassed)"
     },
     {
       "id": 2331,
@@ -7567,7 +7567,7 @@
         2.5,
         true
       ],
-      "title": "LTX2_NAG (nag_cond_video from Phase 3)"
+      "title": "LTX2_NAG (loop body; nag_cond_video from Phase 3)"
     },
     {
       "id": 2332,
@@ -7609,7 +7609,7 @@
         true,
         1024
       ],
-      "title": "AudioLoopHelperSageAttention (Sage LAST)"
+      "title": "AudioLoopHelperSageAttention (loop body; Sage LAST)"
     },
     {
       "id": 2333,
