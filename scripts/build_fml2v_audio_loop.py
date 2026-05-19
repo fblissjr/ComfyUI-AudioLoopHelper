@@ -1216,6 +1216,95 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     )
     ed.add_link(sampler_p1_id, 0, sep_p1_post_id, 0, "LATENT")
 
+    # ====================================================================
+    # 5c.1 — Re-arm the model patch chain AFTER comfy-aimdo's offload
+    # boundary between pass1 and pass2.
+    #
+    # CLAUDE.md gotcha: "Top-level patches may silently drop across
+    # comfy-aimdo dynamic-VRAM stages." The patch chain at the top of
+    # the loop body (5a) fires ONCE per iter and feeds both
+    # CFGGuider_p1 and CFGGuider_p2 via Set_loop_patched_model. But
+    # between pass1 sampling and pass2 sampling, comfy-aimdo offloads
+    # then reloads the model (visible in the console as "Requested to
+    # load LTXAV → Model LTXAV prepared" between the two samplers).
+    # That reload strips the transformer_options/object_patches state
+    # that sage / NAG / ChunkFFN / AttnTuner installed → pass2 runs on
+    # an unpatched model → no NAG steering → output looks like
+    # "melting paint" (model invents whatever, since negative-prompt
+    # guidance is gone).
+    #
+    # Fix: a SECOND patch chain that fires AFTER pass1's sampler
+    # completes. ComfyMathExpression(a + b*0) forces the topological
+    # dependency: a comes from TLO.current_iteration (the actual
+    # per-iter value), b comes from LatentFrameCount(post-pass1 sep
+    # video) which can only be computed after pass1 finishes. Output
+    # = a, but the executor cannot run this until pass1 is done →
+    # second chain runs in the gap between pass1's offload and pass2's
+    # CFGGuider invocation → patches are fresh when pass2 reads them.
+    p1_frame_count_id = _add_from_template(
+        ed, "LatentFrameCount", (1200, 1950),
+        widget_values=[],
+        title="LatentFrameCount (sync point: forces patch_chain_p2 after pass1)",
+        size=(290, 80),
+    )
+    ed.add_link(sep_p1_post_id, 0, p1_frame_count_id, 0, "LATENT")
+
+    iter_after_pass1_id = _add_from_template(
+        ed, "ComfyMathExpression", (1500, 1950),
+        widget_values=["a + b * 0"],
+        title="ComfyMathExpression (a + b*0; output=a, depends on b for ordering)",
+        size=(290, 130),
+    )
+    ed.add_link(tlo_id, 3, iter_after_pass1_id, 0, "INT")              # a ← TLO.current_iteration
+    ed.add_link(p1_frame_count_id, 1, iter_after_pass1_id, 1, "INT")   # b ← LatentFrameCount.latent_frames
+
+    stamp_p2_id = _add_from_template(
+        ed, "LoopIterationStamp", (1500, 2100),
+        widget_values=[0],
+        title="LoopIterationStamp (pass2 re-arm)",
+        size=(280, 80),
+    )
+    ed.add_link(get_model_id, 0, stamp_p2_id, 0, "MODEL")
+    ed.add_link(iter_after_pass1_id, 1, stamp_p2_id, 1, "INT")          # current_iteration ← ComfyMath.INT
+
+    chunk_p2_id = _add_from_template(
+        ed, "LTXVChunkFeedForward", (1800, 2100),
+        widget_values=[2, 4096],
+        title="LTXVChunkFeedForward (pass2 re-arm)",
+        size=(280, 80),
+    )
+    ed.add_link(stamp_p2_id, 0, chunk_p2_id, 0, "MODEL")
+
+    attn_p2_id = _add_from_template(
+        ed, "LTX2AttentionTunerPatch", (2100, 2100),
+        widget_values=["", 1, 1, 1, 1, True],
+        title="LTX2AttentionTunerPatch (pass2 re-arm; bypassed)",
+        size=(280, 130),
+        mode=4,
+    )
+    ed.add_link(chunk_p2_id, 0, attn_p2_id, 0, "MODEL")
+
+    nag_p2_id = _add_from_template(
+        ed, "LTX2_NAG", (2400, 2100),
+        widget_values=[11, 0.25, 2.5, True],
+        title="LTX2_NAG (pass2 re-arm; nag_cond_video from Phase 3)",
+        size=(280, 130),
+    )
+    ed.add_link(attn_p2_id, 0, nag_p2_id, 0, "MODEL")
+    ed.add_link(nag_cond_id, 0, nag_p2_id, 1, "CONDITIONING")
+
+    sage_p2_id = _add_from_template(
+        ed, "AudioLoopHelperSageAttention", (2700, 2100),
+        widget_values=["auto", True, 1024],
+        title="AudioLoopHelperSageAttention (pass2 re-arm; Sage LAST)",
+        size=(280, 100),
+    )
+    ed.add_link(nag_p2_id, 0, sage_p2_id, 0, "MODEL")
+
+    set_patched_p2_id = _add_setnode(ed, "loop_patched_model_pass2", (3000, 2100), dtype="MODEL")
+    ed.add_link(sage_p2_id, 0, set_patched_p2_id, 0, "MODEL")
+    log(f"+ pass2 re-arm chain: Stamp#{stamp_p2_id} → ChunkFFN#{chunk_p2_id} → AttnTuner#{attn_p2_id} (bypassed) → NAG#{nag_p2_id} → Sage#{sage_p2_id} → Set_loop_patched_model_pass2#{set_patched_p2_id}")
+
     # Unbypass and rewire benchmark's between+pass2 chain. The upscale
     # model loader #182 must un-bypass alongside the upsampler that consumes
     # it via Set_/Get_upscale_model — without the loader, the bus carries
@@ -1247,10 +1336,14 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     ed.rewire_input(_BENCH_PRE_PASS2_CONCAT_AV, 1, mask_id, 1, "LATENT")
     log(f"  rewire ConcatAV#{_BENCH_PRE_PASS2_CONCAT_AV}.audio_latent ← LTXVAudioVideoMask#{mask_id}.audio")
 
-    # Pass2 CFGGuider model ← Get_loop_patched_model (was dangling Get_model_nag).
-    get_patched_p2_id = _add_getnode(ed, "loop_patched_model", (300, 1300), "MODEL")
+    # Pass2 CFGGuider model ← Get_loop_patched_model_pass2 (the FRESH bus
+    # populated by the pass2 re-arm chain above, which fires after pass1's
+    # offload boundary). The original Get_loop_patched_model bus carries
+    # a stale model reference whose transformer_options got cleared by
+    # comfy-aimdo's reload between passes.
+    get_patched_p2_id = _add_getnode(ed, "loop_patched_model_pass2", (3300, 2100), "MODEL")
     ed.rewire_input(_BENCH_PASS2_CFG_GUIDER, 0, get_patched_p2_id, 0, "MODEL")
-    log(f"  rewire CFGGuider#{_BENCH_PASS2_CFG_GUIDER}.model ← Get_loop_patched_model")
+    log(f"  rewire CFGGuider#{_BENCH_PASS2_CFG_GUIDER}.model ← Get_loop_patched_model_pass2 (fresh patches post-offload)")
 
     # Pass2 RandomNoise: benchmark's #14 is widget-only (no input slot). Add a
     # NEW RandomNoise with iteration_seed wire; rewire Sampler.noise to it.
@@ -1346,6 +1439,14 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
         "sampler_p1": sampler_p1_id,
         "separate_av_p1_post": sep_p1_post_id,
         "noise_p2": noise_p2_id,
+        "p1_frame_count": p1_frame_count_id,
+        "iter_after_pass1": iter_after_pass1_id,
+        "stamp_p2": stamp_p2_id,
+        "chunk_p2": chunk_p2_id,
+        "attn_tuner_p2": attn_p2_id,
+        "nag_p2": nag_p2_id,
+        "sage_p2": sage_p2_id,
+        "set_patched_model_pass2": set_patched_p2_id,
         "adain_final": adain_final_id,
         "iteration_cleanup": cleanup_id,
     }

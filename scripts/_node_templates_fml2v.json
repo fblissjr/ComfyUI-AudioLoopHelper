@@ -1967,5 +1967,29 @@
       0,
       25
     ]
+  },
+  "LatentFrameCount": {
+    "type": "LatentFrameCount",
+    "inputs": [
+      {
+        "name": "latent",
+        "type": "LATENT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "pixel_frames",
+        "type": "INT"
+      },
+      {
+        "name": "latent_frames",
+        "type": "INT"
+      }
+    ],
+    "properties": {
+      "Node name for S&R": "LatentFrameCount",
+      "aux_id": "fblissjr/ComfyUI-AudioLoopHelper"
+    },
+    "widgets_values": []
   }
 }
