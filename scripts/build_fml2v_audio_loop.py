@@ -1180,19 +1180,19 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
     ed.add_link(vae_encode_id, 0, add_guide_frame0_id, 4, "LATENT")
     # strength_5 widget=1.0 = HARD; no FloatConstant wire (input left at widget value)
 
-    add_guide_id = _add_from_template(
+    add_guide_trailing_id = _add_from_template(
         ed, "LTXVAddLatentGuide", (-400, 1800),
         widget_values=[-1, 0.7],  # [latent_idx=-1, strength_widget_default 0.7]
         title="LTXVAddLatentGuide (trailing init anchor; idx=-1)",
         size=(290, 180),
     )
-    ed.add_link(get_vae_id, 0, add_guide_id, 0, "VAE")
+    ed.add_link(get_vae_id, 0, add_guide_trailing_id, 0, "VAE")
     # pos/neg/latent chain from the frame-0 guide's outputs (guides accumulate)
-    ed.add_link(add_guide_frame0_id, 0, add_guide_id, 1, "CONDITIONING")
-    ed.add_link(add_guide_frame0_id, 1, add_guide_id, 2, "CONDITIONING")
-    ed.add_link(add_guide_frame0_id, 2, add_guide_id, 3, "LATENT")
-    ed.add_link(vae_encode_id, 0, add_guide_id, 4, "LATENT")
-    ed.add_link(init_strength_id, 0, add_guide_id, 5, "FLOAT")      # strength ← FloatConstant 0.7
+    ed.add_link(add_guide_frame0_id, 0, add_guide_trailing_id, 1, "CONDITIONING")
+    ed.add_link(add_guide_frame0_id, 1, add_guide_trailing_id, 2, "CONDITIONING")
+    ed.add_link(add_guide_frame0_id, 2, add_guide_trailing_id, 3, "LATENT")
+    ed.add_link(vae_encode_id, 0, add_guide_trailing_id, 4, "LATENT")
+    ed.add_link(init_strength_id, 0, add_guide_trailing_id, 5, "FLOAT")      # strength ← FloatConstant 0.7
 
     # F3 dual cropguides: NoLatent for cond path; with-latent for AdaIN path.
     nocrop_id = _add_from_template(
@@ -1201,8 +1201,8 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
         title="LTXVCropGuidesNoLatent (cond path)",
         size=(290, 80),
     )
-    ed.add_link(add_guide_id, 0, nocrop_id, 0, "CONDITIONING")
-    ed.add_link(add_guide_id, 1, nocrop_id, 1, "CONDITIONING")
+    ed.add_link(add_guide_trailing_id, 0, nocrop_id, 0, "CONDITIONING")
+    ed.add_link(add_guide_trailing_id, 1, nocrop_id, 1, "CONDITIONING")
 
     crop_p1_id = _add_from_template(
         ed, "LTXVCropGuides", (-300, 1900),
@@ -1210,9 +1210,9 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
         title="LTXVCropGuides (latent path for AdaIN)",
         size=(290, 100),
     )
-    ed.add_link(add_guide_id, 0, crop_p1_id, 0, "CONDITIONING")
-    ed.add_link(add_guide_id, 1, crop_p1_id, 1, "CONDITIONING")
-    ed.add_link(add_guide_id, 2, crop_p1_id, 2, "LATENT")
+    ed.add_link(add_guide_trailing_id, 0, crop_p1_id, 0, "CONDITIONING")
+    ed.add_link(add_guide_trailing_id, 1, crop_p1_id, 1, "CONDITIONING")
+    ed.add_link(add_guide_trailing_id, 2, crop_p1_id, 2, "LATENT")
 
     # AdaIN with reference from initial-render bus.
     #
@@ -1483,7 +1483,7 @@ def phase5_loop_body(ed: WorkflowEditor, *, verbose: bool = True) -> None:
         "overlap_trim_output": overlap_trim_id,
         "av_mask": mask_id,
         "add_latent_guide_frame0": add_guide_frame0_id,
-        "add_latent_guide": add_guide_id,
+        "add_latent_guide_trailing": add_guide_trailing_id,
         "crop_guides_no_latent": nocrop_id,
         "crop_guides_p1": crop_p1_id,
         "adain_p1": adain_p1_id,

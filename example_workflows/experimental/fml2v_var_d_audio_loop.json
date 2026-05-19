@@ -13152,7 +13152,7 @@
       "overlap_trim_output": 2366,
       "av_mask": 2340,
       "add_latent_guide_frame0": 2342,
-      "add_latent_guide": 2343,
+      "add_latent_guide_trailing": 2343,
       "crop_guides_no_latent": 2344,
       "crop_guides_p1": 2345,
       "adain_p1": 2347,
