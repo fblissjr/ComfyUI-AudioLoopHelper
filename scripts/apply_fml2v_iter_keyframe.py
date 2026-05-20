@@ -32,7 +32,6 @@ from _helpers._fml2v_helpers import (
     make_argparser,
     phase5_stash,
     revert_variant,
-    smoke_iters_applied,
     stage_variant,
 )
 from apply_fml2v_option3_context_extract import _apply as _apply_option3
@@ -49,18 +48,18 @@ ITER_KEYFRAME_TITLE = "LTX Iter Keyframe Schedule (first/mid/last)"
 
 
 def _already_toggled(ed: WorkflowEditor) -> bool:
+    """Check iter-keyframe-specific markers only. Smoke vs full TLO wiring
+    state is mode-dependent and isn't a stable toggle marker — revert + re-apply
+    to switch modes."""
     stash = ed.wf.get("properties", {}).get("build_fml2v_phase5") or {}
-    tlo_id = stash.get("tlo")
-    if tlo_id is None:
+    if stash.get("tlo") is None:
         return False
     try:
-        tlo = ed.find_node(tlo_id)
         guide_multi = ed.find_node(INIT_RENDER_ADD_GUIDE_MULTI)
     except ValueError:
         return False
     return (
-        smoke_iters_applied(tlo)
-        and find_by_type_and_title(ed, "LTXIterKeyframeSchedule", ITER_KEYFRAME_TITLE) is not None
+        find_by_type_and_title(ed, "LTXIterKeyframeSchedule", ITER_KEYFRAME_TITLE) is not None
         and (guide_multi.get("widgets_values") or [None])[0] == "1"
     )
 
@@ -93,13 +92,35 @@ def _collapse_init_render_multi_to_single(ed: WorkflowEditor) -> None:
     print(f"  AddGuideMulti #{INIT_RENDER_ADD_GUIDE_MULTI} (init render): num_guides '3' -> '1' (drop image_2 + image_3)")
 
 
-def _apply(ed: WorkflowEditor) -> None:
+def _restore_total_iterations_autowire(ed: WorkflowEditor, tlo_id: int) -> None:
+    """Undo the smoke iters config that option3 applied; re-wire the canonical
+    AudioLoopPlanner.total_iterations → TensorLoopOpen.iterations_in instead.
+    F5 audit invariant ('iterations_autowired'). Resets TLO.iterations widget
+    back to its canonical default (50) so the widget value isn't a footgun
+    when the wire is removed later.
+    """
+    stash2 = ed.wf["properties"]["build_fml2v_phase2"]
+    planner_id = stash2["audio_loop_planner"]
+    iter_slot = WorkflowEditor.find_input_slot(ed.find_node(tlo_id), "iterations_in")
+    ed.add_link(planner_id, 1, tlo_id, iter_slot, "INT")  # planner.total_iterations (slot 1)
+    tlo = ed.find_node(tlo_id)
+    wv = list(tlo.get("widgets_values") or [])
+    if len(wv) >= 2:
+        wv[1] = 50
+    tlo["widgets_values"] = wv
+    print(f"  re-wire TLO #{tlo_id}.iterations_in ← AudioLoopPlanner #{planner_id}.total_iterations (F5 canonical)")
+
+
+def _apply(ed: WorkflowEditor, *, smoke: bool = False) -> None:
     _apply_option3(ed)
 
     stash = phase5_stash(ed)
     tlo_id = stash["tlo"]
     av_mask_id = stash["av_mask"]
     add_guide_frame0_id = stash["add_latent_guide_frame0"]
+
+    if not smoke:
+        _restore_total_iterations_autowire(ed, tlo_id)
 
     get_vae_id = ed.next_node_id()
     ed.add_node(WorkflowEditor.make_get_node(
@@ -138,30 +159,45 @@ def _apply(ed: WorkflowEditor) -> None:
 
 
 def main() -> None:
-    args = make_argparser(__doc__, DEFAULT_OUTPUT).parse_args()
+    ap = make_argparser(__doc__, DEFAULT_OUTPUT)
+    ap.add_argument("--smoke", action="store_true",
+                    help="Keep the 2-iter smoke config (TLO unwired + widget=2). "
+                         "Default re-wires AudioLoopPlanner.total_iterations → TLO "
+                         "for full-length renders (F5 canonical).")
+    args = ap.parse_args()
     output_path = Path(args.output)
     if args.revert:
         revert_variant(output_path)
         return
 
+    next_steps_smoke = [
+        "1. bash start_experiment.sh nodynvram   # avoid offload-reload bug",
+        f"2. Reload {output_path.name} in ComfyUI",
+        "3. Wire LoadImage slots (first/middle/last) + LoadAudio",
+        "4. Set target_iters_N on LTXIterKeyframeSchedule (target_iters_1='0' anchors iter 0).",
+        "5. Queue (2 iters smoke).",
+    ]
+    next_steps_full = [
+        "1. bash start_experiment.sh nodynvram   # avoid offload-reload bug",
+        f"2. Reload {output_path.name} in ComfyUI",
+        "3. Wire LoadImage slots (first/middle/last) + LoadAudio",
+        "4. Check AudioLoopPlanner.summary in UI to see computed iter count",
+        "   (= ceil((audio_duration − init_render_seconds) / stride_seconds)).",
+        "5. Set target_iters_N on LTXIterKeyframeSchedule based on that count:",
+        "     target_iters_1 = '0'              (first iter)",
+        "     target_iters_2 = '<midpoint>'     (e.g. '2' for 5-iter song)",
+        "     target_iters_3 = '<last>'         (e.g. '4' for 5-iter song)",
+        "   Empty target_iters = no-op for that row.",
+        "6. Queue (full-length render).",
+    ]
+
     stage_variant(
         Path(args.input), output_path,
-        apply_fn=_apply,
+        apply_fn=lambda ed: _apply(ed, smoke=args.smoke),
         already_toggled_fn=_already_toggled,
         dry_run=args.dry_run,
-        variant_label="iter-keyframe",
-        next_steps=[
-            "1. bash start_experiment.sh nodynvram   # avoid offload-reload bug",
-            f"2. Reload {output_path.name} in ComfyUI",
-            "3. Wire LoadImage slots (first/middle/last) + LoadAudio as before",
-            "4. Edit LTXIterKeyframeSchedule widgets in UI:",
-            "     target_iters_1 = '0'         (first image anchors iter 0)",
-            "     target_iters_2 = '25'        (middle anchors iter 25 — pick your midpoint)",
-            "     target_iters_3 = '49'        (last anchors final iter)",
-            "   Empty target_iters = no-op for that row.",
-            "5. Queue prompt — watch for fresh anchor frames at the chosen iters",
-            "   with continuity preserved between anchors.",
-        ],
+        variant_label="iter-keyframe (smoke)" if args.smoke else "iter-keyframe (full)",
+        next_steps=next_steps_smoke if args.smoke else next_steps_full,
     )
 
 
