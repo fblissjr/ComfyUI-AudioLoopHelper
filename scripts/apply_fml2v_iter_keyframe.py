@@ -92,35 +92,13 @@ def _collapse_init_render_multi_to_single(ed: WorkflowEditor) -> None:
     print(f"  AddGuideMulti #{INIT_RENDER_ADD_GUIDE_MULTI} (init render): num_guides '3' -> '1' (drop image_2 + image_3)")
 
 
-def _restore_total_iterations_autowire(ed: WorkflowEditor, tlo_id: int) -> None:
-    """Undo the smoke iters config that option3 applied; re-wire the canonical
-    AudioLoopPlanner.total_iterations → TensorLoopOpen.iterations_in instead.
-    F5 audit invariant ('iterations_autowired'). Resets TLO.iterations widget
-    back to its canonical default (50) so the widget value isn't a footgun
-    when the wire is removed later.
-    """
-    stash2 = ed.wf["properties"]["build_fml2v_phase2"]
-    planner_id = stash2["audio_loop_planner"]
-    iter_slot = WorkflowEditor.find_input_slot(ed.find_node(tlo_id), "iterations_in")
-    ed.add_link(planner_id, 1, tlo_id, iter_slot, "INT")  # planner.total_iterations (slot 1)
-    tlo = ed.find_node(tlo_id)
-    wv = list(tlo.get("widgets_values") or [])
-    if len(wv) >= 2:
-        wv[1] = 50
-    tlo["widgets_values"] = wv
-    print(f"  re-wire TLO #{tlo_id}.iterations_in ← AudioLoopPlanner #{planner_id}.total_iterations (F5 canonical)")
-
-
 def _apply(ed: WorkflowEditor, *, smoke: bool = False) -> None:
-    _apply_option3(ed)
+    _apply_option3(ed, smoke=smoke)
 
     stash = phase5_stash(ed)
     tlo_id = stash["tlo"]
     av_mask_id = stash["av_mask"]
     add_guide_frame0_id = stash["add_latent_guide_frame0"]
-
-    if not smoke:
-        _restore_total_iterations_autowire(ed, tlo_id)
 
     get_vae_id = ed.next_node_id()
     ed.add_node(WorkflowEditor.make_get_node(

@@ -106,7 +106,12 @@ def _already_toggled(ed: WorkflowEditor) -> bool:
     )
 
 
-def _apply(ed: WorkflowEditor) -> None:
+def _apply(ed: WorkflowEditor, *, smoke: bool = True) -> None:
+    """Apply option3 mutations. ``smoke=True`` (default) preserves CLI
+    semantics: short-circuit TLO.iterations_in to 2 via widget. Pass
+    ``smoke=False`` from sibling apply-scripts that need the canonical
+    AudioLoopPlanner.total_iterations → TLO autowire (F5) preserved.
+    """
     stash = phase5_stash(ed)
     tlo_id = stash["tlo"]
     sampler_p1_id = stash["sampler_p1"]
@@ -173,7 +178,8 @@ def _apply(ed: WorkflowEditor) -> None:
         n["mode"] = 0
         print(f"  #{nid} {n['type']}: mode {prev} -> 0 (un-bypassed)")
 
-    apply_smoke_iters_config(ed, tlo_id)
+    if smoke:
+        apply_smoke_iters_config(ed, tlo_id)
 
 
 def main() -> None:

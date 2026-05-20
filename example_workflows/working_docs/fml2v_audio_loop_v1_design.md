@@ -1,6 +1,50 @@
 # fml2v_var_d_audio_loop V1 — design
 
-Last updated: 2026-05-18
+Last updated: 2026-05-19
+
+> **V2 ARCHITECTURAL PIVOT (2026-05-19).** Live-render verification of
+> V1's two-pass-refine + spatial-upsample loop body produced yellow
+> tiger-stripe artifacts in loop iters regardless of guide strengths or
+> AdaIN state. Four diagnostic apply-scripts (`apply_fml2v_smoke_toggle`,
+> `apply_fml2v_no_pass2_blend`, `apply_fml2v_pass1_recovery`,
+> `apply_fml2v_inplace_kj_p1`) converged on the root cause: the loop
+> body never consumed prev-iter content. `TLO.previous_value` had no
+> downstream consumer; every iter started from `EmptyLatent` in the
+> middle frames, and 8 distilled steps cannot invent coherent middle
+> frames from soft anchors alone.
+>
+> **Pivot to "option 3": full-res two-pass refine + `LatentContextExtract`
+> from prev iter, no spatial upsampler.** Staged via
+> `scripts/apply_fml2v_option3_context_extract.py`. Resolves both
+> architectural deltas in the V1 banner below — ContextExtract now in
+> the chain, single resolution end-to-end (so the half-res / full-res
+> mismatch that motivated dropping ContextExtract in V1 disappears).
+>
+> **Per-iter keyframe re-anchoring** added on top of option3 via the
+> new `LTXIterKeyframeSchedule` node + `scripts/apply_fml2v_iter_keyframe.py`.
+> DiT video drift on long renders is mitigated by hard-locking the
+> latent at user-chosen iter+frame positions (same `noise_mask=0`
+> semantics as `LTXVImgToVideoInplaceKJ`). Init-render `LTXVAddGuideMulti`
+> collapsed from 3 keyframes (first/mid/last in 19.88s window) to 1
+> (first only); middle/last become per-iter keyframes scheduled across
+> the song timeline.
+>
+> **Mode flags**: `apply_fml2v_iter_keyframe.py` defaults to FULL
+> render (re-wires `AudioLoopPlanner.total_iterations → TLO.iterations_in`,
+> F5 canonical autowire); `--smoke` opts into the 2-iter quick test.
+> `apply_fml2v_option3_context_extract.py::_apply()` accepts `smoke`
+> kwarg (default True for CLI preservation, False from iter-keyframe
+> caller).
+>
+> **Verified runs** (2026-05-19, with `bash start_experiment.sh nodynvram`
+> to avoid comfy-aimdo offload-reload corruption of LTX AV model state):
+> coherent video continuing from init render via ContextExtract, lip
+> sync stable through full song after `AudioVideoMask` timing wires
+> resolved (`video_end_time` / `audio_start_time` / `audio_end_time`
+> all wired to `LTXFramePlanner.actual_seconds`).
+>
+> Original V1 banner + recipe follow. V1 two-pass + 960×512 + no-ContextExtract
+> are preserved for context but superseded by V2.
 
 > **STATUS: BUILD COMPLETE as of 2026-05-18.** All six phases of
 > `scripts/build_fml2v_audio_loop.py` implemented; workflow at
