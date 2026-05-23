@@ -24,6 +24,19 @@ This project uses [Semantic Versioning](https://semver.org/).
   referenced anchor.
 
 ### Added
+- **`scripts/apply_audioreactive_loop.py` + the
+  `example_workflows/experimental/audio_reactive_loop.json` variant it
+  generates.** The full-length production counterpart to the single-shot
+  fork: keeps the loop intact (topology unchanged from canonical, passes
+  all loop invariants) so it tracks the WHOLE track — the loop auto-sizes
+  to the loaded audio — and the prompt schedule can evolve the visual
+  across a set's sections. Presets the same audio-reactive knobs
+  (`audio_to_video_scale=2.5`, `NAG=5` + non-person negative) plus
+  `first_frame_guide_strength=0.6` (the per-iter re-anchor = drift-vs-motion
+  dial) and a multi-section prompt-schedule scaffold to rewrite per track.
+  All `--flag`-overridable; no-op on re-run (marker-Note detection) so an
+  authored schedule survives, `--force` to regenerate. Workflow:
+  preview/tune on the single-shot fork, render long-form here.
 - **`scripts/apply_audio_driven_single_shot.py` + the
   `example_workflows/experimental/audio_driven_single_shot.json` fork it
   generates.** A loop-removed fork of the canonical latent workflow for
