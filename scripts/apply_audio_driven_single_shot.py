@@ -2,12 +2,15 @@
 
 Last updated: 2026-05-23
 
-Stages a single-shot, audio-reactive DRAFT variant of the canonical
-latent workflow into gitignored `internal/scratch/`. Does NOT mutate the
-canonical, and does NOT write to the tracked `example_workflows/` surface
-(the variant is unvalidated — it has not been render-tested. Promotion to
-`example_workflows/experimental/` + a paired audit invariant follows the
-"ships AND stabilizes" criterion in `internal/PLAN.md`).
+Stages a single-shot, audio-reactive variant of the canonical latent
+workflow into `example_workflows/experimental/` — a fork surface, peer to
+the other experimental forks there. Per the experimental-fork convention
+it is NOT picked up by the default audit sweep (not in
+`EXPERIMENTAL_AUDITED_FILES`); audit it explicitly by passing the path.
+Does NOT mutate the canonical.
+
+Note: this fork has non-standard (loopless) topology and is not yet
+render-validated. Treat as experimental.
 
 Symptom / motivation: the canonical workflow is a full-length looped
 music video. For a short audio-reactive demo (a subject that pulses/moves
@@ -125,7 +128,7 @@ REQUIRED_SOURCE_NODES = (
 )
 
 DEFAULT_INPUT = "example_workflows/audio-loop-music-video_latent.json"
-DEFAULT_OUTPUT = "internal/scratch/audio_driven_single_shot.json"
+DEFAULT_OUTPUT = "example_workflows/experimental/audio_driven_single_shot.json"
 
 DEFAULT_A2V_SCALE = 2.0
 DEFAULT_IMG_COMPRESSION = 35
