@@ -651,7 +651,7 @@
         "",
         1,
         1,
-        2.0,
+        2.5,
         1,
         true
       ]
@@ -3125,7 +3125,7 @@
         "cnr_id": "comfyui-audioloophelper"
       },
       "widgets_values": [
-        "0:00+: In a tight macro close-up, a glistening human heart pulses and contracts rhythmically, beating steadily, its surface flexing and relaxing with each beat under soft warm light. The camera holds steady with a slow, gentle push-in.",
+        "0:00+: In a tight macro close-up, an expressive oil-painted anatomical heart pulses and contracts rhythmically, beating steadily, vivid brushstrokes and splattered color flexing with each beat, radiant light streaks rippling outward on every pulse. The camera holds steady with a slow, gentle push-in.",
         17.92,
         180,
         true,
