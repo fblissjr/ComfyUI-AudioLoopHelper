@@ -22,12 +22,12 @@ widgets, so it passes every canonical audit invariant. What it sets:
         distilled freeze-risk knob)
   - #507 CLIPTextEncode (NAG negative) = motion + frame-quality terms for a
         non-person subject (drops the canonical's singer tokens)
-  - #1269 first_frame_guide_strength = 0.6  (the per-iter init re-anchor
+  - #1269 first_frame_guide_strength = 0.7  (the per-iter init re-anchor
         strength = the DRIFT vs MOTION dial: higher holds a painterly init
         harder but suppresses motion; lower frees motion but lets style
         drift across iterations — A/B this for your image)
-  - #1615 TimestampPromptScheduleBatchEncode = a multi-section scaffold to
-        rewrite for your track's structure
+  - #1615 TimestampPromptScheduleBatchEncode = a single `0:00+:` prompt held
+        for the whole render (add more `M:SS+:` entries to evolve per section)
 
 All preset values are `--flag`-overridable. The audio path stays frozen;
 this only tunes how hard audio drives video and how the loop re-anchors.
@@ -75,26 +75,20 @@ DEFAULT_OUTPUT = "example_workflows/audio_reactive_loop.json"
 
 DEFAULT_A2V_SCALE = 2.5
 DEFAULT_NAG_SCALE = 5.0
-DEFAULT_FFG_STRENGTH = 0.6
+DEFAULT_FFG_STRENGTH = 0.7
 DEFAULT_NEGATIVE = (
     "still image with no motion, frozen frame, static, blurry, low quality, "
     "watermark, subtitles, text"
 )
-# Multi-section scaffold — REWRITE to your track. Each "M:SS+: ..." entry
-# switches the visual from that timestamp onward. "In a [shot]" continuation
-# framing (NOT "Cut to"); keep the beat verb so motion binds to the audio.
-DEFAULT_PROMPT_SCHEDULE = "\n".join((
+# Single "0:00+:" entry — one look held for the whole render. The loop CAN still
+# evolve the visual by section (add more "M:SS+: ..." entries, "In a [shot]"
+# continuation framing — NOT "Cut to"); a single steady prompt is the default.
+DEFAULT_PROMPT_SCHEDULE = (
     "0:00+: In a tight macro close-up, an expressive oil-painted anatomical "
     "heart pulses and contracts rhythmically, beating steadily, vivid "
     "brushstrokes flexing with each beat under soft warm light. The camera "
-    "holds steady.",
-    "2:00+: In a medium shot, the oil-painted heart beats harder, radiant "
-    "light streaks rippling outward on every beat, colors deepening and "
-    "swirling. The camera slowly pushes in.",
-    "4:00+: In a wide shot, the heart blazes with energy, brushstroke colors "
-    "bursting in time with each beat, light rays spiraling outward. The "
-    "camera slowly orbits.",
-))
+    "holds steady."
+)
 
 NOTE_MARKER = "Audio-reactive loop — read me"
 NOTE_TEXT = (
@@ -104,12 +98,12 @@ NOTE_TEXT = (
     "Knobs (all --flag-overridable in apply_audioreactive_loop.py):\n"
     "  - #1523 audio_to_video_scale=2.5: how hard audio drives video.\n"
     "  - #508 NAG nag_scale=5 (+#507 negative): softened from freeze-prone 11.\n"
-    "  - #1269 first_frame_guide_strength=0.6: the DRIFT vs MOTION dial.\n"
+    "  - #1269 first_frame_guide_strength=0.7: the DRIFT vs MOTION dial.\n"
     "    Higher = holds the (painterly) init harder, less motion;\n"
     "    lower = more motion, more cross-iter style drift. A/B this.\n"
-    "  - #1615 schedule: EDIT to your track's sections. Each 'M:SS+: ...'\n"
-    "    entry switches the visual from that timestamp. 'In a [shot]'\n"
-    "    framing (NOT 'Cut to'); keep the beat verb (pulses/beats).\n\n"
+    "  - #1615 prompt: a single 0:00+: entry by default. To evolve per\n"
+    "    section, add more 'M:SS+: ...' entries ('In a [shot]' framing,\n"
+    "    NOT 'Cut to'); keep the beat verb (pulses/beats).\n\n"
     "To run: #444 init image, #565 full track. Output trims to audio.\n"
     "Long renders: render per-track, use the SaveLatent -> upscale path."
 )
@@ -186,7 +180,7 @@ def _migrate(input_path: Path, output_path: Path, *, dry_run: bool, force: bool,
     print("Next steps:")
     print(f"  1. Validate: python3 -c \"import json; json.load(open('{output_path}'))\"")
     print(f"  2. Audit:    uv run --group dev python scripts/audit_workflows.py {output_path}")
-    print(f"  3. EDIT the #1615 prompt schedule to your track's sections.")
+    print(f"  3. EDIT the #1615 prompt to your subject (add M:SS+: entries to evolve per section).")
     print(f"  4. Load in ComfyUI: open {output_path}; set #444 init image + #565 full track.")
 
 
@@ -219,7 +213,7 @@ def main() -> None:
     ap.add_argument("--nag-scale", type=float, default=DEFAULT_NAG_SCALE,
                     help="LTX2_NAG nag_scale (default 5; canonical 11 is freeze-prone on distilled).")
     ap.add_argument("--first-frame-guide-strength", type=float, default=DEFAULT_FFG_STRENGTH,
-                    help="Per-iter init re-anchor strength (default 0.6; the drift-vs-motion dial, "
+                    help="Per-iter init re-anchor strength (default 0.7 = canonical; the drift-vs-motion dial, "
                          "1.0 = max identity stability / minimal motion, lower = more motion + drift).")
     ap.add_argument("--negative", default=DEFAULT_NEGATIVE,
                     help="NAG negative text (#507). Default is motion/quality terms for a non-person subject.")

@@ -32,8 +32,8 @@ This project uses [Semantic Versioning](https://semver.org/).
   to the loaded audio — and the prompt schedule can evolve the visual
   across a set's sections. Presets the same audio-reactive knobs
   (`audio_to_video_scale=2.5`, `NAG=5` + non-person negative) plus
-  `first_frame_guide_strength=0.6` (the per-iter re-anchor = drift-vs-motion
-  dial) and a multi-section prompt-schedule scaffold to rewrite per track.
+  `first_frame_guide_strength=0.7` (the per-iter re-anchor = drift-vs-motion
+  dial) and a single-entry prompt (add `M:SS+:` entries to evolve per section).
   All `--flag`-overridable; no-op on re-run (marker-Note detection) so an
   authored schedule survives, `--force` to regenerate. Workflow:
   preview/tune on the single-shot fork, render long-form here.

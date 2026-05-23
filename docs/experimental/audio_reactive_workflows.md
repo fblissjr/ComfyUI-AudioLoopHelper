@@ -64,9 +64,9 @@ is deterministic — see "Regenerating"). Node-level values if you tune in the U
 | `#1523 LTX2AttentionTunerPatch` | `audio_to_video_scale` (widget 3) | `2.5` | How hard the audio drives video attention. `1.0` = neutral. Raise to 3–5 if the beat coupling is too weak; watch for artifacts. |
 | `#508 LTX2_NAG` | `nag_scale` (widget 0) | `5` | The canonical/KJNodes default `11` is the documented distilled freeze-risk knob. `5` is safer for a motion-first render; raise toward 7–11 only if motion is too loose. |
 | `#507 CLIPTextEncode` | NAG negative text | motion + frame-quality terms | Pushes away from "still / no motion / blurry". Default drops person/singer tokens (faces / hands / mic) that don't fit a non-person subject. |
-| `#1269 first_frame_guide_strength` | value (widget 0) | `0.6` (loop only) | **Loop only.** Per-iteration init re-anchor strength = the drift-vs-motion dial. `1.0` = holds the init hard but suppresses motion; lower = more motion but more cross-iter style drift. A/B for your image (≈0.5–0.8 for a painterly init). |
+| `#1269 first_frame_guide_strength` | value (widget 0) | `0.7` (loop only; = canonical) | **Loop only.** Per-iteration init re-anchor strength = the drift-vs-motion dial. `1.0` = holds the init hard but suppresses motion; lower = more motion but more cross-iter style drift. A/B for your image (≈0.5–0.8 for a painterly init). |
 | `#446 LTXVPreprocess` | `img_compression` | `35` (single-shot) | Anti frozen-frame: a pristine init reads as a static photo. Single-shot only (the loop keeps the canonical `18` to preserve init/loop preprocess symmetry). |
-| `#1615 TimestampPromptScheduleBatchEncode` | schedule (widget 0) | heart scaffold | The prompt(s). Single entry for single-shot; multi-section for the loop (see below). |
+| `#1615 TimestampPromptScheduleBatchEncode` | schedule (widget 0) | single `0:00+:` entry | One prompt held for the whole render (both workflows). Add `M:SS+:` entries to evolve the loop per section (see below). |
 
 ---
 
@@ -88,8 +88,8 @@ is deterministic — see "Regenerating"). Node-level values if you tune in the U
 
 1. Same inputs.
 2. Open `example_workflows/audio_reactive_loop.json`.
-3. **Author the `#1615` prompt schedule to your track's sections** — this is
-   the step that matters. One entry per section:
+3. **Prompt:** the default is a single `0:00+:` entry held for the whole render.
+   To evolve the visual per section, replace it with one entry per section:
    ```
    0:00+: In a tight macro close-up, <subject> <verb>s to the beat, <detail>. The camera holds steady.
    1:30+: In a medium shot, <subject> <verb>s harder as the energy builds, <detail>. The camera slowly pushes in.
@@ -99,7 +99,7 @@ is deterministic — see "Regenerating"). Node-level values if you tune in the U
    [shot]` continuation framing — **not** "Cut to" (the model reads scene-cut
    language as a discontinuation directive).
 4. Carry the `audio_to_video_scale` / `nag_scale` you settled on in preview;
-   set `first_frame_guide_strength` (start `0.6`).
+   set `first_frame_guide_strength` (start `0.7`).
 5. Queue. The loop auto-sizes to the audio length.
 
 ---
