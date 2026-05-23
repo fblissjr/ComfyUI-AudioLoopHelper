@@ -24,17 +24,20 @@ This project uses [Semantic Versioning](https://semver.org/).
   referenced anchor.
 
 ### Added
-- **`scripts/apply_audio_driven_single_shot.py` — single-shot variant
-  generator.** Stages a loop-removed fork of the canonical latent
-  workflow into gitignored `internal/scratch/` for short audio-reactive
-  renders (one render pass, output trimmed to audio). Rewires the decoder
-  to read the initial-render latent directly, deletes the TensorLoop /
-  controller / loop-body subsystem and prunes the orphaned subgraph
-  definition, and presets `LTX2AttentionTunerPatch.audio_to_video_scale`
-  (audio-attention drive) plus init `LTXVPreprocess.img_compression`
-  (anti frozen-frame). Standard `--dry-run` / `--revert` / idempotent;
-  `--revert` refuses to delete a target that still contains the loop body.
-  Draft surface (no F-pair audit until promotion).
+- **`scripts/apply_audio_driven_single_shot.py` + the
+  `example_workflows/experimental/audio_driven_single_shot.json` fork it
+  generates.** A loop-removed fork of the canonical latent workflow for
+  short audio-reactive renders (one render pass, output trimmed to audio).
+  Rewires the decoder to read the initial-render latent directly, deletes
+  the TensorLoop / controller / loop-body subsystem and prunes the
+  orphaned subgraph definition, and presets
+  `LTX2AttentionTunerPatch.audio_to_video_scale` (audio-attention drive)
+  plus init `LTXVPreprocess.img_compression` (anti frozen-frame).
+  Experimental fork: non-standard loopless topology, not in the default
+  audit sweep (audit explicitly by path), not yet render-validated.
+  Standard `--dry-run` / `--revert`; a second run is a no-op unless
+  `--force` regenerates with new params. `--revert` refuses to delete a
+  target that still contains the loop body.
 - **`LTXHeadTrim` node — composite IMAGE + AUDIO head trim.** Drops
   the first `trim_latent_frames * 8` pixel frames from the decoded
   image batch and the matching audio span from the waveform, keeping

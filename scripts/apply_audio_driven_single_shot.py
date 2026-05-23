@@ -74,13 +74,16 @@ Usage:
     uv run --group dev python scripts/apply_audio_driven_single_shot.py --dry-run
     uv run --group dev python scripts/apply_audio_driven_single_shot.py --revert
     uv run --group dev python scripts/apply_audio_driven_single_shot.py \
-        --audio-to-video-scale 3.0 --img-compression 35
+        --audio-to-video-scale 3.0 --img-compression 35 --force
 
-Idempotent on the OUTPUT path (re-detects via the removed loop node).
-`--dry-run` always reports planned ops (never mutates). `--revert` deletes
-the output staging file, but refuses if the target still contains the loop
-body (node 843) — a guard against a misdirected --output nuking a real
-workflow.
+A second run is a NO-OP by default (the output already has the loop body
+removed) — this protects in-UI hand-edits to the generated file. To apply
+changed `--audio-to-video-scale` / `--img-compression` / `--prompt` on top
+of an existing output, pass `--force` (regenerates fresh from the canonical;
+deterministic, so it stays idempotent). `--dry-run` always reports planned
+ops (never mutates). `--revert` deletes the output file, but refuses if the
+target still contains the loop body (node 843) — a guard against a
+misdirected --output nuking a real workflow.
 """
 
 from __future__ import annotations
@@ -228,7 +231,7 @@ def _apply_ops(ed: WorkflowEditor, a2v_scale: float, img_compression: int,
     )
 
 
-def _migrate(input_path: Path, output_path: Path, *, dry_run: bool,
+def _migrate(input_path: Path, output_path: Path, *, dry_run: bool, force: bool,
              a2v_scale: float, img_compression: int, prompt_schedule: str) -> None:
     # Pre-flight always runs (read-only) against the canonical source.
     _assert_required_nodes_present(WorkflowEditor(input_path))
@@ -245,8 +248,9 @@ def _migrate(input_path: Path, output_path: Path, *, dry_run: bool,
         print("would add handoff Note")
         return
 
-    if output_path.exists() and input_path != output_path and _already_migrated(WorkflowEditor(output_path)):
-        print(f"{output_path.name}: already migrated, skipping. Run --revert to reset.")
+    if not force and output_path.exists() and input_path != output_path and _already_migrated(WorkflowEditor(output_path)):
+        print(f"{output_path.name}: already migrated, skipping (preserves any hand-edits). "
+              "Pass --force to regenerate with new params, or --revert to remove.")
         return
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -297,7 +301,11 @@ def main() -> None:
     ap.add_argument("--prompt", default=DEFAULT_PROMPT_SCHEDULE,
                     help="Schedule[0] prompt text (include the '0:00+:' prefix).")
     ap.add_argument("--revert", action="store_true",
-                    help="Delete the output staging file (does not touch --input).")
+                    help="Delete the output file (does not touch --input).")
+    ap.add_argument("--force", action="store_true",
+                    help="Regenerate even if the output already exists "
+                         "(needed to apply changed --audio-to-video-scale / "
+                         "--img-compression / --prompt; overwrites in-UI edits).")
     ap.add_argument("--dry-run", action="store_true",
                     help="Report planned ops without writing.")
     args = ap.parse_args()
@@ -308,7 +316,7 @@ def main() -> None:
         return
 
     _migrate(
-        Path(args.input), output_path, dry_run=args.dry_run,
+        Path(args.input), output_path, dry_run=args.dry_run, force=args.force,
         a2v_scale=args.audio_to_video_scale,
         img_compression=args.img_compression,
         prompt_schedule=args.prompt,
