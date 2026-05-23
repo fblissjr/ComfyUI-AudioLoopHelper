@@ -7,8 +7,10 @@ animated so its motion tracks an audio track, using LTX 2.3's native joint
 audio-video cross-attention. The audio is frozen and *drives* the visuals —
 e.g. a painted heart pulsing to a drum loop, a subject moving to a beat.
 
-Not production-validated yet (no render gate passed — see bottom). Use the
-single-shot to dial in the look, then render long-form with the loop.
+The loop variant passed its render gate and is promoted to the top-level
+shipped surface (`example_workflows/audio_reactive_loop.json`); the single-shot
+stays an experimental tuning rig. Use the single-shot to dial in the look, then
+render long-form with the loop.
 
 ---
 
@@ -152,4 +154,6 @@ uv run --group dev python scripts/apply_audioreactive_loop.py --force \
 4. At least one case study (an `internal/log/` entry or a `docs/experiments/`
    note).
 
-Until then, this stays in `docs/experimental/`.
+The loop variant met 1–3 and was promoted to `example_workflows/`; the
+single-shot and this writeup stay in `docs/experimental/` pending a case
+study (4).

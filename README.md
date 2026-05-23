@@ -4,7 +4,7 @@
   <img src="assets/hero.webp" alt="ComfyUI-AudioLoopHelper" width="500">
 </p>
 
-Last updated: 2026-05-12
+Last updated: 2026-05-23
 
 Custom ComfyUI nodes for full-length music video generation with LTX 2.3.
 Drives loop timing from integer-latent counts, freezes audio via
@@ -90,9 +90,11 @@ The split is by upstream lineage: **forks** patch an upstream library's internal
 | `audio-loop-music-video_latent_stg.json` | A/B target — Spatial-Temporal Guidance instead of CFG. |
 | `audio-loop-music-video_image_adain_perstep.json` | Per-step AdaIN, per-iter VAE round-trip. Color-drift prevention. |
 | `audio-loop-music-video_retake.json` | Regenerate a `[start, end]` window of an existing render. |
+| `audio_reactive_loop.json` | Audio-driven motion — init image animated so its motion tracks the (frozen) audio via LTX 2.3's joint cross-attention. Full-length loop; tune the look on the single-shot rig first. Writeup: [`docs/experimental/audio_reactive_workflows.md`](docs/experimental/audio_reactive_workflows.md). |
 
 Experimental forks live in `example_workflows/experimental/` paired with
-`docs/experiments/` run logs. Not on the shipped-promotion path.
+`docs/experiments/` run logs; they graduate to the top-level shipped surface
+when a render gate validates them (most recently `audio_reactive_loop.json`).
 
 ## Audio feature analysis
 

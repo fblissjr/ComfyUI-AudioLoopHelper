@@ -1,6 +1,6 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-05-16
+Last updated: 2026-05-23
 
 ComfyUI nodes that automate loop timing + audio analysis for full-length music video generation with LTX 2.3. Core pattern: `AudioLoopController` drives stride from integer latent counts, audio is frozen via `noise_mask=0`, prompts pre-encoded once outside the loop (CLIP must never enter the loop body). **Start here:** `docs/architecture_overview.md`; task-first nav at `docs/README.md`.
 
@@ -184,7 +184,7 @@ Public: `docs/README.md` (task-first nav) → `docs/guides/` (how-to), `docs/ref
 
 Reference codebases (read-only): `coderef/LTX-2/`, `coderef/LTX-Desktop/`, ComfyUI-LTXVideo upstream.
 
-Example workflows: ten shipped on `AudioLoopHelperSageAttention auto`. Validate via `scripts/audit_workflows.py`.
+Example workflows: the shipped variants in `example_workflows/` all run `AudioLoopHelperSageAttention auto` — incl. `audio_reactive_loop.json` (audio-driven motion; promoted from experimental 2026-05-23 after a render gate, generator `scripts/apply_audioreactive_loop.py`). Validate via `scripts/audit_workflows.py`.
 
 Subtree CLAUDE.md files (auto-loaded when working in that subtree):
 - `scripts/CLAUDE.md` — apply-script conventions, audit invariants, WorkflowEditor patterns.
@@ -194,11 +194,7 @@ Subtree CLAUDE.md files (auto-loaded when working in that subtree):
 
 Internal (gitignored): `internal/PLAN.md`, `internal/TODO.md`, `internal/ic_lora_assessment.md`, `internal/design/*.md` (long-term designs), `internal/autoresearch/`, `internal/scripts/` (out-of-repo deploy sources), `internal/postmortem_*.md`, `internal/prompts/`, `internal/analysis/`, `internal/log/log_YYYY-MM-DD.md` (session logs).
 
-## Pending review (last drained: 2026-05-10)
+## Pending review (last drained: 2026-05-23)
 
-<!-- Capture-then-review staging. New findings land HERE, not inline. Drained per curation pass (policy: .claude/CLAUDE.md "CLAUDE.md governance"). -->
-
-- **Memory benchmarks must track offload pressure, not just peak allocation.** ComfyUI's dynamic VRAM loader (`comfy-aimdo`) shuffles model weights to CPU under memory pressure — renders go slower instead of crashing, so snapshot-allocation gates miss the actual cost. Full methodology + tooling pointers (`scripts/bench_aimdo_vram.py`, `scripts/analyze_sage_traces.py`) + A/B recipe + failure modes at `docs/reference/benchmarking_memory_pressure.md`. Related gotcha: audio-loop workflows cannot exercise LTX 2.3's masked self-attn path — something in the conditioning route (likely `LTXVCropGuides` or `LTXVConcatAVLatent`'s NestedTensor packing) strips `guide_attention_entries` before `_process_input` builds the mask. For masked-path code (kernel benches, mask-correctness checks), use `example_workflows/benchmark_workflows/fml2v_sage_masked_attn_benchmark.json` instead.
-- **fps 25→24 sweep reverted; canonical = 25** (matches Lightricks's shipped workflows + 8n+1 latent boundary). Full evidence + postmortem: `internal/analysis/fps_24_partial_reading_postmortem.md` (private clone only). Followups: rename `apply_fps_24_default.py`; retire/invert F16+F18; update `frame_rate == 24` test assertions.
-- **`IterPatchInspector` verifies per-iter patch survival** — pass-through logging `object_patches` count, `transformer_options` keys, `optimized_attention_override` sentinel. Drop in loop-body model chain (between `LoopIterationStamp` and subgraph invoker). Defined `nodes.py::IterPatchInspector`.
-- **Top-level patches may silently drop across comfy-aimdo dynamic-VRAM stages.** NAG-off at 19.88s = frozen iters (= short-window-no-NAG). Test variant `example_workflows/experimental/audio-loop-music-video_latent_nag_in_loop.json` re-executes NAG per-iter inside subgraph. If motion improves, fix extends to sage / ChunkFFN / AttentionTuner.
+<!-- Capture-then-review staging. New findings land HERE, not inline; drained to `internal/findings_ledger.md` (gitignored) per .claude/CLAUDE.md "CLAUDE.md governance". -->
+- Empty — 4 findings drained to `internal/findings_ledger.md` (gitignored) on 2026-05-23 (memory-offload bench, fps-25-canonical, IterPatchInspector, top-level-patch-drop). Triage to layer 1/2 or archive next pass.
