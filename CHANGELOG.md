@@ -24,6 +24,17 @@ This project uses [Semantic Versioning](https://semver.org/).
   referenced anchor.
 
 ### Added
+- **`scripts/apply_audio_driven_single_shot.py` — single-shot variant
+  generator.** Stages a loop-removed fork of the canonical latent
+  workflow into gitignored `internal/scratch/` for short audio-reactive
+  renders (one render pass, output trimmed to audio). Rewires the decoder
+  to read the initial-render latent directly, deletes the TensorLoop /
+  controller / loop-body subsystem and prunes the orphaned subgraph
+  definition, and presets `LTX2AttentionTunerPatch.audio_to_video_scale`
+  (audio-attention drive) plus init `LTXVPreprocess.img_compression`
+  (anti frozen-frame). Standard `--dry-run` / `--revert` / idempotent;
+  `--revert` refuses to delete a target that still contains the loop body.
+  Draft surface (no F-pair audit until promotion).
 - **`LTXHeadTrim` node — composite IMAGE + AUDIO head trim.** Drops
   the first `trim_latent_frames * 8` pixel frames from the decoded
   image batch and the matching audio span from the waveform, keeping
