@@ -8,6 +8,15 @@ Corresponding workflow files live under `example_workflows/experimental/`. They 
 
 ## Current experiments
 
+### Audio-reactive video (single-shot preview + full-length loop)
+
+- **Guide:** [`audio_reactive_workflows.md`](./audio_reactive_workflows.md)
+- **Workflows:** `example_workflows/experimental/audio_driven_single_shot.json` (preview rig) + `example_workflows/experimental/audio_reactive_loop.json` (full render)
+- **Build scripts:** `scripts/apply_audio_driven_single_shot.py`, `scripts/apply_audioreactive_loop.py`
+- **Hypothesis:** an init image animated under a frozen audio track moves so its motion tracks the beat, via LTX 2.3 joint audio-video cross-attention; `audio_to_video_scale` controls the coupling strength.
+- **Gate for promotion:** a render confirms visible audio-driven motion on the single-shot AND a full-length loop render holds style + tracks sections without unacceptable drift.
+- **Status:** wired + awaiting user render validation.
+
 ### Spectrogram-as-reference IC-LoRA (Phase 2.0)
 
 - **Tutorial:** [`spectrogram_iclora_tutorial.md`](./spectrogram_iclora_tutorial.md)
