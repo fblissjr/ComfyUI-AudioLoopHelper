@@ -3,7 +3,8 @@
 Last updated: 2026-05-23
 
 Stages an audio-reactive, FULL-LENGTH (loop-preserving) variant of the
-canonical latent workflow into `example_workflows/experimental/`. This is
+canonical latent workflow into `example_workflows/` (promoted from
+experimental after render validation; top-level shipped surface). This is
 the production counterpart to `apply_audio_driven_single_shot.py`:
 
   - single-shot fork = fast preview/tuning rig (~14s, no loop, no drift) —
@@ -70,7 +71,7 @@ REQUIRED_SOURCE_NODES = (
 )
 
 DEFAULT_INPUT = "example_workflows/audio-loop-music-video_latent.json"
-DEFAULT_OUTPUT = "example_workflows/experimental/audio_reactive_loop.json"
+DEFAULT_OUTPUT = "example_workflows/audio_reactive_loop.json"
 
 DEFAULT_A2V_SCALE = 2.5
 DEFAULT_NAG_SCALE = 5.0
@@ -162,7 +163,8 @@ def _migrate(input_path: Path, output_path: Path, *, dry_run: bool, force: bool,
         print(f"would set #{N_NAG}.nag_scale = {nag_scale}")
         print(f"would set #{N_NEG_PROMPT} (NAG negative) = {negative!r}")
         print(f"would set #{N_FFG_STRENGTH}.first_frame_guide_strength = {ffg_strength}")
-        print(f"would set #{N_PROMPT_SCHEDULE}.schedule ({prompt_schedule.count(chr(10)) + 1} entries)")
+        entry_count = prompt_schedule.count("\n") + 1
+        print(f"would set #{N_PROMPT_SCHEDULE}.schedule ({entry_count} entries)")
         print("would add marker Note (loop topology unchanged)")
         return
 

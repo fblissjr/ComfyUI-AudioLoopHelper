@@ -219,7 +219,7 @@ def _prune_orphan_subgraphs(ed: WorkflowEditor) -> int:
     return removed
 
 
-def _apply_ops(ed: WorkflowEditor, a2v_scale: float, img_compression: int,
+def _apply_ops(ed: WorkflowEditor, *, a2v_scale: float, img_compression: int,
                prompt_schedule: str, nag_scale: float, negative: str) -> None:
     # 1. Decode reads the initial-render latent directly (was LatentConcat #1605).
     slot = WorkflowEditor.find_input_slot(ed.find_node(N_TRIM_VIDEO_LATENT), "latent")
@@ -282,7 +282,8 @@ def _migrate(input_path: Path, output_path: Path, *, dry_run: bool, force: bool,
     print(f"  copied {input_path} -> {output_path}")
 
     ed = WorkflowEditor(output_path)
-    _apply_ops(ed, a2v_scale, img_compression, prompt_schedule, nag_scale, negative)
+    _apply_ops(ed, a2v_scale=a2v_scale, img_compression=img_compression,
+               prompt_schedule=prompt_schedule, nag_scale=nag_scale, negative=negative)
     ed.save()
     print(f"  wrote {output_path}")
     print()
@@ -301,7 +302,11 @@ def _revert(output_path: Path) -> None:
     try:
         still_a_loop_workflow = WorkflowEditor(output_path).has_node(N_LOOP_BODY_SUBGRAPH)
     except Exception:
-        still_a_loop_workflow = False
+        # Can't parse it as a workflow -> can't confirm it's our variant -> refuse (conservative).
+        raise SystemExit(
+            f"Refusing to delete {output_path}: could not parse it as a workflow, so it "
+            "cannot be confirmed as a single-shot variant. Check your --output path."
+        )
     if still_a_loop_workflow:
         raise SystemExit(
             f"Refusing to delete {output_path}: it still contains the loop body "
@@ -319,7 +324,7 @@ def main() -> None:
     ap.add_argument("--input", default=DEFAULT_INPUT)
     ap.add_argument("--output", default=DEFAULT_OUTPUT)
     ap.add_argument("--audio-to-video-scale", type=float, default=DEFAULT_A2V_SCALE,
-                    help="LTX2AttentionTunerPatch audio_to_video_scale (default 2.0; 1.0 = neutral).")
+                    help="LTX2AttentionTunerPatch audio_to_video_scale (default 2.5; 1.0 = neutral).")
     ap.add_argument("--img-compression", type=int, default=DEFAULT_IMG_COMPRESSION,
                     help="Init LTXVPreprocess img_compression (default 35; anti frozen-frame).")
     ap.add_argument("--prompt", default=DEFAULT_PROMPT_SCHEDULE,

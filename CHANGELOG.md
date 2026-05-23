@@ -25,8 +25,8 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 - **`scripts/apply_audioreactive_loop.py` + the
-  `example_workflows/experimental/audio_reactive_loop.json` variant it
-  generates.** The full-length production counterpart to the single-shot
+  `example_workflows/audio_reactive_loop.json` workflow it generates
+  (promoted to the top-level shipped surface after render validation).** The full-length production counterpart to the single-shot
   fork: keeps the loop intact (topology unchanged from canonical, passes
   all loop invariants) so it tracks the WHOLE track — the loop auto-sizes
   to the loaded audio — and the prompt schedule can evolve the visual

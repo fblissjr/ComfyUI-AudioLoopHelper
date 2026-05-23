@@ -17,7 +17,7 @@ single-shot to dial in the look, then render long-form with the loop.
 | Workflow | Generator | Role |
 |---|---|---|
 | `example_workflows/experimental/audio_driven_single_shot.json` | `scripts/apply_audio_driven_single_shot.py` | **Preview / tuning rig.** Loop removed, one render pass (~14 s, ~1–2 min compute). Zero cross-iteration drift. Iterate on look / prompt / knobs fast. |
-| `example_workflows/experimental/audio_reactive_loop.json` | `scripts/apply_audioreactive_loop.py` | **Full-length render.** Loop intact — auto-tracks the whole track (3 / 5 / 20 min) and the prompt schedule can evolve the visual across a set's sections. |
+| `example_workflows/audio_reactive_loop.json` (promoted to top-level) | `scripts/apply_audioreactive_loop.py` | **Full-length render.** Loop intact — auto-tracks the whole track (3 / 5 / 20 min) and the prompt schedule can evolve the visual across a set's sections. |
 
 Both are forks of `example_workflows/audio-loop-music-video_latent.json`. The
 single-shot removes the TensorLoop subsystem and reads the initial-render
@@ -85,7 +85,7 @@ is deterministic — see "Regenerating"). Node-level values if you tune in the U
 ### Loop (full-length render)
 
 1. Same inputs.
-2. Open `example_workflows/experimental/audio_reactive_loop.json`.
+2. Open `example_workflows/audio_reactive_loop.json`.
 3. **Author the `#1615` prompt schedule to your track's sections** — this is
    the step that matters. One entry per section:
    ```
