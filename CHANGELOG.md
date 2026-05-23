@@ -31,8 +31,10 @@ This project uses [Semantic Versioning](https://semver.org/).
   Rewires the decoder to read the initial-render latent directly, deletes
   the TensorLoop / controller / loop-body subsystem and prunes the
   orphaned subgraph definition, and presets
-  `LTX2AttentionTunerPatch.audio_to_video_scale` (audio-attention drive)
-  plus init `LTXVPreprocess.img_compression` (anti frozen-frame).
+  `LTX2AttentionTunerPatch.audio_to_video_scale` (audio-attention drive),
+  init `LTXVPreprocess.img_compression` (anti frozen-frame), a softened
+  `LTX2_NAG.nag_scale` (the distilled freeze-risk knob), and a non-person
+  NAG negative. All preset values are `--flag`-overridable.
   Experimental fork: non-standard loopless topology, not in the default
   audit sweep (audit explicitly by path), not yet render-validated.
   Standard `--dry-run` / `--revert`; a second run is a no-op unless

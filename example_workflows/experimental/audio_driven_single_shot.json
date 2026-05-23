@@ -744,7 +744,7 @@
         "Node name for S&R": "LTX2_NAG"
       },
       "widgets_values": [
-        11,
+        5.0,
         0.25,
         2.5,
         true
@@ -2898,7 +2898,7 @@
         "secondTabWidth": 65
       },
       "widgets_values": [
-        "still image with no motion, subtitles, deformed facial features, extra limbs, disfigured hands, duplicate character, twin, clone, microphone"
+        "still image with no motion, frozen frame, static, blurry, low quality, watermark, subtitles, text"
       ],
       "color": "#322",
       "bgcolor": "#533"
@@ -3743,7 +3743,7 @@
         "Node name for S&R": "Note"
       },
       "widgets_values": [
-        "SINGLE-SHOT AUDIO-REACTIVE VARIANT (loop removed)\n\nAudio drives the scene natively via LTX 2.3 cross-attention.\nKnobs preset for an audio-driven demo:\n  - #1523 LTX2AttentionTunerPatch.audio_to_video_scale: how hard\n    audio drives video. Push higher (e.g. 3-5) for tighter coupling.\n  - #446 LTXVPreprocess.img_compression=35: unlocks motion from a\n    still init (pristine init -> frozen frame).\n  - #1615 schedule[0]: the heart-pulse prompt. Verb (pulses/beating)\n    is what binds the motion to the audio.\n\nTo run: load your init image (#444 LoadImage) and a short music/audio\nclip (#565 LoadAudio). Output is trimmed to the audio length.\nAlso try: boost the audio so it peaks; keep framing tight."
+        "SINGLE-SHOT AUDIO-REACTIVE VARIANT (loop removed)\n\nAudio drives the scene natively via LTX 2.3 cross-attention.\nKnobs preset for an audio-driven demo:\n  - #1523 LTX2AttentionTunerPatch.audio_to_video_scale: how hard\n    audio drives video. Push higher (e.g. 3-5) for tighter coupling.\n  - #446 LTXVPreprocess.img_compression=35: unlocks motion from a\n    still init (pristine init -> frozen frame).\n  - #1615 schedule[0]: the heart-pulse prompt. Verb (pulses/beating)\n    is what binds the motion to the audio.\n  - #508 LTX2_NAG.nag_scale=5: softened from the freeze-prone 11.\n    The negative (#507) pushes away from 'still / no motion'.\n\nTo run: load your init image (#444 LoadImage) and a short music/audio\nclip (#565 LoadAudio). Output is trimmed to the audio length.\nAlso try: boost the audio so it peaks; keep framing tight."
       ],
       "title": "Single-shot audio-reactive — read me"
     }

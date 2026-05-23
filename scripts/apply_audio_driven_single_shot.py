@@ -19,7 +19,7 @@ adds drift risk and render time and buys nothing — the output is one
 window, trimmed to the audio.
 
 What this variant is: the canonical workflow with the loop subsystem
-removed so only the initial render runs, and three knobs preset for an
+removed so only the initial render runs, and a few knobs preset for an
 audio-driven demo:
   1. The decode reads the initial-render latent directly (no LatentConcat
      prepend, no TensorLoop).
@@ -30,6 +30,12 @@ audio-driven demo:
      (a pristine i2v init reads as a static photo and freezes; LTX-2 was
      trained on compressed video, so compression unlocks motion).
   4. A single heart-pulse schedule entry as a starting prompt.
+  5. NAG (#508) softened to scale 5 (the canonical/KJNodes default 11 is
+     the documented freeze-risk knob for distilled — and this fork is
+     pure initial render, where freezing is the failure mode), and the
+     NAG negative (#507) retuned from singer-oriented tokens (faces /
+     hands / mic) to motion + frame-quality terms that fit a non-person
+     subject and don't fight a painterly init.
 
 The audio path stays sacred and frozen. Audio still drives the scene via
 LTX 2.3's native joint cross-attention; this variant only changes which
@@ -74,7 +80,7 @@ Usage:
     uv run --group dev python scripts/apply_audio_driven_single_shot.py --dry-run
     uv run --group dev python scripts/apply_audio_driven_single_shot.py --revert
     uv run --group dev python scripts/apply_audio_driven_single_shot.py \
-        --audio-to-video-scale 3.0 --img-compression 35 --force
+        --audio-to-video-scale 3.0 --nag-scale 4 --force
 
 A second run is a NO-OP by default (the output already has the loop body
 removed) — this protects in-UI hand-edits to the generated file. To apply
@@ -103,6 +109,8 @@ N_CROP_GUIDES = 381          # LTXVCropGuides -- initial-render latent source (o
 N_ATTN_TUNER = 1523          # LTX2AttentionTunerPatch -- audio_to_video_scale knob (widget 3)
 N_INIT_PREPROCESS = 446      # LTXVPreprocess -- init-image img_compression (widget 0)
 N_PROMPT_SCHEDULE = 1615     # TimestampPromptScheduleBatchEncode (widget 0 = schedule text)
+N_NAG = 508                  # LTX2_NAG -- nag_scale (widget 0); [scale, alpha, tau, inplace]
+N_NEG_PROMPT = 507           # CLIPTextEncode -- NAG negative text (widget 0)
 N_LOOP_BODY_SUBGRAPH = 843   # subgraph invoker (its node "type" == the subgraph def id)
 
 # Loop subsystem + loop-only reference nodes to remove. Self-contained after
@@ -127,19 +135,28 @@ LOOP_NODES_TO_REMOVE = (
 # Pre-flight: refuse unless the canonical layout is present.
 REQUIRED_SOURCE_NODES = (
     N_TRIM_VIDEO_LATENT, N_CROP_GUIDES, N_ATTN_TUNER, N_INIT_PREPROCESS,
-    N_PROMPT_SCHEDULE, 1539, 1540, 843, 1582, 1560, 444, 565, 2021,
+    N_PROMPT_SCHEDULE, N_NAG, N_NEG_PROMPT, 1539, 1540, 843, 1582, 1560, 444, 565, 2021,
 )
 
 DEFAULT_INPUT = "example_workflows/audio-loop-music-video_latent.json"
 DEFAULT_OUTPUT = "example_workflows/experimental/audio_driven_single_shot.json"
 
-DEFAULT_A2V_SCALE = 2.0
+DEFAULT_A2V_SCALE = 2.5
 DEFAULT_IMG_COMPRESSION = 35
+DEFAULT_NAG_SCALE = 5.0
 DEFAULT_PROMPT_SCHEDULE = (
-    "0:00+: In a tight macro close-up, a glistening human heart pulses and "
-    "contracts rhythmically, beating steadily, its surface flexing and "
-    "relaxing with each beat under soft warm light. The camera holds steady "
-    "with a slow, gentle push-in."
+    "0:00+: In a tight macro close-up, an expressive oil-painted anatomical "
+    "heart pulses and contracts rhythmically, beating steadily, vivid "
+    "brushstrokes and splattered color flexing with each beat, radiant light "
+    "streaks rippling outward on every pulse. The camera holds steady with a "
+    "slow, gentle push-in."
+)
+# Retuned for a non-person subject + painterly init: motion + frame-quality
+# only. Dropped the canonical's singer tokens (faces / hands / twin / mic)
+# and "deformed/disfigured" (which fights an expressive painted style).
+DEFAULT_NEGATIVE = (
+    "still image with no motion, frozen frame, static, blurry, low quality, "
+    "watermark, subtitles, text"
 )
 
 NOTE_TEXT = (
@@ -151,7 +168,9 @@ NOTE_TEXT = (
     "  - #446 LTXVPreprocess.img_compression=35: unlocks motion from a\n"
     "    still init (pristine init -> frozen frame).\n"
     "  - #1615 schedule[0]: the heart-pulse prompt. Verb (pulses/beating)\n"
-    "    is what binds the motion to the audio.\n\n"
+    "    is what binds the motion to the audio.\n"
+    "  - #508 LTX2_NAG.nag_scale=5: softened from the freeze-prone 11.\n"
+    "    The negative (#507) pushes away from 'still / no motion'.\n\n"
     "To run: load your init image (#444 LoadImage) and a short music/audio\n"
     "clip (#565 LoadAudio). Output is trimmed to the audio length.\n"
     "Also try: boost the audio so it peaks; keep framing tight."
@@ -201,7 +220,7 @@ def _prune_orphan_subgraphs(ed: WorkflowEditor) -> int:
 
 
 def _apply_ops(ed: WorkflowEditor, a2v_scale: float, img_compression: int,
-               prompt_schedule: str) -> None:
+               prompt_schedule: str, nag_scale: float, negative: str) -> None:
     # 1. Decode reads the initial-render latent directly (was LatentConcat #1605).
     slot = WorkflowEditor.find_input_slot(ed.find_node(N_TRIM_VIDEO_LATENT), "latent")
     ed.rewire_input(N_TRIM_VIDEO_LATENT, slot, N_CROP_GUIDES, 2, "LATENT")
@@ -218,6 +237,8 @@ def _apply_ops(ed: WorkflowEditor, a2v_scale: float, img_compression: int,
     ed.find_node(N_ATTN_TUNER)["widgets_values"][3] = a2v_scale          # audio_to_video_scale
     ed.find_node(N_INIT_PREPROCESS)["widgets_values"][0] = img_compression
     ed.find_node(N_PROMPT_SCHEDULE)["widgets_values"][0] = prompt_schedule
+    ed.find_node(N_NAG)["widgets_values"][0] = nag_scale                  # nag_scale
+    ed.find_node(N_NEG_PROMPT)["widgets_values"][0] = negative            # NAG negative text
 
     # 4. Drop a handoff Note on the canvas.
     ed.add_top_level_node(
@@ -232,7 +253,8 @@ def _apply_ops(ed: WorkflowEditor, a2v_scale: float, img_compression: int,
 
 
 def _migrate(input_path: Path, output_path: Path, *, dry_run: bool, force: bool,
-             a2v_scale: float, img_compression: int, prompt_schedule: str) -> None:
+             a2v_scale: float, img_compression: int, prompt_schedule: str,
+             nag_scale: float, negative: str) -> None:
     # Pre-flight always runs (read-only) against the canonical source.
     _assert_required_nodes_present(WorkflowEditor(input_path))
 
@@ -245,6 +267,8 @@ def _migrate(input_path: Path, output_path: Path, *, dry_run: bool, force: bool,
         print(f"would set #{N_ATTN_TUNER}.audio_to_video_scale = {a2v_scale}")
         print(f"would set #{N_INIT_PREPROCESS}.img_compression = {img_compression}")
         print(f"would set #{N_PROMPT_SCHEDULE}.schedule[0] = {prompt_schedule!r}")
+        print(f"would set #{N_NAG}.nag_scale = {nag_scale}")
+        print(f"would set #{N_NEG_PROMPT} (NAG negative) = {negative!r}")
         print("would add handoff Note")
         return
 
@@ -258,7 +282,7 @@ def _migrate(input_path: Path, output_path: Path, *, dry_run: bool, force: bool,
     print(f"  copied {input_path} -> {output_path}")
 
     ed = WorkflowEditor(output_path)
-    _apply_ops(ed, a2v_scale, img_compression, prompt_schedule)
+    _apply_ops(ed, a2v_scale, img_compression, prompt_schedule, nag_scale, negative)
     ed.save()
     print(f"  wrote {output_path}")
     print()
@@ -300,6 +324,12 @@ def main() -> None:
                     help="Init LTXVPreprocess img_compression (default 35; anti frozen-frame).")
     ap.add_argument("--prompt", default=DEFAULT_PROMPT_SCHEDULE,
                     help="Schedule[0] prompt text (include the '0:00+:' prefix).")
+    ap.add_argument("--nag-scale", type=float, default=DEFAULT_NAG_SCALE,
+                    help="LTX2_NAG nag_scale (default 5; canonical 11 is freeze-prone "
+                         "on distilled, raise toward 7-11 only if motion is too loose).")
+    ap.add_argument("--negative", default=DEFAULT_NEGATIVE,
+                    help="NAG negative text (#507). Default is motion/quality terms for "
+                         "a non-person subject.")
     ap.add_argument("--revert", action="store_true",
                     help="Delete the output file (does not touch --input).")
     ap.add_argument("--force", action="store_true",
@@ -320,6 +350,8 @@ def main() -> None:
         a2v_scale=args.audio_to_video_scale,
         img_compression=args.img_compression,
         prompt_schedule=args.prompt,
+        nag_scale=args.nag_scale,
+        negative=args.negative,
     )
 
 
