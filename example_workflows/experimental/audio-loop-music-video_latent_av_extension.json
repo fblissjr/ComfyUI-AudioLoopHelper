@@ -1,8 +1,8 @@
 {
   "id": "3db70343-fd10-483b-8d66-6be2395b9681",
   "revision": 0,
-  "last_node_id": 2031,
-  "last_link_id": 3218,
+  "last_node_id": 2032,
+  "last_link_id": 3219,
   "nodes": [
     {
       "id": 252,
@@ -2218,9 +2218,7 @@
         {
           "name": "total_iterations",
           "type": "INT",
-          "links": [
-            3069
-          ]
+          "links": []
         },
         {
           "name": "stride_seconds",
@@ -2695,7 +2693,7 @@
           "widget": {
             "name": "iterations_in"
           },
-          "link": 3069
+          "link": 3219
         }
       ],
       "outputs": [
@@ -2735,7 +2733,7 @@
       },
       "widgets_values": [
         "iterations",
-        50,
+        0,
         0
       ],
       "color": "#323",
@@ -4777,6 +4775,39 @@
       },
       "widgets_values": [],
       "title": "Generated audio (decode sampled audio latent)"
+    },
+    {
+      "id": 2032,
+      "type": "INTConstant",
+      "pos": [
+        30,
+        2010
+      ],
+      "size": [
+        210,
+        58
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "value",
+          "type": "INT",
+          "links": [
+            3219
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "INTConstant",
+        "cnr_id": "comfyui-kjnodes"
+      },
+      "widgets_values": [
+        0
+      ],
+      "title": "probe: single window (loop bypassed, iterations=0)"
     }
   ],
   "links": [
@@ -5331,14 +5362,6 @@
       843,
       2,
       "MODEL"
-    ],
-    [
-      3069,
-      1560,
-      1,
-      1539,
-      1,
-      "INT"
     ],
     [
       3107,
@@ -5907,6 +5930,14 @@
       617,
       1,
       "AUDIO"
+    ],
+    [
+      3219,
+      2032,
+      0,
+      1539,
+      1,
+      "INT"
     ]
   ],
   "groups": [

@@ -25,9 +25,9 @@ Caveats (render-gate pending — structural validation only):
     frames. Use a clip >= ~20 s so it fills the window and is fully frozen; a shorter clip
     leaves the video tail (and a misaligned audio seed) to generate. WINDOW_FRAME_CAP must
     track the planner duration, not the (stale) EmptyLTXVLatentVideo widget.
-  * Run with iterations=1 (single window; the loop body re-freezes audio via the subgraph
-    LTXVAudioVideoMask). Do NOT touch first_frame_guide_strength here — it feeds only the
-    loop-body invoker, not the initial render.
+  * Single-window by construction (inherited from the av_extension base, which bypasses
+    the loop so only the initial render samples — one pass). No manual iterations override
+    needed. Do NOT touch first_frame_guide_strength — it feeds only the loop-body invoker.
   * Keep the neutral prompt — describe only the scene, never the audio (see
     example_workflows/working_docs/av_inversion_test_examples.md).
 
@@ -143,8 +143,8 @@ def build(dry_run: bool = False) -> int:
     OUT.parent.mkdir(parents=True, exist_ok=True)
     ed.save(OUT)
     print(f"Wrote {OUT.relative_to(REPO)} (VHS_LoadVideo#{vhs_id}).")
-    print(f"Load a clip >= ~20s (fills the {WINDOW_FRAME_CAP}-frame window), neutral prompt, "
-          "iterations=1. Render-gate pending.")
+    print(f"Load a clip >= ~20s (fills the {WINDOW_FRAME_CAP}-frame window), neutral prompt. "
+          "Single-window by default (loop bypassed). Render-gate pending.")
     return 0
 
 

@@ -25,8 +25,9 @@ Scope / caveats:
     AUDIO. Adding a real video PREFIX (VHS_LoadVideo -> VAEEncode -> LatentTemporalMask)
     is the Phase-2 follow-up, worth wiring only if this probe shows the audio branch
     generates anything coherent.
-  * Audio generation here applies to the INITIAL RENDER only. The loop body re-freezes
-    audio via LTXVAudioVideoMask (Node 606), so run with iterations = 1.
+  * Single-window by construction: the loop is bypassed (TensorLoopOpen count=0 via an
+    INTConstant override), so only the initial render samples — one pass. The loop body
+    re-freezes audio, so it must not run; this removes the need for a manual iterations=1.
 
 Staged variant (outputs to ``example_workflows/experimental/``); skips the F-pair
 audit-invariant requirement per scripts/CLAUDE.md.
@@ -60,6 +61,7 @@ CONCAT_AUDIO_SLOT = 1  # audio_latent input slot on LTXVConcatAVLatent
 SEPARATE = 245        # LTXVSeparateAVLatent -> audio_latent output slot 1
 AUDIO_VAE_GET = 254   # Get_audio_vae GetNode -> VAE output slot 0
 VHS_COMBINE = 617     # VHS_VideoCombine     -> audio input slot 1
+TENSOR_LOOP_OPEN = 1539  # TensorLoopOpen      -> iterations_in input slot 1
 
 # Default probe widgets: start_time=2.0 — keep the first 2 s of real audio as
 # context, regenerate the tail. This is the meaningful test: audio CONTINUATION
@@ -81,7 +83,8 @@ def apply(dry_run: bool = False) -> int:
     ed = WorkflowEditor(SRC)
 
     missing = [
-        n for n in (AUDIO_ENCODE, CONCAT, SET_MASK, SOLID_MASK, FRAME_PLANNER, SEPARATE, AUDIO_VAE_GET, VHS_COMBINE)
+        n for n in (AUDIO_ENCODE, CONCAT, SET_MASK, SOLID_MASK, FRAME_PLANNER,
+                    SEPARATE, AUDIO_VAE_GET, VHS_COMBINE, TENSOR_LOOP_OPEN)
         if not ed.has_node(n)
     ]
     if missing:
@@ -134,19 +137,43 @@ def apply(dry_run: bool = False) -> int:
     ed.add_link(AUDIO_VAE_GET, 0, dec_id, 1, "VAE")            # audio VAE -> decode
     ed.rewire_input(VHS_COMBINE, 1, dec_id, 0, "AUDIO")        # VHS audio <- GENERATED audio
 
+    # Single-window probe: bypass the loop so ONLY the initial render samples. The loop
+    # body re-freezes audio (so it isn't the probe), and a single window is all the test
+    # needs. ComfyUI-NativeLooping bypasses (passes the initial render straight through,
+    # one sampler pass) when count==0, which needs iterations_in<=0 AND the mode widget at
+    # 0. Replace the AudioLoopPlanner -> iterations_in wire with an INTConstant=0: keeps
+    # the F5 audit at WARN ("experiment-tier override") instead of ERR (unwired).
+    iter_const = ed.add_top_level_node(
+        "INTConstant",
+        pos=[30, 2010],
+        size=[210, 58],
+        inputs=[],
+        outputs=[WorkflowEditor.out("value", "INT")],
+        widgets_values=[0],
+        properties={"Node name for S&R": "INTConstant", "cnr_id": "comfyui-kjnodes"},
+        title="probe: single window (loop bypassed, iterations=0)",
+    )
+    planner_link = ed.find_link_to_slot(TENSOR_LOOP_OPEN, 1)  # iterations_in
+    if planner_link:
+        ed.remove_link(planner_link[0])
+    ed.add_link(iter_const, 0, TENSOR_LOOP_OPEN, 1, "INT")
+    # mode widget -> count 0: ['iterations', 0, 0] (iterations=0, total_frames=0 -> bypass)
+    ed.find_node(TENSOR_LOOP_OPEN)["widgets_values"] = ["iterations", 0, 0]
+
     if dry_run:
         print("--dry-run: would write", OUT.relative_to(REPO))
         print(f"  - remove SetLatentNoiseMask#{SET_MASK}, SolidMask#{SOLID_MASK}")
         print(f"  - add AudioTemporalMask#{atm_id} between #{AUDIO_ENCODE} and #{CONCAT}.audio_latent")
         print(f"  - wire audio_duration_seconds <- LTXFramePlanner#{FRAME_PLANNER}.actual_seconds")
         print(f"  - add LTXVAudioVAEDecode + mux GENERATED audio into VHS#{VHS_COMBINE}")
+        print(f"  - bypass loop (INTConstant=0 -> TensorLoopOpen#{TENSOR_LOOP_OPEN}) so only the initial render samples")
         return 0
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     ed.save(OUT)
     print(f"Wrote {OUT.relative_to(REPO)} (AudioTemporalMask#{atm_id}).")
+    print("Single-window by default (loop bypassed) — one sampler pass, no manual iterations override.")
     print("Set start_time=0.0 for 'generate all audio' (Probe 1), 2.0 for 'keep 2s prefix' (extension).")
-    print("Run with iterations=1 (loop body re-freezes audio).")
     return 0
 
 
