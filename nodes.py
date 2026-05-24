@@ -2721,6 +2721,125 @@ class LatentSeamZoneMask(io.ComfyNode):
         return io.NodeOutput(out)
 
 
+class AudioTemporalMask(io.ComfyNode):
+    """Writes a retake/extension noise_mask to an AUDIO latent: regenerate only
+    `[start_time, end_time]` seconds, hold the rest fixed as context.
+
+    Audio analog of `LatentTemporalMask`. The video node maps seconds to latent
+    frames via the fixed video VAE scale (`fps / 8`); the audio VAE's latent rate
+    is NOT a clean constant (mel hop_length / autoencoder downscale factor), so
+    this node derives it empirically from the latent's own temporal dim and the
+    known source duration — same approach as `AudioLatentSlice._infer_latent_rate`:
+
+        rate (audio-latent frames / sec) = T / audio_duration_seconds
+
+    Audio latents are `[B, C, T, F]` (rank 4: batch, channels, time, mel_bins),
+    distinct from video `[B, C, F, H, W]` (rank 5). The mask is built as a 1-D
+    temporal profile and broadcast over the remaining dims, so it is rank-agnostic
+    (works whatever the audio latent's exact rank, as long as dim 2 is time).
+
+    Primary use: AV temporal-extension probe — freeze the first N seconds of
+    audio (context), regenerate the tail (`start_time=N, end_time=audio_duration`).
+    Pair the video stream with `LatentTemporalMask(start_time=N, end_time=N+window,
+    fps=25)` using the SAME seconds so both streams' clean prefixes align in time.
+
+    Reversed / zero-width ranges, out-of-range starts, and non-positive durations
+    yield an all-zero mask (no-op) rather than raising — safer for UI widget drift.
+
+    `edge_taper_seconds > 0` cosine-ramps the mask 0->1 at the leading boundary and
+    1->0 at the trailing boundary. Default 0.0 = hard mask.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="AudioTemporalMask",
+            display_name="Audio Temporal Mask (Retake)",
+            category="looping/audio",
+            description=(
+                "Writes a noise_mask to an AUDIO latent so only [start_time, end_time] "
+                "regenerates; the rest stays fixed as context. Audio analog of "
+                "LatentTemporalMask. Use for audio retake / AV temporal-extension."
+            ),
+            inputs=[
+                io.Latent.Input("latent", tooltip="Audio latent [B, C, T, F] from LTXVAudioVAEEncode."),
+                io.Float.Input(
+                    "start_time", default=0.0, min=0.0, max=10_000.0, step=0.01,
+                    tooltip="Start of the regenerate window in seconds. Clamped to 0 if negative.",
+                ),
+                io.Float.Input(
+                    "end_time", default=10.0, min=0.0, max=10_000.0, step=0.01,
+                    tooltip="End of the regenerate window in seconds. Clamped to audio duration.",
+                ),
+                io.Float.Input(
+                    "audio_duration_seconds", default=10.0, min=0.0, max=10_000.0, step=0.01,
+                    tooltip=(
+                        "Real-world duration (seconds) of the audio encoded into THIS latent "
+                        "(e.g. the TrimAudioDuration output length, or AudioDuration of the "
+                        "same clip). Used to map seconds to audio-latent frames: rate = T / "
+                        "duration. <= 0 yields an all-zero no-op mask."
+                    ),
+                ),
+                io.Float.Input(
+                    "edge_taper_seconds", default=0.0, min=0.0, max=2.0, step=0.01,
+                    tooltip=(
+                        "Cosine taper width in seconds at each end of the regenerate range. "
+                        "0.0 (default) = hard mask."
+                    ),
+                ),
+            ],
+            outputs=[
+                io.Latent.Output(tooltip="Audio latent with noise_mask set: 1.0 inside [start,end], 0.0 outside; cosine ramps at boundaries when taper > 0."),
+            ],
+        )
+
+    @classmethod
+    def execute(
+        cls,
+        latent: dict,
+        start_time: float,
+        end_time: float,
+        audio_duration_seconds: float,
+        edge_taper_seconds: float = 0.0,
+    ) -> io.NodeOutput:
+        with _profile_span("AudioTemporalMask"):
+            out = latent.copy()
+            samples = out["samples"]
+            total_frames = samples.shape[2]
+
+            # 1-D temporal profile, broadcast to the latent's full shape below.
+            # Built in float32 (not samples.dtype) so the cosine taper keeps strict
+            # monotonicity on bf16/fp16 latents; expand() preserves the float32 mask.
+            profile = torch.zeros(
+                total_frames, device=samples.device, dtype=torch.float32,
+            )
+            if end_time > start_time and audio_duration_seconds > 0:
+                rate = total_frames / audio_duration_seconds  # audio-latent frames / sec
+                start_latent = max(0, int(start_time * rate))
+                end_latent = min(total_frames, int(end_time * rate) + 1)
+                if end_latent > start_latent:
+                    profile[start_latent:end_latent] = 1.0
+                    if edge_taper_seconds > 0.0:
+                        range_latents = end_latent - start_latent
+                        taper_latents = max(1, int(edge_taper_seconds * rate))
+                        taper_latents = min(taper_latents, range_latents // 2)
+                        if taper_latents > 0:
+                            ramp_up = 0.5 * (1.0 - torch.cos(
+                                torch.linspace(
+                                    0.0, math.pi, taper_latents + 2,
+                                    device=samples.device, dtype=torch.float32,
+                                )[1:-1]
+                            ))
+                            profile[start_latent:start_latent + taper_latents] = ramp_up
+                            profile[end_latent - taper_latents:end_latent] = ramp_up.flip(0)
+
+            # Broadcast the temporal profile over all non-temporal dims (rank-agnostic).
+            view_shape = [1, 1, total_frames] + [1] * (samples.ndim - 3)
+            out["noise_mask"] = profile.view(*view_shape).expand_as(samples).contiguous()
+
+        return io.NodeOutput(out)
+
+
 class KeyframeLatentScheduleBatchEncode(io.ComfyNode):
     """Pre-encodes every per-iteration keyframe LATENT up front, OUTSIDE the loop.
 
@@ -4099,6 +4218,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LatentOverlapTrim,
             LatentTemporalMask,
             LatentSeamZoneMask,
+            AudioTemporalMask,
             RunIdPrefix,
             LatentFrameCount,
             TrimVideoLatentToAudio,
