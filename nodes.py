@@ -1006,23 +1006,6 @@ def _keyframe_latent_cache_key(
     )
 
 
-# Per-image VAE encode cache for LTXIterKeyframeSchedule. Higher cap than
-# the keyframe-batch cache because each row is encoded independently and
-# users may schedule many rows. (id, typename) tagging mirrors the
-# keyframe-batch cache's address-recycling guard.
-_ITER_KEYFRAME_ENCODE_CACHE: OrderedDict = OrderedDict()
-_ITER_KEYFRAME_ENCODE_CACHE_MAX = 32
-
-
-def _iter_keyframe_encode_cache_key(vae, image, target_h: int, target_w: int) -> tuple:
-    return (
-        id(vae), type(vae).__name__,
-        id(image), type(image).__name__,
-        tuple(image.shape), str(image.dtype),
-        int(target_h), int(target_w),
-    )
-
-
 def _parse_iter_targets(s: str) -> set[int]:
     """Parse a comma-separated iter-index string to a set of ints.
 
@@ -2978,23 +2961,27 @@ class LatentSelectByIteration(io.ComfyNode):
 
 
 class LTXIterKeyframeSchedule(io.ComfyNode):
-    """Per-iter keyframe re-anchoring for long-form video loops.
+    """Per-iter keyframe SELECTOR for long-form video loops.
 
-    Mitigates DiT video drift by hard-locking the latent at user-chosen
-    iter+frame positions to fresh image content. Same noise_mask=0
-    semantics as LTXVImgToVideoInplaceKJ at strength=1.0: the written
-    frame is preserved through sampling (sampler cannot touch it).
+    Picks which pre-encoded keyframe latent anchors the current
+    iteration, by per-row `target_iters` lists. Runs OUTSIDE the loop
+    body; its output feeds the loop's existing `guide_latent` input (in
+    the canonical audio-loop subgraph: sg.input `guide_latent` →
+    `LTXVAddLatentGuide`). When no row matches the current iteration, it
+    passes `fallback_latent` through (typically the static init-image
+    guide), so behavior is identical to the no-keyframe canonical on
+    un-targeted iterations.
 
-    Each row: an image, a comma-separated `target_iters` string, and a
-    `target_idx` latent-frame position. Empty `target_iters` = no-op
-    for that row. Multi-row matches on the same iter stack (each row
-    writes its own target_idx). Negative `target_idx` counts from end.
+    Mitigates DiT drift on long renders by re-referencing a fresh image
+    at chosen iterations without per-iter VAE work — keyframes are
+    encoded ONCE outside the loop (VAEEncode / KeyframeLatentScheduleBatchEncode)
+    and only SELECTED by index here. Anchoring strength + frame index are
+    governed downstream by the existing `LTXVAddLatentGuide` (soft anchor).
 
-    Wiring: insert between LTXVAudioVideoMask and LTXVAddLatentGuide
-    in a loop body. `current_iteration` from TensorLoopOpen.
-    Pre-sized images expected (resize falls back to bilinear via
-    comfy.utils.common_upscale to match latent pixel dims). VAE
-    encoding is memoized across iters via a module-level LRU.
+    Each row: a pre-encoded `keyframe_latent` + a comma-separated
+    `target_iters` string ('10, 25, 40'). Empty `target_iters` = that
+    row never matches. Lowest-index matching row wins if an iteration
+    appears in multiple rows (one latent feeds one guide_latent).
     """
 
     @classmethod
@@ -3004,24 +2991,13 @@ class LTXIterKeyframeSchedule(io.ComfyNode):
             slot_inputs: list = []
             for i in range(1, num + 1):
                 slot_inputs.extend([
-                    io.Image.Input(f"image_{i}", tooltip=f"Keyframe image {i}."),
+                    io.Latent.Input(f"keyframe_latent_{i}", tooltip=f"Pre-encoded keyframe latent {i}."),
                     io.String.Input(
                         f"target_iters_{i}",
                         default="",
                         tooltip=(
-                            f"Comma-separated iteration indices where image_{i} "
-                            f"anchors (e.g. '10, 25, 40'). Empty = no-op for "
-                            f"this row."
-                        ),
-                    ),
-                    io.Int.Input(
-                        f"target_idx_{i}",
-                        default=0,
-                        min=-9999,
-                        max=9999,
-                        tooltip=(
-                            f"Latent frame index where image_{i} writes. "
-                            f"Negative counts from end (matches LTXVAddLatentGuide)."
+                            f"Comma-separated iterations where keyframe {i} "
+                            f"anchors (e.g. '10, 25, 40'). Empty = never matches."
                         ),
                     ),
                 ])
@@ -3032,27 +3008,26 @@ class LTXIterKeyframeSchedule(io.ComfyNode):
             display_name="LTX Iter Keyframe Schedule",
             category="looping/audio",
             description=(
-                "Per-iter keyframe re-anchoring for long-form loops. "
-                "Hard-locks latent frames to fresh image content at "
-                "user-chosen iter+frame positions. Mitigates DiT video drift."
+                "Per-iter keyframe selector. Picks which pre-encoded keyframe "
+                "latent anchors the current iteration; passes a fallback "
+                "through on un-targeted iters. Feeds the loop's guide_latent."
             ),
             inputs=[
                 io.Latent.Input(
-                    "latent",
+                    "fallback_latent",
                     tooltip=(
-                        "Video latent. Insert between LTXVAudioVideoMask "
-                        "(upstream) and LTXVAddLatentGuide (downstream)."
+                        "Latent used when no row matches current_iteration "
+                        "(typically the static init-image guide latent)."
                     ),
                 ),
                 io.Int.Input(
                     "current_iteration",
                     default=0,
                     min=0,
-                    tooltip="Current iteration index from TensorLoopOpen.",
+                    tooltip="Current iteration index from TensorLoopOpen / AudioLoopController.",
                 ),
-                io.Vae.Input("vae", tooltip="Video VAE (LTX 2.3)."),
                 io.DynamicCombo.Input(
-                    "num_images",
+                    "num_keyframes",
                     options=options,
                     display_name="Number of Keyframes",
                     tooltip="How many keyframe rows to schedule.",
@@ -3064,69 +3039,17 @@ class LTXIterKeyframeSchedule(io.ComfyNode):
         )
 
     @classmethod
-    def execute(cls, latent, current_iteration: int, vae, num_images) -> io.NodeOutput:
-        image_keys = sorted(k for k in num_images.keys() if k.startswith("image_"))
-        matches: list[tuple[int, "torch.Tensor"]] = []
-        for img_key in image_keys:
-            i = img_key.split("_", 1)[1]
-            iters = _parse_iter_targets(num_images.get(f"target_iters_{i}", ""))
-            if current_iteration not in iters:
-                continue
-            matches.append((int(num_images[f"target_idx_{i}"]), num_images[img_key]))
-
-        if not matches:
-            return io.NodeOutput(latent)
-
-        s = latent.copy()
-        samples = s["samples"].clone()
-        existing_mask = s.get("noise_mask")
-        if existing_mask is not None:
-            noise_mask = existing_mask.clone()
-        else:
-            noise_mask = torch.ones(
-                (samples.shape[0], 1, samples.shape[2], 1, 1),
-                dtype=samples.dtype, device=samples.device,
-            )
-
-        latent_frames = samples.shape[2]
-        target_h_pixels = samples.shape[3] * 32  # LTX video VAE 32:1 spatial
-        target_w_pixels = samples.shape[4] * 32
-
-        for target_idx, image in matches:
-            idx = target_idx if target_idx >= 0 else max(latent_frames + target_idx, 0)
-            idx = min(idx, latent_frames - 1)
-            encoded = _encode_keyframe_cached(vae, image, target_h_pixels, target_w_pixels)
-            samples[:, :, idx : idx + 1] = encoded[:, :, 0:1]
-            noise_mask[:, :, idx : idx + 1] = 0
-
-        s["samples"] = samples
-        s["noise_mask"] = noise_mask
-        return io.NodeOutput(s)
-
-
-def _encode_keyframe_cached(vae, image, target_h_pixels: int, target_w_pixels: int):
-    """VAE-encode an image at target pixel dims, memoized by (vae id, image id, dims)."""
-    cache_key = _iter_keyframe_encode_cache_key(vae, image, target_h_pixels, target_w_pixels)
-    cached = _ITER_KEYFRAME_ENCODE_CACHE.get(cache_key)
-    if cached is not None:
-        _ITER_KEYFRAME_ENCODE_CACHE.move_to_end(cache_key)
-        return cached
-
-    # Import inside conditional so non-resize callers don't require comfy
-    # (tests run without ComfyUI loaded via the _IOStub fallback).
-    if image.shape[1] != target_h_pixels or image.shape[2] != target_w_pixels:
-        import comfy.utils
-        resized = comfy.utils.common_upscale(
-            image.movedim(-1, 1), target_w_pixels, target_h_pixels, "bilinear", "center",
-        ).movedim(1, -1)
-    else:
-        resized = image
-
-    encoded = vae.encode(resized[:, :, :, :3])
-    _ITER_KEYFRAME_ENCODE_CACHE[cache_key] = encoded
-    if len(_ITER_KEYFRAME_ENCODE_CACHE) > _ITER_KEYFRAME_ENCODE_CACHE_MAX:
-        _ITER_KEYFRAME_ENCODE_CACHE.popitem(last=False)
-    return encoded
+    def execute(cls, fallback_latent, current_iteration: int, num_keyframes) -> io.NodeOutput:
+        latent_keys = sorted(
+            (k for k in num_keyframes.keys() if k.startswith("keyframe_latent_")),
+            key=lambda k: int(k.rsplit("_", 1)[1]),
+        )
+        for lat_key in latent_keys:
+            i = lat_key.rsplit("_", 1)[1]
+            iters = _parse_iter_targets(num_keyframes.get(f"target_iters_{i}", ""))
+            if current_iteration in iters:
+                return io.NodeOutput(num_keyframes[lat_key])
+        return io.NodeOutput(fallback_latent)
 
 
 class KeyframeImageSchedule(io.ComfyNode):
