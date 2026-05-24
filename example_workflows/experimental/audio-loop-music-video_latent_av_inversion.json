@@ -3947,44 +3947,6 @@
       }
     },
     {
-      "id": 444,
-      "type": "LoadImage",
-      "pos": [
-        30,
-        378.7051202626735
-      ],
-      "size": [
-        282.798828125,
-        314
-      ],
-      "flags": {},
-      "order": 28,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": []
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": []
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.8.2",
-        "Node name for S&R": "LoadImage",
-        "image": "clipspace/reference_image.png [input]"
-      },
-      "widgets_values": [
-        "reference_image.png",
-        "image"
-      ]
-    },
-    {
       "id": 1615,
       "type": "TimestampPromptScheduleBatchEncode",
       "pos": [
@@ -4052,39 +4014,6 @@
       ],
       "color": "#232",
       "bgcolor": "#353"
-    },
-    {
-      "id": 565,
-      "type": "LoadAudio",
-      "pos": [
-        30,
-        742.7051202626735
-      ],
-      "size": [
-        282.798828125,
-        136
-      ],
-      "flags": {},
-      "order": 29,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "AUDIO",
-          "type": "AUDIO",
-          "links": []
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.9.2",
-        "Node name for S&R": "LoadAudio"
-      },
-      "widgets_values": [
-        "example_audio.mp3",
-        null,
-        null
-      ]
     },
     {
       "id": 2009,

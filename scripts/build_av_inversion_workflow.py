@@ -58,6 +58,8 @@ OUT = EXP / "audio-loop-music-video_latent_av_inversion.json"
 RESIZE = 445          # LTXSmartImageResize — image input slot 0
 TRIM_ACTUAL = 567     # TrimAudioDuration feeding actual_audio — audio input slot 0
 INPLACE = 531         # LTXVImgToVideoInplaceKJ — left at canonical ['1', 1, 0] (freeze)
+LOAD_IMAGE = 444      # LoadImage — i2v init source, orphaned once resize feeds from VHS
+LOAD_AUDIO = 565      # LoadAudio — audio source, orphaned once trim feeds from VHS
 
 # Planner-driven window: LTXFramePlanner#1634 = 19.88 s @ 25 fps -> 497 px frames.
 # (The EmptyLTXVLatentVideo length widget reads 353 but is WIRED from the planner, so the
@@ -124,11 +126,17 @@ def build(dry_run: bool = False) -> int:
     # 3. Audio seed from the SAME clip (guaranteed sync).
     ed.rewire_input(TRIM_ACTUAL, 0, vhs_id, 2, "AUDIO")     # actual-audio trim <- VHS audio
 
+    # 4. Remove the now-orphaned i2v init sources (no consumers after the rewires above).
+    for nid in (LOAD_IMAGE, LOAD_AUDIO):
+        if ed.has_node(nid) and not ed.find_links_from(nid):
+            ed.remove_node_and_links(nid)
+
     if dry_run:
         print("--dry-run: would write", OUT.relative_to(REPO))
         print(f"  + VHS_LoadVideo#{vhs_id} (frame_load_cap={WINDOW_FRAME_CAP})")
         print(f"  resize#{RESIZE}.image <- VHS frames (InplaceKJ#{INPLACE} unchanged = freeze)")
         print(f"  trim#{TRIM_ACTUAL}.audio <- VHS audio")
+        print(f"  remove orphaned LoadImage#{LOAD_IMAGE}, LoadAudio#{LOAD_AUDIO}")
         print("  generated-audio decode+mux inherited from av_extension base")
         return 0
 
