@@ -24,6 +24,13 @@ This project uses [Semantic Versioning](https://semver.org/).
   referenced anchor.
 
 ### Added
+- **`AUDIOLOOPHELPER_KF_DEBUG` env-gated shape trace on the loop-body
+  guide path.** Off by default (no-op on the hot path). When set, logs
+  per-iteration LATENT shapes from `LatentContextExtract` and
+  `LTXIterKeyframeSchedule` to stderr — used to localize a
+  final-iteration `LTXVAddLatentGuide` spatial-ratio crash on
+  full-length renders by isolating which loop input diverges from the
+  steady-state shape and on which iteration.
 - **`scripts/apply_audioreactive_loop.py` + the
   `example_workflows/audio_reactive_loop.json` workflow it generates
   (promoted to the top-level shipped surface after render validation).** The full-length production counterpart to the single-shot

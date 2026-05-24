@@ -12,7 +12,9 @@ for generating full-length music videos with LTX 2.3.
 import gc
 import logging
 import math
+import os
 import re
+import sys
 import warnings
 from collections import OrderedDict
 from contextlib import nullcontext
@@ -1977,6 +1979,21 @@ def _profile_span(name: str):
     return torch.profiler.record_function(name)
 
 
+# Env-gated diagnostic: trace per-iter LATENT shapes on the loop-body
+# guide path. Off by default (no-op on the hot path). Set
+# AUDIOLOOPHELPER_KF_DEBUG=1 to log to stderr (lands in the ComfyUI
+# console log). Used to localize the final-iteration LTXVAddLatentGuide
+# spatial-ratio crash on full-length renders — see which loop input
+# (video latent vs guide latent) diverges from the steady-state shape
+# and on which iteration.
+_KF_DEBUG = os.environ.get("AUDIOLOOPHELPER_KF_DEBUG", "") not in ("", "0")
+
+
+def _kf_debug(msg: str) -> None:
+    if _KF_DEBUG:
+        print(f"[KFDEBUG] {msg}", file=sys.stderr, flush=True)
+
+
 class LatentContextExtract(io.ComfyNode):
     """Extracts the last N latent frames as context for the next loop iteration.
 
@@ -2020,6 +2037,11 @@ class LatentContextExtract(io.ComfyNode):
             # Strip noise_mask so downstream creates fresh (matches VAEEncode behavior)
             s.pop("noise_mask", None)
 
+        if _KF_DEBUG:
+            _kf_debug(
+                f"ContextExtract: in_shape={tuple(video.shape)} "
+                f"overlap={overlap_latent_frames} out_shape={tuple(s['samples'].shape)}"
+            )
         return io.NodeOutput(s)
 
 
@@ -3171,7 +3193,18 @@ class LTXIterKeyframeSchedule(io.ComfyNode):
             i = lat_key.rsplit("_", 1)[1]
             iters = _parse_iter_targets(num_keyframes.get(f"target_iters_{i}", ""))
             if current_iteration in iters:
-                return io.NodeOutput(num_keyframes[lat_key])
+                chosen = num_keyframes[lat_key]
+                if _KF_DEBUG:
+                    _kf_debug(
+                        f"Selector: iter={current_iteration} -> keyframe row {i} "
+                        f"guide_shape={tuple(chosen['samples'].shape)}"
+                    )
+                return io.NodeOutput(chosen)
+        if _KF_DEBUG:
+            _kf_debug(
+                f"Selector: iter={current_iteration} -> fallback "
+                f"guide_shape={tuple(fallback_latent['samples'].shape)}"
+            )
         return io.NodeOutput(fallback_latent)
 
 
