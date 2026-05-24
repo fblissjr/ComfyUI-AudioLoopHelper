@@ -2,7 +2,7 @@
   "id": "3db70343-fd10-483b-8d66-6be2395b9681",
   "revision": 0,
   "last_node_id": 2033,
-  "last_link_id": 3221,
+  "last_link_id": 3222,
   "nodes": [
     {
       "id": 252,
@@ -1479,7 +1479,7 @@
         {
           "name": "image",
           "type": "IMAGE",
-          "link": 3220
+          "link": 3221
         },
         {
           "name": "width",
@@ -2042,7 +2042,8 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            2993
+            2993,
+            3220
           ]
         }
       ],
@@ -2385,7 +2386,7 @@
         {
           "name": "audio",
           "type": "AUDIO",
-          "link": 3221
+          "link": 3222
         }
       ],
       "outputs": [
@@ -3197,8 +3198,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            3202,
-            3205
+            3202
           ]
         }
       ],
@@ -4526,7 +4526,7 @@
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 3205
+          "link": 3220
         },
         {
           "name": "audio",
@@ -4763,7 +4763,7 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            3220
+            3221
           ]
         },
         {
@@ -4775,7 +4775,7 @@
           "name": "audio",
           "type": "AUDIO",
           "links": [
-            3221
+            3222
           ]
         },
         {
@@ -5803,14 +5803,6 @@
       "LATENT"
     ],
     [
-      3205,
-      1605,
-      0,
-      2028,
-      0,
-      "LATENT"
-    ],
-    [
       3206,
       604,
       0,
@@ -5916,6 +5908,14 @@
     ],
     [
       3220,
+      381,
+      2,
+      2028,
+      0,
+      "LATENT"
+    ],
+    [
+      3221,
       2033,
       0,
       445,
@@ -5923,7 +5923,7 @@
       "IMAGE"
     ],
     [
-      3221,
+      3222,
       2033,
       2,
       567,

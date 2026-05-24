@@ -62,6 +62,9 @@ SEPARATE = 245        # LTXVSeparateAVLatent -> audio_latent output slot 1
 AUDIO_VAE_GET = 254   # Get_audio_vae GetNode -> VAE output slot 0
 VHS_COMBINE = 617     # VHS_VideoCombine     -> audio input slot 1
 TENSOR_LOOP_OPEN = 1539  # TensorLoopOpen      -> iterations_in input slot 1
+TRIM_VIDEO = 2028     # TrimVideoLatentToAudio -> latent input slot 0
+CROP_GUIDES = 381     # LTXVCropGuides (initial render video) -> latent output slot 2
+LATENT_CONCAT = 1605  # LatentConcat (loop video assembly)
 
 # Default probe widgets: start_time=2.0 — keep the first 2 s of real audio as
 # context, regenerate the tail. This is the meaningful test: audio CONTINUATION
@@ -159,6 +162,15 @@ def apply(dry_run: bool = False) -> int:
     ed.add_link(iter_const, 0, TENSOR_LOOP_OPEN, 1, "INT")
     # mode widget -> count 0: ['iterations', 0, 0] (iterations=0, total_frames=0 -> bypass)
     ed.find_node(TENSOR_LOOP_OPEN)["widgets_values"] = ["iterations", 0, 0]
+
+    # Structural belt-and-suspenders: take the loop OUT of the output path. Route the video
+    # output straight from the initial render (LTXVCropGuides) instead of LatentConcat
+    # (which welds initial + loop windows). LatentConcat's only other consumer is a bypassed
+    # SaveLatent, so it goes dead and the loop body never executes — one sampler pass,
+    # robust even if ComfyUI drops the loop-count widget value on load. (The audio output
+    # already comes only from the initial render, so it's unaffected.)
+    if ed.has_node(TRIM_VIDEO) and ed.has_node(CROP_GUIDES):
+        ed.rewire_input(TRIM_VIDEO, 0, CROP_GUIDES, 2, "LATENT")
 
     if dry_run:
         print("--dry-run: would write", OUT.relative_to(REPO))
