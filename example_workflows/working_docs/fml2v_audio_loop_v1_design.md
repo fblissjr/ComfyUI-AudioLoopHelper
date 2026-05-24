@@ -20,28 +20,22 @@ Last updated: 2026-05-19
 > the chain, single resolution end-to-end (so the half-res / full-res
 > mismatch that motivated dropping ContextExtract in V1 disappears).
 >
-> **Per-iter keyframe re-anchoring** added on top of option3 via the
-> new `LTXIterKeyframeSchedule` node + `scripts/apply_fml2v_iter_keyframe.py`.
-> DiT video drift on long renders is mitigated by hard-locking the
-> latent at user-chosen iter+frame positions (same `noise_mask=0`
-> semantics as `LTXVImgToVideoInplaceKJ`). Init-render `LTXVAddGuideMulti`
-> collapsed from 3 keyframes (first/mid/last in 19.88s window) to 1
-> (first only); middle/last become per-iter keyframes scheduled across
-> the song timeline.
+> **Per-iter keyframe re-anchoring SUPERSEDED + RELOCATED (2026-05-24).**
+> The keyframe feature no longer lives on the fml2v flat-canvas build at
+> all. It was rebuilt on the proven canonical subgraph and ships as
+> `example_workflows/audio-loop-music-video_latent_keyframe.json`
+> (generator `scripts/apply_keyframe_iter_anchor.py`). Design record:
+> `example_workflows/working_docs/keyframe_iter_anchor_design.md`. The
+> `apply_fml2v_iter_keyframe.py` script and the in-loop `noise_mask=0`
+> writer node design referenced in earlier drafts were removed —
+> `LTXIterKeyframeSchedule` is now an OUTSIDE-loop selector feeding the
+> canonical's existing `guide_latent` (hard lock comes from
+> `first_frame_guide_strength=1.0`, not an in-loop mask write).
 >
-> **Mode flags**: `apply_fml2v_iter_keyframe.py` defaults to FULL
-> render (re-wires `AudioLoopPlanner.total_iterations → TLO.iterations_in`,
-> F5 canonical autowire); `--smoke` opts into the 2-iter quick test.
-> `apply_fml2v_option3_context_extract.py::_apply()` accepts `smoke`
-> kwarg (default True for CLI preservation, False from iter-keyframe
-> caller).
->
-> **Verified runs** (2026-05-19, with `bash start_experiment.sh nodynvram`
-> to avoid comfy-aimdo offload-reload corruption of LTX AV model state):
-> coherent video continuing from init render via ContextExtract, lip
-> sync stable through full song after `AudioVideoMask` timing wires
-> resolved (`video_end_time` / `audio_start_time` / `audio_end_time`
-> all wired to `LTXFramePlanner.actual_seconds`).
+> The option3 pivot below (ContextExtract + single-resolution loop body)
+> is what proved the canonical's loop-body design is the right spine —
+> which is why the keyframe feature was moved off fml2v entirely. fml2v
+> remains an experimental two-pass-refine record; not the keyframe home.
 >
 > Original V1 banner + recipe follow. V1 two-pass + 960×512 + no-ContextExtract
 > are preserved for context but superseded by V2.

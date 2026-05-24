@@ -114,18 +114,22 @@ def test_selects_matching_keyframe():
 
 
 def test_multi_row_selection():
+    # 1-based iters: TensorLoopOpen.current_iteration emits 1,2,3,… — schedules
+    # use 1-based indices (target_iters='0' would be dead, iter 0 = out-of-loop
+    # init render). Use realistic 1-based values here so the test doubles as
+    # documentation of the loop's actual iteration base.
     from nodes import LTXIterKeyframeSchedule
     fallback = _kf("fallback")
     kf1, kf2, kf3 = _kf("kf1"), _kf("kf2"), _kf("kf3")
     num_keyframes = {
-        "keyframe_latent_1": kf1, "target_iters_1": "0",
-        "keyframe_latent_2": kf2, "target_iters_2": "2",
-        "keyframe_latent_3": kf3, "target_iters_3": "4",
+        "keyframe_latent_1": kf1, "target_iters_1": "1",
+        "keyframe_latent_2": kf2, "target_iters_2": "3",
+        "keyframe_latent_3": kf3, "target_iters_3": "5",
     }
-    assert LTXIterKeyframeSchedule.execute(fallback, 0, num_keyframes)[0] is kf1
-    assert LTXIterKeyframeSchedule.execute(fallback, 2, num_keyframes)[0] is kf2
-    assert LTXIterKeyframeSchedule.execute(fallback, 4, num_keyframes)[0] is kf3
-    assert LTXIterKeyframeSchedule.execute(fallback, 3, num_keyframes)[0] is fallback
+    assert LTXIterKeyframeSchedule.execute(fallback, 1, num_keyframes)[0] is kf1
+    assert LTXIterKeyframeSchedule.execute(fallback, 3, num_keyframes)[0] is kf2
+    assert LTXIterKeyframeSchedule.execute(fallback, 5, num_keyframes)[0] is kf3
+    assert LTXIterKeyframeSchedule.execute(fallback, 2, num_keyframes)[0] is fallback
 
 
 def test_lowest_index_row_wins_on_overlap():

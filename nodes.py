@@ -3024,7 +3024,11 @@ class LTXIterKeyframeSchedule(io.ComfyNode):
                     "current_iteration",
                     default=0,
                     min=0,
-                    tooltip="Current iteration index from TensorLoopOpen / AudioLoopController.",
+                    tooltip=(
+                        "Current iteration index from TensorLoopOpen / AudioLoopController. "
+                        "TensorLoopOpen.current_iteration is 1-based (emits 1,2,3,…), so "
+                        "target_iters lists should use 1-based indices."
+                    ),
                 ),
                 io.DynamicCombo.Input(
                     "num_keyframes",

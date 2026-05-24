@@ -1,40 +1,49 @@
 """apply_keyframe_iter_anchor.
 
-Last updated: 2026-05-20
+Last updated: 2026-05-24
 
-Stages a per-iter keyframe variant of the canonical audio-loop workflow
-(`audio-loop-music-video_latent.json`) by inserting the
-`LTXIterKeyframeSchedule` selector at the TOP LEVEL — intercepting the
-feed into the subgraph's existing `guide_latent` input. No subgraph
-schema change: `guide_latent` already exists (sg.input[8] →
-`LTXVAddLatentGuide`), today fed a static init-image latent for every
-iter. We replace that static feed with a per-iter selection.
+Generates the per-iter keyframe variant of the canonical audio-loop
+workflow and writes it to
+`example_workflows/audio-loop-music-video_latent_keyframe.json`
+(replacing the stale prior file). Generator-style — its output IS the
+shipped variant, so no F-pair audit (mirrors apply_audioreactive_loop.py).
 
-Topology (all top-level):
-    LoadImage_kf_N → VAEEncode_kf_N ─┐
-                                     ├→ LTXIterKeyframeSchedule ─→ invoker #843.guide_latent
-    #1617 VAEEncode (init) ──────────┘ (fallback)
-    TLO #1539.current_iteration ─────┘
+Mechanism: insert the `LTXIterKeyframeSchedule` selector at the TOP LEVEL,
+intercepting the feed into the subgraph's existing `guide_latent` input
+(sg.input[8] → LTXVAddLatentGuide). No subgraph schema change — the
+per-iter anchor machinery already exists; today it gets a static init
+latent every iter, and we replace that with a per-iter selection.
 
-Per iter, the selector picks the keyframe whose `target_iters` contains
-the current iteration; otherwise passes the init latent through (so
-un-targeted iters behave identically to the no-keyframe canonical). The
-selected latent feeds the proven `LTXVAddLatentGuide` soft anchor inside
-the subgraph — no new in-loop nodes, no VAE in the loop.
+Topology (all top-level), per keyframe replicating the init guide chain
+so the keyframe latent is shape-compatible with guide_latent:
+    LoadImage_kf → LTXSmartImageResize (FramePlanner dims) →
+        LTXVPreprocess(18) → VAEEncode ─┐
+                                        ├→ LTXIterKeyframeSchedule → #843.guide_latent
+    #1617 VAEEncode (init) ─────────────┘ (fallback)
+    TLO #1539.current_iteration ────────┘
+
+Per iter the selector picks the keyframe whose `target_iters` contains
+the current iteration (1-BASED — TensorLoopOpen emits 1,2,3,…); otherwise
+passes the init latent through, so un-targeted iters are identical to the
+no-keyframe canonical.
+
+Anchor strength: sets `first_frame_guide_strength` (#1269) = 1.0. At 1.0
+the LTXVAddLatentGuide noise_mask = max(0, 1-strength) = 0 → the guide
+frame is FROZEN (hard lock), which (a) makes keyframes hold against drift
+and (b) is the fast path (frozen frame is skipped in attention/FFN; <1.0
+denoises it as an active token). The keyframe anchors at idx=-1 (window
+tail); the overlap carries it into the next iter as frozen context, so a
+keyframe change drives a smooth one-iter transition.
 
 Mutations (idempotent):
-  1. New `GetNode("video_vae")` for the keyframe encoders.
-  2. N (=3) `LoadImage` + `VAEEncode` keyframe-encoder chains (placeholders;
-     user picks image files in the UI).
-  3. New `LTXIterKeyframeSchedule` (num_keyframes=N):
-       fallback_latent ← #1617 VAEEncode (init guide)
-       current_iteration ← TLO #1539.current_iteration (out slot 3)
-       keyframe_latent_K ← VAEEncode_kf_K
-       target_iters_K default "" (user sets, e.g. "0", "2", "4")
-  4. Rewire invoker #843.guide_latent ← selector (was ← #1617 directly).
-
-Output: internal/scratch/audio-loop-music-video_latent_iterkeyframe.json
-(gitignored draft; promote to example_workflows/ after a render gate).
+  1. Per keyframe (N=3): LoadImage → LTXSmartImageResize → LTXVPreprocess
+     → VAEEncode (chain mirrors the init guide path #444→#445→#446→#1617).
+     LoadImage defaults to the init placeholder so unset keyframes don't
+     crash the eager encode; un-targeted rows are never selected anyway.
+  2. LTXIterKeyframeSchedule (num_keyframes=N): fallback ← #1617,
+     current_iteration ← TLO #1539.out[3], keyframe_latent_K ← VAEEncode_K.
+  3. Rewire invoker #843.guide_latent ← selector (was ← #1617 directly).
+  4. FloatConstant #1269 first_frame_guide_strength: 0.7 → 1.0.
 
 Usage:
     uv run --group dev python scripts/apply_keyframe_iter_anchor.py
@@ -54,14 +63,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from workflow_utils import WorkflowEditor
 
 DEFAULT_INPUT = "example_workflows/audio-loop-music-video_latent.json"
-DEFAULT_OUTPUT = "internal/scratch/audio-loop-music-video_latent_iterkeyframe.json"
+DEFAULT_OUTPUT = "example_workflows/audio-loop-music-video_latent_keyframe.json"
 NUM_KEYFRAMES = 3
 
 SUBGRAPH_INVOKER = 843
-GUIDE_LATENT_SLOT = 8           # subgraph input slot for guide_latent
-INIT_GUIDE_VAEENCODE = 1617     # VAEEncode "init image → guide latent" (becomes fallback)
-TLO = 1539                      # TensorLoopOpen; current_iteration is out slot 3
+GUIDE_LATENT_SLOT = 8            # subgraph input slot for guide_latent
+INIT_GUIDE_VAEENCODE = 1617      # VAEEncode "init image → guide latent" (becomes fallback)
+TLO = 1539                       # TensorLoopOpen; current_iteration is out slot 3 (1-based)
 TLO_CURRENT_ITERATION_SLOT = 3
+FRAME_PLANNER = 1634             # LTXFramePlanner; width=out[0], height=out[1]
+VIDEO_VAE_GET = 619              # GetNode "video_vae" feeding the init VAEEncode
+FIRST_FRAME_GUIDE_STRENGTH = 1269  # FloatConstant feeding LTXVAddLatentGuide.strength
+PREPROCESS_COMPRESSION = 18      # matches init LTXVPreprocess #446 (Lightricks default)
+DEFAULT_KEYFRAME_IMAGE = "reference_image.png"  # exists in the shipped workflow → no eager crash
 
 SELECTOR_TITLE = "LTX Iter Keyframe Schedule (per-iter keyframe anchor)"
 
@@ -74,61 +88,18 @@ def _find_selector(ed: WorkflowEditor) -> dict | None:
 
 
 def _already_applied(ed: WorkflowEditor) -> bool:
-    if _find_selector(ed) is None:
+    sel = _find_selector(ed)
+    if sel is None:
         return False
-    # guide_latent must point at the selector, not the raw init VAEEncode.
-    try:
-        invoker = ed.find_node(SUBGRAPH_INVOKER)
-    except ValueError:
-        return False
-    inp = invoker["inputs"][GUIDE_LATENT_SLOT]
+    inp = ed.find_node(SUBGRAPH_INVOKER)["inputs"][GUIDE_LATENT_SLOT]
     lk = inp.get("link")
     if lk is None:
         return False
     row = next((l for l in ed.wf.get("links", []) if l[0] == lk), None)
-    return row is not None and row[1] != INIT_GUIDE_VAEENCODE
+    return row is not None and row[1] == sel["id"]
 
 
-def _make_selector_node(node_id: int) -> dict:
-    """Hand-build the LTXIterKeyframeSchedule DynamicCombo node (num_keyframes=N).
-
-    Mirrors the KJNodes DynamicCombo serialization: per-row fields are
-    flattened into inputs as `num_keyframes.<field>_<i>` with shape 7;
-    widget-bearing fields also carry a `widget` sub-dict and a slot in
-    widgets_values. Widget order follows schema declaration:
-    [current_iteration, num_keyframes_combo, target_iters_1..N].
-    """
-    inputs = [
-        {"name": "fallback_latent", "type": "LATENT", "link": None},
-        {"name": "current_iteration", "type": "INT",
-         "widget": {"name": "current_iteration"}, "link": None},
-    ]
-    for i in range(1, NUM_KEYFRAMES + 1):
-        inputs.append({"label": f"keyframe_latent_{i}",
-                       "name": f"num_keyframes.keyframe_latent_{i}",
-                       "shape": 7, "type": "LATENT", "link": None})
-        inputs.append({"name": f"num_keyframes.target_iters_{i}", "type": "STRING",
-                       "widget": {"name": f"target_iters_{i}"}, "shape": 7, "link": None})
-    return {
-        "id": node_id,
-        "type": "LTXIterKeyframeSchedule",
-        "pos": [1430, 1000],
-        "size": [320, 240],
-        "flags": {},
-        "order": 0,
-        "mode": 0,
-        "inputs": inputs,
-        "outputs": [{"name": "latent", "type": "LATENT", "links": []}],
-        "properties": {
-            "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
-            "Node name for S&R": "LTXIterKeyframeSchedule",
-        },
-        "widgets_values": [0, str(NUM_KEYFRAMES)] + [""] * NUM_KEYFRAMES,
-        "title": SELECTOR_TITLE,
-    }
-
-
-def _make_loadimage(node_id: int, pos: list, default_name: str) -> dict:
+def _make_loadimage(node_id: int, pos: list) -> dict:
     return {
         "id": node_id, "type": "LoadImage", "pos": pos, "size": [240, 310],
         "flags": {}, "order": 0, "mode": 0, "inputs": [],
@@ -137,7 +108,41 @@ def _make_loadimage(node_id: int, pos: list, default_name: str) -> dict:
             {"name": "MASK", "type": "MASK", "links": []},
         ],
         "properties": {"cnr_id": "comfy-core", "ver": "0.8.2", "Node name for S&R": "LoadImage"},
-        "widgets_values": [default_name, "image"],
+        "widgets_values": [DEFAULT_KEYFRAME_IMAGE, "image"],
+    }
+
+
+def _make_resize(node_id: int, pos: list) -> dict:
+    return {
+        "id": node_id, "type": "LTXSmartImageResize", "pos": pos, "size": [270, 336],
+        "flags": {}, "order": 0, "mode": 0,
+        "inputs": [
+            {"name": "image", "type": "IMAGE", "link": None},
+            {"name": "width", "type": "INT", "widget": {"name": "width"}, "link": None},
+            {"name": "height", "type": "INT", "widget": {"name": "height"}, "link": None},
+            {"name": "keep_proportion", "type": "BOOLEAN", "widget": {"name": "keep_proportion"}, "link": None},
+            {"name": "crop_position", "type": "COMBO", "widget": {"name": "crop_position"}, "link": None},
+        ],
+        "outputs": [
+            {"name": "image", "type": "IMAGE", "links": []},
+            {"name": "width", "type": "INT", "links": []},
+            {"name": "height", "type": "INT", "links": []},
+        ],
+        "properties": {"aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+                       "cnr_id": "comfyui-audioloophelper",
+                       "Node name for S&R": "LTXSmartImageResize"},
+        "widgets_values": [832, 448, True, "top"],
+    }
+
+
+def _make_preprocess(node_id: int, pos: list) -> dict:
+    return {
+        "id": node_id, "type": "LTXVPreprocess", "pos": pos, "size": [270, 58],
+        "flags": {}, "order": 0, "mode": 0,
+        "inputs": [{"name": "image", "type": "IMAGE", "link": None}],
+        "outputs": [{"name": "output_image", "type": "IMAGE", "links": []}],
+        "properties": {"cnr_id": "comfy-core", "ver": "0.9.2", "Node name for S&R": "LTXVPreprocess"},
+        "widgets_values": [PREPROCESS_COMPRESSION],
     }
 
 
@@ -155,58 +160,85 @@ def _make_vaeencode(node_id: int, pos: list) -> dict:
     }
 
 
-def _apply(ed: WorkflowEditor) -> None:
-    # 1. Get_video_vae for the keyframe encoders.
-    get_vae_id = ed.next_node_id()
-    ed.add_node(WorkflowEditor.make_get_node(
-        get_vae_id, "video_vae", "VAE", [1430, 700], title="Get_video_vae (keyframes)",
-    ))
-    print(f"  + GetNode #{get_vae_id} video_vae (keyframe encoders)")
+def _make_selector_node(node_id: int) -> dict:
+    """Hand-build the LTXIterKeyframeSchedule DynamicCombo node (num_keyframes=N).
 
-    # 2. N keyframe LoadImage + VAEEncode chains.
+    Per-row fields flatten into inputs as `num_keyframes.<field>_<i>` with
+    shape 7; widget-bearing fields carry a `widget` sub-dict and a slot in
+    widgets_values. Widget order = schema declaration order:
+    [current_iteration, num_keyframes_combo, target_iters_1..N].
+    """
+    inputs = [
+        {"name": "fallback_latent", "type": "LATENT", "link": None},
+        {"name": "current_iteration", "type": "INT",
+         "widget": {"name": "current_iteration"}, "link": None},
+    ]
+    for i in range(1, NUM_KEYFRAMES + 1):
+        inputs.append({"label": f"keyframe_latent_{i}",
+                       "name": f"num_keyframes.keyframe_latent_{i}",
+                       "shape": 7, "type": "LATENT", "link": None})
+        inputs.append({"name": f"num_keyframes.target_iters_{i}", "type": "STRING",
+                       "widget": {"name": f"target_iters_{i}"}, "shape": 7, "link": None})
+    return {
+        "id": node_id, "type": "LTXIterKeyframeSchedule", "pos": [-700, 7200],
+        "size": [320, 240], "flags": {}, "order": 0, "mode": 0,
+        "inputs": inputs,
+        "outputs": [{"name": "latent", "type": "LATENT", "links": []}],
+        "properties": {"aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+                       "Node name for S&R": "LTXIterKeyframeSchedule"},
+        "widgets_values": [0, str(NUM_KEYFRAMES)] + [""] * NUM_KEYFRAMES,
+        "title": SELECTOR_TITLE,
+    }
+
+
+def _apply(ed: WorkflowEditor) -> None:
+    base_x, base_y = -2000, 7000
     kf_latent_ids: list[int] = []
     for i in range(1, NUM_KEYFRAMES + 1):
-        li_id = ed.next_node_id()
-        ed.add_node(_make_loadimage(li_id, [1080, 600 + (i - 1) * 360], f"keyframe_{i}.png"))
-        ve_id = ed.next_node_id()
-        ed.add_node(_make_vaeencode(ve_id, [1360, 600 + (i - 1) * 360]))
-        ed.add_link(li_id, 0, ve_id, 0, "IMAGE")   # LoadImage.IMAGE → VAEEncode.pixels
-        ed.add_link(get_vae_id, 0, ve_id, 1, "VAE")
-        kf_latent_ids.append(ve_id)
-        print(f"  + keyframe {i}: LoadImage #{li_id} → VAEEncode #{ve_id}")
+        y = base_y + (i - 1) * 360
+        li = ed.next_node_id(); ed.add_node(_make_loadimage(li, [base_x, y]))
+        rs = ed.next_node_id(); ed.add_node(_make_resize(rs, [base_x + 280, y]))
+        pp = ed.next_node_id(); ed.add_node(_make_preprocess(pp, [base_x + 580, y]))
+        ve = ed.next_node_id(); ed.add_node(_make_vaeencode(ve, [base_x + 880, y]))
+        # Chain: LoadImage → resize → preprocess → vaeencode (mirror init #444→#445→#446→#1617)
+        ed.add_link(li, 0, rs, 0, "IMAGE")
+        ed.add_link(FRAME_PLANNER, 0, rs, 1, "INT")   # width
+        ed.add_link(FRAME_PLANNER, 1, rs, 2, "INT")   # height
+        ed.add_link(rs, 0, pp, 0, "IMAGE")
+        ed.add_link(pp, 0, ve, 0, "IMAGE")
+        ed.add_link(VIDEO_VAE_GET, 0, ve, 1, "VAE")
+        kf_latent_ids.append(ve)
+        print(f"  + keyframe {i}: LoadImage #{li} → Resize #{rs} → Preprocess #{pp} → VAEEncode #{ve}")
 
-    # 3. Selector node.
     sel_id = ed.next_node_id()
     ed.add_node(_make_selector_node(sel_id))
     print(f"  + LTXIterKeyframeSchedule #{sel_id} (num_keyframes={NUM_KEYFRAMES})")
 
-    # 4. Wire selector inputs. Slot order: fallback_latent(0),
-    #    current_iteration(1), then per-row [keyframe_latent_i, target_iters_i].
-    ed.add_link(INIT_GUIDE_VAEENCODE, 0, sel_id, 0, "LATENT")        # fallback
-    ed.add_link(TLO, TLO_CURRENT_ITERATION_SLOT, sel_id, 1, "INT")   # current_iteration
+    # Wire selector: fallback(0), current_iteration(1), then [keyframe_latent_i, target_iters_i].
+    ed.add_link(INIT_GUIDE_VAEENCODE, 0, sel_id, 0, "LATENT")
+    ed.add_link(TLO, TLO_CURRENT_ITERATION_SLOT, sel_id, 1, "INT")
     for k, ve_id in enumerate(kf_latent_ids):
-        kf_slot = 2 + k * 2  # keyframe_latent_i input slot (target_iters interleaved after)
-        ed.add_link(ve_id, 0, sel_id, kf_slot, "LATENT")
+        ed.add_link(ve_id, 0, sel_id, 2 + k * 2, "LATENT")
     print(f"    fallback_latent ← #{INIT_GUIDE_VAEENCODE} (init guide)")
-    print(f"    current_iteration ← TLO #{TLO}.out[{TLO_CURRENT_ITERATION_SLOT}]")
+    print(f"    current_iteration ← TLO #{TLO}.out[{TLO_CURRENT_ITERATION_SLOT}] (1-based)")
     print(f"    keyframe_latent_1..{NUM_KEYFRAMES} ← keyframe VAEEncodes")
 
-    # 5. Rewire invoker.guide_latent ← selector (was ← init VAEEncode directly).
     ed.rewire_input(SUBGRAPH_INVOKER, GUIDE_LATENT_SLOT, sel_id, 0, "LATENT")
     print(f"  rewire invoker #{SUBGRAPH_INVOKER}.guide_latent ← #{sel_id} (was ← #{INIT_GUIDE_VAEENCODE})")
+
+    # Hard-lock anchor + fast path: strength 1.0 (noise_mask=0 on the guide frame).
+    fc = ed.find_node(FIRST_FRAME_GUIDE_STRENGTH)
+    wv = list(fc.get("widgets_values") or [0.7])
+    prev = wv[0]; wv[0] = 1.0; fc["widgets_values"] = wv
+    print(f"  FloatConstant #{FIRST_FRAME_GUIDE_STRENGTH} first_frame_guide_strength: {prev} → 1.0 (hard lock + fast)")
 
 
 def _migrate(input_path: Path, output_path: Path, dry_run: bool) -> None:
     if not input_path.exists():
         raise SystemExit(f"Input workflow missing: {input_path}")
-    if output_path.exists() and input_path != output_path:
-        if _already_applied(WorkflowEditor(output_path)):
-            print(f"{output_path.name}: already applied, skipping. Run --revert to reset.")
-            return
     if dry_run:
         ed = WorkflowEditor(input_path)
-        print(f"would copy {input_path} -> {output_path}")
-        print("would apply keyframe-iter-anchor ops:")
+        print(f"would generate {output_path} from {input_path}")
         _apply(ed)
         return
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -221,32 +253,32 @@ def _migrate(input_path: Path, output_path: Path, dry_run: bool) -> None:
     print(f"  wrote {output_path}")
     print()
     print("Next steps:")
-    print(f"  1. bash start_experiment.sh nodynvram")
+    print("  1. bash start_experiment.sh nodynvram")
     print(f"  2. Reload {output_path.name} in ComfyUI")
-    print(f"  3. Set the 3 keyframe LoadImage files + the init LoadImage #444")
-    print(f"  4. On LTXIterKeyframeSchedule set target_iters per row, e.g.:")
-    print(f"       target_iters_1 = '0'   target_iters_2 = '2'   target_iters_3 = '4'")
-    print(f"     (check AudioLoopPlanner.summary for your song's iter count)")
-    print(f"  5. Queue. Un-targeted iters use the init image (identical to canonical).")
-    print(f"  NOTE: if the DynamicCombo node doesn't expand its keyframe rows in the")
-    print(f"  UI, delete + re-add LTXIterKeyframeSchedule from the node menu and rewire")
-    print(f"  (DynamicCombo slot indices bake at save time).")
+    print("  3. Set the 3 keyframe LoadImage files (default = init placeholder) + init LoadImage #444")
+    print("  4. On LTXIterKeyframeSchedule set target_iters per row (1-BASED — TLO emits 1,2,3,…):")
+    print("       target_iters_1 = '1'   target_iters_2 = '3'   target_iters_3 = '5'")
+    print("     (check AudioLoopPlanner.summary for your song's iter count)")
+    print("  5. Queue. Un-targeted iters use the init image (identical to canonical).")
+    print("  NOTE: if the DynamicCombo keyframe rows don't expand in the UI, delete +")
+    print("  re-add LTXIterKeyframeSchedule from the node menu and rewire (slot indices")
+    print("  bake at save time).")
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--input", default=DEFAULT_INPUT)
     ap.add_argument("--output", default=DEFAULT_OUTPUT)
-    ap.add_argument("--revert", action="store_true")
+    ap.add_argument("--revert", action="store_true",
+                    help="Restore the output file from the canonical input (un-applied state).")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     out = Path(args.output)
     if args.revert:
-        if out.exists():
-            out.unlink()
-            print(f"removed {out}")
-        else:
-            print(f"{out} does not exist; nothing to revert.")
+        # Output is a tracked shipped variant; revert = regenerate-without-keyframes
+        # is meaningless. Restore from git instead. Just report.
+        print("--revert: output is a tracked shipped variant; restore via "
+              "`git checkout -- <output>` or re-run without --revert to regenerate.")
         return
     _migrate(Path(args.input), out, dry_run=args.dry_run)
 

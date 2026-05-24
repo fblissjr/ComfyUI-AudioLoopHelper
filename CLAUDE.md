@@ -1,6 +1,6 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-05-23
+Last updated: 2026-05-24
 
 ComfyUI nodes that automate loop timing + audio analysis for full-length music video generation with LTX 2.3. Core pattern: `AudioLoopController` drives stride from integer latent counts, audio is frozen via `noise_mask=0`, prompts pre-encoded once outside the loop (CLIP must never enter the loop body). **Start here:** `docs/architecture_overview.md`; task-first nav at `docs/README.md`.
 
@@ -43,7 +43,7 @@ Core nodes (per-node role + wiring in each class's docstring; full reference at 
 
 - **Loop spine**: `AudioLoopController`, `LoopIterationStamp`, `IterationCleanup`, `AudioLoopPlanner`, `AudioDuration`
 - **Prompt schedule**: `TimestampPromptScheduleBatchEncode` + `ConditioningSelectByIteration` (current) / `TimestampPromptSchedule` + `CachedTextEncode` (legacy; don't wire in loop body)
-- **Keyframe schedule**: `KeyframeLatentScheduleBatchEncode` + `LatentSelectByIteration` (timestamp-driven; current — VAE-encodes once outside loop) / `KeyframeImageSchedule` + `ImageBlend` (legacy; per-iter VAE) / `LTXIterKeyframeSchedule` (iter-index-driven SELECTOR — runs OUTSIDE the loop, picks a pre-encoded keyframe latent per iter by `target_iters` lists, passes `fallback_latent` through on un-targeted iters; output feeds the subgraph's existing `guide_latent` input → `LTXVAddLatentGuide` soft anchor; DynamicCombo 1-20 `keyframe_latent` rows; staged onto the canonical via `scripts/apply_keyframe_iter_anchor.py`)
+- **Keyframe schedule**: `KeyframeLatentScheduleBatchEncode` + `LatentSelectByIteration` (timestamp-driven; current — VAE-encodes once outside loop) / `KeyframeImageSchedule` + `ImageBlend` (legacy; per-iter VAE) / `LTXIterKeyframeSchedule` (iter-index-driven SELECTOR — picks a pre-encoded keyframe latent per iter by **1-based** `target_iters`, feeds the subgraph's `guide_latent` → `LTXVAddLatentGuide`; `first_frame_guide_strength=1.0` makes that a HARD lock + fast path. Ships as `example_workflows/audio-loop-music-video_latent_keyframe.json`; design + overlap mechanics: `example_workflows/working_docs/keyframe_iter_anchor_design.md`; generator `scripts/apply_keyframe_iter_anchor.py`)
 - **Latent ops**: `LatentContextExtract`, `LatentOverlapTrim`, `LatentTemporalMask` (retake; `edge_taper_seconds` for soft boundary), `LatentSeamZoneMask` (multi-band mask centered on iteration boundaries — pairs with `scripts/diagnose_overlap_seams.py`), `LatentFrameCount` (sizes empty audio latent for upscale + seam), `TrimImageBatchToAudio` (F14), `TrimVideoLatentToAudio` (A/B staged), `LTXHeadTrim` (image+audio composite — drops first N latent-frames' pixel + matching audio span; default 0 = no-op), `RunIdPrefix` (F15)
 - **Attention + profiling + blend**: `AudioLoopHelperSageAttention` (default `auto` as of 2026-05-15 via `scripts/apply_sage_mode_auto.py`; `auto_mask_aware` was prior default — runtime-equivalent on audio-loop workflows since the masked path doesn't fire there, and `auto` is what benchmark workflows need), `ProfileBegin`/`IterStep`/`End`, `ConditioningBlend` (works with Gemma 3 + CLIP)
 - **Step-skipping cache**: `LTXVideoEasyCache` (experimental, default off)
@@ -184,7 +184,7 @@ Public: `docs/README.md` (task-first nav) → `docs/guides/` (how-to), `docs/ref
 
 Reference codebases (read-only): `coderef/LTX-2/`, `coderef/LTX-Desktop/`, ComfyUI-LTXVideo upstream.
 
-Example workflows: the shipped variants in `example_workflows/` all run `AudioLoopHelperSageAttention auto` — incl. `audio_reactive_loop.json` (audio-driven motion; promoted from experimental 2026-05-23 after a render gate, generator `scripts/apply_audioreactive_loop.py`). Validate via `scripts/audit_workflows.py`.
+Example workflows: the shipped variants in `example_workflows/` all run `AudioLoopHelperSageAttention auto` — incl. `audio_reactive_loop.json` (audio-driven motion; promoted from experimental 2026-05-23 after a render gate, generator `scripts/apply_audioreactive_loop.py`) and `audio-loop-music-video_latent_keyframe.json` (per-iter keyframe re-anchoring via `LTXIterKeyframeSchedule`, generator `scripts/apply_keyframe_iter_anchor.py`; structurally sound + audit-clean but render-gate still pending). Validate via `scripts/audit_workflows.py`.
 
 Subtree CLAUDE.md files (auto-loaded when working in that subtree):
 - `scripts/CLAUDE.md` — apply-script conventions, audit invariants, WorkflowEditor patterns.
