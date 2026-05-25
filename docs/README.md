@@ -1,4 +1,4 @@
-Last updated: 2026-05-05
+Last updated: 2026-05-25
 
 # docs/ — ComfyUI-AudioLoopHelper documentation
 
@@ -86,6 +86,7 @@ linking out (parallel-scrubbed-copy convention retired 2026-04-25).
 - `LTXVAddGuideMulti` (up to 20 guides), `LTXVAddGuidesFromBatch`: [`analysis/kjnodes_multiframe_guide_analysis.md`](analysis/kjnodes_multiframe_guide_analysis.md)
 
 ### "I want to understand lip-sync / frozen-audio prompting"
+- Replace someone's dialogue (voice-clone + lip-sync), step by step: [`guides/dialogue_replacement_guide.md`](guides/dialogue_replacement_guide.md)
 - Community research on lip-sync prompting + when it applies vs when our frozen-audio workflow diverges: [`analysis/audio_in_prompt_research.md`](analysis/audio_in_prompt_research.md)
 
 ### "I need env-vars / runtime knobs"
@@ -115,6 +116,7 @@ linking out (parallel-scrubbed-copy convention retired 2026-04-25).
 | `audio_analysis_guide.md` | Running offline analysis; wiring `AudioPitchDetect`. |
 | `bench_workflow_guide.md` | Sage A/B procedure + bench-variant apply scripts. |
 | `debugging_guide.md` | Output looks wrong → symptom → first-check. |
+| `dialogue_replacement_guide.md` | Replace a speaker's dialogue: voice-clone audio (pass 1) + lip-synced video (pass 2). Experimental. |
 | `profiling_guide.md` | Placing `ProfileBegin`/`IterStep`/`End` for a torch.profiler run. |
 | `prompt_creation_guide.md` | Project-specific prompt rules + variation patterns. |
 | `prompt_workflow_end_to_end.md` | Init image → VLM → audio → LLM → schedule. |
