@@ -1,12 +1,20 @@
 """apply_keyframe_iter_anchor.
 
-Last updated: 2026-05-24
+Last updated: 2026-05-25
 
 Generates the per-iter keyframe variant of the canonical audio-loop
 workflow and writes it to
 `example_workflows/audio-loop-music-video_latent_keyframe.json`
 (replacing the stale prior file). Generator-style — its output IS the
 shipped variant, so no F-pair audit (mirrors apply_audioreactive_loop.py).
+
+CLOBBER WARNING: this regenerates the output from the CANONICAL base, so
+re-running DROPS any hand edits made directly to keyframe.json that aren't
+encoded here (e.g. a tuned negative prompt, NAG bypass). The shipped JSON is
+the source of truth, not this script. Before re-running, `git diff` the output
+and either fold those edits into this generator or re-apply them after. Same
+hazard cascades to build_keyframe_autoextract_workflow.py, which forks this
+output.
 
 Mechanism: insert the `LTXIterKeyframeSchedule` selector at the TOP LEVEL,
 intercepting the feed into the subgraph's existing `guide_latent` input

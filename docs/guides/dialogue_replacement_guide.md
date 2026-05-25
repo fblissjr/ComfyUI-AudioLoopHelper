@@ -2,11 +2,13 @@
 
 Last updated: 2026-05-25
 
-> **EXPERIMENTAL.** This pipeline works — a real clip went through it end to end
-> and came back with the speaker's voice saying new lines, matched to the scene.
-> But it hasn't had a lot of testing yet. Treat the parameter values here as
-> sensible starting points, not tuned optimums. Expect to re-roll seeds and
-> nudge a few knobs per clip.
+> **EXPERIMENTAL — and the two passes are not equally proven.**
+> **Pass 1 (generate the new audio)** is the part that's actually been run end to
+> end: a real clip came back with the speaker's voice saying new lines, matched to
+> the scene. **Pass 2 (regenerate the video for lip-sync)** is conceptually sound
+> and wired up, but it's render-gate-pending — not yet validated on a real clip,
+> so its parameters are best guesses. Treat every value here as a starting point,
+> not a tuned optimum, and expect to re-roll seeds and nudge knobs per clip.
 
 ## What you're going to do
 
@@ -172,6 +174,14 @@ cp new_dialogue.wav <comfyui>/input/
 ```
 
 ## Pass 2 — regenerate the video to lip-sync
+
+> **Least-tested step.** Pass 2 hasn't been validated on a real clip yet. The
+> wiring is sound and the mechanism is the same frozen-audio / generated-video
+> path the music-video workflow uses every day, but the specific tension here —
+> keyframes pinning the *original* face hard (`first_frame_guide_strength=1.0`)
+> while the model tries to invent *new* mouth motion — is exactly where it might
+> need tuning. If the lips stay locked to the old words, that's the first knob to
+> back off. Report what you find.
 
 Open `example_workflows/experimental/audio-loop-music-video_latent_keyframe_autoextract.json`.
 

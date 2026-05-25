@@ -193,6 +193,38 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         if all_good:
             record("OK", "cond_frame_rate_24", f"LTXVConditioning frame_rate={LTX23_FPS} (F16)")
 
+    # keyframe_target_iters_set — LTXIterKeyframeSchedule with EVERY row's
+    # target_iters empty silently falls back to the init latent on every iter
+    # (the wired keyframes never fire — looks like "only one image in use").
+    # WARN-level: the config still RUNS, it just ignores the keyframes. Shipped
+    # keyframe workflows default target_iters to firing values via
+    # scripts/apply_keyframe_iter_anchor.py; this guards against a row being
+    # cleared back to empty. Widget layout:
+    # [current_iteration, num_keyframes_combo, target_iters_1..N].
+    for n in by_type.get("LTXIterKeyframeSchedule", []):
+        wv = n.get("widgets_values") or []
+        if len(wv) < 3:
+            continue  # malformed; widget_shape owns shape errors
+        try:
+            num = int(wv[1])
+        except (TypeError, ValueError):
+            continue
+        target_iters = wv[2:2 + num]
+        if target_iters and all(not str(t).strip() for t in target_iters):
+            record(
+                "WARN",
+                "keyframe_target_iters_set",
+                f"LTXIterKeyframeSchedule(id={n.get('id')}) has all target_iters "
+                "empty — keyframes never fire (every iter falls back to the init "
+                "latent). Set target_iters per row (1-based) or run "
+                "scripts/apply_keyframe_iter_anchor.py.",
+            )
+        else:
+            record(
+                "OK", "keyframe_target_iters_set",
+                f"LTXIterKeyframeSchedule(id={n.get('id')}) target_iters set",
+            )
+
     # AudioLoopController seed input name (post-2026-04-26 rename)
     # ComfyUI auto-attaches control_after_generate to any INT widget literally
     # named "seed" or "noise_seed", which silently mutates the saved widget

@@ -16,6 +16,11 @@ schedule's 3 separate keyframe_latent inputs. count is fixed at 3 to match the s
 slots. The old LoadImage chains are left in place but orphaned (override path: rewire a
 resize back to a LoadImage, or swap GetImageRangeFromBatch start_index to hand-pick frames).
 
+CLOBBER WARNING: re-forks from keyframe.json, so re-running DROPS any hand edits made
+directly to the autoextract output (and inherits whatever state keyframe.json is in —
+regenerate that first via apply_keyframe_iter_anchor.py if it's stale). Shipped JSON is the
+source of truth; `git diff` the output before re-running.
+
 Usage:
     uv run --group dev python scripts/build_keyframe_autoextract_workflow.py            # build
     uv run --group dev python scripts/build_keyframe_autoextract_workflow.py --dry-run  # preview
