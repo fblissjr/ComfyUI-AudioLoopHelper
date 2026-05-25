@@ -61,13 +61,11 @@ OVERLAP_DEFAULT = 2.0
 DEFAULT_TARGETS = [
     "example_workflows/audio-loop-music-video_latent.json",
     "example_workflows/audio-loop-music-video_latent_keyframe.json",
-    "example_workflows/audio-loop-music-video_latent_stg.json",
-    "example_workflows/audio-loop-music-video_latent_validator.json",
-    "example_workflows/audio-loop-music-video_image_adain_perstep.json",
     "example_workflows/experimental/init_guide_amplification_poc.json",
     # retake.json has no AudioLoopController/Planner; skipped
     # spectrogram_iclora_minimal.json + iclora_amplification_poc.json
     # don't have a loop controller/planner — skipped
+    # _stg / _validator / _image_adain_perstep archived 2026-05-25 (migration baked in)
 ]
 
 

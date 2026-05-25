@@ -76,10 +76,8 @@ def _find_frame_planner_id(ed: WorkflowEditor) -> int | None:
 DEFAULT_TARGETS = [
     "example_workflows/audio-loop-music-video_latent.json",
     "example_workflows/audio-loop-music-video_latent_keyframe.json",
-    "example_workflows/audio-loop-music-video_latent_stg.json",
-    "example_workflows/audio-loop-music-video_latent_validator.json",
-    "example_workflows/audio-loop-music-video_image_adain_perstep.json",
     # retake.json has no #601 (different topology); skipped
+    # _stg / _validator / _image_adain_perstep archived 2026-05-25 (migration baked in)
 ]
 
 

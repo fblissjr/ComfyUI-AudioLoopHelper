@@ -1,4 +1,4 @@
-Last updated: 2026-04-23 (de-black-box rewrite)
+Last updated: 2026-05-25
 
 # LTX2_NAG -- Normalized Attention Guidance Technical Reference
 
@@ -170,7 +170,7 @@ Both can be active simultaneously. NAG modulates intermediate cross-attention fe
 
 **For distilled LTX 2.3 the default is CFG=1** (trivial — uncond branch is skipped entirely). This is deliberate: the distilled checkpoint was trained without CFG guidance, and stacking aggressive NAG on top of CFG > 1 compounds non-linearly. **If the output freezes or the sampler stalls, REDUCE nag_scale before raising CFG.** NAG-at-scale-5-to-7 with CFG=1 is the working combination on the merged distilled-1.1 checkpoint.
 
-The STG-hybrid workflow (`example_workflows/audio-loop-music-video_latent_stg.json`) is the one exception where CFG is non-trivial, and there it's CFG=2 to work around an unbound-variable bug in `MultimodalGuider` when `cfg=1.0` — not because CFG=2 is better for distilled. See the STG workflow docs in CLAUDE.md.
+The STG-hybrid workflow (`example_workflows/archive/audio-loop-music-video_latent_stg.json`, archived) is the one exception where CFG is non-trivial, and there it's CFG=2 to work around an unbound-variable bug in `MultimodalGuider` when `cfg=1.0` — not because CFG=2 is better for distilled. See the STG workflow docs in CLAUDE.md.
 
 ## How it Patches the Model
 

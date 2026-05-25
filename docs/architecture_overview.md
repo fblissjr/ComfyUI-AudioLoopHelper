@@ -1,4 +1,4 @@
-Last updated: 2026-05-12
+Last updated: 2026-05-25
 
 # Architecture overview — ComfyUI-AudioLoopHelper
 
@@ -614,7 +614,7 @@ For "I want to...":
 | Trim i2v opening-filler frames from the saved clip | `LTXHeadTrim` between the decoded `IMAGE` output and `VHS_VideoCombine`; drops the first `trim_latent_frames * 8` pixel frames + matching audio span. Default 0 = no-op. Post-decode trim, not pre-sample — doesn't fight the model's temporal prior, just hides the window where it dominates |
 | Multi-image guide per iteration (re-anchor style) | §6 + §8 — `LTXVAddGuideMulti` (KJNodes, up to 20 images) or chain `LTXVAddLatentGuide` |
 | A2V two-stage pipeline | §8 — INFEASIBLE as straight port; build a custom node that runs both stages with an explicit frozen-modality handoff |
-| Replace NAG with Lightricks-native guidance | §6 — swap to `MultimodalGuider` + `GuiderParameters` + optional `STG` / `APG`. See `example_workflows/audio-loop-music-video_latent_stg.json` for a working A/B variant |
+| Replace NAG with Lightricks-native guidance | §6 — swap to `MultimodalGuider` + `GuiderParameters` + optional `STG` / `APG`. See `example_workflows/archive/audio-loop-music-video_latent_stg.json` for a working A/B variant (archived) |
 | Add a new debug tool | Use `scripts/workflow_utils.py::timestamped_run_path()` to land output under the gitignored runs dir. Follow the pattern of `exec_logger.py` or `scripts/analyze_workflow_dag.py` |
 | Verify any node's widget schema | `uv run --group dev python scripts/trace_node_source.py <workflow> <node_id> --include-inputs` — prints the authoritative schema from source. Run this BEFORE trusting any widget annotation in docs |
 | See execution order + DAG | `uv run --group dev python scripts/analyze_workflow_dag.py <workflow> --save-run --format ascii` (or `mermaid` / `dot` / `json`) |

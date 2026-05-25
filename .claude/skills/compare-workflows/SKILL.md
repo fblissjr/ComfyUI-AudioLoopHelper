@@ -8,7 +8,7 @@ description: Structural diff of two ComfyUI workflow JSON files — node types, 
 Structural diff between two ComfyUI workflow JSONs. Answers questions like:
 - "What actually changed between my scratch run that worked and the one that didn't?"
 - "Did `apply_vae_and_cleanup.py` produce the intended changes to this workflow?"
-- "Which widgets differ between `_latent.json` and `_latent_stg.json`?"
+- "Which widgets differ between `_latent.json` and `_latent_keyframe.json`?"
 
 Noise is filtered: link IDs (workflow-local, noisy), node positions (visual-only), node ordering. What remains is behavioral: matched-by-ID node type/mode/widget diffs, added/removed nodes, link-topology changes, and subgraph input/output schema changes.
 
@@ -61,7 +61,7 @@ uv run --group dev python \
 uv run --group dev python \
   .claude/skills/compare-workflows/diff_workflows.py \
   example_workflows/audio-loop-music-video_latent.json \
-  example_workflows/audio-loop-music-video_latent_stg.json
+  example_workflows/audio-loop-music-video_latent_keyframe.json
 ```
 
 ## Scope
