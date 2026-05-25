@@ -5361,9 +5361,9 @@
       "widgets_values": [
         0,
         "3",
-        "",
-        "",
-        ""
+        "1",
+        "2",
+        "3"
       ],
       "title": "LTX Iter Keyframe Schedule (per-iter keyframe anchor)"
     },

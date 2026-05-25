@@ -72,9 +72,10 @@ K's window.
 1. `bash start_experiment.sh nodynvram`
 2. Load `audio-loop-music-video_latent_keyframe.json`
 3. Set the 3 keyframe `LoadImage` files + the init `LoadImage #444`
-4. On `LTXIterKeyframeSchedule`, set `target_iters` per row (1-based), e.g.
-   `target_iters_1='1'`, `target_iters_2='3'`, `target_iters_3='5'`. Check
-   `AudioLoopPlanner.summary` for the song's iter count.
+4. `target_iters` ships pre-filled to `1`, `2`, `3` (keyframes fire on the first
+   three iters). Re-spread per row across the song's iter count for long renders
+   (1-based), e.g. `target_iters_1='1'`, `target_iters_2='3'`, `target_iters_3='5'`.
+   Check `AudioLoopPlanner.summary` for the song's iter count.
 5. Queue. Un-targeted iters use the init image (identical to the no-keyframe canonical).
 
 If the DynamicCombo keyframe rows don't expand in the UI, delete + re-add
@@ -83,11 +84,14 @@ save time).
 
 ## Footgun: empty `target_iters` → silent fallback to init image
 
-The shipped default leaves every `target_iters` row **EMPTY**. With no row
-claiming any iteration, `LTXIterKeyframeSchedule` returns `fallback_latent`
-(the init latent) on *every* iter — so the keyframes never fire and the render
-is bit-identical to the no-keyframe canonical. No error, no warning: it just
-looks like the keyframes did nothing.
+`target_iters` now ships pre-filled to `1,2,3` so the keyframes fire out of the
+box. The hazard remains if a row is **cleared back to EMPTY**: with no row
+claiming an iteration, `LTXIterKeyframeSchedule` returns `fallback_latent` (the
+init latent) on *every* iter — keyframes never fire and the render is
+bit-identical to the no-keyframe canonical. No error, no warning: it just looks
+like the keyframes did nothing (the "only one image in use" symptom). This is
+why the default is a firing one rather than empty — a silent no-op default is
+worse than a placeholder the user re-spreads.
 
 If the keyframes "aren't working," check `target_iters` first:
 

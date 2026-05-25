@@ -186,7 +186,11 @@ def _make_selector_node(node_id: int) -> dict:
         "outputs": [{"name": "latent", "type": "LATENT", "links": []}],
         "properties": {"aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
                        "Node name for S&R": "LTXIterKeyframeSchedule"},
-        "widgets_values": [0, str(NUM_KEYFRAMES)] + [""] * NUM_KEYFRAMES,
+        # target_iters default to consecutive 1-based iters (1,2,3,...) so the
+        # keyframes FIRE out of the box. Empty defaults silently fell back to the
+        # init image on every iter (looked like "only 1 keyframe in use"). User
+        # re-spreads these across their song's iter count (AudioLoopPlanner.summary).
+        "widgets_values": [0, str(NUM_KEYFRAMES)] + [str(i) for i in range(1, NUM_KEYFRAMES + 1)],
         "title": SELECTOR_TITLE,
     }
 
@@ -256,9 +260,10 @@ def _migrate(input_path: Path, output_path: Path, dry_run: bool) -> None:
     print("  1. bash start_experiment.sh nodynvram")
     print(f"  2. Reload {output_path.name} in ComfyUI")
     print("  3. Set the 3 keyframe LoadImage files (default = init placeholder) + init LoadImage #444")
-    print("  4. On LTXIterKeyframeSchedule set target_iters per row (1-BASED — TLO emits 1,2,3,…):")
-    print("       target_iters_1 = '1'   target_iters_2 = '3'   target_iters_3 = '5'")
-    print("     (check AudioLoopPlanner.summary for your song's iter count)")
+    print("  4. target_iters pre-filled to 1,2,3 (keyframes fire on the first 3 iters).")
+    print("     Re-spread per row across your song's iter count for long renders (1-BASED —")
+    print("     TLO emits 1,2,3,…), e.g. target_iters_1='1' _2='3' _3='5'. Check")
+    print("     AudioLoopPlanner.summary for your iter count.")
     print("  5. Queue. Un-targeted iters use the init image (identical to canonical).")
     print("  NOTE: if the DynamicCombo keyframe rows don't expand in the UI, delete +")
     print("  re-add LTXIterKeyframeSchedule from the node menu and rewire (slot indices")
