@@ -93,6 +93,15 @@ like the keyframes did nothing (the "only one image in use" symptom). This is
 why the default is a firing one rather than empty — a silent no-op default is
 worse than a placeholder the user re-spreads.
 
+At runtime the selector prints one line per iteration to the ComfyUI console
+(by default — no env flag) saying what it used: `Keyframe selector: iter N ->
+keyframe row K (target_iters [...] matched)`, or `-> init fallback (...)` with
+the reason — including an explicit "all target_iters empty -- keyframes
+disabled" when every row is blank. So you can confirm from the console which
+keyframe anchored each iter without guessing. The `keyframe_target_iters_set`
+audit (F19) catches the all-empty case at edit time; this catches it at render
+time.
+
 If the keyframes "aren't working," check `target_iters` first:
 
 - At least one row must name an iteration. `target_iters_1='1'` is the minimum

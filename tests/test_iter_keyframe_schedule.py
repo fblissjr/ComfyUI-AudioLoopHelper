@@ -157,3 +157,46 @@ def test_key_ordering_is_numeric_not_lexical():
     }
     out = LTXIterKeyframeSchedule.execute(fallback, 7, num_keyframes)
     assert out[0] is kf10
+
+
+# --- Decision message (what the node reports it actually used) ---
+
+
+def test_select_message_on_match_names_the_keyframe():
+    from nodes import _kf_select
+    kf2 = _kf("kf2")
+    rows = [("1", {10}, _kf("kf1")), ("2", {25}, kf2)]
+    chosen, msg, matched = _kf_select(rows, _kf("fallback"), 25)
+    assert chosen is kf2
+    assert matched == "2"
+    assert "keyframe" in msg.lower() and "2" in msg and "matched" in msg.lower()
+
+
+def test_select_message_on_no_match_says_fallback():
+    from nodes import _kf_select
+    fallback = _kf("fallback")
+    rows = [("1", {10}, _kf("kf1")), ("2", {25}, _kf("kf2"))]
+    chosen, msg, matched = _kf_select(rows, fallback, 5)
+    assert chosen is fallback and matched is None
+    assert "fallback" in msg.lower()
+    assert "disabled" not in msg.lower()  # rows DO have targets; just none this iter
+
+
+def test_select_message_on_all_empty_flags_disabled():
+    """The footgun: every row empty → fallback every iter → say keyframes disabled."""
+    from nodes import _kf_select
+    fallback = _kf("fallback")
+    rows = [("1", set(), _kf("kf1")), ("2", set(), _kf("kf2"))]
+    chosen, msg, matched = _kf_select(rows, fallback, 3)
+    assert chosen is fallback and matched is None
+    assert "disabled" in msg.lower() or "empty" in msg.lower()
+
+
+def test_execute_prints_decision_by_default(capsys):
+    """execute() reports what it used to the console with no env flag set."""
+    from nodes import LTXIterKeyframeSchedule
+    num_keyframes = {"keyframe_latent_1": _kf("kf1"), "target_iters_1": "3"}
+    LTXIterKeyframeSchedule.execute(_kf("fallback"), 3, num_keyframes)
+    out = capsys.readouterr()
+    combined = out.out + out.err
+    assert "keyframe selector" in combined.lower()

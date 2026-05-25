@@ -3173,6 +3173,33 @@ class LatentSelectByIteration(io.ComfyNode):
         return io.NodeOutput(latent_list[idx])
 
 
+def _kf_select(rows, fallback_latent, current_iteration: int):
+    """Pick the keyframe latent for the current iter and describe the choice.
+
+    `rows` is a list of `(row_label, iters_set, latent)` in selection order
+    (lowest-index row wins on overlap). Returns `(chosen_latent, message,
+    matched_label_or_None)`. The message is what the node reports to the console
+    so a render makes plain which keyframe — or the init fallback — it used, and
+    when EVERY row's target_iters is empty, that the keyframes are effectively
+    disabled (the silent-no-op footgun, surfaced at runtime).
+    """
+    all_empty = all(not iters for _, iters, _ in rows) if rows else True
+    for label, iters, lat in rows:
+        if current_iteration in iters:
+            return lat, (
+                f"iter {current_iteration} -> keyframe {label} "
+                f"(target_iters {sorted(iters)} matched)"
+            ), label
+    if all_empty:
+        msg = (
+            f"iter {current_iteration} -> init fallback (all target_iters empty "
+            "-- keyframes disabled, every iter uses the init image)"
+        )
+    else:
+        msg = f"iter {current_iteration} -> init fallback (no keyframe row targets this iter)"
+    return fallback_latent, msg, None
+
+
 class LTXIterKeyframeSchedule(io.ComfyNode):
     """Per-iter keyframe SELECTOR for long-form video loops.
 
@@ -3195,6 +3222,12 @@ class LTXIterKeyframeSchedule(io.ComfyNode):
     `target_iters` string ('10, 25, 40'). Empty `target_iters` = that
     row never matches. Lowest-index matching row wins if an iteration
     appears in multiple rows (one latent feeds one guide_latent).
+
+    Prints one line per iter to the ComfyUI console BY DEFAULT (no env flag)
+    saying what it used: which keyframe row anchored the iter, or that it fell
+    back to the init latent — and if EVERY row's `target_iters` is empty, that
+    the keyframes are disabled. `AUDIOLOOPHELPER_KF_DEBUG=1` adds latent-shape
+    detail on top. Decision logic lives in `_kf_select` (pure / unit-tested).
     """
 
     @classmethod
@@ -3261,23 +3294,22 @@ class LTXIterKeyframeSchedule(io.ComfyNode):
             (k for k in num_keyframes.keys() if k.startswith("keyframe_latent_")),
             key=lambda k: int(k.rsplit("_", 1)[1]),
         )
-        for lat_key in latent_keys:
-            i = lat_key.rsplit("_", 1)[1]
-            iters = _parse_iter_targets(num_keyframes.get(f"target_iters_{i}", ""))
-            if current_iteration in iters:
-                chosen = num_keyframes[lat_key]
-                if _KF_DEBUG:
-                    _kf_debug(
-                        f"Selector: iter={current_iteration} -> keyframe row {i} "
-                        f"guide_shape={tuple(chosen['samples'].shape)}"
-                    )
-                return io.NodeOutput(chosen)
-        if _KF_DEBUG:
-            _kf_debug(
-                f"Selector: iter={current_iteration} -> fallback "
-                f"guide_shape={tuple(fallback_latent['samples'].shape)}"
+        rows = [
+            (
+                lat_key.rsplit("_", 1)[1],
+                _parse_iter_targets(num_keyframes.get(f"target_iters_{lat_key.rsplit('_', 1)[1]}", "")),
+                num_keyframes[lat_key],
             )
-        return io.NodeOutput(fallback_latent)
+            for lat_key in latent_keys
+        ]
+        chosen, msg, _matched = _kf_select(rows, fallback_latent, current_iteration)
+        # Report what we actually used, by default — a render should make plain
+        # which keyframe (or the init fallback) anchored each iter, and flag the
+        # empty-target_iters footgun at runtime, not just at audit time.
+        print(f"[AudioLoopHelper] Keyframe selector: {msg}", flush=True)
+        if _KF_DEBUG:
+            _kf_debug(f"Selector: {msg} guide_shape={tuple(chosen['samples'].shape)}")
+        return io.NodeOutput(chosen)
 
 
 class KeyframeImageSchedule(io.ComfyNode):
