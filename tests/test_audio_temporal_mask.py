@@ -267,18 +267,18 @@ class TestAudioTemporalMaskInvert:
         )[0]["noise_mask"]
         assert torch.equal(default, explicit)
 
-    def test_invert_degenerate_regenerates_all(self):
-        """No valid seed window + invert -> regenerate everything (all 1), not a no-op.
-        (1 - all-zero = all-one: 'no seed, generate from scratch'.)"""
+    def test_invert_degenerate_is_noop(self):
+        """A degenerate window (reversed/zero-width/OOB) is an all-zero no-op REGARDLESS
+        of invert — a fat-fingered seed window must not silently wipe all audio to
+        regenerate-from-scratch. Invert only flips a VALID window."""
         from nodes import AudioTemporalMask
 
-        latent = _make_audio_latent(time_frames=20)
-        result = AudioTemporalMask.execute(
-            latent=latent, start_time=5.0, end_time=5.0, audio_duration_seconds=10.0,
-            invert=True,
-        )
-        mask = result[0]["noise_mask"]
-        assert torch.all(mask == 1.0)
+        for start, end in ((5.0, 5.0), (6.0, 3.0), (99.0, 200.0)):
+            result = AudioTemporalMask.execute(
+                latent=_make_audio_latent(time_frames=20),
+                start_time=start, end_time=end, audio_duration_seconds=10.0, invert=True,
+            )
+            assert result[0]["noise_mask"].sum().item() == 0.0, (start, end)
 
 
 def test_audio_temporal_mask_registered():

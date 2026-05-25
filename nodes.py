@@ -2845,12 +2845,14 @@ class AudioTemporalMask(io.ComfyNode):
             profile = torch.zeros(
                 total_frames, device=samples.device, dtype=torch.float32,
             )
+            window_set = False  # only flip on a VALID window; degenerate stays a no-op
             if end_time > start_time and audio_duration_seconds > 0:
                 rate = total_frames / audio_duration_seconds  # audio-latent frames / sec
                 start_latent = max(0, int(start_time * rate))
                 end_latent = min(total_frames, int(end_time * rate) + 1)
                 if end_latent > start_latent:
                     profile[start_latent:end_latent] = 1.0
+                    window_set = True
                     if edge_taper_seconds > 0.0:
                         range_latents = end_latent - start_latent
                         taper_latents = max(1, int(edge_taper_seconds * rate))
@@ -2867,8 +2869,10 @@ class AudioTemporalMask(io.ComfyNode):
 
             # invert: [start,end] becomes the KEPT seed (0) and everything else
             # regenerates (1). Complementing the whole profile also flips the
-            # tapered edges cleanly (ramp 0->1 becomes 1->0).
-            if invert:
+            # tapered edges cleanly (ramp 0->1 becomes 1->0). Only flip a VALID
+            # window — a degenerate window stays an all-zero no-op (a fat-fingered
+            # seed range must not silently regenerate the entire track).
+            if invert and window_set:
                 profile = 1.0 - profile
 
             # Broadcast the temporal profile over all non-temporal dims (rank-agnostic).
@@ -2920,6 +2924,8 @@ class EvenlySpacedKeyframes(io.ComfyNode):
     def execute(cls, images, count: int) -> io.NodeOutput:
         with _profile_span("EvenlySpacedKeyframes"):
             total = int(images.shape[0])
+            if total == 0:
+                return io.NodeOutput(images)  # empty batch — nothing to sample, don't IndexError
             n = max(1, min(int(count), total))
             if n == 1:
                 idx = torch.tensor([0], device=images.device)

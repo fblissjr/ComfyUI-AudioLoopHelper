@@ -52,6 +52,15 @@ class TestEvenlySpacedKeyframes:
         assert out.shape[0] == 4
         assert _selected_indices(out) == [0, 1, 2, 3]
 
+    def test_empty_batch_returns_empty_no_crash(self):
+        """A 0-frame batch (bad video path / frame_load_cap miss) must not IndexError —
+        return the empty batch so the failure surfaces downstream, not as a crash here."""
+        from nodes import EvenlySpacedKeyframes
+
+        empty = torch.zeros(0, 2, 2, 3)
+        out = EvenlySpacedKeyframes.execute(images=empty, count=3)[0]
+        assert out.shape[0] == 0
+
     def test_count_zero_or_negative_clamps_to_one(self):
         from nodes import EvenlySpacedKeyframes
 
