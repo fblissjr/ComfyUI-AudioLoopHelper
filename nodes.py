@@ -2878,6 +2878,56 @@ class AudioTemporalMask(io.ComfyNode):
         return io.NodeOutput(out)
 
 
+class EvenlySpacedKeyframes(io.ComfyNode):
+    """Pick `count` frames spread evenly across an IMAGE batch — auto keyframe sampling.
+
+    Replaces hand-loading keyframe images: feed the loaded video frames (e.g.
+    `VHS_LoadVideo`) and get `count` frames sampled evenly across the clip
+    (`count=3` -> first/middle/last; `count=5` -> 0/25/50/75/100%). Endpoints are
+    always included for `count >= 2`. Feeds the keyframe encode chain.
+
+    KJNodes' `GetImagesFromBatchIndexed` selects by explicit indices (the manual
+    override path); this computes the evenly-spaced indices from the batch length.
+
+    `count` is clamped to `[1, batch_size]`: `count=1` -> first frame; `count >`
+    frame count -> all frames.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="EvenlySpacedKeyframes",
+            display_name="Evenly-Spaced Keyframes (from video)",
+            category="looping/keyframes",
+            description=(
+                "Pick N frames spread evenly across an IMAGE batch (count=3 -> "
+                "first/middle/last). Auto keyframe sampling from a loaded video; feeds "
+                "the keyframe encode chain. Endpoints always included for count >= 2."
+            ),
+            inputs=[
+                io.Image.Input("images", tooltip="IMAGE batch to sample from (e.g. VHS_LoadVideo frames)."),
+                io.Int.Input(
+                    "count", default=3, min=1, max=20,
+                    tooltip="Number of evenly-spaced frames to pick. Clamped to the batch size; count=1 = first frame.",
+                ),
+            ],
+            outputs=[
+                io.Image.Output(tooltip="The `count` selected frames, in clip order."),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, images, count: int) -> io.NodeOutput:
+        with _profile_span("EvenlySpacedKeyframes"):
+            total = int(images.shape[0])
+            n = max(1, min(int(count), total))
+            if n == 1:
+                idx = torch.tensor([0], device=images.device)
+            else:
+                idx = torch.linspace(0, total - 1, n, device=images.device).round().long()
+        return io.NodeOutput(images[idx])
+
+
 class KeyframeLatentScheduleBatchEncode(io.ComfyNode):
     """Pre-encodes every per-iteration keyframe LATENT up front, OUTSIDE the loop.
 
@@ -4268,6 +4318,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LatentTemporalMask,
             LatentSeamZoneMask,
             AudioTemporalMask,
+            EvenlySpacedKeyframes,
             RunIdPrefix,
             LatentFrameCount,
             TrimVideoLatentToAudio,
