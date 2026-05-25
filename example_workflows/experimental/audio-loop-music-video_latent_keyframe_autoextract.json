@@ -4774,43 +4774,6 @@
       "title": "Trim to audio"
     },
     {
-      "id": 2030,
-      "type": "LoadImage",
-      "pos": [
-        -2000,
-        7000
-      ],
-      "size": [
-        240,
-        310
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": []
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": []
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.8.2",
-        "Node name for S&R": "LoadImage"
-      },
-      "widgets_values": [
-        "reference_image.png",
-        "image"
-      ]
-    },
-    {
       "id": 2031,
       "type": "LTXSmartImageResize",
       "pos": [
@@ -4976,43 +4939,6 @@
       "widgets_values": []
     },
     {
-      "id": 2034,
-      "type": "LoadImage",
-      "pos": [
-        -2000,
-        7360
-      ],
-      "size": [
-        240,
-        310
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": []
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": []
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.8.2",
-        "Node name for S&R": "LoadImage"
-      },
-      "widgets_values": [
-        "reference_image.png",
-        "image"
-      ]
-    },
-    {
       "id": 2035,
       "type": "LTXSmartImageResize",
       "pos": [
@@ -5176,43 +5102,6 @@
         "Node name for S&R": "VAEEncode"
       },
       "widgets_values": []
-    },
-    {
-      "id": 2038,
-      "type": "LoadImage",
-      "pos": [
-        -2000,
-        7720
-      ],
-      "size": [
-        240,
-        310
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": []
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": []
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.8.2",
-        "Node name for S&R": "LoadImage"
-      },
-      "widgets_values": [
-        "reference_image.png",
-        "image"
-      ]
     },
     {
       "id": 2039,

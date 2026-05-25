@@ -184,7 +184,7 @@ Public: `docs/README.md` (task-first nav) → `docs/guides/` (how-to), `docs/ref
 
 Reference codebases (read-only): `coderef/LTX-2/`, `coderef/LTX-Desktop/`, ComfyUI-LTXVideo upstream.
 
-Example workflows: the shipped variants in `example_workflows/` all run `AudioLoopHelperSageAttention auto` — incl. `audio_reactive_loop.json` (audio-driven motion; promoted from experimental 2026-05-23 after a render gate, generator `scripts/apply_audioreactive_loop.py`) and `audio-loop-music-video_latent_keyframe.json` (per-iter keyframe re-anchoring via `LTXIterKeyframeSchedule`, generator `scripts/apply_keyframe_iter_anchor.py`; structurally sound + audit-clean but render-gate still pending). Validate via `scripts/audit_workflows.py`.
+Example workflows (`example_workflows/`, all run `AudioLoopHelperSageAttention auto`): `_latent` (default loop), `_av_inversion` (video→audio dialogue replacement), `_keyframe` (per-iter re-anchoring; set `target_iters` or it falls back to the init), `_retake`, `audio_reactive_loop`. More variants in `experimental/`; retired ones in `archive/`. Validate via `scripts/audit_workflows.py`.
 
 Subtree CLAUDE.md files (auto-loaded when working in that subtree):
 - `scripts/CLAUDE.md` — apply-script conventions, audit invariants, WorkflowEditor patterns.

@@ -37,6 +37,9 @@ OUT = REPO / "example_workflows" / "experimental" / "audio-loop-music-video_late
 
 # The 3 keyframe-chain resize nodes (image input slot 0) fed by the 3 LoadImage shots.
 RESIZE_NODES = [2031, 2035, 2039]
+# The 3 keyframe LoadImage nodes feeding those resizes — orphaned once we rewire to the
+# auto-extracted frames, so remove them. (Init/fallback LoadImage#444 stays.)
+KEYFRAME_LOADIMAGES = [2030, 2034, 2038]
 KEYFRAME_COUNT = 3  # matches LTXIterKeyframeSchedule#2042's 3 keyframe_latent slots
 
 VHS_WIDGETS = {
@@ -86,6 +89,11 @@ def build(dry_run: bool = False) -> int:
         )
         ed.add_link(esk, 0, sel, 0, "IMAGE")          # batch -> selector
         ed.rewire_input(resize_id, 0, sel, 0, "IMAGE")  # resize.image <- this single frame
+
+    # Remove the now-orphaned keyframe LoadImage nodes (resizes no longer read them).
+    for nid in KEYFRAME_LOADIMAGES:
+        if ed.has_node(nid) and not ed.find_links_from(nid):
+            ed.remove_node_and_links(nid)
 
     if dry_run:
         print("--dry-run: would write", OUT.relative_to(REPO))

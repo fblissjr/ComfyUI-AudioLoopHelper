@@ -82,22 +82,19 @@ The split is by upstream lineage: **forks** patch an upstream library's internal
 
 ## Workflow variants
 
-| File | Use when |
-|---|---|
-| `audio-loop-music-video_latent.json` | **Default. Start here.** Pre-encoded audio, IC-LoRA scaffolding bypassed, two LoRA loaders bypassed, 9-group two-row layout, Note-annotated. Un-bypass IC-LoRA chain to enable visual reference adapters; un-bypass distill LoRA when running base ltx-2.3 dev. |
-| `audio-loop-music-video_latent_keyframe.json` | Per-section reference images. |
-| `audio-loop-music-video_latent_av_inversion.json` | **Video → audio.** Inversion of the default: full real video frozen as context + a short audio seed (`AudioTemporalMask`) + dialogue prompt → LTX clones the voice and generates new audio over the (kept) footage. Single-pass. Pair with the keyframe variant to regenerate lip-synced video for *new* words (voice-cloned dubbing). Use the `/ltx-dialogue-prompt` skill for the prompt. |
-| `audio-loop-music-video_latent_validator.json` | Adds `LoopConfigValidator` + `PreviewAny`. |
-| `audio-loop-music-video_latent_stg.json` | A/B target — Spatial-Temporal Guidance instead of CFG. |
-| `audio-loop-music-video_image_adain_perstep.json` | Per-step AdaIN, per-iter VAE round-trip. Color-drift prevention. |
-| `audio-loop-music-video_retake.json` | Regenerate a `[start, end]` window of an existing render. |
-| `audio_reactive_loop.json` | Audio-driven motion — init image animated so its motion tracks the (frozen) audio via LTX 2.3's joint cross-attention. Full-length loop; tune the look on the single-shot rig first. Writeup: [`docs/experimental/audio_reactive_workflows.md`](docs/experimental/audio_reactive_workflows.md). |
+Shipped (top-level `example_workflows/`) — what each does and when to reach for it:
 
-Experimental forks live in `example_workflows/experimental/` paired with
-`docs/experiments/` run logs; they graduate to the top-level shipped surface
-when a render gate validates them (most recently `audio-loop-music-video_latent_av_inversion.json`).
-Retired diagnostic variants (cfgpp / inspect / refine forks) move to
-`example_workflows/archive/` — kept for reference, not maintained or audited.
+| File | What it does / when to use |
+|---|---|
+| `audio-loop-music-video_latent.json` | **Default — start here. Full-length music video.** i2v init image + your full audio track frozen (`noise_mask=0`); loops over overlapping windows so the video tracks the song end-to-end. IC-LoRA scaffolding + two LoRA loaders ship bypassed; 9-group Note-annotated layout. Un-bypass IC-LoRA for visual reference adapters; un-bypass the distill LoRA to run base ltx-2.3. |
+| `audio-loop-music-video_latent_av_inversion.json` | **Video → audio (dialogue replacement / voice-clone dub).** The inverse of the default: the video is held from a source clip + a short audio seed (`AudioTemporalMask`) + a dialogue prompt → LTX clones the voice and generates new audio over the footage. Single-window. New words won't match the original lips — pair with the keyframe variant to regenerate lip-synced video. Author the prompt with the `/ltx-dialogue-prompt` skill. |
+| `audio-loop-music-video_latent_keyframe.json` | **Per-section keyframe re-anchoring.** Pin different reference images to different loop iterations (combats DiT drift on long renders; drives scene changes synced to song structure) via `LTXIterKeyframeSchedule`. **Set `target_iters` (1-based) on the schedule** — left empty, every iteration falls back to the init image and the keyframes are silently ignored. |
+| `audio-loop-music-video_retake.json` | **Regenerate one section.** Re-roll a `[start, end]` window of an existing render while holding the rest as fixed context (`LatentTemporalMask`). |
+| `audio_reactive_loop.json` | **Audio-driven motion.** Init image animated so its motion tracks the (frozen) audio via LTX 2.3's joint cross-attention. Full-length loop; tune the look on the single-shot rig first. Writeup: [`docs/experimental/audio_reactive_workflows.md`](docs/experimental/audio_reactive_workflows.md). |
+
+**Experimental** (`example_workflows/experimental/`, paired with `docs/experiments/` run logs; graduate to top-level on a render gate). The dialogue-replacement family in progress: `_av_voiceref` (clone the voice via `LTXVReferenceAudio` conditioning — *no* original words in the output, vs the mask-seed inversion), `_av_extension` (audio-continuation probe), `_keyframe_autoextract` (keyframes auto-sampled from a loaded clip via `EvenlySpacedKeyframes` — no hand-loading). Plus older forks (`_window15s`/`_window19_88s`, `_promptrelay`, `fml2v`, amplification/spectrogram POCs).
+
+**Archive** (`example_workflows/archive/`) — retired variants, kept for reference, not maintained or audited: `_stg` (Spatial-Temporal Guidance A/B), `_validator` (`LoopConfigValidator` + `PreviewAny`), `_image_adain_perstep` (per-step AdaIN), and the `cfgpp`/`inspect`/`refine` diagnostic forks.
 
 ## Audio feature analysis
 
