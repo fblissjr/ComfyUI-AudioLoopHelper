@@ -27,8 +27,8 @@ It's two passes:
    freeze it, pull a few still frames from the original clip as look-anchors, and
    regenerate the video. Now the mouth moves to the new words.
 
-If you only care about the audio (e.g. you're fine with a dub), pass 1 is the
-whole job. Pass 2 is what turns a dub into a real lip-sync.
+If you only care about the audio (e.g. you're fine with a dub and words not always matching), pass 1 is the
+whole job, and it preserves the original video. Pass 2 is what turns a dub into a real lip sync, but it creates new video, with proper lip sync. Meaning you can change the scene's video and body expressions and language with keyframes and prompts. This totally changes the original video into an AI-generated one, but even with auto extracted keyframes from [example_workflows/experimental/audio-loop-music-video_latent_keyframe_autoextract.json] you can get close enough for the purposes of this demonstration.
 
 ```
 original clip ─┬─► [PASS 1: av_inversion] ─► new audio (cloned voice, new words)
