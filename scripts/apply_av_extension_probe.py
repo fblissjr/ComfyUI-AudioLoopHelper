@@ -72,7 +72,9 @@ LATENT_CONCAT = 1605  # LatentConcat (loop video assembly)
 # generation, which LTX already does and needs no probe.
 # end_time huge so it always clamps to the real duration (regen to end).
 # audio_duration_seconds (10.0) is a display fallback; the wired link overrides it.
-ATM_WIDGETS = [2.0, 10000.0, 10.0, 0.0]  # [start_time, end_time, audio_duration_seconds, edge_taper_seconds]
+# invert=False -> [start,end] regenerates (prefix-seed). (Set True in the UI to keep
+# [start,end] as the seed and regenerate the rest — pick an arbitrary clean voice slice.)
+ATM_WIDGETS = [2.0, 10000.0, 10.0, 0.0, False]  # [start_time, end_time, audio_duration_seconds, edge_taper_seconds, invert]
 
 
 def apply(dry_run: bool = False) -> int:

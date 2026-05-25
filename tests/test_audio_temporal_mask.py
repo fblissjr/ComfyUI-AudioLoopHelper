@@ -216,6 +216,71 @@ class TestAudioTemporalMask:
         assert (mask <= 1.0).all()
 
 
+class TestAudioTemporalMaskInvert:
+    """invert=True flips the semantics: [start_time, end_time] becomes the KEPT
+    seed window (mask 0), everything else regenerates (mask 1). Lets you pick an
+    arbitrary slice of audio as the voice-clone seed, not just the prefix."""
+
+    def test_invert_keeps_window_regenerates_outside(self):
+        """T=50, dur=10 -> rate=5. seed window [4,6]s -> latent [20,31).
+        invert keeps [20,31)=0, regenerates [0,20) and [31,50)=1."""
+        from nodes import AudioTemporalMask
+
+        latent = _make_audio_latent(time_frames=50)
+        result = AudioTemporalMask.execute(
+            latent=latent, start_time=4.0, end_time=6.0, audio_duration_seconds=10.0,
+            invert=True,
+        )
+        frames = result[0]["noise_mask"][0, 0, :, 0]
+        assert frames[0].item() == 1.0    # before seed -> regenerate
+        assert frames[19].item() == 1.0
+        assert frames[20].item() == 0.0   # seed window -> kept
+        assert frames[30].item() == 0.0
+        assert frames[31].item() == 1.0   # after seed -> regenerate
+        assert frames[49].item() == 1.0
+
+    def test_invert_is_complement_of_default(self):
+        """invert=True mask == 1 - (invert=False mask) for the same window."""
+        from nodes import AudioTemporalMask
+
+        base = AudioTemporalMask.execute(
+            latent=_make_audio_latent(time_frames=50),
+            start_time=4.0, end_time=6.0, audio_duration_seconds=10.0,
+        )[0]["noise_mask"]
+        inv = AudioTemporalMask.execute(
+            latent=_make_audio_latent(time_frames=50),
+            start_time=4.0, end_time=6.0, audio_duration_seconds=10.0, invert=True,
+        )[0]["noise_mask"]
+        assert torch.equal(inv, 1.0 - base)
+
+    def test_default_invert_false_unchanged(self):
+        """Omitting invert == invert=False (regression guard for existing probes)."""
+        from nodes import AudioTemporalMask
+
+        default = AudioTemporalMask.execute(
+            latent=_make_audio_latent(time_frames=50),
+            start_time=2.0, end_time=10.0, audio_duration_seconds=10.0,
+        )[0]["noise_mask"]
+        explicit = AudioTemporalMask.execute(
+            latent=_make_audio_latent(time_frames=50),
+            start_time=2.0, end_time=10.0, audio_duration_seconds=10.0, invert=False,
+        )[0]["noise_mask"]
+        assert torch.equal(default, explicit)
+
+    def test_invert_degenerate_regenerates_all(self):
+        """No valid seed window + invert -> regenerate everything (all 1), not a no-op.
+        (1 - all-zero = all-one: 'no seed, generate from scratch'.)"""
+        from nodes import AudioTemporalMask
+
+        latent = _make_audio_latent(time_frames=20)
+        result = AudioTemporalMask.execute(
+            latent=latent, start_time=5.0, end_time=5.0, audio_duration_seconds=10.0,
+            invert=True,
+        )
+        mask = result[0]["noise_mask"]
+        assert torch.all(mask == 1.0)
+
+
 def test_audio_temporal_mask_registered():
     from _node_registry import assert_node_registered
 

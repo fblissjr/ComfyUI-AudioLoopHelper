@@ -4731,7 +4731,8 @@
         2.0,
         10000.0,
         10.0,
-        0.0
+        0.0,
+        false
       ],
       "title": "AV Probe: audio noise_mask (start_time 0=gen all / 2.0=keep 2s prefix)"
     },

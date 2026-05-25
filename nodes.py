@@ -2809,9 +2809,18 @@ class AudioTemporalMask(io.ComfyNode):
                         "0.0 (default) = hard mask."
                     ),
                 ),
+                io.Boolean.Input(
+                    "invert", default=False,
+                    tooltip=(
+                        "False (default): [start_time, end_time] REGENERATES, the rest is kept "
+                        "(prefix-seed / extension). True: [start_time, end_time] is the KEPT "
+                        "SEED window and everything else regenerates — use to pick an arbitrary "
+                        "slice of audio (e.g. the cleanest 2s of voice) as the clone seed."
+                    ),
+                ),
             ],
             outputs=[
-                io.Latent.Output(tooltip="Audio latent with noise_mask set: 1.0 inside [start,end], 0.0 outside; cosine ramps at boundaries when taper > 0."),
+                io.Latent.Output(tooltip="Audio latent with noise_mask set: 1.0 = regenerate, 0.0 = keep (invert flips which range is which); cosine ramps at boundaries when taper > 0."),
             ],
         )
 
@@ -2823,6 +2832,7 @@ class AudioTemporalMask(io.ComfyNode):
         end_time: float,
         audio_duration_seconds: float,
         edge_taper_seconds: float = 0.0,
+        invert: bool = False,
     ) -> io.NodeOutput:
         with _profile_span("AudioTemporalMask"):
             out = latent.copy()
@@ -2854,6 +2864,12 @@ class AudioTemporalMask(io.ComfyNode):
                             ))
                             profile[start_latent:start_latent + taper_latents] = ramp_up
                             profile[end_latent - taper_latents:end_latent] = ramp_up.flip(0)
+
+            # invert: [start,end] becomes the KEPT seed (0) and everything else
+            # regenerates (1). Complementing the whole profile also flips the
+            # tapered edges cleanly (ramp 0->1 becomes 1->0).
+            if invert:
+                profile = 1.0 - profile
 
             # Broadcast the temporal profile over all non-temporal dims (rank-agnostic).
             view_shape = [1, 1, total_frames] + [1] * (samples.ndim - 3)
