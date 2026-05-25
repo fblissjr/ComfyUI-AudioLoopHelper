@@ -4,7 +4,7 @@
   <img src="assets/hero.webp" alt="ComfyUI-AudioLoopHelper" width="500">
 </p>
 
-Last updated: 2026-05-23
+Last updated: 2026-05-25
 
 Custom ComfyUI nodes for full-length music video generation with LTX 2.3.
 Drives loop timing from integer-latent counts, freezes audio via
@@ -86,6 +86,7 @@ The split is by upstream lineage: **forks** patch an upstream library's internal
 |---|---|
 | `audio-loop-music-video_latent.json` | **Default. Start here.** Pre-encoded audio, IC-LoRA scaffolding bypassed, two LoRA loaders bypassed, 9-group two-row layout, Note-annotated. Un-bypass IC-LoRA chain to enable visual reference adapters; un-bypass distill LoRA when running base ltx-2.3 dev. |
 | `audio-loop-music-video_latent_keyframe.json` | Per-section reference images. |
+| `audio-loop-music-video_latent_av_inversion.json` | **Video → audio.** Inversion of the default: full real video frozen as context + a short audio seed (`AudioTemporalMask`) + dialogue prompt → LTX clones the voice and generates new audio over the (kept) footage. Single-pass. Pair with the keyframe variant to regenerate lip-synced video for *new* words (voice-cloned dubbing). Use the `/ltx-dialogue-prompt` skill for the prompt. |
 | `audio-loop-music-video_latent_validator.json` | Adds `LoopConfigValidator` + `PreviewAny`. |
 | `audio-loop-music-video_latent_stg.json` | A/B target — Spatial-Temporal Guidance instead of CFG. |
 | `audio-loop-music-video_image_adain_perstep.json` | Per-step AdaIN, per-iter VAE round-trip. Color-drift prevention. |
@@ -94,7 +95,9 @@ The split is by upstream lineage: **forks** patch an upstream library's internal
 
 Experimental forks live in `example_workflows/experimental/` paired with
 `docs/experiments/` run logs; they graduate to the top-level shipped surface
-when a render gate validates them (most recently `audio_reactive_loop.json`).
+when a render gate validates them (most recently `audio-loop-music-video_latent_av_inversion.json`).
+Retired diagnostic variants (cfgpp / inspect / refine forks) move to
+`example_workflows/archive/` — kept for reference, not maintained or audited.
 
 ## Audio feature analysis
 

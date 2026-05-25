@@ -52,7 +52,9 @@ from workflow_utils import WorkflowEditor  # noqa: E402
 REPO = Path(__file__).resolve().parent.parent
 EXP = REPO / "example_workflows" / "experimental"
 SRC = EXP / "audio-loop-music-video_latent_av_extension.json"
-OUT = EXP / "audio-loop-music-video_latent_av_inversion.json"
+# Promoted to the shipped surface (render-gate validated 2026-05-25). The av_extension
+# base it forks stays in experimental/ (it's the probe + the base for this generator).
+OUT = REPO / "example_workflows" / "audio-loop-music-video_latent_av_inversion.json"
 
 # Node IDs (shared with the canonical / av_extension variant).
 RESIZE = 445          # LTXSmartImageResize — image input slot 0

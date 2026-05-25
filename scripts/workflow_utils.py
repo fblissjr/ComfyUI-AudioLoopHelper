@@ -60,7 +60,9 @@ def iter_all_workflows() -> list[Path]:
     paths: list[Path] = []
     for d in (EXAMPLE_WORKFLOWS_DIR, INTERNAL_WORKFLOWS_DIR):
         if d.exists():
-            paths.extend(sorted(d.rglob("*.json")))
+            # Skip example_workflows/archive/ — retired variants, not maintained
+            # or apply-script-targeted (apply scripts shouldn't mutate archived JSON).
+            paths.extend(sorted(p for p in d.rglob("*.json") if "archive" not in p.parts))
     return paths
 
 # Decoders that produce IMAGE from a video LATENT. Shared vocabulary so
