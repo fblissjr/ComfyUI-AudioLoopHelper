@@ -1,12 +1,19 @@
 # AV inversion test — example scenarios (video → audio)
 
-Last updated: 2026-05-24
+Last updated: 2026-05-25
 
-> **STATUS:** Test-design doc for the audio-side inversion probe. The probe
-> workflow itself (full video as clean context + 2 s audio seed → generate
-> audio) is a stripped standalone V2A graph, staged under
-> `example_workflows/experimental/`. The `AudioTemporalMask` node it relies on
-> ships in `nodes.py` (tested). Render-gate pending.
+> **STATUS:** Test-design doc for the audio-side inversion probe — the research
+> question *"can the model infer audio from video + a seed?"*. The
+> dialogue-replacement *product* built on this same spine (put specific new words
+> in a speaker's mouth) is documented separately in
+> [`av_dialogue_replacement_design.md`](av_dialogue_replacement_design.md).
+>
+> The probe workflow (full video as clean context + audio seed → generate audio)
+> ships as `example_workflows/audio-loop-music-video_latent_av_inversion.json`
+> (the dialogue-replacement variant uses the same graph with a dialogue prompt);
+> related experimental variants (`_av_voiceref`, `_av_extension`) are staged
+> under `example_workflows/experimental/`. The `AudioTemporalMask` node it relies
+> on ships in `nodes.py` (tested). Render-gate pending.
 
 ## What this tests
 

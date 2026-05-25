@@ -1,6 +1,6 @@
 # audio-loop keyframe variant — per-iter keyframe re-anchoring
 
-Last updated: 2026-05-24
+Last updated: 2026-05-25
 
 > **STATUS:** Generated + audit-clean (47 OK / 1 WARN pre-existing
 > latent_volume / 0 ERR). Render-gate pending before relying on it.
@@ -80,6 +80,49 @@ K's window.
 If the DynamicCombo keyframe rows don't expand in the UI, delete + re-add
 `LTXIterKeyframeSchedule` from the node menu and rewire (slot indices bake at
 save time).
+
+## Footgun: empty `target_iters` → silent fallback to init image
+
+The shipped default leaves every `target_iters` row **EMPTY**. With no row
+claiming any iteration, `LTXIterKeyframeSchedule` returns `fallback_latent`
+(the init latent) on *every* iter — so the keyframes never fire and the render
+is bit-identical to the no-keyframe canonical. No error, no warning: it just
+looks like the keyframes did nothing.
+
+If the keyframes "aren't working," check `target_iters` first:
+
+- At least one row must name an iteration. `target_iters_1='1'` is the minimum
+  to see any keyframe at all.
+- **`target_iters` is 1-based** (see decision #3). `TensorLoopOpen.current_iteration`
+  emits 1, 2, 3, …; iter 0 is the out-of-loop init render. `target_iters='0'` is
+  dead — it matches no iteration and falls back silently.
+- Rows accept comma-separated lists (`'1,2,3'`); lowest-index matching row wins
+  when ranges overlap.
+
+## Variant: `_keyframe_autoextract` (no hand-loading)
+
+Staged under `example_workflows/experimental/audio-loop-music-video_latent_keyframe_autoextract.json`.
+Same selector + anchor mechanism as the shipped keyframe workflow; only the
+keyframe *source* differs. Instead of three hand-loaded `LoadImage` files, the
+keyframes are sampled from a video clip:
+
+```
+VHS_LoadVideo (clip) → EvenlySpacedKeyframes(count=3) → frame batch ─┬→ GetImageRangeFromBatch(0,1) → keyframe-1 encode chain
+                                                                     ├→ GetImageRangeFromBatch(1,1) → keyframe-2 encode chain
+                                                                     └→ GetImageRangeFromBatch(2,1) → keyframe-3 encode chain
+```
+
+- `EvenlySpacedKeyframes` (in `nodes.py`) picks `count` frames spread evenly
+  across the IMAGE batch — `count=3` = first / middle / last, endpoints always
+  included. `count` is **fixed at 3** here to match the schedule's 3 keyframe
+  slots; the three `GetImageRangeFromBatch` (KJNodes) nodes each split one frame
+  (`start_index` 0/1/2, `num_frames=1`) into the existing keyframe encode chains.
+- Each split frame then flows through the same `LTXSmartImageResize →
+  LTXVPreprocess(18) → VAEEncode` chain as the hand-loaded variant, so the
+  selector and anchor downstream are unchanged.
+- The empty-`target_iters` footgun above applies identically — the auto-extract
+  only replaces *which images* the keyframes are; you still have to assign them
+  to iterations (1-based) or every iter falls back to the init.
 
 ## Open / next
 
