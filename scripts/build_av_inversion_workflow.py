@@ -128,6 +128,14 @@ def build(dry_run: bool = False) -> int:
     # 3. Audio seed from the SAME clip (guaranteed sync).
     ed.rewire_input(TRIM_ACTUAL, 0, vhs_id, 2, "AUDIO")     # actual-audio trim <- VHS audio
 
+    # 3b. Bypass NAG. It's wired nag_cond_video <- negative (steers the VIDEO, which is
+    # frozen here) and nag_cond_audio is unwired (never touches the generated AUDIO), so
+    # it's a wasted forward pass per step at best; at nag_scale=11 it can perturb the frozen
+    # video context the audio cross-attends to. Off is the right default for audio-gen.
+    NAG = 508
+    if ed.has_node(NAG):
+        ed.find_node(NAG)["mode"] = 4
+
     # 4. Remove the now-orphaned i2v init sources (no consumers after the rewires above).
     for nid in (LOAD_IMAGE, LOAD_AUDIO):
         if ed.has_node(nid) and not ed.find_links_from(nid):

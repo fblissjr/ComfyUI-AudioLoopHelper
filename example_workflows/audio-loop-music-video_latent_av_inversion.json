@@ -712,7 +712,7 @@
       ],
       "flags": {},
       "order": 60,
-      "mode": 0,
+      "mode": 4,
       "inputs": [
         {
           "name": "model",
@@ -3533,7 +3533,7 @@
         "secondTabWidth": 65
       },
       "widgets_values": [
-        "still image with no motion, frozen frame, static, blurry, low quality, watermark, subtitles, text, deformed, extra limbs, duplicate, mutated"
+        "still image with no motion, subtitles, deformed facial features, extra limbs, disfigured hands, duplicate character, twin, clone, microphone"
       ],
       "color": "#322",
       "bgcolor": "#533"
