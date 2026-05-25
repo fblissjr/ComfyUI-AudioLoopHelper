@@ -2,13 +2,8 @@
 
 Last updated: 2026-05-25
 
-> **EXPERIMENTAL — and the two passes are not equally proven.**
-> **Pass 1 (generate the new audio)** is the part that's actually been run end to
-> end: a real clip came back with the speaker's voice saying new lines, matched to
-> the scene. **Pass 2 (regenerate the video for lip-sync)** is conceptually sound
-> and wired up, but it's render-gate-pending — not yet validated on a real clip,
-> so its parameters are best guesses. Treat every value here as a starting point,
-> not a tuned optimum, and expect to re-roll seeds and nudge knobs per clip.
+> **EXPERIMENTAL**
+> Treat every value here as a starting point, not a tuned optimum, and expect to re-roll seeds and nudge knobs per clip.
 
 ## What you're going to do
 
