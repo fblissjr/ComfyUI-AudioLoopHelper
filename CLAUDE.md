@@ -1,6 +1,6 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-05-24
+Last updated: 2026-05-25
 
 ComfyUI nodes that automate loop timing + audio analysis for full-length music video generation with LTX 2.3. Core pattern: `AudioLoopController` drives stride from integer latent counts, audio is frozen via `noise_mask=0`, prompts pre-encoded once outside the loop (CLIP must never enter the loop body). **Start here:** `docs/architecture_overview.md`; task-first nav at `docs/README.md`.
 
@@ -184,7 +184,7 @@ Public: `docs/README.md` (task-first nav) → `docs/guides/` (how-to), `docs/ref
 
 Reference codebases (read-only): `coderef/LTX-2/`, `coderef/LTX-Desktop/`, ComfyUI-LTXVideo upstream.
 
-Example workflows (`example_workflows/`, all run `AudioLoopHelperSageAttention auto`): `_latent` (default loop), `_av_inversion` (video→audio dialogue replacement), `_keyframe` (per-iter re-anchoring; set `target_iters` or it falls back to the init), `_retake`, `audio_reactive_loop`. More variants in `experimental/`; retired ones in `archive/`. Validate via `scripts/audit_workflows.py`.
+Example workflows (`example_workflows/`, all run `AudioLoopHelperSageAttention auto`): `_latent` (default loop), `_av_inversion` (video→audio dialogue replacement), `_keyframe` (per-iter re-anchoring; `target_iters` ships pre-filled 1,2,3, re-spread per song), `_retake`, `audio_reactive_loop`. More variants in `experimental/`; retired ones in `archive/`. Validate via `scripts/audit_workflows.py`.
 
 Subtree CLAUDE.md files (auto-loaded when working in that subtree):
 - `scripts/CLAUDE.md` — apply-script conventions, audit invariants, WorkflowEditor patterns.

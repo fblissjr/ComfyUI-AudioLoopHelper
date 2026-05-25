@@ -216,6 +216,10 @@ render, so `0` is dead).
 - **Clearing a row to empty makes that keyframe silently do nothing** — the
   iteration falls back to the init image and you'll see "only one image in use."
   That's the #1 gotcha; a firing default is shipped specifically to avoid it.
+- The selector prints what it used each iteration to the ComfyUI console
+  (`Keyframe selector: iter N -> keyframe K ...` or `-> init fallback (...)`), so
+  you can confirm from the log which keyframe actually anchored each iter — and
+  it says "all target_iters empty -- keyframes disabled" if you hit the gotcha.
 
 ### What you get
 
