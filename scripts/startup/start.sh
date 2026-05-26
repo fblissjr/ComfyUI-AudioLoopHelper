@@ -1,6 +1,6 @@
 #!/bin/bash
 # ComfyUI startup script — canonical deploy template.
-# Last updated: 2026-05-13
+# Last updated: 2026-05-26
 #
 # Tuned for 24GB-class consumer cards (RTX 4090 etc.) running LTX 2.3 /
 # WAN2.1 / similar fp8-scaled video diffusion models. Adjust the mode
@@ -146,7 +146,9 @@ case "$MODE" in
         # slowdown. Notes:
         #   --disable-dynamic-vram  : kills aimdo page-level offload during inference
         #   --disable-async-offload : kills async weight streams (the lower-level mechanism)
-        #   --cache-none            : no node-output cache between renders (cleaner repro)
+        #   --cache-none            : no node-output cache between renders (cleaner repro).
+        #                             WARNING: catastrophic for TensorLoop/looping
+        #                             workflows — see the cache-none guard below esac.
         #   --reserve-vram 0        : maximize the budget (user budget == actual budget)
         # NOT included: --gpu-only / --highvram (would OOM at load on 24GB
         # with LTX 2.3 + large text encoders), --disable-smart-memory
@@ -175,6 +177,25 @@ case "$MODE" in
         exit 1
         ;;
 esac
+
+# --cache-none guard. --cache-none maps to ComfyUI's NullCache (caches nothing).
+# That is intended ONLY for single-render benchmarking/tracing — a clean repro,
+# and it stops the node cache from short-circuiting identical-input tracer
+# queues. It is CATASTROPHIC for looping workflows: TensorLoop /
+# execution-inversion loops (ComfyUI-NativeLooping_testing TensorLoopOpen/Close)
+# re-emit an expanded subgraph every iteration and rely on the node-output cache
+# to reuse non-contained UPSTREAM nodes. With no cache, every iteration
+# re-executes all of them — prompt batch-encode (text-encoder reload), full-audio
+# VAE encode, keyframe video extract + VAE encode, and model re-patching — for an
+# N x slowdown (N = iterations). Use the 'default' mode for loop / full-song
+# renders. This is launch config, not a workflow-wiring bug.
+if [[ " ${CMD_ARGS[*]} $* " == *" --cache-none "* ]]; then
+    echo "[start.sh] WARNING: --cache-none active -> node-output cache OFF."
+    echo "[start.sh]   Looping (TensorLoop) workflows re-execute ALL upstream nodes each"
+    echo "[start.sh]   iteration (text-encode, audio/keyframe VAE, model re-patch) => N x slow."
+    echo "[start.sh]   Use 'default' mode for loop/full-song renders; --cache-none is for"
+    echo "[start.sh]   single-render benchmarking/tracing only."
+fi
 
 # Surface exactly what main.py receives. Useful for verifying flag passthrough
 # from wrappers and for reproducibility (anyone re-running a bench can copy

@@ -1,4 +1,4 @@
-Last updated: 2026-05-16
+Last updated: 2026-05-26
 
 # Debugging Guide: Quality Problems in the Audio-Loop Pipeline
 
@@ -57,6 +57,7 @@ often reveals the next one. That's not a regression — it's progress.
 | Subtle identity feature drift (hair/clothing/face) over later windows with no microphone — subtler than F2, present even after the preprocess fix | Loop-body CFGGuider bypasses `LTXVCropGuides` on the CONDITIONING path; guide-keyframe metadata accumulates across iterations in ways the initial render never saw | [Loop-cropguides asymmetry (F3)](#loop-cropguides-asymmetry-f3) |
 | Lip-sync desyncs progressively over 10 iterations | Integer-latent stride drift (fixed 2026-04-20 in `AudioLoopController`) | [Lip-sync drift over iterations](#lip-sync-drift-over-iterations) |
 | Resolution-related sampling oddness | `ImageResizeKJv2` width/height not divisible by 32 (single-stage) or 64 (distilled) | [Resolution alignment](#resolution-alignment) |
+| Loop / full-song render pathologically slow — text encoder reloads + audio + keyframe re-encode EVERY iteration (performance, not quality) | ComfyUI launched with `--cache-none`; TensorLoop re-runs all non-contained upstream nodes per iteration | Run `start.sh` **default** mode, not `nodynvram`/`safe`/`minimal`. Full: `docs/reference/debug_tools.md` ("Pathologically slow loop render") |
 | Items from the negative prompt (microphones, duplicate characters, etc.) reappear starting iter 2+ even though iter 1 is clean; or `Style: illustrated.` inits slide toward photoreal; or anatomy glitches (deformed hands, extra limbs) return after the first iteration — and the schedule-bypassed run is clean | CLIP loaded inside the loop body is evicting the DiT; LTX2_NAG's captured negative-conditioning tensor goes stale across the offload/reload round-trip (`object_patches` are not device-migrated by ComfyUI). Fixed 2026-04-22 by moving CLIP out of the loop via `TimestampPromptScheduleBatchEncode`. | Migrate the workflow: `uv run --group dev python scripts/apply_batch_encode_fix.py`. Full technical reference: `docs/analysis/nag_object_patches_offload_asymmetry.md`. |
 
 ---

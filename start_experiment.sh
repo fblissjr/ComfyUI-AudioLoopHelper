@@ -127,6 +127,7 @@ if [[ -n "$AUDIOLOOPHELPER_SAGE_OUTPUT_FINGERPRINT" \
     # Skip if the user (or selected mode) already passed --cache-none.
     if [[ " $* " != *" --cache-none "* ]]; then
         echo "[start_experiment.sh] heavy tracer active — auto-adding --cache-none (prevents node cache short-circuiting identical-input queues)"
+        echo "[start_experiment.sh] NOTE: --cache-none is for SINGLE-render tracing. Do NOT trace a full looping/TensorLoop render with it — every iteration re-runs all upstream nodes (text-encode, audio/keyframe VAE, model re-patch) for an N x slowdown. Trace a short/capped render instead."
         EXTRA_ARGS+=(--cache-none)
     fi
 fi

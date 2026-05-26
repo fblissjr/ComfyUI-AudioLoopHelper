@@ -6,6 +6,17 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **`start.sh` launcher warns when `--cache-none` is active.** The
+  `nodynvram`/`safe`/`minimal` modes disable ComfyUI's node-output cache
+  (`NullCache`), which is benchmark-only. Looping (TensorLoop) workflows
+  re-execute every non-contained upstream node — text-encode, audio +
+  keyframe VAE encode, model re-patch — on each iteration when the cache
+  is off, for an N× slowdown; the workflow JSON is unaffected. The launcher
+  family and `start_experiment.sh` now print a guard before launch; use
+  `default` mode for loop/full-song renders. Diagnosis + fix documented in
+  `docs/reference/debug_tools.md` and the ComfyUI gotchas in `CLAUDE.md`.
+
 ### Fixed
 - **fps default reverted to 25 across audio-loop workflows.** LTX 2.3
   audio-loop canonical inference fps is 25; the 8n+1 video-latent

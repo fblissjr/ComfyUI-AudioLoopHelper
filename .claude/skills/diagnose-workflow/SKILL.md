@@ -1,6 +1,6 @@
 ---
 name: diagnose-workflow
-description: Canonical first-pass when a ComfyUI-AudioLoopHelper workflow won't run or fails validation. Use when the user mentions "workflow won't run", "dependency cycle detected", "validation failed", "Failed to convert ... to INT", "control_after_generate", or describes a recent ComfyUI render that didn't get past prompt validation. Runs the canonical diagnosis (ComfyUI log tail, audit, DAG inspection, exec log review) BEFORE any inline orjson scripting. Reference: docs/reference/debug_tools.md.
+description: Canonical first-pass when a ComfyUI-AudioLoopHelper workflow won't run or fails validation. Use when the user mentions "workflow won't run", "dependency cycle detected", "validation failed", "Failed to convert ... to INT", "control_after_generate", or describes a recent ComfyUI render that didn't get past prompt validation, or reports a loop/full-song render that is pathologically slow or re-encodes (text-encode / audio / keyframe) every iteration. Runs the canonical diagnosis (ComfyUI log tail, audit, DAG inspection, exec log review, launch-flag check for --cache-none) BEFORE any inline orjson scripting. Reference: docs/reference/debug_tools.md.
 ---
 
 # Diagnose workflow failure
@@ -35,6 +35,7 @@ The newest entries are at the bottom. Match the failure class:
 | `Failed to convert an input value to a INT value: <name>, <stringval>` | Widget shift from a partial schema rename (control_after_generate leak). Run audit; check `widget_shape` ERR. |
 | `TypeError: list indices must be integers or slices, not tuple` at `ltxv_nodes.py` | `keyframe_idxs` being `[]` instead of `None`. Run `pytest tests/test_node_schemas.py` — the AST test catches this. |
 | `Exception during processing` mid-iteration | Real runtime bug. Use exec log (step 4) to find the last successful node. |
+| `CLIP/text encoder model load` + `Applying LTX2 Attention Tuner Patch` + keyframe-selector line repeating EVERY iteration; loop render N× too slow | ComfyUI launched with `--cache-none` (NullCache). TensorLoop re-runs all upstream nodes per iteration. Check `ps -eo args \| grep main.py`; run `start.sh` **default** mode (not `nodynvram`/`safe`/`minimal`). Full: `docs/reference/debug_tools.md`. |
 | Workflow runs to completion but output is wrong | Quality issue, not failure. Use `docs/guides/debugging_guide.md` instead. |
 
 ### 2. Run the audit

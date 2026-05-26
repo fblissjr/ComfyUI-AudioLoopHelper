@@ -139,6 +139,15 @@ events for the rest. The user-opt-in heavy tracers are the unambiguous
 `AUDIOLOOPHELPER_SAGE_TRACE` does NOT auto-inject (production renders
 benefit from the cache).
 
+> **Do NOT trace a full looping render with `--cache-none`.** TensorLoop /
+> execution-inversion loops re-emit an expanded subgraph each iteration and
+> rely on the node cache to reuse non-contained upstream nodes. With
+> `--cache-none` every iteration re-runs the entire upstream pipeline
+> (text-encode, full-audio + keyframe VAE encode, model re-patch) for an N×
+> slowdown. Trace a short/capped render instead, and run real loop renders in
+> `start.sh` default mode. Full write-up: `docs/reference/debug_tools.md`
+> ("Pathologically slow loop render").
+
 **Effect**: when set + `AudioLoopHelperSageAttention` node runs in the
 workflow, installs `register_forward_pre_hook` + `register_forward_hook`
 on every `BasicAVTransformerBlock`'s sub-modules (`attn1`, `audio_attn1`,

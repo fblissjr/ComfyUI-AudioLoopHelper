@@ -1,6 +1,6 @@
 # Benchmarking memory pressure on ComfyUI + LTX 2.3
 
-Last updated: 2026-05-15
+Last updated: 2026-05-26
 
 ## Role
 
@@ -34,6 +34,8 @@ Comparing two runs across these three signals lets you attribute differences cle
 | `scripts/analyze_sage_traces.py` | Aggregates per-shape kernel timing across N sage.jsonl files | one or more sage.jsonl paths; defaults to scanning `data/runs/*/*/sage.jsonl` | stdout: per-run summary table + per-shape masked/unmasked p50+p95 |
 
 The `/aimdo/vram` endpoint is provided by the third-party `ComfyUI-MemoryVisualization` custom node. Without that node installed + ComfyUI restarted to load it, the polling script returns 404. Verify with `curl http://localhost:8188/aimdo/vram | head -c 200` before running the bench.
+
+> **`--cache-none` (in `nodynvram`/`safe`/`minimal` modes and the tracer auto-inject) is benchmark-only — never use it for a full looping render.** It maps to ComfyUI's `NullCache`. TensorLoop / execution-inversion loops re-emit an expanded subgraph each iteration and rely on the node-output cache to reuse non-contained upstream nodes; with no cache, every iteration re-executes the entire upstream pipeline (text-encode, full-audio + keyframe VAE encode, model re-patch) for an N× slowdown. Benchmark single (or short/capped) renders with `--cache-none`; run real loop/full-song renders in `start.sh` **default** mode. Full diagnosis: `docs/reference/debug_tools.md` ("Pathologically slow loop render").
 
 ## Run recipe — A/B comparison of two attention configs
 

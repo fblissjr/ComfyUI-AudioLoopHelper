@@ -1,4 +1,4 @@
-Last updated: 2026-05-25
+Last updated: 2026-05-26
 
 # Debug & Workflow Tooling Reference
 
@@ -248,3 +248,43 @@ the failure class within the first matching line.
 **Iter-over-iter drift** specifically: trace CONDITIONING paths in
 parallel (initial vs loop). Asymmetries (missing `LTXVConditioning`,
 `frame_rate` mismatch, CLIP in subgraph) are load-bearing bugs.
+
+---
+
+## Pathologically slow loop render: check `--cache-none` first
+
+Distinct symptom from "won't run": the workflow runs correctly but is
+**N× too slow** (N = iterations), and the same workflow was fast on a
+prior run.
+
+**Symptom in the log.** Every loop iteration reloads the text encoder
+(`CLIP/text encoder model load`), re-encodes the full audio, re-extracts
+keyframes, and re-applies model patches (`Applying LTX2 Attention Tuner
+Patch`). The keyframe-selector line repeats each iteration. You see the
+full upstream pipeline re-run per iteration instead of once.
+
+**Cause.** ComfyUI was launched with `--cache-none` (maps to `NullCache`,
+which caches nothing). The loop nodes (`ComfyUI-NativeLooping_testing`
+`TensorLoopOpen` / `TensorLoopClose`) are an execution-inversion loop:
+each iteration re-emits an *expanded subgraph* (`expand=graph.finalize()`)
+whose cloned body references non-contained UPSTREAM nodes by their
+original output, relying on the node-output cache so they run once. With
+`NullCache`, every iteration re-executes the entire upstream tree. This is
+launch config — **not** a workflow-wiring bug. The JSON is fine and the
+contained loop-body set is unchanged (verify with
+`scripts/verify_loop_containment.py`).
+
+**Why it's easy to hit.** `start.sh` `nodynvram` / `safe` / `minimal`
+modes set `--cache-none` (clean OOM-benchmark repro), and
+`start_experiment.sh` auto-injects it under a heavy-tracer env var (so
+identical-input tracer queues don't short-circuit the sampler). Those are
+single-render benchmark/trace configs. `default` mode keeps the cache.
+
+**Diagnose.** `ps -eo args | grep main.py` — if `--cache-none` is present
+and you're running a loop workflow, that's the cause.
+
+**Fix.** Run loop / full-song renders in `start.sh` **default** mode (full
+`HierarchicalCache`). Reserve `--cache-none` for single-render
+benchmarking/tracing. The `start.sh` family now prints a
+`WARNING: --cache-none active` guard before launch. Methodology cross-ref:
+`docs/reference/benchmarking_memory_pressure.md`.
