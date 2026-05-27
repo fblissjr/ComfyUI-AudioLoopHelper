@@ -40,6 +40,11 @@ audio inert). If you take one thing to every conversation, it's this.
   audio→video link? Is the relationship focused (one type) for a proof run? Are the
   nuisance variables (speaker, scene, lighting) diversified so the LoRA can't
   shortcut? Is the caption leaking?
+- Audit the WHOLE conditioning budget, not just the caption (data plan §1.2): every
+  channel that can explain the audio-driven dynamics makes the audio inert. The
+  big one beyond text is the **IC-LoRA reference video** — if it carries motion the
+  model copies it and ignores the audio, so for audio→video the reference must be a
+  static identity still (or test ref-off). Decide this before precompute.
 - Run the data validator before any GPU time and interpret it:
   `uv run python coderef/LTX-2/packages/ltx-trainer/scripts/verify_training_data.py <root> --with-audio`
   (the silent-intersection count check is the one that most often explains "won't
