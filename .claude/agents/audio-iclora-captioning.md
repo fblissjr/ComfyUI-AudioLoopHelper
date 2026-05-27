@@ -18,7 +18,8 @@ nothing (it learns text→video and the audio goes inert).
 
 ## Source of truth
 
-`internal/audio_iclora_data_plan.md` §0, §1, §1.1 (private clone only). READ IT —
+The effort map is `internal/audio_iclora_index.md` (private clone). Your canonical
+doc is `internal/audio_iclora_data_plan.md` §0, §1, §1.1 (private clone only). READ IT —
 it's canonical for the principle, the keep/omit table, and the inference-topology
 dependence. Also relevant: `docs/guides/prompt_creation_guide.md` and the CLAUDE.md
 "verb choice drives cross-attention" rule (the mechanism you exploit), and

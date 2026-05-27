@@ -18,6 +18,8 @@ because most failures here are data-design failures that masquerade as code bugs
 
 ## Source of truth
 
+The map for the whole effort is `internal/audio_iclora_index.md` (private clone) —
+read it to see who owns what and the through-line principles. Your canonical doc is
 `internal/audio_iclora_data_plan.md` (private clone only — if absent, you're on a
 public clone and this effort's data spec isn't present). READ IT FIRST and treat
 it as canonical for: the captioning rule, the relationship taxonomy, mix/diversity,

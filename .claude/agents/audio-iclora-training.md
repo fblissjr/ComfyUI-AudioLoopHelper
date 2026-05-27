@@ -18,7 +18,9 @@ the strategy is actually teaching.
 
 ## Source of truth
 
-Read these first (private clone only): `internal/trainer_audio_iclora_plan.md`
+The map for the whole effort is `internal/audio_iclora_index.md` (private clone) —
+read it for who owns what + the principles. Then (private clone only):
+`internal/trainer_audio_iclora_plan.md`
 (the design + the three modes), `internal/audio_iclora_status.md` (current
 implementation state, 4090/distilled feasibility, recommended config). The code
 lives in the fork: `coderef/LTX-2/packages/ltx-trainer/` —
