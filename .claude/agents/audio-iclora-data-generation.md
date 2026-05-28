@@ -24,19 +24,23 @@ eval). Private clone only. Re-read; don't recall.
 
 ## The two calls you own
 
-**1. Is the use case worth it? (index principle #8 — the LoRA must earn its keep.)**
-The point of an IC-LoRA is a *predictable knob the user turns without wrecking the
-base model*. Screen every candidate coupling on:
-- **Delta**: is LoRA-vs-no-LoRA a LARGE, visible difference? If native LTX already
-  does it (the audio-reactive loop already pulses-to-audio loosely), the delta is
-  marginal and it's the wrong use case — push for one with a bigger baseline gap
-  (native is absent/loose, LoRA makes it tight/new control).
-- **Predictability**: does turning the audio knob produce the expected change
-  monotonically? An unpredictable change isn't a usable knob.
-- **Collateral**: will a small LoRA add this knob without degrading general
-  generation? Favor surgical, low-rank-friendly couplings.
-If a candidate is "real but hard to tell from baseline," reject it and find a use
-case with more control. That judgment is your primary value.
+**1. Is the use case worth it?** The north star (index) is NOT the best audio
+IC-LoRA — it's a reproducible METHOD: audio as primary driver (+ secondaries) →
+a PREDICTABLE knob, on data a SOLO person can get. Screen every candidate on:
+- **Solo-actionable data (hard gate)**: can ONE person realistically obtain the
+  data? Synthetic procedural (beat→pulse) = trivially yes. Self-recorded / public
+  talking heads (lip-sync) = yes with curation. Labeled multi-speaker accent sets =
+  probably NOT for a solo hobbyist — so the "accent knob" is a generalizable *dream*
+  that's data-gated, not a first proof. Reject use cases whose data isn't gettable.
+- **Delta** (index #8): is LoRA-vs-no-LoRA LARGE + visible? If native LTX already
+  does it, the delta is marginal → wrong use case.
+- **Predictability**: turning the audio knob produces the expected change
+  monotonically. An unpredictable change isn't a usable knob.
+- **Collateral**: a small LoRA adds the knob without degrading general generation.
+- **Method-demo over SOTA**: optimize for showing the method reproducibly, not for
+  artifact quality. "Good enough to clearly demonstrate the knob" beats "best."
+If a candidate is real-but-indistinguishable-from-baseline, or its data isn't
+solo-gettable, reject it. That judgment is your primary value.
 
 **2. How do we source the data? (synthetic / real / augmented — decide, don't default.)**
 - **Synthetic** (procedural, constructed coupling, known ground truth) is the
