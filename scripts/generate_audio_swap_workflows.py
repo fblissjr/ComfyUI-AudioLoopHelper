@@ -21,7 +21,12 @@ import json
 from pathlib import Path
 
 
-BPMS = [50, 70, 90, 110, 130, 150, 170]
+# Sub-Nyquist held-out BPMs (interpolation within the v3 training range [50,85]).
+# The video VAE's 8x temporal compression caps representable pulse rate at
+# ~fps*3.75 ≈ 94 BPM at 25fps; the old [50..170] set put 110/130/150/170 above
+# that ceiling (aliased — unusable for a tracking read). These six are evenly
+# spread and all comfortably sub-Nyquist. See internal/audio_iclora_data_plan.md §4.
+BPMS = [52, 58, 64, 71, 78, 84]
 ARMS = ("lora", "baseline")
 # Our trained LoRA is IC-LoRA shape (condition-mode v2v strategy, reference
 # conditioning + audio context). It must load into the IC-LoRA loader, NOT
@@ -48,7 +53,7 @@ def render(template: dict, bpm: int, arm: str) -> dict:
         elif nid == IC_LORA_LOADER_ID:
             # IC-LoRA loader: widgets = [lora_name, strength_model]. Point
             # at our trained LoRA + active for the lora arm, bypassed for baseline.
-            n["widgets_values"] = ["audio_iclora/e1_run1_step300_rank16_broad.safetensors", 1.0]
+            n["widgets_values"] = ["audio_iclora/e1_v3_step300_rank16_audioonly_staticref.safetensors", 1.0]
             n["mode"] = 0 if arm == "lora" else 4
         elif nid == STYLE_LORA_ID:
             # Always bypassed — wrong slot for an IC-LoRA, attaching here
