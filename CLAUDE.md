@@ -163,7 +163,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 - **Check sibling-session backlogs (`internal/design/*_backlog.md`) before executing stale PLAN items** that touch defaults.
 - **Project-level `settings.json` hook config is loaded once at session start** — deleting a hook script mid-session leaves the cached config trying to run a missing file, blocking every Write/Edit until session restart. Workaround: use Bash for post-deletion edits.
 - **Marketplace plugin cache lags behind merged plugin changes.** To pick up freshly-merged plugin changes immediately, re-run the plugin's `install-git-hooks.sh` from a workspace clone of the plugin repo.
-- **Cross-repo coordination**: sister repos split two ways — sister fork (current: `sage-fork`, patches an upstream library) vs companion umbrella (`comfy-workbench`, cross-workload meta-harness + glue). Taxonomy + bootstrap + decision table: `internal/design/sister_repo_taxonomy.md` (private clone only). Bilateral memo channel: `cross-repo-handoff` skill.
+- **Cross-repo coordination**: sister forks `sage-fork` + `LTX-2` (trainer at `coderef/LTX-2/`, fork CLAUDE.md inside); companion `comfy-workbench`. Memo channels: `cross-repo-handoff` + `cross-repo-handoff-ltx2`. Rule: ONE parent claude session at a time (two-claudes produce conflicting roadmap edits). Taxonomy: `internal/design/sister_repo_taxonomy.md` (private clone only).
 
 ## Documentation conventions
 
