@@ -12,6 +12,7 @@ __pycache__
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 .claude/skills/cross-repo-handoff/
+.claude/skills/cross-repo-handoff-ltx2/
 .claude.local.md
 .path-privacy.local.json
 

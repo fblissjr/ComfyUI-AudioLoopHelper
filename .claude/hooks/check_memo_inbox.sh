@@ -53,9 +53,14 @@
 set -euo pipefail
 
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Sage-fork channel (established 2026-04-26)
 INBOX="$PLUGIN_DIR/internal/SAGE_CLAUDE_TO_AUDIO_LOOP_CLAUDE_MEMO.md"
 OUTBOX="$PLUGIN_DIR/coderef/sage-fork/internal/AUDIO_LOOP_CLAUDE_TO_SAGE_CLAUDE_MEMO.md"
 MARKER="$PLUGIN_DIR/internal/.memo_inbox_seen_at"
+# LTX-2 fork channel (established 2026-05-28)
+INBOX_LTX2="$PLUGIN_DIR/internal/LTX2_CLAUDE_TO_AUDIO_LOOP_CLAUDE_MEMO.md"
+OUTBOX_LTX2="$PLUGIN_DIR/coderef/LTX-2/internal/AUDIO_LOOP_CLAUDE_TO_LTX2_CLAUDE_MEMO.md"
+MARKER_LTX2="$PLUGIN_DIR/internal/.ltx2_memo_inbox_seen_at"
 
 # Local helpers: extract a short, sanitized first content line for
 # preview output. Used in both the new-inbound branch and the
@@ -91,15 +96,38 @@ if [[ "$inbox_mtime" -gt "$marker_mtime" ]]; then
     exit 0
 fi
 
-# No new inbound. Surface a low-cost reminder of what we last said
-# (outbound memo) so a cold-start session has the recent context
-# without an extra Read(). Silent if outbound doesn't exist yet.
+# LTX-2 channel — identical contract, separate marker.
+inbox_ltx2_mtime=0
+[[ -f "$INBOX_LTX2" ]] && inbox_ltx2_mtime=$(stat -c %Y "$INBOX_LTX2")
+marker_ltx2_mtime=0
+[[ -f "$MARKER_LTX2" ]] && marker_ltx2_mtime=$(stat -c %Y "$MARKER_LTX2")
+if [[ "$inbox_ltx2_mtime" -gt "$marker_ltx2_mtime" ]]; then
+    touch "$MARKER_LTX2"
+    echo >&2
+    echo "📬 New memo from LTX-2 fork claude (modified $(_fmt_ts "$inbox_ltx2_mtime")):" >&2
+    echo "   $INBOX_LTX2" >&2
+    first_content=$(_first_line "$INBOX_LTX2")
+    [[ -n "$first_content" ]] && echo "   first line: $first_content" >&2
+    echo "   Read: Read(\"internal/LTX2_CLAUDE_TO_AUDIO_LOOP_CLAUDE_MEMO.md\")" >&2
+    exit 0
+fi
+
+# No new inbound on either channel. Surface low-cost reminders of what we
+# last said on each (outbound mtime + first line) so a cold-start session
+# has recent context without extra Read() calls.
 if [[ -f "$OUTBOX" ]]; then
     out_mtime=$(stat -c %Y "$OUTBOX")
     echo >&2
     echo "ℹ  Last outbound to sage-fork claude (sent $(_fmt_ts "$out_mtime")):" >&2
     out_first=$(_first_line "$OUTBOX")
     [[ -n "$out_first" ]] && echo "   $out_first" >&2
+fi
+if [[ -f "$OUTBOX_LTX2" ]]; then
+    out_ltx2_mtime=$(stat -c %Y "$OUTBOX_LTX2")
+    echo >&2
+    echo "ℹ  Last outbound to LTX-2 fork claude (sent $(_fmt_ts "$out_ltx2_mtime")):" >&2
+    out_ltx2_first=$(_first_line "$OUTBOX_LTX2")
+    [[ -n "$out_ltx2_first" ]] && echo "   $out_ltx2_first" >&2
 fi
 
 exit 0
