@@ -10,6 +10,7 @@ __pycache__
 # cross-repo-handoff/ depends on a sister-repo symlink other clones
 # don't have.
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 .claude/skills/cross-repo-handoff/
 .claude.local.md
 .path-privacy.local.json

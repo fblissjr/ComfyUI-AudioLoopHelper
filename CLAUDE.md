@@ -196,5 +196,5 @@ Internal (gitignored): `internal/PLAN.md`, `internal/TODO.md`, `internal/ic_lora
 
 ## Pending review (last drained: 2026-05-23)
 
-<!-- Capture-then-review staging. New findings land HERE, not inline; drained to `internal/findings_ledger.md` (gitignored) per .claude/CLAUDE.md "CLAUDE.md governance". -->
-- Empty — 4 findings drained to `internal/findings_ledger.md` (gitignored) on 2026-05-23 (memory-offload bench, fps-25-canonical, IterPatchInspector, top-level-patch-drop). Triage to layer 1/2 or archive next pass.
+- **Identical-byte OOM across retries = base/persistent state IS the floor**, not activations — only base-size cuts (quant, block-swap) move it; clip/res/cache flags can't.
+- **Don't-load / offload before throw-resources** — for wasted VRAM/time, name what shouldn't load (pre-encoded data → decoders are validation-only) first. See [[feedback_dont_load_before_throw_resources]].
