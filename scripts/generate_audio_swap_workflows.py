@@ -33,15 +33,19 @@ def render(template: dict, bpm: int, arm: str) -> dict:
     for n in w["nodes"]:
         nid = n.get("id")
         if nid == LOAD_AUDIO_ID:
-            # LoadAudio widget shape: [filename_in_input_dir, ...]
-            n["widgets_values"] = [f"audio_iclora_eval/{bpm}bpm.wav", None, None]
+            # LoadAudio widget shape: [filename_in_input_dir, ...]. LoadAudio
+            # doesn't surface subfolders in its dropdown, so the .wav files
+            # live in the ROOT input dir (not a subdir).
+            n["widgets_values"] = [f"{bpm}bpm.wav", None, None]
         elif nid == LORA_LOADER_ID:
             # mode 0 = active, mode 4 = bypassed
             n["mode"] = 0 if arm == "lora" else 4
         elif nid == VHS_COMBINE_ID:
-            # filename_prefix is the routing knob for where outputs land in ComfyUI/output/
+            # filename_prefix routes outputs in ComfyUI/output/. Per-workflow
+            # subfolder so it's obvious which workflow each render came from
+            # (e.g. lora_eval/lora/110bpm_NNNNN_.mp4 vs baseline arm).
             wv = n["widgets_values"]
-            wv["filename_prefix"] = f"audio_iclora_eval/{arm}/{bpm}bpm"
+            wv["filename_prefix"] = f"lora_eval/{arm}/{bpm}bpm"
     return w
 
 
@@ -70,8 +74,8 @@ def main() -> None:
     print(f"wrote {n_written} workflows to {args.out_dir}/")
     print()
     print("Drag each into ComfyUI + Queue Prompt. Output paths (relative to ComfyUI/output/):")
-    print("  audio_iclora_eval/lora/<BPM>bpm_*.mp4")
-    print("  audio_iclora_eval/baseline/<BPM>bpm_*.mp4")
+    print("  lora_eval/lora/<BPM>bpm_*.mp4")
+    print("  lora_eval/baseline/<BPM>bpm_*.mp4")
 
 
 if __name__ == "__main__":
