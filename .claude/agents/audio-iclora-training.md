@@ -35,9 +35,13 @@ lives in the fork: `coderef/LTX-2/packages/ltx-trainer/` —
   but condition is the one that matches the goal. The clean-audio mechanism (per-
   token timesteps 0, single modality sigma) mirrors shipped v2v clean-reference
   tokens — that's verified correct, don't "fix" it.
-- **The strategy is plumbing-proven, not learning-proven.** Unit tests (CPU,
-  synthetic) cover shapes/masks/guards across all modes. The open question is
-  whether it learns — that's a real-data run, not a test.
+- **Status (2026-05-27): DATA pipeline + codecs PROVEN on the 4090**, strategy is
+  plumbing-proven, learning still UNPROVEN. The full real precompute (Gemma 8bit +
+  video/audio VAE + projectors, full Lightricks checkpoint) → validate runs green
+  end to end (recipe in `audio_iclora_status.md`). Unit tests cover the strategy's
+  shapes/masks/guards. The open gate is the **train-step VRAM smoke** (does the 22B
+  distilled + LoRA fit + step on the 4090) → then whether it LEARNS (a real run +
+  the audio-swap eval), not a test.
 - **4090/distilled is a proof, not the final artifact**: quantized distilled base,
   rank 16–32, batch 1 + grad-accum, adamw8bit, gradient checkpointing, short
   low-res clips. VRAM smoke-test (2–3 steps) before any real run; if OOM, cut
