@@ -35,6 +35,7 @@ import re
 import sys
 from pathlib import Path
 
+from safetensors import safe_open
 from safetensors.torch import load_file, save_file
 
 
@@ -57,19 +58,31 @@ def convert_state_dict(state_dict: dict) -> dict:
     return {convert_key(k): v for k, v in state_dict.items()}
 
 
+def convert_file(in_path: Path, out_path: Path) -> tuple[int, int]:
+    """Load, rename keys, save — carrying the SOURCE header metadata through.
+
+    The ComfyUI IC-LoRA loader reads `reference_downscale_factor` from the
+    safetensors header; `save_file`'s default drops it, which produced the
+    eval-time 'Failed to extract reference_downscale_factor from metadata'
+    warning. Read the header explicitly and pass it through. No-op when the
+    source has no metadata. Returns (total_keys, renamed_keys)."""
+    with safe_open(str(in_path), framework="pt") as f:
+        metadata = f.metadata()  # None if the source has no header metadata
+    sd = load_file(str(in_path))
+    new_sd = convert_state_dict(sd)
+    n_renamed = sum(1 for old, new in zip(sd.keys(), new_sd.keys()) if old != new)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    save_file(new_sd, str(out_path), metadata=metadata or None)
+    return len(sd), n_renamed
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("input", type=Path, help="Trained LoRA safetensors from the fork")
     ap.add_argument("output", type=Path, help="Where to write the re-keyed LoRA")
     args = ap.parse_args()
 
-    sd = load_file(str(args.input))
-    n_total = len(sd)
-    new_sd = convert_state_dict(sd)
-    n_renamed = sum(1 for old, new in zip(sd.keys(), new_sd.keys()) if old != new)
-
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    save_file(new_sd, str(args.output))
+    n_total, n_renamed = convert_file(args.input, args.output)
 
     print(f"keys total: {n_total}")
     print(f"keys renamed: {n_renamed} ({100 * n_renamed / max(n_total, 1):.1f}%)")

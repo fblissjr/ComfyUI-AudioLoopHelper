@@ -11,7 +11,7 @@ import pytest
 
 # scripts/ on path for the importable converter
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-from convert_lora_for_comfyui import convert_key, convert_state_dict
+from convert_lora_for_comfyui import convert_file, convert_key, convert_state_dict
 
 
 class TestConvertKey:
@@ -83,3 +83,48 @@ class TestConvertStateDict:
         assert "diffusion_model.transformer_blocks.12.attn1.to_k.lora_A.weight" in out
         # non-transformer key untouched
         assert "diffusion_model.patchify_proj.lora_A.weight" in out
+
+
+class TestConvertFileMetadata:
+    """The source safetensors header carries metadata the ComfyUI IC-LoRA loader
+    reads (reference_downscale_factor). safetensors.save_file drops it unless
+    passed explicitly — which is what produced the eval-time 'Failed to extract
+    reference_downscale_factor from metadata' warning."""
+
+    @staticmethod
+    def _toy_sd():
+        import torch
+        return {
+            "diffusion_model.transformer_blocks.12.block.attn1.to_k.lora_A.weight": torch.zeros(2, 2),
+            "diffusion_model.transformer_blocks.0.attn1.to_k.lora_B.weight": torch.ones(2, 2),
+        }
+
+    def test_preserves_source_metadata(self, tmp_path):
+        from safetensors import safe_open
+        from safetensors.torch import save_file
+
+        in_path = tmp_path / "in.safetensors"
+        out_path = tmp_path / "out.safetensors"
+        meta = {"reference_downscale_factor": "1", "lora_rank": "16"}
+        save_file(self._toy_sd(), str(in_path), metadata=meta)
+
+        convert_file(in_path, out_path)
+
+        with safe_open(str(out_path), framework="pt") as f:
+            assert f.metadata() == meta
+            # and the keys were still converted
+            assert any(".block." not in k for k in f.keys())
+            assert all(".block." not in k for k in f.keys())
+
+    def test_handles_absent_metadata(self, tmp_path):
+        from safetensors import safe_open
+        from safetensors.torch import save_file
+
+        in_path = tmp_path / "in.safetensors"
+        out_path = tmp_path / "out.safetensors"
+        save_file(self._toy_sd(), str(in_path))  # no metadata=
+
+        convert_file(in_path, out_path)  # must not crash
+
+        with safe_open(str(out_path), framework="pt") as f:
+            assert f.metadata() in (None, {})
