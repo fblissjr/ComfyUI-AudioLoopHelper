@@ -1,24 +1,29 @@
 #!/usr/bin/env python3
 """Build the audio-swap eval manifest from a directory of rendered A/B videos.
 
-Convention (so we don't need any naming-aware glue past this script):
+Convention — matches what RunIdPrefix produces from our generated workflows
+(`<output>/lora_eval/<arm>/<BPM>bpm/<timestamp>/<file>.mp4`):
 
     renders_dir/
       lora/
-        50bpm.mp4
-        70bpm.mp4
+        50bpm/
+          20260528_153022/<file>.mp4
+        70bpm/
+          20260528_153105/<file>.mp4
+          20260528_154210/<file>.mp4   # re-render — script picks the NEWEST
         ...
       baseline/
-        50bpm.mp4
-        70bpm.mp4
+        50bpm/
+          20260528_153044/<file>.mp4
         ...
       (optional) neutral/
-        silent.mp4     # for base-preservation check, single arm
-        ...
+        silent_audio/
+          20260528_153300/<file>.mp4    # base-preservation, LoRA arm only
 
-For each `<bpm>bpm.mp4` that exists in BOTH lora/ and baseline/, emit a case
-with expected=<bpm>. Files in neutral/ become neutral_cases (LoRA arm only,
-base-preservation).
+For each `<bpm>bpm/` subdir that exists in BOTH lora/ and baseline/, the
+NEWEST timestamped render in each is used. So re-rendering one cell with
+a tweaked config just drops a new timestamped folder; old runs are ignored
+but kept on disk for review.
 
 Usage:
 
