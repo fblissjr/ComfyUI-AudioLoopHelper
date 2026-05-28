@@ -195,6 +195,6 @@ Subtree CLAUDE.md files (auto-loaded when working in that subtree):
 Internal (gitignored): `internal/PLAN.md`, `internal/TODO.md`, `internal/ic_lora_assessment.md`, `internal/design/*.md` (long-term designs), `internal/autoresearch/`, `internal/scripts/` (out-of-repo deploy sources), `internal/postmortem_*.md`, `internal/prompts/`, `internal/analysis/`, `internal/log/log_YYYY-MM-DD.md` (session logs).
 
 ## Pending review (last drained: 2026-05-23)
-
-- **Identical-byte OOM across retries = base/persistent state IS the floor**, not activations — only base-size cuts (quant, block-swap) move it; clip/res/cache flags can't.
-- **Don't-load / offload before throw-resources** — for wasted VRAM/time, name what shouldn't load (pre-encoded data → decoders are validation-only) first. See [[feedback_dont_load_before_throw_resources]].
+- **Identical-byte OOM = base IS the floor**, not activations — only base-size cuts move it. [[feedback_dont_load_before_throw_resources]].
+- **Data in `./data/<feature>/<labeled-subfolder>/`, not `/tmp/`** — tmpfiles wipes /tmp. [[feedback_data_lives_in_data_dir]].
+- **"Engaged" log deltas need a second confirmation** — sample a moved param's device; VRAM delta alone silently no-op'd for hours on quanto.
