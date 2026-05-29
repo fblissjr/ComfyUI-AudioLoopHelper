@@ -32,36 +32,48 @@ STOCK = (
 OUT = Path(__file__).resolve().parents[1] / "internal/workflows/pitch_gate_eval/_template.json"
 
 # --- the distilled chain to KEEP (traced from the stock graph) ----------------------------
-# everything else is pruned. Primitives that feed kept nodes are added automatically.
-KEEP = {
-    3940,  # CheckpointLoaderSimple  (repoint -> distilled)
-    4960,  # LTXAVTextEncoderLoader  (CLIP / Gemma)
-    2483,  # CLIPTextEncode positive (-> constant caption)
-    2612,  # CLIPTextEncode negative
-    1241,  # LTXVConditioning
-    3059,  # EmptyLTXVLatentVideo
-    3980,  # LTXVEmptyLatentAudio    (GENERATED audio)
-    4010,  # LTXVAudioVAELoader      (fp32)
-    4528,  # LTXVConcatAVLatent
-    4922,  # LoraLoaderModelOnly     (the trained LoRA; bypass=base arm)
-    4828,  # CFGGuider cfg=1
-    4831,  # KSamplerSelect          (-> "euler", CATCH #1)
-    4832,  # RandomNoise
-    4971,  # ManualSigmas (8-step)
-    4829,  # SamplerCustomAdvanced (distilled)
-    4845,  # LTXVSeparateAVLatent
-    4848,  # LTXVAudioVAEDecode (audio out)
-    4849,  # CreateVideo
-    4852,  # SaveVideo
-    4982,  # LTXVTiledVAEDecode (video, feeds CreateVideo)
+# id -> expected node TYPE. STOCK is a LIVE upstream checkout (not vendored), so its node ids
+# can renumber on `git pull`. This map is BOTH the keep-set AND a drift guard: assert_stock_ids
+# fails loud if any id no longer holds its expected type, instead of silently pruning the wrong
+# 24 nodes and producing a structurally-valid but semantically-wrong measurement instrument.
+KEEP_TYPES = {
+    3940: "CheckpointLoaderSimple",   # repoint -> distilled
+    4960: "LTXAVTextEncoderLoader",   # CLIP / Gemma
+    2483: "CLIPTextEncode",           # positive -> constant caption
+    2612: "CLIPTextEncode",           # negative
+    1241: "LTXVConditioning",
+    3059: "EmptyLTXVLatentVideo",
+    3980: "LTXVEmptyLatentAudio",     # GENERATED audio
+    4010: "LTXVAudioVAELoader",       # fp32
+    4528: "LTXVConcatAVLatent",
+    4922: "LoraLoaderModelOnly",      # trained LoRA; bypass=base arm
+    4828: "CFGGuider",                # cfg=1
+    4831: "KSamplerSelect",           # -> "euler" (CATCH #1)
+    4832: "RandomNoise",
+    4971: "ManualSigmas",             # 8-step
+    4829: "SamplerCustomAdvanced",    # distilled
+    4845: "LTXVSeparateAVLatent",
+    4848: "LTXVAudioVAEDecode",       # audio out
+    4849: "CreateVideo",
+    4852: "SaveVideo",
+    4982: "LTXVTiledVAEDecode",       # video, feeds CreateVideo
     # primitives feeding kept nodes:
-    4977,  # PrimitiveBoolean (i2v bypass — kept node #3159 is dropped, see below)
-    4978,  # PrimitiveFloat (fps)
-    4979,  # PrimitiveInt (length)
-    4985,  # LTXFloatToInt (audio frames)
+    4977: "PrimitiveBoolean",         # i2v bypass (kept node #3159 dropped)
+    4978: "PrimitiveFloat",           # fps
+    4979: "PrimitiveInt",             # length
+    4985: "LTXFloatToInt",            # audio frames
 }
-# the video tiled decoder #4982 needs the video latent from #4845 + the video VAE; in stock
-# it's fed by the quality chain. We rewire it to the distilled separate-latent + checkpoint VAE.
+KEEP = set(KEEP_TYPES)
+
+
+def assert_stock_ids(wf: dict) -> None:
+    """Fail loud if STOCK drifted — a kept id no longer holds its expected type. Protects
+    the measurement instrument from silent wrong-graph corruption on an upstream pull."""
+    byid = {n["id"]: n.get("type") for n in wf["nodes"]}
+    bad = {i: (want, byid.get(i)) for i, want in KEEP_TYPES.items() if byid.get(i) != want}
+    if bad:
+        lines = "\n".join(f"    #{i}: expected {w}, got {g}" for i, (w, g) in sorted(bad.items()))
+        sys.exit(f"stock graph drifted — re-trace KEEP_TYPES against {STOCK.name}:\n{lines}")
 
 
 def _normalize_link_fields(wf):
@@ -80,39 +92,23 @@ def _normalize_link_fields(wf):
 
 
 def prune(wf: dict) -> dict:
-    keep_ids = set(KEEP)
-    wf["nodes"] = [n for n in wf["nodes"] if n["id"] in keep_ids]
-    # drop links whose endpoints aren't both kept
-    wf["links"] = [L for L in wf["links"] if L[1] in keep_ids and L[3] in keep_ids]
-    _normalize_link_fields(wf)  # clear stale node-body link refs from the pruned-away links
+    wf["nodes"] = [n for n in wf["nodes"] if n["id"] in KEEP]
+    # drop links whose endpoints aren't both kept; splice() re-normalizes node-body fields
+    wf["links"] = [L for L in wf["links"] if L[1] in KEEP and L[3] in KEEP]
     return wf
 
 
+# The links array is the single source of truth; node-body .link / .links[] are DERIVED by
+# _normalize_link_fields (called once at the end of splice). So these only touch the array —
+# no per-call node-body sync to keep consistent (that desync was the link_integrity bug).
 def _add_link(wf, src, ss, tgt, ts, typ):
     lid = max((L[0] for L in wf["links"]), default=0) + 1
     wf["links"].append([lid, src, ss, tgt, ts, typ])
-    byid = {n["id"]: n for n in wf["nodes"]}
-    # BOTH link representations must sync (ComfyUI gotcha): target input .link AND source output .links[]
-    byid[tgt]["inputs"][ts]["link"] = lid
-    out = byid[src]["outputs"][ss]
-    out.setdefault("links", [])
-    if out["links"] is None:
-        out["links"] = []
-    out["links"].append(lid)
     return lid
 
 
 def _remove_links(wf, pred):
-    """Drop links matching pred(L); rebuild BOTH representations consistently."""
     wf["links"] = [L for L in wf["links"] if not pred(L)]
-    live = {L[0] for L in wf["links"]}
-    for n in wf["nodes"]:
-        for inp in n.get("inputs", []):
-            if inp.get("link") is not None and inp["link"] not in live:
-                inp["link"] = None
-        for out in n.get("outputs", []):
-            if out.get("links"):
-                out["links"] = [lid for lid in out["links"] if lid in live]
 
 
 def _node(nid, ntype, inputs, outputs, wv=None, pos=(0, 0)):
@@ -267,20 +263,24 @@ def main() -> None:
         sys.exit(f"stock graph not found: {STOCK}")
     wf = json.loads(STOCK.read_text())
     print(f"stock: {len(wf['nodes'])} nodes, {len(wf['links'])} links")
+    assert_stock_ids(wf)  # fail loud if upstream renumbered (silent wrong-graph guard)
     wf = prune(wf)
     print(f"pruned to distilled chain: {len(wf['nodes'])} nodes, {len(wf['links'])} links")
     wf = splice(wf, lora_on=True, prefix="pitch_gate/lora_template")
     print(f"spliced (audio-ref + t2v rewire + caption): {len(wf['nodes'])} nodes, {len(wf['links'])} links")
+    # Local pre-filter: a fast, dependency-free fail-early (cycle / unwired / sink). NOT the
+    # authoritative gate — `scripts/audit_workflows.py` is (it caught link-array desync +
+    # frame_rate + decode that this pre-filter missed). Always run the audit on the output.
     errs = validate(wf)
-    print("=== post-splice SIMULATE-EXECUTION validation ===")
-    print("\n".join(f"  {e}" for e in errs) if errs else "  VALIDATE OK — no gaps, no cycle, sink reachable")
+    print("=== pre-filter (cycle / unwired / sink) ===")
+    print("\n".join(f"  {e}" for e in errs) if errs else "  pre-filter OK")
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(wf, indent=2))
     print(f"\nwrote template -> {OUT}")
     if errs:
-        print("(structural gaps above — fix before generation)")
-    else:
-        print("STRUCTURAL OK. Generation validation needs the trained checkpoint + GPU.")
+        print("(pre-filter gaps above — fix before the audit)")
+    print(f"AUTHORITATIVE CHECK: uv run --group dev python scripts/audit_workflows.py {OUT}")
+    print("Generation validation still needs the trained checkpoint + GPU.")
 
 
 if __name__ == "__main__":
