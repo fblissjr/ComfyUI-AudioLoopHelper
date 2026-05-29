@@ -64,22 +64,55 @@ KEEP = {
 # it's fed by the quality chain. We rewire it to the distilled separate-latent + checkpoint VAE.
 
 
+def _normalize_link_fields(wf):
+    """Rebuild every node's input .link + output .links[] from the authoritative links
+    array, so node-body fields can't reference pruned/stale link ids."""
+    ins_by = {}   # (tgt, slot) -> lid
+    outs_by = {}  # (src, slot) -> [lids]
+    for lid, src, ss, tgt, ts, _typ in wf["links"]:
+        ins_by[(tgt, ts)] = lid
+        outs_by.setdefault((src, ss), []).append(lid)
+    for n in wf["nodes"]:
+        for i, inp in enumerate(n.get("inputs", [])):
+            inp["link"] = ins_by.get((n["id"], i))
+        for i, out in enumerate(n.get("outputs", [])):
+            out["links"] = outs_by.get((n["id"], i), [])
+
+
 def prune(wf: dict) -> dict:
     keep_ids = set(KEEP)
     wf["nodes"] = [n for n in wf["nodes"] if n["id"] in keep_ids]
     # drop links whose endpoints aren't both kept
     wf["links"] = [L for L in wf["links"] if L[1] in keep_ids and L[3] in keep_ids]
+    _normalize_link_fields(wf)  # clear stale node-body link refs from the pruned-away links
     return wf
 
 
 def _add_link(wf, src, ss, tgt, ts, typ):
     lid = max((L[0] for L in wf["links"]), default=0) + 1
     wf["links"].append([lid, src, ss, tgt, ts, typ])
-    # sync the target node-body input link field
-    for n in wf["nodes"]:
-        if n["id"] == tgt:
-            n["inputs"][ts]["link"] = lid
+    byid = {n["id"]: n for n in wf["nodes"]}
+    # BOTH link representations must sync (ComfyUI gotcha): target input .link AND source output .links[]
+    byid[tgt]["inputs"][ts]["link"] = lid
+    out = byid[src]["outputs"][ss]
+    out.setdefault("links", [])
+    if out["links"] is None:
+        out["links"] = []
+    out["links"].append(lid)
     return lid
+
+
+def _remove_links(wf, pred):
+    """Drop links matching pred(L); rebuild BOTH representations consistently."""
+    wf["links"] = [L for L in wf["links"] if not pred(L)]
+    live = {L[0] for L in wf["links"]}
+    for n in wf["nodes"]:
+        for inp in n.get("inputs", []):
+            if inp.get("link") is not None and inp["link"] not in live:
+                inp["link"] = None
+        for out in n.get("outputs", []):
+            if out.get("links"):
+                out["links"] = [lid for lid in out["links"] if lid in live]
 
 
 def _node(nid, ntype, inputs, outputs, wv=None, pos=(0, 0)):
@@ -109,6 +142,12 @@ def splice(wf: dict, *, caption="a person speaking", res=256, length=121,
 
     # CATCH #1: euler, not euler_ancestral
     byid[4831]["widgets_values"] = ["euler"]
+    # F16: LTXVConditioning.frame_rate must be 25 (canonical LTX 2.3), not the stock 24;
+    # also resolves fps_coherence vs the audio latent (25).
+    byid[1241]["widgets_values"] = [25]
+    # vae_decode_no_tile: [1,1,1] single-tile on 24GB+ (3x faster cold-pass)
+    if byid.get(4982):
+        byid[4982]["widgets_values"] = [1, 1, 1, False, "auto", "auto"]
     # CATCH #2: distilled checkpoint (audio VAE loader left to user-confirm; flagged)
     byid[3940]["widgets_values"] = [distilled]
     # constant caption (positive); negative kept generic
@@ -146,13 +185,15 @@ def splice(wf: dict, *, caption="a person speaking", res=256, length=121,
     _add_link(wf, 4010, 0, enc_id, 1, "VAE")
     _add_link(wf, enc_id, 0, ref_id, 2, "LATENT")
     # reroute conditioning: #1241 LTXVConditioning pos/neg -> ref tokens -> #4828 CFGGuider
-    # remove the existing 1241->4828 links (pos slot1, neg slot2)
-    wf["links"] = [L for L in wf["links"]
-                   if not (L[1] == 1241 and L[3] == 4828)]
+    # remove the existing 1241->4828 links (pos slot1, neg slot2), both representations
+    _remove_links(wf, lambda L: L[1] == 1241 and L[3] == 4828)
     _add_link(wf, 1241, 0, ref_id, 0, "CONDITIONING")  # pos -> ref.positive
     _add_link(wf, 1241, 1, ref_id, 1, "CONDITIONING")  # neg -> ref.negative
     _add_link(wf, ref_id, 0, 4828, 1, "CONDITIONING")  # ref.pos -> guider.positive
     _add_link(wf, ref_id, 1, 4828, 2, "CONDITIONING")  # ref.neg -> guider.negative
+    # Single source of truth: rebuild ALL node-body link fields from the links array, so no
+    # hand-sync gap can leave a stale/missing ref (the link_integrity invariant).
+    _normalize_link_fields(wf)
     return wf
 
 
