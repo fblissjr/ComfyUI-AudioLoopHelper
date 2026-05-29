@@ -1,8 +1,9 @@
 """Red-first contract tests for the pitch-gate data generator.
 
-Locks the leak discipline (design doc in internal/, private clone only) BEFORE
-generating GPU-encoded latents: the reference voiced-tone's F0 must be the ONLY
-thing that co-varies with the target pitch. Everything else decorrelated.
+Locks the contract for the pitch-gate generator (design doc in internal/, private
+clone only) BEFORE generating GPU-encoded latents. Option B (bounded shift): the
+reference voiced-tone's F0 is the sole F0-bearing input; shifts stay in the
+artifact-free range; timbre is a decorrelated nuisance axis; the caption is constant.
 
 Run: uv run --group dev --group analysis python -m pytest tests/test_pitch_gate_data.py -v --rootdir=.
 """
@@ -15,7 +16,6 @@ import pitch_gate_data as P
 
 
 SR = 16_000
-LEVELS = [90.0, 120.0, 150.0, 190.0, 240.0]
 
 
 # ---- voiced tone: carries F0, harmonic (not sine), timbre ⊥ F0 ----
@@ -62,32 +62,40 @@ def test_pitch_shift_doubles_f0_at_octave():
     assert len(up) == len(a), "duration not preserved (timing must stay for lip-sync)"
 
 
-# ---- manifest: the decorrelation matrix ----
+# ---- manifest (Option B: bounded shift from natural; reference is the sole carrier) ----
+# NOTE: the old target⊥natural decorrelation test is intentionally GONE. Its only purpose
+# was to stop an init FACE from leaking pitch (face->gender->F0). R-init resolved to DROP
+# the init frame, so there is no face input; with a constant caption, nothing but the
+# reference tone carries F0. Option B therefore lets target track natural (bounded shift)
+# leak-free, which buys artifact-free shifts (the smoke confirmed >±8 st degrades).
 
 def _natural(n=200, seed=1):
     rng = np.random.default_rng(seed)
-    return {f"clip_{i:04d}": float(rng.uniform(90, 240)) for i in range(n)}
+    return {f"clip_{i:04d}": float(rng.uniform(80, 260)) for i in range(n)}
 
 
-def test_manifest_balanced_across_levels():
-    rows = P.build_manifest(_natural(), LEVELS, seed=0)
-    counts = {lv: sum(r["target_f0"] == lv for r in rows) for lv in LEVELS}
-    lo, hi = min(counts.values()), max(counts.values())
-    assert hi - lo <= 1, f"levels not balanced: {counts}"
+def test_shifts_are_bounded():
+    rows = P.build_manifest(_natural(n=400), seed=0, max_semitones=7.0)
+    assert all(abs(r["shift_semitones"]) <= 7.0 + 1e-9 for r in rows), "shift exceeded the artifact-free bound"
 
 
-def test_target_pitch_decorrelated_from_natural_pitch():
-    """The killer leak: if target F0 tracks the clip's natural F0, the init
-    frame (face->gender->F0) leaks pitch. Must be ~0 correlation."""
-    rows = P.build_manifest(_natural(n=400), LEVELS, seed=0)
-    nat = np.array([r["natural_f0"] for r in rows])
+def test_target_is_natural_times_shift():
+    rows = P.build_manifest(_natural(n=50), seed=0, max_semitones=7.0)
+    for r in rows:
+        expected = r["natural_f0"] * 2.0 ** (r["shift_semitones"] / 12.0)
+        assert abs(r["target_f0"] - expected) < 1e-6
+
+
+def test_target_pitch_spread_is_wide():
+    """LTX-2's ask: actual_f0 must span a real range so the eval tests F0-tracking
+    across pitch. Bounded shift over a diverse natural set delivers it."""
+    rows = P.build_manifest(_natural(n=400), seed=0, max_semitones=7.0)
     tgt = np.array([r["target_f0"] for r in rows])
-    r = np.corrcoef(nat, tgt)[0, 1]
-    assert abs(r) < 0.15, f"target F0 correlates with natural F0 (r={r:.2f}) -> face leaks pitch"
+    assert tgt.max() - tgt.min() > 150.0, f"target spread too narrow: {tgt.min():.0f}-{tgt.max():.0f}"
 
 
 def test_timbre_decorrelated_from_target_pitch():
-    rows = P.build_manifest(_natural(n=400), LEVELS, seed=0)
+    rows = P.build_manifest(_natural(n=400), seed=0)
     tim = np.array([r["timbre"] for r in rows], dtype=float)
     tgt = np.array([r["target_f0"] for r in rows])
     r = np.corrcoef(tim, tgt)[0, 1]
@@ -96,7 +104,7 @@ def test_timbre_decorrelated_from_target_pitch():
 
 
 def test_caption_is_pitch_free():
-    rows = P.build_manifest(_natural(), [120.0, 150.0, 190.0], seed=0)
+    rows = P.build_manifest(_natural(), seed=0)
     caps = {r["caption"].lower() for r in rows}
     assert len(caps) == 1, "caption must be constant"
     cap = caps.pop()
@@ -105,10 +113,11 @@ def test_caption_is_pitch_free():
         assert banned not in words, f"caption leaks pitch word '{banned}'"
 
 
-def test_heldout_split_disjoint_and_has_middle_level():
-    rows = P.build_manifest(_natural(n=400), LEVELS, seed=0, heldout_frac=0.2)
+def test_heldout_split_disjoint_and_spans_range():
+    rows = P.build_manifest(_natural(n=400), seed=0, heldout_frac=0.2)
     train = {r["clip_id"] for r in rows if r["split"] == "train"}
-    held = {r["clip_id"] for r in rows if r["split"] == "heldout"}
-    assert train and held and not (train & held), "splits overlap or empty"
-    held_levels = {r["target_f0"] for r in rows if r["split"] == "heldout"}
-    assert 150.0 in held_levels, "held-out must include a middle level (interpolation eval)"
+    held = [r for r in rows if r["split"] == "heldout"]
+    held_ids = {r["clip_id"] for r in held}
+    assert train and held_ids and not (train & held_ids), "splits overlap or empty"
+    htgt = np.array([r["target_f0"] for r in held])
+    assert htgt.max() - htgt.min() > 100.0, "held-out F0 too clustered for an interpolation test"

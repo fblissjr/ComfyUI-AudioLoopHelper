@@ -36,8 +36,11 @@ import pitch_gate_data as P
 SR = 16_000           # audio VAE convention
 RES = 256             # re-render resolution (fits 4090, dodges the 512-token wall)
 FPS = 25
-LEVELS = [90.0, 120.0, 150.0, 190.0, 240.0]
-DEFAULT_SOURCE = "data/noakraicer_ID-LoRA-CelebVHQ/train"
+# Mix both banks for natural-pitch diversity (LTX-2's ask: wide actual_f0 spread).
+DEFAULT_SOURCES = [
+    "data/noakraicer_ID-LoRA-CelebVHQ/train",
+    "data/noakraicer_ID-LoRA-TalkVid/train",
+]
 
 
 def _voiced_f0(audio: np.ndarray) -> float:
@@ -99,10 +102,11 @@ def _process(src_mp4: Path, natural_f0: float, target_f0: float, timbre: int,
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--source", default=DEFAULT_SOURCE, help="dir of source mp4s")
+    ap.add_argument("--source", nargs="+", default=DEFAULT_SOURCES, help="dirs of source mp4s")
     ap.add_argument("--out", default="data/audio_iclora/pitch_ref_gate_v1")
     ap.add_argument("--n", type=int, default=300, help="number of source clips to use")
     ap.add_argument("--ref-seconds", type=float, default=2.0, help="reference tone duration")
+    ap.add_argument("--max-semitones", type=float, default=7.0, help="bounded shift range (Option B)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--smoke", type=int, default=0, help="process N clips + validate, then stop")
     args = ap.parse_args()
@@ -112,11 +116,15 @@ def main() -> None:
     (out / "clips").mkdir(parents=True, exist_ok=True)
     (out / "references").mkdir(parents=True, exist_ok=True)
 
-    srcs = sorted(Path(args.source).glob("*.mp4"))[:n]
-    if not srcs:
+    pool: list[Path] = []
+    for d in args.source:
+        pool.extend(sorted(Path(d).glob("*.mp4")))
+    if not pool:
         sys.exit(f"no source mp4s under {args.source}")
+    np.random.default_rng(args.seed).shuffle(pool)  # mix banks for natural-pitch diversity
+    srcs = pool[:n]
 
-    # Pass 1: probe natural F0 (so target pitch can be assigned decorrelated from it).
+    # Pass 1: probe natural F0 (Option B shifts each clip a bounded amount from its own F0).
     print(f"probing natural F0 for {len(srcs)} clips...")
     natural = {}
     for src in srcs:
@@ -124,7 +132,7 @@ def main() -> None:
             natural[src.stem] = _voiced_f0(_load_audio(src))
         except Exception as e:  # noqa: BLE001 - skip unreadable clips, keep going
             print(f"  skip {src.name}: {e}")
-    rows_meta = P.build_manifest(natural, LEVELS, seed=args.seed)
+    rows_meta = P.build_manifest(natural, seed=args.seed, max_semitones=args.max_semitones)
     by_id = {src.stem: src for src in srcs}
 
     # Pass 2: produce media.
@@ -140,7 +148,8 @@ def main() -> None:
             print(f"  [{i}] skip {src.name}: {e}")
             continue
         row = {"video": clip_rel, "reference": ref_rel, "caption": P.NEUTRAL_CAPTION,
-               "target_f0": m["target_f0"], "actual_f0": round(actual, 1),
+               "actual_f0": round(actual, 1), "target_f0": round(m["target_f0"], 1),
+               "shift_semitones": round(m["shift_semitones"], 2),
                "natural_f0": round(m["natural_f0"], 1), "timbre": m["timbre"],
                "split": m["split"]}
         manifest.append(row)
@@ -159,7 +168,6 @@ def main() -> None:
 def _validate(manifest: list[dict], out: Path) -> None:
     """Smoke validation: reference tone F0 lands on actual_f0; durations sane; the
     leak invariants hold on what was actually written."""
-    import librosa
     import soundfile as sf
 
     print("\n=== smoke validation ===")
@@ -171,12 +179,14 @@ def _validate(manifest: list[dict], out: Path) -> None:
         fails += not ok
         print(f"  {r['reference']}: tone F0={ref_f0:.0f} vs actual={r['actual_f0']:.0f} "
               f"{'OK' if ok else 'OFF'}")
-    # leak invariants on the written manifest
-    tgt = np.array([r["target_f0"] for r in manifest])
-    nat = np.array([r["natural_f0"] for r in manifest])
+    # Option B invariants on the written manifest
+    act = np.array([r["actual_f0"] for r in manifest])
     if len(manifest) > 2:
-        rcorr = float(np.corrcoef(nat, tgt)[0, 1])
-        print(f"  corr(natural, target) = {rcorr:+.2f} {'OK' if abs(rcorr) < 0.4 else 'LEAK'}")
+        spread = act.max() - act.min()
+        print(f"  actual_f0 spread = {act.min():.0f}-{act.max():.0f} Hz "
+              f"({'OK' if spread > 80 else 'NARROW — widen source diversity'})")
+    sh = np.array([abs(r["shift_semitones"]) for r in manifest])
+    print(f"  max |shift| = {sh.max():.1f} st ({'OK' if sh.max() <= 8.01 else 'OVER artifact bound'})")
     caps = {r["caption"] for r in manifest}
     print(f"  captions constant: {'OK' if len(caps) == 1 else 'FAIL'} ({len(caps)} unique)")
     print("SMOKE OK" if not fails else f"SMOKE: {fails} F0 mismatches — inspect")

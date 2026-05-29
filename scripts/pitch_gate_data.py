@@ -96,41 +96,35 @@ def semitones_to_target(natural_f0: float, target_f0: float) -> float:
 
 def build_manifest(
     natural_f0: dict[str, float],
-    levels: list[float],
     seed: int = 0,
+    max_semitones: float = 7.0,
     heldout_frac: float = 0.2,
     n_timbres: int = 4,
 ) -> list[dict]:
-    """Assign each clip a target F0 (balanced across levels, decorrelated from the
-    clip's natural F0) + a timbre id (decorrelated from F0), a pitch-free caption,
-    and a split. Held-out includes middle levels for the interpolation eval."""
+    """Option B (bounded shift). Assign each clip a BOUNDED pitch shift (±max_semitones)
+    from its own natural F0 -> target_f0 = natural * 2^(shift/12). Bounded shifts stay in
+    the artifact-free range (the smoke confirmed >±8 st degrades). Leak-free because there
+    is NO init frame and a constant caption, so the source clip's natural pitch is not an
+    input at all -> the reference tone is the sole F0-bearing channel; target tracking
+    natural cannot leak. Timbre is a decorrelated nuisance axis; held-out is random clips
+    (continuous F0 -> generalization is tested across the range, not discrete levels)."""
     rng = np.random.default_rng(seed)
     clips = sorted(natural_f0)
     nclip = len(clips)
 
-    # balanced assignment (tile levels to nclip), then shuffled (independent of natural F0)
-    assign = np.resize(np.asarray(levels, dtype=float), nclip)
-    rng.shuffle(assign)
-
-    # timbre independent of level
+    shifts = rng.uniform(-max_semitones, max_semitones, size=nclip)
     timbres = rng.integers(0, n_timbres, size=nclip)
-
-    # split: STRATIFIED per-level holdout so every level (incl. the middle ones the
-    # interpolation eval needs) appears in both train and heldout.
-    held_mask = np.zeros(nclip, dtype=bool)
-    for lv in set(levels):
-        idx = np.where(assign == lv)[0]
-        rng.shuffle(idx)
-        k = max(1, int(round(heldout_frac * len(idx)))) if len(idx) else 0
-        held_mask[idx[:k]] = True
+    held_mask = rng.random(nclip) < heldout_frac  # random clip holdout (continuous F0)
 
     rows = []
     for i, cid in enumerate(clips):
+        nat = float(natural_f0[cid])
         rows.append(
             {
                 "clip_id": cid,
-                "natural_f0": float(natural_f0[cid]),
-                "target_f0": float(assign[i]),
+                "natural_f0": nat,
+                "shift_semitones": float(shifts[i]),
+                "target_f0": nat * (2.0 ** (shifts[i] / 12.0)),
                 "timbre": int(timbres[i]),
                 "caption": NEUTRAL_CAPTION,
                 "split": "heldout" if held_mask[i] else "train",
