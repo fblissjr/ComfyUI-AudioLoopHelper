@@ -72,6 +72,90 @@ def prune(wf: dict) -> dict:
     return wf
 
 
+def _add_link(wf, src, ss, tgt, ts, typ):
+    lid = max((L[0] for L in wf["links"]), default=0) + 1
+    wf["links"].append([lid, src, ss, tgt, ts, typ])
+    # sync the target node-body input link field
+    for n in wf["nodes"]:
+        if n["id"] == tgt:
+            n["inputs"][ts]["link"] = lid
+    return lid
+
+
+def _node(nid, ntype, inputs, outputs, wv=None, pos=(0, 0)):
+    """Minimal ComfyUI node dict. inputs/outputs: list of (name, type)."""
+    return {
+        "id": nid, "type": ntype, "pos": list(pos), "size": [270, 80], "flags": {},
+        "order": 0, "mode": 0,
+        "inputs": [{"name": n, "type": t, "link": None} for n, t in inputs],
+        "outputs": [{"name": n, "type": t, "links": []} for n, t in outputs],
+        "properties": {"Node name for S&R": ntype},
+        "widgets_values": wv if wv is not None else [],
+    }
+
+
+def splice(wf: dict, *, caption="a person speaking", res=256, length=121,
+           distilled="ltx-2.3-22b-distilled-1.1.safetensors",
+           tone_wav="pitch_gate_tone.wav", lora="", lora_on=True,
+           prefix="pitch_gate/template") -> dict:
+    """Turn the pruned distilled-chain base into the audio-reference eval template.
+
+    Edits (build-plan §EDITS): t2v rewire, constant caption, euler sampler, distilled
+    loaders, 256 sizing, stock audio-ref splice (LoadAudio->LTXVAudioVAEEncode->
+    LTXVSetAudioRefTokens between conditioning and CFGGuider), LoRA arm toggle, static
+    SaveVideo prefix per condition.
+    """
+    byid = {n["id"]: n for n in wf["nodes"]}
+
+    # CATCH #1: euler, not euler_ancestral
+    byid[4831]["widgets_values"] = ["euler"]
+    # CATCH #2: distilled checkpoint (audio VAE loader left to user-confirm; flagged)
+    byid[3940]["widgets_values"] = [distilled]
+    # constant caption (positive); negative kept generic
+    byid[2483]["widgets_values"] = [caption]
+    # CATCH #3: 256 sizing + generated audio length
+    byid[3059]["widgets_values"] = [res, res, length, 1]
+    if byid.get(4979):
+        byid[4979]["widgets_values"] = [length, "fixed"]
+    # LoRA arm: bypass the loader for the base arm
+    byid[4922]["mode"] = 0 if lora_on else 4
+    if lora:
+        wv = byid[4922].get("widgets_values") or ["", 1.0]
+        wv[0] = lora
+        byid[4922]["widgets_values"] = wv
+    # static per-condition prefix
+    byid[4852]["widgets_values"] = [prefix, "auto", "auto"]
+
+    # CATCH #4 / the one gap: t2v rewire EmptyLTXVLatentVideo -> Concat.video_latent
+    _add_link(wf, 3059, 0, 4528, 0, "LATENT")
+
+    # audio-ref splice: new LoadAudio -> LTXVAudioVAEEncode -> LTXVSetAudioRefTokens
+    base = max(n["id"] for n in wf["nodes"])
+    load_id, enc_id, ref_id = base + 1, base + 2, base + 3
+    wf["nodes"] += [
+        _node(load_id, "LoadAudio", [], [("AUDIO", "AUDIO")], wv=[tone_wav], pos=(-400, 600)),
+        _node(enc_id, "LTXVAudioVAEEncode",
+              [("audio", "AUDIO"), ("audio_vae", "VAE")], [("Audio Latent", "LATENT")], pos=(-100, 600)),
+        _node(ref_id, "LTXVSetAudioRefTokens",
+              [("positive", "CONDITIONING"), ("negative", "CONDITIONING"), ("audio_latent", "LATENT")],
+              [("positive", "CONDITIONING"), ("negative", "CONDITIONING"), ("frozen_audio", "LATENT")],
+              pos=(200, 600)),
+    ]
+    # wire: LoadAudio->enc.audio ; audioVAE->enc.audio_vae ; enc->ref.audio_latent
+    _add_link(wf, load_id, 0, enc_id, 0, "AUDIO")
+    _add_link(wf, 4010, 0, enc_id, 1, "VAE")
+    _add_link(wf, enc_id, 0, ref_id, 2, "LATENT")
+    # reroute conditioning: #1241 LTXVConditioning pos/neg -> ref tokens -> #4828 CFGGuider
+    # remove the existing 1241->4828 links (pos slot1, neg slot2)
+    wf["links"] = [L for L in wf["links"]
+                   if not (L[1] == 1241 and L[3] == 4828)]
+    _add_link(wf, 1241, 0, ref_id, 0, "CONDITIONING")  # pos -> ref.positive
+    _add_link(wf, 1241, 1, ref_id, 1, "CONDITIONING")  # neg -> ref.negative
+    _add_link(wf, ref_id, 0, 4828, 1, "CONDITIONING")  # ref.pos -> guider.positive
+    _add_link(wf, ref_id, 1, 4828, 2, "CONDITIONING")  # ref.neg -> guider.negative
+    return wf
+
+
 def validate(wf: dict) -> list[str]:
     """Simulate execution: link integrity + topo-sort (cycle detect) + sink reachability."""
     errs = []
@@ -144,15 +228,18 @@ def main() -> None:
     print(f"stock: {len(wf['nodes'])} nodes, {len(wf['links'])} links")
     wf = prune(wf)
     print(f"pruned to distilled chain: {len(wf['nodes'])} nodes, {len(wf['links'])} links")
+    wf = splice(wf, lora_on=True, prefix="pitch_gate/lora_template")
+    print(f"spliced (audio-ref + t2v rewire + caption): {len(wf['nodes'])} nodes, {len(wf['links'])} links")
     errs = validate(wf)
-    # the pruned graph WILL have unwired inputs (the cut i2v + audio-ref splices) — report,
-    # don't fail; the splice step (next) fills them.
-    print("=== post-prune validation (expected gaps = the splice points) ===")
-    print("\n".join(f"  {e}" for e in errs) if errs else "  (clean)")
+    print("=== post-splice SIMULATE-EXECUTION validation ===")
+    print("\n".join(f"  {e}" for e in errs) if errs else "  VALIDATE OK — no gaps, no cycle, sink reachable")
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(wf, indent=2))
-    print(f"\nwrote pruned base -> {OUT}")
-    print("NEXT: splice audio-ref + constant caption + RunIdPrefix + t2v rewire (separate step).")
+    print(f"\nwrote template -> {OUT}")
+    if errs:
+        print("(structural gaps above — fix before generation)")
+    else:
+        print("STRUCTURAL OK. Generation validation needs the trained checkpoint + GPU.")
 
 
 if __name__ == "__main__":
