@@ -10,7 +10,7 @@ show the trained LoRA *does something*, even if not useful. We have not shown th
 yet, and this doc is honest about why.
 
 Everything below is either (a) observed via inference-only conditioning (the same
-way [`audio_reactive_workflows.md`](audio_reactive_workflows.md) and the ADR design
+way [`audio_reactive_workflows.md`](../experimental/audio_reactive_workflows.md) and the ADR design
 notes report), or (b) explicitly marked as a guess. Where we screwed up, we say so.
 **If you have a better idea, fork it and change whatever you want.**
 
@@ -19,7 +19,7 @@ notes report), or (b) explicitly marked as a guess. Where we screwed up, we say 
 LTX 2.3 is a joint audio-video model: it's trained on audio + video together, so
 audio already influences the generated video through native cross-attention. You
 can see this today with zero training — freeze an audio track, animate an init
-image, and the motion tracks the beat ([`audio_reactive_workflows.md`](audio_reactive_workflows.md)).
+image, and the motion tracks the beat ([`audio_reactive_workflows.md`](../experimental/audio_reactive_workflows.md)).
 We call this the **native coupling**, and it's loose but real.
 
 The IC-LoRA idea: train a small adapter so audio drives video *on top of* that
@@ -192,7 +192,7 @@ This is speculative — we have not run it. But it's where we'd point a fork.
 ## Cross-links
 
 - Native audio→video coupling, inference-only (the baseline this builds on):
-  [`audio_reactive_workflows.md`](audio_reactive_workflows.md)
+  [`audio_reactive_workflows.md`](../experimental/audio_reactive_workflows.md)
 - The two-pass audio-guides-video inference path (validated manually):
   `example_workflows/working_docs/combined_adr_workflow_design.md`
 - Trainer side (block-swap, strategy, configs): the LTX-2 fork's `docs/` — see that

@@ -22,7 +22,8 @@ docs/
 ├── reference/                ← technical deep-dive "how does X work"
 ├── analysis/                 ← research, postmortems, comparative code study
 ├── experimental/             ← scaffolded-but-not-validated workflow tutorials
-└── experiments/              ← per-experiment logs (hypothesis → setup → results)
+├── experiments/              ← per-experiment logs (hypothesis → setup → results)
+└── audio_iclora/             ← the audio→video IC-LoRA *training* experiment (hub + method notes)
 ```
 
 **Why this split:**
@@ -60,6 +61,9 @@ linking out (parallel-scrubbed-copy convention retired 2026-04-25).
 
 ### "I want to analyze audio / wire audio-reactive nodes"
 - Offline + runtime analysis, AudioPitchDetect: [`guides/audio_analysis_guide.md`](guides/audio_analysis_guide.md)
+
+### "I want to TRAIN an audio→video IC-LoRA (or fork the attempt)"
+- Experiment hub + method notes (process, not a working result; candid about confounds): [`audio_iclora/index.md`](audio_iclora/index.md)
 
 ### "My output looks wrong / workflow won't run"
 - **First stop**: [`guides/debugging_guide.md`](guides/debugging_guide.md) — symptom → first-check table
