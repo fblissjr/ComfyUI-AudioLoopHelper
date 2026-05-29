@@ -5,8 +5,12 @@ that's the target the model learns to match. Clips where the phase vocoder broke
 pitch track (octave flip, breathy garbage) feed a WRONG target, so drop them from the
 TRAINING manifest (keep them on disk; eval ignores them too).
 
-Drop rule (Fred): remeasured median F0 disagrees with manifest actual_f0 by >30 Hz,
-OR voiced-fraction < 0.4 (pitch track too unstable to trust).
+Drop rule: remeasured median F0 disagrees with manifest actual_f0 by >30 Hz (the pitch
+shift broke → wrong target). Voiced-fraction is REPORTED but NOT a drop gate: real speech
+has pauses/consonants/silence, so a perfectly-pitched clip routinely scores low
+voiced-frac — a hard voiced-frac<0.4 gate over-rejects ~58 fine pairs whose F0 is accurate
+to <15 Hz. F0-accuracy is the principled "is the target measurable" test; voicing density
+is not. (--min-voiced-frac defaults to 0.0 = off; raise it only to inspect.)
 
     uv run --group analysis python scripts/filter_pitch_gate_dataset.py \
         --dataset data/audio_iclora/pitch_ref_gate_v1
@@ -41,7 +45,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dataset", default="data/audio_iclora/pitch_ref_gate_v1")
     ap.add_argument("--max-f0-error", type=float, default=30.0, help="drop if |remeasured - actual_f0| exceeds this (Hz)")
-    ap.add_argument("--min-voiced-frac", type=float, default=0.4, help="drop if voiced-fraction below this")
+    ap.add_argument("--min-voiced-frac", type=float, default=0.0,
+                    help="drop if voiced-fraction below this (default 0.0 = OFF; speech is naturally sparse-voiced, "
+                         "so this over-rejects fine pairs — F0-accuracy is the real gate)")
     args = ap.parse_args()
 
     import librosa
@@ -55,7 +61,7 @@ def main() -> None:
         med, frac = measure(y)
         err = abs(med - r["actual_f0"])
         bad_f0 = err > args.max_f0_error
-        bad_voiced = frac < args.min_voiced_frac
+        bad_voiced = frac < args.min_voiced_frac  # default OFF (0.0); reported, not gated
         if bad_f0 or bad_voiced:
             reason = ("f0_drift" if bad_f0 else "") + ("+unvoiced" if bad_voiced else "")
             dropped.append({"video": r["video"], "actual_f0": r["actual_f0"],
