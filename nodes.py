@@ -4336,6 +4336,7 @@ class AudioLoopHelperExtension(ComfyExtension):
     @override
     async def get_node_list(self) -> list[type[io.ComfyNode]]:
         from .nodes_analysis import AudioPitchDetect
+        from .nodes_audio_iclora import LTXAddAudioICLoRAGuide
         from .nodes_audio_latent_slice import AudioLatentSlice
         from .nodes_easycache import LTXVideoEasyCache
         from .nodes_regional_compile import LTXVideoRegionalCompile
@@ -4364,6 +4365,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LTXHeadTrim,
             PurgeVRAM,
             AudioPitchDetect,
+            LTXAddAudioICLoRAGuide,
             LTXResolutionFromAspect,
             LTXFramePlanner,
             LTXVCropGuidesNoLatent,
