@@ -14,8 +14,12 @@ from __future__ import annotations
 
 import numpy as np
 
-# Pitch-free constant caption (the seesaw: pitch must come from the reference, not text)
-NEUTRAL_CAPTION = "a person speaking to camera"
+# Pitch-free constant caption (the seesaw: pitch must come from the reference, not text).
+# Gender-neutral ("a person" — gender↔pitch is the strongest natural leak) + no pitch words;
+# "speaking" nudges audible speech (need voiced audio to carry F0) without claiming framing
+# ("to camera" was false for the corpus's profile/off-camera clips). Reviewed by the
+# captioning specialist: leak-safe, KEEP. [audio_only_iclora_pitch_gate.md §5.2]
+NEUTRAL_CAPTION = "a person speaking"
 PITCH_BAN = ("pitch", "high", "low", "helium", "deep", "squeak", "tone", "hz", "semitone")
 
 # Output location (data/audio_iclora/pitch_ref_gate_v1/, flat clips/+references/+manifest.jsonl
