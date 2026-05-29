@@ -70,9 +70,9 @@ def convert_file(in_path: Path, out_path: Path) -> tuple[int, int]:
         metadata = f.metadata()  # None if the source has no header metadata
     sd = load_file(str(in_path))
     new_sd = convert_state_dict(sd)
-    n_renamed = sum(1 for old, new in zip(sd.keys(), new_sd.keys()) if old != new)
+    n_renamed = sum(1 for k in sd if convert_key(k) != k)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    save_file(new_sd, str(out_path), metadata=metadata or None)
+    save_file(new_sd, str(out_path), metadata=metadata)
     return len(sd), n_renamed
 
 
