@@ -18,10 +18,10 @@ the strategy is actually teaching.
 
 ## Source of truth
 
-The map for the whole effort is `internal/audio_iclora_index.md` (private clone) —
+The map for the whole effort is `internal/audio_iclora_training/index.md` (private clone) —
 read it for who owns what + the principles. Then (private clone only):
-`internal/trainer_audio_iclora_plan.md`
-(the design + the three modes), `internal/audio_iclora_status.md` (current
+`internal/audio_iclora_training/trainer_audio_iclora_plan.md`
+(the design + the three modes), `internal/audio_iclora_training/status.md` (current
 implementation state, 4090/distilled feasibility, recommended config). The code
 lives in the fork: `coderef/LTX-2/packages/ltx-trainer/` —
 `src/ltx_trainer/training_strategies/video_to_video.py` (the audio strategy),
@@ -38,7 +38,7 @@ lives in the fork: `coderef/LTX-2/packages/ltx-trainer/` —
 - **Status (2026-05-27): DATA pipeline + codecs PROVEN on the 4090**, strategy is
   plumbing-proven, learning still UNPROVEN. The full real precompute (Gemma 8bit +
   video/audio VAE + projectors, full Lightricks checkpoint) → validate runs green
-  end to end (recipe in `audio_iclora_status.md`). Unit tests cover the strategy's
+  end to end (recipe in `internal/audio_iclora_training/status.md`). Unit tests cover the strategy's
   shapes/masks/guards. The open gate is the **train-step VRAM smoke** (does the 22B
   distilled + LoRA fit + step on the 4090) → then whether it LEARNS (a real run +
   the audio-swap eval), not a test.

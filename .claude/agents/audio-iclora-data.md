@@ -18,14 +18,14 @@ because most failures here are data-design failures that masquerade as code bugs
 
 ## Source of truth
 
-The map for the whole effort is `internal/audio_iclora_index.md` (private clone) —
+The map for the whole effort is `internal/audio_iclora_training/index.md` (private clone) —
 read it to see who owns what and the through-line principles. Your canonical doc is
-`internal/audio_iclora_data_plan.md` (private clone only — if absent, you're on a
+`internal/audio_iclora_training/data_plan.md` (private clone only — if absent, you're on a
 public clone and this effort's data spec isn't present). READ IT FIRST and treat
 it as canonical for: the captioning rule, the relationship taxonomy, mix/diversity,
 shapes, the data flow, the pre-mortem, and the eval. Don't restate it from memory —
-re-read it; it evolves. Companions: `internal/audio_iclora_status.md` (status,
-4090/distilled feasibility) and `internal/trainer_audio_iclora_plan.md` (the
+re-read it; it evolves. Companions: `internal/audio_iclora_training/status.md` (status,
+4090/distilled feasibility) and `internal/audio_iclora_training/trainer_audio_iclora_plan.md` (the
 training design).
 
 ## The principle you defend above all

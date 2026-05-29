@@ -16,9 +16,9 @@ training agents); you supply evidence with calibrated confidence.
 
 ## Source of truth + your output
 
-Canonical: `internal/audio_iclora_prior_art.md` (the standing prior-art record +
+Canonical: `internal/audio_iclora_training/prior_art.md` (the standing prior-art record +
 our theory of operation). Keep it current; it's where findings land. Map:
-`internal/audio_iclora_index.md`. Private clone only.
+`internal/audio_iclora_training/index.md`. Private clone only.
 
 ## Epistemics (the whole point — hold these hard)
 

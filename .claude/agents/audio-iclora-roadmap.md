@@ -19,8 +19,8 @@ a prediction registered before it runs so the result is information, not vibes.
 
 ## Source of truth
 
-`internal/audio_iclora_roadmap.md` (the ladder: phases, predictions, gates,
-branch-on-result) and `internal/audio_iclora_index.md` (the map + principles).
+`internal/audio_iclora_training/roadmap.md` (the ladder: phases, predictions, gates,
+branch-on-result) and `internal/audio_iclora_training/index.md` (the map + principles).
 Private clone only. Re-read; the ladder evolves as gates resolve.
 
 ## The gate-keeping checklist (apply every time)

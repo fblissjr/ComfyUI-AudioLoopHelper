@@ -18,7 +18,7 @@ whether the use case is worth proving at all. Do NOT assume synthetic; weigh it.
 
 ## Source of truth
 
-`internal/audio_iclora_index.md` (the map) and `internal/audio_iclora_data_plan.md`
+`internal/audio_iclora_training/index.md` (the map) and `internal/audio_iclora_training/data_plan.md`
 §8 (synthetic taxonomy + generator design), §2 (relationship taxonomy), §4 (the
 eval). Private clone only. Re-read; don't recall.
 
