@@ -39,25 +39,21 @@ def test_patchify_parity_with_installed_ltxvideo_node():
     """If ComfyUI-LTXVideo is importable, assert byte-identical to its private
     _patchify_audio_latent. Skips cleanly when not in a comfy env."""
     import importlib.util
-    import sys
     from pathlib import Path
+
+    import pytest
 
     ltxv = Path(__file__).resolve().parents[2] / "ComfyUI-LTXVideo" / "iclora.py"
     if not ltxv.is_file():
-        import pytest
-
         pytest.skip("ComfyUI-LTXVideo not present")
-    # the function is module-level + pure (no comfy imports needed to call it), but the
-    # module imports comfy at top — so extract+exec just the function if comfy is absent.
+    # The sibling module imports comfy at top level, so it only loads inside a comfy
+    # runtime — exec it directly and skip cleanly if that import chain isn't available.
     try:
         spec = importlib.util.spec_from_file_location("_ltxv_iclora", ltxv)
         mod = importlib.util.module_from_spec(spec)
-        sys.modules["_ltxv_iclora"] = mod
         spec.loader.exec_module(mod)
         stock = mod._patchify_audio_latent
     except Exception:
-        import pytest
-
         pytest.skip("ComfyUI-LTXVideo iclora.py needs comfy runtime to import")
     latent = torch.randn(1, 8, 51, 16)
     assert torch.equal(G.patchify_audio_latent(latent)["tokens"], stock(latent)["tokens"])
