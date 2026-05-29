@@ -17,6 +17,13 @@ Corresponding workflow files live under `example_workflows/experimental/`. They 
 - **Gate for promotion:** a render confirms visible audio-driven motion on the single-shot AND a full-length loop render holds style + tracks sections without unacceptable drift.
 - **Status:** loop variant **promoted** (validated by a full-length render); single-shot preview rig stays experimental pending its own validation.
 
+### Audio→video IC-LoRA — training method notes (process, not a result)
+
+- **Notes:** [`audio_iclora_method_notes.md`](./audio_iclora_method_notes.md) — lab-notebook writeup of an attempt to *train* an audio-conditioned IC-LoRA (vs the inference-only audio-reactive workflows above).
+- **Trainer side:** the 22B-on-one-4090 block-swap trainer is a fork of Lightricks' LTX-2 training code; its overview is in that fork's `docs/audio_iclora_trainer_notes.md`.
+- **Goal:** build a reproducible *process* (data → 4090-fittable trainer → eval) others can fork — not to ship a working LoRA.
+- **Status:** pipeline runs end-to-end; the trained LoRA's audio→video behavior is **not yet cleanly measured** (renders so far are confounded by the base model's native reactivity). The notes are candid about two dataset leaks and an eval we got wrong twice, and recommend a different task (turn-left/turn-right) next. Fork and change whatever you want.
+
 ### Spectrogram-as-reference IC-LoRA (Phase 2.0)
 
 - **Tutorial:** [`spectrogram_iclora_tutorial.md`](./spectrogram_iclora_tutorial.md)
