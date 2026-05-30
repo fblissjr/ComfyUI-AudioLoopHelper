@@ -150,16 +150,17 @@ def splice(wf: dict, *, caption="a person speaking", res=256, length=121,
     byid[2483]["widgets_values"] = [caption]
     # CATCH #3: 256 sizing + generated audio length.
     # The prune severs the PrimitiveInt(length)/PrimitiveFloat(fps) -> consumer links, so the
-    # video/audio latent + createvideo fps all fall back to their OWN widgets. Set every
-    # dependent widget EXPLICITLY (don't rely on the severed primitives): otherwise stale
-    # stock vestiges go live — e.g. LTXVEmptyLatentAudio's [97,...] would size audio for 97
-    # frames while video is 121, mismatching A/V at concat. (This whole class is what the
-    # CreateVideo fps=30 bug was; Fred's fps catch surfaced it.)
+    # video/audio latent + createvideo fps fall back to their OWN widgets — set them explicitly.
+    # AUDIO LENGTH: NOT equal to video frames. The stock proven single-stage example pairs
+    # 121 VIDEO frames with 97 AUDIO frames (the audio VAE has its own temporal rate). Setting
+    # audio=video_frames was a regression — use the proven audio_frames for this video length.
+    # (For length != 121 this ratio would need re-deriving; the gate uses the stock 121/97.)
+    AUDIO_FRAMES = 97  # proven pairing for length=121 video (stock example)
     byid[3059]["widgets_values"] = [res, res, length, 1]            # EmptyLTXVLatentVideo: WxHxLx1
     if byid.get(3980):
-        byid[3980]["widgets_values"] = [length, 25, 1]              # LTXVEmptyLatentAudio: frames,fps,downscale
+        byid[3980]["widgets_values"] = [AUDIO_FRAMES, 25, 1]        # LTXVEmptyLatentAudio: frames,fps,batch
     if byid.get(4979):
-        byid[4979]["widgets_values"] = [length, "fixed"]            # PrimitiveInt length (now vestigial but keep coherent)
+        byid[4979]["widgets_values"] = [length, "fixed"]            # PrimitiveInt length (vestigial; keep coherent)
     # LoRA arm: bypass the loader for the base arm
     byid[4922]["mode"] = 0 if lora_on else 4
     if lora:
@@ -186,9 +187,9 @@ def splice(wf: dict, *, caption="a person speaking", res=256, length=121,
         _node(load_id, "LoadAudio", [], [("AUDIO", "AUDIO")], wv=[tone_wav], pos=(-400, 600)),
         _node(enc_id, "LTXVAudioVAEEncode",
               [("audio", "AUDIO"), ("audio_vae", "VAE")], [("Audio Latent", "LATENT")], pos=(-100, 600)),
-        _node(ref_id, "LTXVSetAudioRefTokens",
+        _node(ref_id, "LTXAudioSetRefTokens",  # debug-instrumented; logs ref latent + token shapes
               [("positive", "CONDITIONING"), ("negative", "CONDITIONING"), ("audio_latent", "LATENT")],
-              [("positive", "CONDITIONING"), ("negative", "CONDITIONING"), ("frozen_audio", "LATENT")],
+              [("positive", "CONDITIONING"), ("negative", "CONDITIONING")],
               pos=(200, 600)),
     ]
     # wire: LoadAudio->enc.audio ; audioVAE->enc.audio_vae ; enc->ref.audio_latent
@@ -249,8 +250,8 @@ def swap_loaders(wf: dict, *, lora=DEFAULT_LORA, lora_on=True) -> dict:
               wv=["auto", True, 1024], pos=(700, 400)),
         _node(ffn, "LTXVChunkFeedForward", [("model", "MODEL")], [("model", "MODEL")],
               wv=[2, 4096], pos=(700, 1020)),
-        _node(iclora, "LTXICLoRALoaderModelOnly", [("model", "MODEL")],
-              [("model", "MODEL"), ("latent_downscale_factor", "FLOAT")],
+        _node(iclora, "LTXAudioICLoRALoader", [("model", "MODEL")],  # debug; logs key-match telemetry
+              [("model", "MODEL")],
               wv=[lora, 1.0], pos=(1430, 400)),
         _node(vvae, "VAELoaderKJ", [], [("VAE", "VAE")], wv=[VIDEO_VAE, "main_device", "bf16"], pos=(700, 1380)),
         _node(avae, "VAELoaderKJ", [], [("VAE", "VAE")], wv=[AUDIO_VAE, "main_device", "bf16"], pos=(700, 1560)),

@@ -26,7 +26,19 @@ used (reference_strength=1.0).
 
 from __future__ import annotations
 
+import logging
+
 import torch
+
+logger = logging.getLogger("AudioICLoRA")
+
+
+def _log(msg: str) -> None:
+    """Telemetry to the ComfyUI console. Uses both logging (respects comfy's handlers) and
+    print (unmissable on stdout) since the whole point of these debug nodes is visibility."""
+    logger.info(msg)
+    print(f"[AudioICLoRA] {msg}", flush=True)
+
 
 try:
     from comfy_api.latest import io
@@ -129,12 +141,144 @@ class LTXAddAudioICLoRAGuide(io.ComfyNode):
     def execute(cls, positive, negative, audio_vae, reference_audio) -> io.NodeOutput:
         # Widen mono->stereo defensively, then encode via the audio VAE (same encoder the
         # trainer precompute used -> identical [8,T,16] latent format).
-        waveform = ensure_stereo(reference_audio["waveform"])
-        audio_in = {"waveform": waveform, "sample_rate": reference_audio["sample_rate"]}
+        raw = reference_audio["waveform"]
+        waveform = ensure_stereo(raw)
+        sr = reference_audio["sample_rate"]
+        dur = raw.shape[-1] / sr
+        _log(f"GUIDE: ref audio in {tuple(raw.shape)} @ {sr}Hz ({dur:.2f}s) -> stereo {tuple(waveform.shape)}")
+        audio_in = {"waveform": waveform, "sample_rate": sr}
         latent = audio_vae.encode(audio_in)
         samples = latent["samples"] if isinstance(latent, dict) else latent
+        _log(f"GUIDE: encoded ref latent shape {tuple(samples.shape)} dtype {samples.dtype}")
 
         ref_audio = patchify_audio_latent(samples)
+        _log(f"GUIDE: patchified ref tokens {tuple(ref_audio['tokens'].shape)} (b,t,c*f) -> attaching to pos+neg")
+        positive = node_helpers.conditioning_set_values(positive, {"ref_audio": ref_audio})
+        negative = node_helpers.conditioning_set_values(negative, {"ref_audio": ref_audio})
+        return io.NodeOutput(positive, negative)
+
+
+def _folder_paths():
+    """Lazy folder_paths import (absent under pytest -> stub so schema defs don't crash)."""
+    try:
+        import folder_paths  # type: ignore
+        return folder_paths
+    except ImportError:
+        class _FP:
+            def get_filename_list(self, _kind):
+                return []
+
+            def get_full_path_or_raise(self, _kind, name):
+                return name
+        return _FP()
+
+
+class LTXAudioICLoRALoader(io.ComfyNode):
+    """Debug-instrumented IC-LoRA loader for the AUDIO IC-LoRA. Functionally the same patch
+    path as comfy's LoraLoaderModelOnly / LTXICLoRALoaderModelOnly (key_map -> load_lora ->
+    add_patches), but logs the KEY-MATCH TELEMETRY we need: how many LoRA tensors loaded, how
+    many produced patches, how many actually applied to the model, and samples of matched +
+    UNMATCHED keys. A LoRA that produces garbage even at low strength is almost always a
+    key-mapping or quant mismatch — this node makes that visible instead of silent."""
+
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="LTXAudioICLoRALoader",
+            display_name="Audio IC-LoRA Loader (debug)",
+            category="Lightricks/IC-LoRA",
+            description=(
+                "Loads an audio IC-LoRA onto the model and logs key-match telemetry to the "
+                "console (matched / unmatched / applied counts + samples). Use to diagnose "
+                "an audio LoRA that loads but produces garbage."
+            ),
+            inputs=[
+                io.Model.Input("model"),
+                io.Combo.Input("lora_name", options=_folder_paths().get_filename_list("loras")),
+                io.Float.Input("strength_model", default=1.0, min=-100.0, max=100.0, step=0.01),
+            ],
+            outputs=[io.Model.Output("model")],
+        )
+
+    @classmethod
+    def execute(cls, model, lora_name, strength_model) -> io.NodeOutput:
+        import comfy.lora
+        import comfy.utils
+
+        fp = _folder_paths()
+        path = fp.get_full_path_or_raise("loras", lora_name)
+        lora, metadata = comfy.utils.load_torch_file(path, safe_load=True, return_metadata=True)
+        lora_keys = list(lora.keys())
+        n_tensors = len(lora_keys)
+        audio_tensors = sum(1 for k in lora_keys if "audio" in k)
+
+        _log("=" * 60)
+        _log(f"LOADER: {lora_name}  strength={strength_model}")
+        _log(f"LOADER: {n_tensors} LoRA tensors in file ({audio_tensors} contain 'audio'); metadata={dict(metadata) if metadata else None}")
+        _log(f"LOADER: sample LoRA keys: {lora_keys[:2]}")
+
+        # build the model's lora target key_map (what comfy knows how to patch on THIS model)
+        key_map = comfy.lora.model_lora_keys_unet(model.model, {})
+        n_targets = len(key_map)
+        audio_targets = sum(1 for k in key_map if "audio" in k)
+        _log(f"LOADER: model exposes {n_targets} LoRA targets ({audio_targets} contain 'audio')")
+
+        # map LoRA keys -> model patches
+        loaded = comfy.lora.load_lora(lora, key_map)  # keyed by MODEL module
+        n_patches = len(loaded)
+
+        m = model.clone()
+        applied = set(m.add_patches(loaded, strength_model))
+        n_applied = len(applied)
+        unmatched = [x for x in loaded if x not in applied]
+
+        _log(f"LOADER: {n_patches} patches built from {n_tensors} tensors; {n_applied} APPLIED to model, {len(unmatched)} not applied")
+        if n_patches == 0:
+            _log("LOADER: *** ZERO patches built — LoRA keys do NOT map to this model. "
+                 "Likely key-grammar or wrong base model. The LoRA is doing NOTHING. ***")
+        elif unmatched:
+            _log(f"LOADER: *** {len(unmatched)} patches NOT applied — sample: {unmatched[:3]} ***")
+        else:
+            sample_applied = list(applied)[:2]
+            _log(f"LOADER: all patches applied. sample target keys: {sample_applied}")
+        _log("=" * 60)
+        return io.NodeOutput(m)
+
+
+class LTXAudioSetRefTokens(io.ComfyNode):
+    """Debug-instrumented audio reference-token attach (the audio twin of LipDub's
+    LTXVSetAudioRefTokens). Takes a PRE-ENCODED audio latent, patchifies it to ref tokens,
+    attaches to pos+neg conditioning, and logs the shapes. The model applies the negative-RoPE
+    offset (matching training). Mirrors the stock node's attach exactly + adds telemetry."""
+
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="LTXAudioSetRefTokens",
+            display_name="Audio Set Ref Tokens (debug)",
+            category="Lightricks/IC-LoRA",
+            description=(
+                "Attaches a pre-encoded audio latent as reference tokens on pos+neg "
+                "conditioning (the model places them at negative temporal positions). Logs "
+                "the latent + token shapes. Debug twin of LTXVSetAudioRefTokens."
+            ),
+            inputs=[
+                io.Conditioning.Input("positive"),
+                io.Conditioning.Input("negative"),
+                io.Latent.Input("audio_latent", tooltip="Encoded audio latent (from an audio VAE encode)."),
+            ],
+            outputs=[
+                io.Conditioning.Output(display_name="positive"),
+                io.Conditioning.Output(display_name="negative"),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, positive, negative, audio_latent) -> io.NodeOutput:
+        samples = audio_latent["samples"] if isinstance(audio_latent, dict) else audio_latent
+        _log(f"REFTOKENS: audio latent {tuple(samples.shape)} (b,c,t,f) dtype {samples.dtype}")
+        ref_audio = patchify_audio_latent(samples)
+        _log(f"REFTOKENS: tokens {tuple(ref_audio['tokens'].shape)} (b,t,c*f) -> attach to pos+neg")
         positive = node_helpers.conditioning_set_values(positive, {"ref_audio": ref_audio})
         negative = node_helpers.conditioning_set_values(negative, {"ref_audio": ref_audio})
         return io.NodeOutput(positive, negative)
