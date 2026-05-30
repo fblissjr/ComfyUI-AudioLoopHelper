@@ -32,7 +32,7 @@ jobs:
         run: uv python install 3.13
 
       - name: Sync dependencies
-        run: uv sync --group dev --group analysis
+        run: uv sync --frozen --group dev --group analysis
 
       - name: pytest
         run: uv run --group dev --group analysis python -m pytest tests/ --rootdir=. -v
