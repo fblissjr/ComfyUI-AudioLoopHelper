@@ -208,6 +208,75 @@ def splice(wf: dict, *, caption="a person speaking", res=256, length=121,
     return wf
 
 
+# Proven loader stack widgets, copied verbatim from the shipped audio-loop workflow
+# (example_workflows/audio-loop-music-video_latent.json — the canonical way THIS repo drives
+# LTX 2.3). Fork's stock CheckpointLoaderSimple/LTXAVTextEncoderLoader/LTXVAudioVAELoader are
+# NOT how the repo runs; swap them for these.
+UNET_FILE = "ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors"
+VIDEO_VAE = "vae/LTX23_video_vae_bf16.safetensors"
+AUDIO_VAE = "vae/LTX23_audio_vae_bf16.safetensors"
+GEMMA = "gemma_3_12B_it_fpmixed.safetensors"
+TEXT_PROJ = "ltx-2.3_text_projection_bf16.safetensors"
+DEFAULT_LORA = "pitch_gate_audio_ref_step02000.safetensors"  # our trained IC-LoRA in models/loras/
+
+
+def swap_loaders(wf: dict, *, lora=DEFAULT_LORA, lora_on=True) -> dict:
+    """Replace the forked stock loaders with the repo's PROVEN stack (Fred's call):
+      UNETLoader(fp8 distilled) -> AudioLoopHelperSageAttention -> LTXVChunkFeedForward
+        -> LTXICLoRALoaderModelOnly(our LoRA) -> CFGGuider.model
+      VAELoaderKJ(video bf16) -> video tiled decode ; VAELoaderKJ(audio bf16) -> audio enc/dec/emptylatent
+      DualCLIPLoader(Gemma+proj) -> CLIPTextEncode x2
+    The generic LoraLoaderModelOnly is replaced by LTXICLoRALoaderModelOnly (the IC-LoRA
+    loader — applies our audio LoRA via load_lora_for_models; same key mapping).
+    """
+    # who currently consumes each loader output (capture BEFORE deleting)
+    audio_vae_consumers = [(L[3], L[4]) for L in wf["links"] if L[1] == 4010]   # (tgt, tgtslot)
+    clip_consumers = [(L[3], L[4]) for L in wf["links"] if L[1] == 4960]
+    video_vae_consumers = [(L[3], L[4]) for L in wf["links"] if L[1] == 3940 and L[2] == 2]  # VAE out
+    guider_model_tgt = (4828, 0)  # CFGGuider.model
+
+    # remove the stock loaders + the generic lora loader, and every link touching them
+    drop = {3940, 4960, 4010, 4922}
+    wf["nodes"] = [n for n in wf["nodes"] if n["id"] not in drop]
+    wf["links"] = [L for L in wf["links"] if L[1] not in drop and L[3] not in drop]
+
+    nid = max(n["id"] for n in wf["nodes"])
+    unet, sage, ffn, iclora = nid + 1, nid + 2, nid + 3, nid + 4
+    vvae, avae, clip = nid + 5, nid + 6, nid + 7
+    wf["nodes"] += [
+        _node(unet, "UNETLoader", [], [("MODEL", "MODEL")], wv=[UNET_FILE, "default"], pos=(700, 560)),
+        _node(sage, "AudioLoopHelperSageAttention", [("model", "MODEL")], [("model", "MODEL")],
+              wv=["auto", True, 1024], pos=(700, 400)),
+        _node(ffn, "LTXVChunkFeedForward", [("model", "MODEL")], [("model", "MODEL")],
+              wv=[2, 4096], pos=(700, 1020)),
+        _node(iclora, "LTXICLoRALoaderModelOnly", [("model", "MODEL")],
+              [("model", "MODEL"), ("latent_downscale_factor", "FLOAT")],
+              wv=[lora, 1.0], pos=(1430, 400)),
+        _node(vvae, "VAELoaderKJ", [], [("VAE", "VAE")], wv=[VIDEO_VAE, "main_device", "bf16"], pos=(700, 1380)),
+        _node(avae, "VAELoaderKJ", [], [("VAE", "VAE")], wv=[AUDIO_VAE, "main_device", "bf16"], pos=(700, 1560)),
+        _node(clip, "DualCLIPLoader", [], [("CLIP", "CLIP")], wv=[GEMMA, TEXT_PROJ, "ltxv", "default"], pos=(700, 692)),
+    ]
+    if not lora_on:
+        byid2 = {n["id"]: n for n in wf["nodes"]}
+        byid2[iclora]["mode"] = 4  # base arm: bypass the IC-LoRA loader
+
+    # model chain
+    _add_link(wf, unet, 0, sage, 0, "MODEL")
+    _add_link(wf, sage, 0, ffn, 0, "MODEL")
+    _add_link(wf, ffn, 0, iclora, 0, "MODEL")
+    _add_link(wf, iclora, 0, guider_model_tgt[0], guider_model_tgt[1], "MODEL")
+    # VAE + CLIP rewires onto the new loaders
+    for tgt, slot in video_vae_consumers:
+        _add_link(wf, vvae, 0, tgt, slot, "VAE")
+    for tgt, slot in audio_vae_consumers:
+        _add_link(wf, avae, 0, tgt, slot, "VAE")
+    for tgt, slot in clip_consumers:
+        _add_link(wf, clip, 0, tgt, slot, "CLIP")
+
+    _normalize_link_fields(wf)
+    return wf
+
+
 def validate(wf: dict) -> list[str]:
     """Simulate execution: link integrity + topo-sort (cycle detect) + sink reachability."""
     errs = []
@@ -283,6 +352,9 @@ def main() -> None:
     print(f"pruned to distilled chain: {len(wf['nodes'])} nodes, {len(wf['links'])} links")
     wf = splice(wf, lora_on=True, prefix="pitch_gate/lora_template")
     print(f"spliced (audio-ref + t2v rewire + caption): {len(wf['nodes'])} nodes, {len(wf['links'])} links")
+    wf = swap_loaders(wf, lora_on=True)
+    print(f"swapped to proven loader stack (UNET+sage+ffn+IC-LoRA+VAELoaderKJ+DualCLIP): "
+          f"{len(wf['nodes'])} nodes, {len(wf['links'])} links")
     # Local pre-filter: a fast, dependency-free fail-early (cycle / unwired / sink). NOT the
     # authoritative gate — `scripts/audit_workflows.py` is (it caught link-array desync +
     # frame_rate + decode that this pre-filter missed). Always run the audit on the output.
