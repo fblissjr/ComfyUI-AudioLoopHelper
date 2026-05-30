@@ -118,3 +118,72 @@ def test_guide_encode_is_channels_last_tensor_at_vae_rate():
     assert arg.shape[-1] == 2, f"not channels-last stereo: {tuple(arg.shape)}"
     # resampled to the VAE rate: 16000 -> 44100 lengthens the sample axis
     assert arg.shape[1] > 16000, f"not resampled to {vae.audio_sample_rate}: {tuple(arg.shape)}"
+
+
+def test_set_ref_tokens_attaches_patchified_to_both(monkeypatch):
+    """LTXAudioSetRefTokens is the node the EVAL WORKFLOW actually uses (the guide node is the
+    all-in-one alternative). It takes a PRE-encoded audio latent, patchifies it, and attaches the
+    SAME ref_audio tokens to BOTH positive and negative conditioning. This locks that contract,
+    independent of comfy's real node_helpers, by recording what gets attached."""
+    calls = []
+
+    def rec(cond, values):
+        calls.append((cond, values))
+        return cond
+
+    monkeypatch.setattr(G.node_helpers, "conditioning_set_values", rec)
+
+    samples = torch.randn(1, 8, 51, 16)
+    out = G.LTXAudioSetRefTokens.execute(positive="POS", negative="NEG", audio_latent={"samples": samples})
+
+    # exactly two attaches: positive then negative, each carrying ref_audio
+    assert [c[0] for c in calls] == ["POS", "NEG"], "must attach to positive then negative"
+    expected = G.patchify_audio_latent(samples)["tokens"]
+    for _cond, values in calls:
+        assert "ref_audio" in values, "did not set ref_audio on conditioning"
+        assert torch.equal(values["ref_audio"]["tokens"], expected), "attached tokens are not the patchified latent"
+    assert len(out) == 2, "must return (positive, negative)"
+
+
+def test_lora_grammar_accepts_valid_keys():
+    """The audio IC-LoRA grammar comfy can map: diffusion_model.<...>.lora_A/lora_B.weight."""
+    keys = [f"diffusion_model.transformer_blocks.{i}.audio_attn1.to_q.lora_A.weight" for i in range(3)]
+    keys += ["diffusion_model.transformer_blocks.0.audio_ff.net.2.lora_B.weight"]
+    assert G.lora_grammar_problems(keys) == []
+
+
+def test_lora_grammar_flags_wrong_grammar():
+    """A checkpoint in the wrong key grammar (lora_down/up, no diffusion_model prefix) would bind
+    nothing; the gate must catch it with a clear reason."""
+    bad = ["transformer.blocks.0.attn.lora_down.weight", "lora_unet_x.lora_up.weight"]
+    problems = G.lora_grammar_problems(bad)
+    assert problems and "lora_A/lora_B" in problems[0]
+
+
+def test_lora_grammar_flags_empty():
+    assert G.lora_grammar_problems([]) == ["empty state dict (no keys)"]
+
+
+def test_shipped_lora_passes_grammar_if_present():
+    """If the trained checkpoint is discoverable here, its keys must pass the grammar gate (the
+    necessary condition for the loader to bind it). Skips when not present, so it stays portable
+    but becomes a real check inside the ComfyUI runtime."""
+    from pathlib import Path
+
+    import pytest
+
+    path = None
+    try:
+        import folder_paths  # only importable inside a comfy runtime
+
+        path = folder_paths.get_full_path("loras", "pitch_gate_audio_ref_step02000.safetensors")
+    except Exception:
+        path = None
+    if not path or not Path(path).is_file():
+        pytest.skip("trained checkpoint not discoverable in this env")
+
+    from safetensors import safe_open
+
+    with safe_open(path, framework="pt") as h:
+        keys = list(h.keys())
+    assert G.lora_grammar_problems(keys) == [], "shipped LoRA fails the comfy LoRA grammar gate"

@@ -1,49 +1,29 @@
-Last updated: 2026-05-29
+Last updated: 2026-05-30
 
-# Audio→video IC-LoRA training experiment — index
+# Audio-only IC-LoRA ("helium")
 
-A self-contained record of an attempt to **train** a small audio-conditioned
-IC-LoRA on LTX 2.3, on hardware a solo person owns (a single 24 GB GPU). The point
-was to build a *reproducible process* others can fork — not to ship a working LoRA.
-We have not shown the trained LoRA does anything useful; these docs are honest about
-why, and where to go next.
-
-This is distinct from the **inference-only** audio-reactive work (no training), which
-already works and is documented separately — see
-[`../experimental/audio_reactive_workflows.md`](../experimental/audio_reactive_workflows.md).
+The current effort: an audio-only IC-LoRA on LTX-2.3-22B (distilled) where an in-context reference
+**tone** steers the pitch of the jointly-generated speech. No image or video reference. Experimental,
+very much a proof of concept (whether it cleanly steers pitch at inference is still under evaluation).
 
 ## Start here
 
-- **[`method_notes.md`](./method_notes.md)** — the lab-notebook writeup. What we
-  built, how it works, the dataset evolution (v1→v2→v3) and the two leaks we hit,
-  the eval confounds we got wrong twice, the missing audio-reference node, and the
-  turn-left/turn-right task we'd try next. Read this first.
+- **[`audio_only_ic_lora.md`](./audio_only_ic_lora.md)**: how the custom nodes work, how to run it in
+  ComfyUI, how to evaluate it (the F0-tracking gate), and the automated trust gates that keep a broken
+  setup from producing a meaningless result. Read this first.
 
-## The work spans two repos
+## Where the pieces live
 
 | Half | Where | What |
 |---|---|---|
-| **Data + eval + ComfyUI inference** | this repo | synthetic data design, the audio-swap eval idea, the LoRA→ComfyUI converter, the canonical audio-loop workflow the LoRA loads into |
-| **Trainer** | the LTX-2 fork (a fork of Lightricks' LTX-2 training code) | block-swap fitting the 22B distilled model on one 24 GB GPU, the `condition`-mode strategy + audio-only target modules, the synthetic dataset builders, the pre-train validator |
+| Nodes + eval + ComfyUI | this repo | `nodes_audio_iclora.py` (the loader + reference-token nodes), the eval workflow builder, the F0 gate |
+| Trainer + model card | the LTX-2 fork ([fblissjr/LTX-2 @ audio-guidance-iclora-vtv](https://github.com/fblissjr/LTX-2/tree/audio-guidance-iclora-vtv)) | the `audio_reference` training strategy, the data recipe, the published model card + checkpoints |
 
-The trainer-side overview lives in that fork's `docs/audio_iclora_trainer_notes.md`.
-(Same author; not duplicated here to avoid drift from the code it describes.)
+## Prior experiments
 
-## The one-paragraph summary
+[`prior_experiments/`](./prior_experiments/) holds the earlier audio→**video** coupling direction
+(beat→pulse, turn-left / turn-right). It is superseded by the audio→audio pitch work above, kept for the
+process notes and the eval confounds documented along the way.
 
-LTX 2.3 is already audio-reactive natively (frozen audio drives video through joint
-cross-attention — works with zero training). The IC-LoRA idea was to *tighten* that,
-or couple to something the base doesn't already do, by training a small adapter. The
-machinery works end-to-end (data → 4090-fittable trainer → ComfyUI load). What we
-have **not** done is cleanly measure whether the LoRA adds anything beyond the base
-model's native reactivity — every render so far is confounded, and the synthetic
-beat→pulse task turned out to be a poor mechanism-prover precisely *because* the base
-already does it. The reusable contributions are the block-swap training path, the
-data-independence discipline, and the documented confounds. Fork and change whatever
-you want.
-
-## Related (in this repo)
-
-- Inference-only audio-reactive workflows: [`../experimental/audio_reactive_workflows.md`](../experimental/audio_reactive_workflows.md)
-- Two-pass audio-guides-video (ADR) design: `example_workflows/working_docs/combined_adr_workflow_design.md`
-- Spectrogram-as-reference IC-LoRA experiment: [`../experimental/spectrogram_iclora_tutorial.md`](../experimental/spectrogram_iclora_tutorial.md)
+Distinct from the inference-only audio-reactive work (no training, works today):
+[`../experimental/audio_reactive_workflows.md`](../experimental/audio_reactive_workflows.md).

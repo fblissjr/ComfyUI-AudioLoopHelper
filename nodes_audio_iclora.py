@@ -27,6 +27,7 @@ used (reference_strength=1.0).
 from __future__ import annotations
 
 import logging
+import re
 
 import torch
 
@@ -89,6 +90,26 @@ def ensure_stereo(waveform: torch.Tensor) -> torch.Tensor:
         repeats[1] = 2
         return waveform.repeat(*repeats)
     return waveform
+
+
+_LORA_KEY_RE = re.compile(r"^diffusion_model\..+\.lora_(A|B)\.weight$")
+
+
+def lora_grammar_problems(keys) -> list[str]:
+    """Necessary condition for comfy to map an LTX LoRA onto the model: every key must be
+    'diffusion_model.<...>.lora_A/lora_B.weight'. Returns the reasons it is not (an empty list
+    means the grammar is OK). Pure and offline, so it both unit-tests and gives the runtime
+    loader a precise diagnostic when a LoRA binds nothing to the model."""
+    keys = list(keys)
+    if not keys:
+        return ["empty state dict (no keys)"]
+    bad = [k for k in keys if not _LORA_KEY_RE.match(k)]
+    if bad:
+        return [
+            f"{len(bad)}/{len(keys)} keys are not 'diffusion_model....lora_A/lora_B.weight' "
+            f"(e.g. {sorted(bad)[:3]})"
+        ]
+    return []
 
 
 class LTXAddAudioICLoRAGuide(io.ComfyNode):
@@ -254,12 +275,24 @@ class LTXAudioICLoRALoader(io.ComfyNode):
         model_side_unapplied = [x for x in loaded if x not in applied]
 
         _log(f"LOADER: {n_patches} patches built from {n_tensors} tensors; {n_applied} APPLIED to model")
-        if n_patches == 0:
-            _log("LOADER: *** ZERO patches built — LoRA keys do NOT map to this model. "
-                 "Likely key-grammar or wrong base model. The LoRA is doing NOTHING. ***")
-        elif model_side_unapplied:
-            _log(f"LOADER: *** {len(model_side_unapplied)} built patches NOT applied (model-side miss) "
-                 f"— sample: {model_side_unapplied[:3]} ***")
+        # AUTOMATED TRUST GATE: a LoRA that binds to nothing makes the eval silently meaningless
+        # (it looks exactly like a null result). Refuse to return a no-op model. Fail loud so an
+        # eval can never run with a dead adapter. The offline half of this check is
+        # lora_grammar_problems() (unit-tested); this is the runtime half that needs the real
+        # model + key map, so it can't be tested without a GPU but it CAN refuse to proceed.
+        if n_applied == 0:
+            grammar = lora_grammar_problems(lora_keys)
+            why = "; ".join(grammar) if grammar else "grammar looks right, so most likely the wrong base model"
+            _log("=" * 60)
+            raise RuntimeError(
+                f"LTXAudioICLoRALoader: '{lora_name}' bound ZERO patches to the model "
+                f"({n_tensors} tensors in file, {n_patches} built, model exposes {n_targets} LoRA "
+                f"targets). The LoRA is doing NOTHING, so the eval would be meaningless. "
+                f"Cause: {why}. Sample LoRA keys: {lora_keys[:3]}."
+            )
+        if model_side_unapplied:
+            _log(f"LOADER: *** {len(model_side_unapplied)} built patches NOT applied (model-side miss), "
+                 f"sample: {model_side_unapplied[:3]} ***")
         else:
             _log(f"LOADER: all {n_applied} built patches applied. sample target keys: {list(applied)[:2]} "
                  f"(any file-side key misses are logged above by load_lora)")

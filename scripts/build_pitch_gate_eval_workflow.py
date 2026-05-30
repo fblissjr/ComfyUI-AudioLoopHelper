@@ -182,15 +182,10 @@ def splice(wf: dict, *, caption="a person speaking", res=256, length=121,
         wv = byid[4922].get("widgets_values") or ["", 1.0]
         wv[0] = lora
         byid[4922]["widgets_values"] = wv
-    # static per-condition prefix
-    byid[4852]["widgets_values"] = [prefix, "auto", "auto"]
-    # fps: CreateVideo's fps input is unwired after prune (PrimitiveFloat link severed) so it
-    # falls back to its own widget — force 25 to match LTXVConditioning/audio-latent fps.
-    # At 30 the 121-frame video = 4.03s vs ~4.84s audio, so ffmpeg -shortest would CLIP the
-    # audio and shrink the F0 measurement window. (The repo audit's fps_coherence allowlist
-    # doesn't cover the comfy-core CreateVideo node, so it missed this — Fred caught it.)
-    if byid.get(4849):
-        byid[4849]["widgets_values"] = [25]
+    # Save path: the stock CreateVideo (#4849) + SaveVideo (#4852) are removed and replaced by a
+    # single VHS_VideoCombine in swap_save_to_vhs() below. It muxes the decoded video frames +
+    # decoded audio into an mp4 at fps=25 (the way this repo saves elsewhere), and sets the
+    # per-condition filename prefix on the VHS node, so there's nothing to set on them here.
 
     # CATCH #4 / the one gap: t2v rewire EmptyLTXVLatentVideo -> Concat.video_latent
     _add_link(wf, 3059, 0, 4528, 0, "LATENT")
@@ -269,7 +264,11 @@ def swap_loaders(wf: dict, *, lora=DEFAULT_LORA, lora_on=True) -> dict:
               [("model", "MODEL")],
               wv=[lora, 1.0], pos=(1430, 400)),
         _node(vvae, "VAELoaderKJ", [], [("VAE", "VAE")], wv=[VIDEO_VAE, "main_device", "bf16"], pos=(700, 1380)),
-        _node(avae, "VAELoaderKJ", [], [("VAE", "VAE")], wv=[AUDIO_VAE, "main_device", "bf16"], pos=(700, 1560)),
+        # Audio VAE in FP32: training encoded the reference tone (and target audio) through the
+        # audio VAE in float32, so the eval must too, or the reference latent drifts off what the
+        # LoRA trained on (the model card's "running it" note). Video VAE stays bf16 (it only
+        # decodes output frames, where the precision-parity argument doesn't apply).
+        _node(avae, "VAELoaderKJ", [], [("VAE", "VAE")], wv=[AUDIO_VAE, "main_device", "fp32"], pos=(700, 1560)),
         _node(clip, "DualCLIPLoader", [], [("CLIP", "CLIP")], wv=[GEMMA, TEXT_PROJ, "ltxv", "default"], pos=(700, 692)),
     ]
     if not lora_on:
@@ -289,6 +288,44 @@ def swap_loaders(wf: dict, *, lora=DEFAULT_LORA, lora_on=True) -> dict:
     for tgt, slot in clip_consumers:
         _add_link(wf, clip, 0, tgt, slot, "CLIP")
 
+    _normalize_link_fields(wf)
+    return wf
+
+
+def swap_save_to_vhs(wf: dict, *, prefix: str, fps: int = 25) -> dict:
+    """Replace the stock CreateVideo (#4849) + SaveVideo (#4852) chain with one
+    VHS_VideoCombine (VideoHelperSuite) that muxes the decoded video frames + decoded audio
+    into an mp4 in a single node — the way this repo saves elsewhere
+    (example_workflows/audio-loop-music-video_latent.json). Frames come from the tiled video
+    decode (#4982), audio from the audio decode (#4848). VHS owns fps + the filename prefix +
+    the audio mux, which also sidesteps the CreateVideo fps / ffmpeg -shortest footguns."""
+    drop = {4849, 4852}  # CreateVideo, SaveVideo
+    wf["nodes"] = [n for n in wf["nodes"] if n["id"] not in drop]
+    wf["links"] = [L for L in wf["links"] if L[1] not in drop and L[3] not in drop]
+
+    vid = max(n["id"] for n in wf["nodes"]) + 1
+    wf["nodes"].append(
+        _node(
+            vid, "VHS_VideoCombine",
+            [("images", "IMAGE"), ("audio", "AUDIO")],
+            [("Filenames", "VHS_FILENAMES")],
+            wv={
+                "frame_rate": fps,
+                "loop_count": 0,
+                "filename_prefix": prefix,
+                "format": "video/h264-mp4",
+                "pix_fmt": "yuv420p",
+                "crf": 19,
+                "save_metadata": True,
+                "trim_to_audio": True,
+                "pingpong": False,
+                "save_output": True,
+            },
+            pos=(2200, 400),
+        )
+    )
+    _add_link(wf, 4982, 0, vid, 0, "IMAGE")   # tiled video decode -> VHS.images
+    _add_link(wf, 4848, 0, vid, 1, "AUDIO")   # audio VAE decode    -> VHS.audio
     _normalize_link_fields(wf)
     return wf
 
@@ -370,6 +407,9 @@ def main() -> None:
     print(f"spliced (audio-ref + t2v rewire + caption): {len(wf['nodes'])} nodes, {len(wf['links'])} links")
     wf = swap_loaders(wf, lora_on=True)
     print(f"swapped to proven loader stack (UNET+sage+ffn+IC-LoRA+VAELoaderKJ+DualCLIP): "
+          f"{len(wf['nodes'])} nodes, {len(wf['links'])} links")
+    wf = swap_save_to_vhs(wf, prefix="pitch_gate/lora_template")
+    print(f"swapped save -> VHS_VideoCombine (mux video+audio): "
           f"{len(wf['nodes'])} nodes, {len(wf['links'])} links")
     # Local pre-filter: a fast, dependency-free fail-early (cycle / unwired / sink). NOT the
     # authoritative gate — `scripts/audit_workflows.py` is (it caught link-array desync +
