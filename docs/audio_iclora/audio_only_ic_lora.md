@@ -39,10 +39,10 @@ steer an attribute without being something the model has to reproduce frame-for-
    the positive and negative conditioning. Keep the caption constant and pitch-free.
 4. Generate audio and video together (do not freeze the audio latent). Save with `VHS_VideoCombine` so the
    video and audio are muxed into one file.
-5. One precision detail that matters: encode the reference through the audio VAE in **fp32**, matching how the
-   training data was encoded. The LoRA itself is bf16; it is specifically the audio-VAE encode of the
-   reference that should be fp32, since a lower-precision encode nudges the reference latent off what the
-   model trained on.
+5. Precision: the reference is encoded by the audio VAE in **fp32**, matching how the training data was
+   encoded. You do not have to set anything for this. comfy always runs the LTX audio VAE in float32 (it
+   forces it, and VAELoaderKJ's audio path ignores the dtype widget), so the parity holds automatically. The
+   LoRA itself is bf16.
 
 ## How to evaluate it (the F0-tracking gate)
 
@@ -68,7 +68,8 @@ positive into a mirage. These checks fail loud rather than silently:
 - **Grammar gate (offline, unit-tested):** `lora_grammar_problems()` checks the checkpoint is the
   `diffusion_model.<...>.lora_A/lora_B.weight` grammar comfy can map, the necessary condition for the loader
   to bind it.
-- **Reference-encode parity:** the eval loads the audio VAE in fp32 to match the training encode.
+- **Reference-encode parity:** the audio VAE runs in fp32 (comfy forces float32 for the LTX audio VAE),
+  matching the training encode, so the reference latent does not drift off what the LoRA trained on.
 - **Patchify parity:** the reference-token layout is byte-identical to the stock node (the train/inference
   parity), confirmed against the stock source.
 - Tests: `tests/test_audio_iclora_guide.py` (the patchify contract and parity, the reference-token attach,

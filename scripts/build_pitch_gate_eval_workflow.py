@@ -264,10 +264,11 @@ def swap_loaders(wf: dict, *, lora=DEFAULT_LORA, lora_on=True) -> dict:
               [("model", "MODEL")],
               wv=[lora, 1.0], pos=(1430, 400)),
         _node(vvae, "VAELoaderKJ", [], [("VAE", "VAE")], wv=[VIDEO_VAE, "main_device", "bf16"], pos=(700, 1380)),
-        # Audio VAE in FP32: training encoded the reference tone (and target audio) through the
-        # audio VAE in float32, so the eval must too, or the reference latent drifts off what the
-        # LoRA trained on (the model card's "running it" note). Video VAE stays bf16 (it only
-        # decodes output frames, where the precision-parity argument doesn't apply).
+        # Audio VAE: comfy ALWAYS runs the LTX audio VAE in float32 regardless of this widget
+        # (comfy.sd.VAE forces working_dtypes=[float32] for it, and VAELoaderKJ's audio branch
+        # drops the dtype arg entirely). Training encoded the reference + target audio in fp32, so
+        # that parity already holds for free. The "fp32" widget here just makes the value match
+        # reality and document intent; it is NOT the mechanism. Video VAE stays bf16 (output decode).
         _node(avae, "VAELoaderKJ", [], [("VAE", "VAE")], wv=[AUDIO_VAE, "main_device", "fp32"], pos=(700, 1560)),
         _node(clip, "DualCLIPLoader", [], [("CLIP", "CLIP")], wv=[GEMMA, TEXT_PROJ, "ltxv", "default"], pos=(700, 692)),
     ]
