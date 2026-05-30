@@ -148,10 +148,18 @@ def splice(wf: dict, *, caption="a person speaking", res=256, length=121,
     byid[3940]["widgets_values"] = [distilled]
     # constant caption (positive); negative kept generic
     byid[2483]["widgets_values"] = [caption]
-    # CATCH #3: 256 sizing + generated audio length
-    byid[3059]["widgets_values"] = [res, res, length, 1]
+    # CATCH #3: 256 sizing + generated audio length.
+    # The prune severs the PrimitiveInt(length)/PrimitiveFloat(fps) -> consumer links, so the
+    # video/audio latent + createvideo fps all fall back to their OWN widgets. Set every
+    # dependent widget EXPLICITLY (don't rely on the severed primitives): otherwise stale
+    # stock vestiges go live — e.g. LTXVEmptyLatentAudio's [97,...] would size audio for 97
+    # frames while video is 121, mismatching A/V at concat. (This whole class is what the
+    # CreateVideo fps=30 bug was; Fred's fps catch surfaced it.)
+    byid[3059]["widgets_values"] = [res, res, length, 1]            # EmptyLTXVLatentVideo: WxHxLx1
+    if byid.get(3980):
+        byid[3980]["widgets_values"] = [length, 25, 1]              # LTXVEmptyLatentAudio: frames,fps,downscale
     if byid.get(4979):
-        byid[4979]["widgets_values"] = [length, "fixed"]
+        byid[4979]["widgets_values"] = [length, "fixed"]            # PrimitiveInt length (now vestigial but keep coherent)
     # LoRA arm: bypass the loader for the base arm
     byid[4922]["mode"] = 0 if lora_on else 4
     if lora:
@@ -160,6 +168,13 @@ def splice(wf: dict, *, caption="a person speaking", res=256, length=121,
         byid[4922]["widgets_values"] = wv
     # static per-condition prefix
     byid[4852]["widgets_values"] = [prefix, "auto", "auto"]
+    # fps: CreateVideo's fps input is unwired after prune (PrimitiveFloat link severed) so it
+    # falls back to its own widget — force 25 to match LTXVConditioning/audio-latent fps.
+    # At 30 the 121-frame video = 4.03s vs ~4.84s audio, so ffmpeg -shortest would CLIP the
+    # audio and shrink the F0 measurement window. (The repo audit's fps_coherence allowlist
+    # doesn't cover the comfy-core CreateVideo node, so it missed this — Fred caught it.)
+    if byid.get(4849):
+        byid[4849]["widgets_values"] = [25]
 
     # CATCH #4 / the one gap: t2v rewire EmptyLTXVLatentVideo -> Concat.video_latent
     _add_link(wf, 3059, 0, 4528, 0, "LATENT")
