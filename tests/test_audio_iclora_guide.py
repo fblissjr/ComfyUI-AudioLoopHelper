@@ -81,3 +81,40 @@ def test_node_registered():
     from _node_registry import assert_node_registered
 
     assert_node_registered("LTXAddAudioICLoRAGuide")
+
+
+class _RecordingVAE:
+    """Fake audio VAE that records exactly what .encode() is handed — to lock the
+    stock-VAEEncodeAudio invocation contract (channels-last TENSOR at the VAE sample rate,
+    NOT a dict). This is the execute-level test the earlier patchify-only tests lacked,
+    which let the dict/no-movedim/no-resample garbage bug through."""
+
+    audio_sample_rate = 44100
+
+    def __init__(self):
+        self.encode_arg = None
+
+    def encode(self, x):
+        self.encode_arg = x
+        # mimic comfy's audio VAE: returns a [b, 8, t, 16] latent tensor
+        b = x.shape[0]
+        return torch.zeros(b, 8, 5, 16)
+
+
+def test_guide_encode_is_channels_last_tensor_at_vae_rate():
+    """The guide must hand audio_vae.encode a channels-LAST TENSOR resampled to the VAE's
+    rate — mirroring stock VAEEncodeAudio. A dict, or [b,c,n] (channels-first), or the wrong
+    sample rate all produce garbage latents (the LTX-2-diagnosed bug)."""
+    vae = _RecordingVAE()
+    # mono 16 kHz tone (our reference format); VAE wants 44100 stereo channels-last
+    ref_audio = {"waveform": torch.randn(1, 1, 16000), "sample_rate": 16000}
+    G.LTXAddAudioICLoRAGuide.execute(
+        positive=[], negative=[], audio_vae=vae, reference_audio=ref_audio
+    )
+    arg = vae.encode_arg
+    assert arg is not None, "audio_vae.encode was never called"
+    assert isinstance(arg, torch.Tensor), f"encode got a {type(arg)}, not a tensor (the dict bug)"
+    # channels-last: after movedim(1,-1) on [b,c,n] -> [b,n,c], last dim == channels (2 after stereo)
+    assert arg.shape[-1] == 2, f"not channels-last stereo: {tuple(arg.shape)}"
+    # resampled to the VAE rate: 16000 -> 44100 lengthens the sample axis
+    assert arg.shape[1] > 16000, f"not resampled to {vae.audio_sample_rate}: {tuple(arg.shape)}"

@@ -141,13 +141,23 @@ class LTXAddAudioICLoRAGuide(io.ComfyNode):
     def execute(cls, positive, negative, audio_vae, reference_audio) -> io.NodeOutput:
         # Widen mono->stereo defensively, then encode via the audio VAE (same encoder the
         # trainer precompute used -> identical [8,T,16] latent format).
+        import torchaudio
+
         raw = reference_audio["waveform"]
-        waveform = ensure_stereo(raw)
         sr = reference_audio["sample_rate"]
         dur = raw.shape[-1] / sr
-        _log(f"GUIDE: ref audio in {tuple(raw.shape)} @ {sr}Hz ({dur:.2f}s) -> stereo {tuple(waveform.shape)}")
-        audio_in = {"waveform": waveform, "sample_rate": sr}
-        latent = audio_vae.encode(audio_in)
+        # Mirror the STOCK VAEEncodeAudio.execute invocation EXACTLY (the authoritative path):
+        #   1) widen mono->stereo on [b,c,n] BEFORE movedim,
+        #   2) resample to the VAE's own sample rate (default 44100), and
+        #   3) hand vae.encode a channels-LAST TENSOR (movedim(1,-1)) — NOT a {"waveform":...} dict.
+        # The earlier dict/no-movedim/no-resample form produced garbage latents (LTX-2 caught it).
+        waveform = ensure_stereo(raw)  # [b,c,n]
+        vae_sr = getattr(audio_vae, "audio_sample_rate", 44100)
+        if vae_sr != sr:
+            waveform = torchaudio.functional.resample(waveform, sr, vae_sr)
+        _log(f"GUIDE: ref audio {tuple(raw.shape)} @ {sr}Hz ({dur:.2f}s) -> stereo {tuple(waveform.shape)}, "
+             f"vae_sr={vae_sr} (resampled={vae_sr != sr}); encoding channels-last")
+        latent = audio_vae.encode(waveform.movedim(1, -1))  # channels-last tensor
         samples = latent["samples"] if isinstance(latent, dict) else latent
         _log(f"GUIDE: encoded ref latent shape {tuple(samples.shape)} dtype {samples.dtype}")
 
