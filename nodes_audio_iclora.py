@@ -213,11 +213,17 @@ class LTXAudioICLoRALoader(io.ComfyNode):
     @classmethod
     def execute(cls, model, lora_name, strength_model) -> io.NodeOutput:
         import comfy.lora
+        import comfy.lora_convert
         import comfy.utils
 
         fp = _folder_paths()
         path = fp.get_full_path_or_raise("loras", lora_name)
         lora, metadata = comfy.utils.load_torch_file(path, safe_load=True, return_metadata=True)
+        # Mirror the production load path EXACTLY (comfy.sd.load_lora_for_models runs
+        # convert_lora before load_lora). For our diffusion_model.…lora_A/lora_B grammar
+        # convert_lora is a verified no-op, but this diagnostic loader must report what the
+        # REAL loader does — so run the same step (code-review H1/parity #4).
+        lora = comfy.lora_convert.convert_lora(lora)
         lora_keys = list(lora.keys())
         n_tensors = len(lora_keys)
         audio_tensors = sum(1 for k in lora_keys if "audio" in k)
@@ -240,17 +246,23 @@ class LTXAudioICLoRALoader(io.ComfyNode):
         m = model.clone()
         applied = set(m.add_patches(loaded, strength_model))
         n_applied = len(applied)
-        unmatched = [x for x in loaded if x not in applied]
+        # `loaded` is keyed by MODEL modules that already matched key_map, so add_patches
+        # applies ~all of them — built-but-unapplied is the rare model-side miss. The
+        # FILE-side signal (LoRA tensors that mapped to NO target) is the one that matters,
+        # and comfy.lora.load_lora already logs each as "lora key not loaded"; the n_patches
+        # vs n_tensors gap is its summary (960 tensors -> 480 paired patches == full match).
+        model_side_unapplied = [x for x in loaded if x not in applied]
 
-        _log(f"LOADER: {n_patches} patches built from {n_tensors} tensors; {n_applied} APPLIED to model, {len(unmatched)} not applied")
+        _log(f"LOADER: {n_patches} patches built from {n_tensors} tensors; {n_applied} APPLIED to model")
         if n_patches == 0:
             _log("LOADER: *** ZERO patches built — LoRA keys do NOT map to this model. "
                  "Likely key-grammar or wrong base model. The LoRA is doing NOTHING. ***")
-        elif unmatched:
-            _log(f"LOADER: *** {len(unmatched)} patches NOT applied — sample: {unmatched[:3]} ***")
+        elif model_side_unapplied:
+            _log(f"LOADER: *** {len(model_side_unapplied)} built patches NOT applied (model-side miss) "
+                 f"— sample: {model_side_unapplied[:3]} ***")
         else:
-            sample_applied = list(applied)[:2]
-            _log(f"LOADER: all patches applied. sample target keys: {sample_applied}")
+            _log(f"LOADER: all {n_applied} built patches applied. sample target keys: {list(applied)[:2]} "
+                 f"(any file-side key misses are logged above by load_lora)")
         _log("=" * 60)
         return io.NodeOutput(m)
 

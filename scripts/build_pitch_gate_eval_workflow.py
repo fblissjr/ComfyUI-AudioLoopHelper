@@ -138,9 +138,14 @@ def splice(wf: dict, *, caption="a person speaking", res=256, length=121,
 
     # CATCH #1: euler, not euler_ancestral
     byid[4831]["widgets_values"] = ["euler"]
-    # F16: LTXVConditioning.frame_rate must be 25 (canonical LTX 2.3), not the stock 24;
-    # also resolves fps_coherence vs the audio latent (25).
-    byid[1241]["widgets_values"] = [25]
+    # F16: LTXVConditioning.frame_rate must be 25 (canonical LTX 2.3), not the stock 24.
+    # IMPORTANT (code-review H2): 1241.frame_rate has a LIVE link from PrimitiveFloat #4978
+    # that SURVIVES prune (both in KEEP) — and a live link WINS over the widget. So setting
+    # the 1241 widget alone is DEAD; the real fps source is #4978 (stock value 24). Drive the
+    # actual source. (The earlier "fps=25" fix only set the dead widget — this is the real fix.)
+    byid[1241]["widgets_values"] = [25]            # belt: correct if the link is ever severed
+    if byid.get(4978):
+        byid[4978]["widgets_values"] = [25.0]      # suspenders: the LIVE driver of frame_rate
     # vae_decode_no_tile: [1,1,1] single-tile on 24GB+ (3x faster cold-pass)
     if byid.get(4982):
         byid[4982]["widgets_values"] = [1, 1, 1, False, "auto", "auto"]
@@ -156,6 +161,16 @@ def splice(wf: dict, *, caption="a person speaking", res=256, length=121,
     # audio=video_frames was a regression — use the proven audio_frames for this video length.
     # (For length != 121 this ratio would need re-deriving; the gate uses the stock 121/97.)
     AUDIO_FRAMES = 97  # proven pairing for length=121 video (stock example)
+    # The 121:97 video:audio pairing is the only one this builder has validated. `length` is a
+    # parameter but AUDIO_FRAMES is fixed — a mismatched length desyncs audio/video duration and
+    # ffmpeg -shortest then clips the F0 measurement window. Fail loud instead of silently
+    # mis-pairing (code-review MED-3). Re-derive the audio-frame count before raising `length`.
+    if length != 121:
+        raise ValueError(
+            f"length={length} but AUDIO_FRAMES is hardcoded to 97 (the validated 121:97 "
+            f"video:audio pairing). Re-derive the audio-frame count for this video length "
+            f"before changing `length`, or audio/video durations desync."
+        )
     byid[3059]["widgets_values"] = [res, res, length, 1]            # EmptyLTXVLatentVideo: WxHxLx1
     if byid.get(3980):
         byid[3980]["widgets_values"] = [AUDIO_FRAMES, 25, 1]        # LTXVEmptyLatentAudio: frames,fps,batch
