@@ -376,6 +376,23 @@ class TestBuildDataset:
         assert row["generation"]["width"] is None
         assert any("resolution" in w.lower() for w in row["warnings"])
 
+    def test_length_probed_when_only_length_is_null(self, tmp_path, monkeypatch):
+        # width/height resolve from graph literals, but length is link-driven-null.
+        # The video probe must still fire (for length) WITHOUT spuriously claiming the
+        # resolution was probed.
+        monkeypatch.setattr(bmd, "_probe_video_dims",
+                            lambda p: {"width": 1920, "height": 1080, "nb_frames": 42})
+        g = {**GRAPH}
+        g["344"] = {**GRAPH["344"],
+                    "inputs": {**GRAPH["344"]["inputs"], "length": ["1570", 0]}}  # -> None
+        vid = tmp_path / "r-audio.mp4"
+        vid.write_bytes(b"x")
+        render = bmd.Render(id="r", png=tmp_path / "r.png", video_audio=vid, video_silent=None)
+        row = bmd.build_row(render, g, [], tmp_path, "reference")
+        assert row["generation"]["width"] == 960          # graph literal, NOT overwritten
+        assert row["generation"]["length_frames"] == 42    # recovered from the video
+        assert not any("resolution probed" in w for w in row["warnings"])
+
 
 class TestModuleInvariants:
     def test_ref_audio_nodes_are_a_subset_of_cond_passthrough(self):

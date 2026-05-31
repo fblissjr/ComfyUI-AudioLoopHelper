@@ -670,20 +670,25 @@ def build_row(render: Render, graph: dict, search_roots: list[Path],
 
     gen = meta["generation"]
     warnings = list(meta["warnings"])
-    # build_row is the sole owner of the resolution warning: parse_prompt_graph leaves
-    # graph-unresolvable dims as None (no warning), and here — the only place with the
-    # rendered video — we recover them and report the outcome exactly once.
-    if gen["width"] is None or gen["height"] is None:
+    # build_row is the only place with the rendered video, so it owns recovering any dim
+    # the graph couldn't resolve (e.g. LTXFramePlanner-linked) and the resolution warning.
+    # Probe once if width, height, OR length is missing; fill each independently. The
+    # resolution warning is gated strictly on width/height — a length-only probe must not
+    # claim the resolution was probed.
+    if gen["width"] is None or gen["height"] is None or gen["length_frames"] is None:
         vid = render.video_audio or render.video_silent
         dims = _probe_video_dims(vid) if vid else {"width": None, "height": None, "nb_frames": None}
-        gen["width"] = gen["width"] if gen["width"] is not None else dims["width"]
-        gen["height"] = gen["height"] if gen["height"] is not None else dims["height"]
+        probed_resolution = False
+        if gen["width"] is None and dims["width"] is not None:
+            gen["width"], probed_resolution = dims["width"], True
+        if gen["height"] is None and dims["height"] is not None:
+            gen["height"], probed_resolution = dims["height"], True
         if gen["length_frames"] is None and dims["nb_frames"]:
             gen["length_frames"] = dims["nb_frames"]
-        if gen["width"] is not None and gen["height"] is not None:
-            warnings.append("resolution probed from output video")
-        else:
+        if gen["width"] is None or gen["height"] is None:
             warnings.append("resolution unresolved (not in graph; output video missing/unprobed)")
+        elif probed_resolution:
+            warnings.append("resolution probed from output video")
 
     outputs: dict[str, str | None] = {}
     media_dir = out_dir / "media"
