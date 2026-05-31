@@ -548,10 +548,15 @@ def _ffprobe_meta(path: Path) -> tuple[float | None, int | None]:
         return None, None
 
 
+def _empty_dims() -> dict:
+    """The probe-result shape, all-None — one source of truth for the dims contract."""
+    return {"width": None, "height": None, "nb_frames": None}
+
+
 def _probe_video_dims(path: Path) -> dict:
     """Read width/height (and nb_frames when reported) from a video via ffprobe.
     Ground truth for dims that the graph computed at runtime (e.g. LTXFramePlanner)."""
-    out: dict = {"width": None, "height": None, "nb_frames": None}
+    out = _empty_dims()
     try:
         r = subprocess.run(
             ["ffprobe", "-v", "quiet", "-print_format", "json",
@@ -677,7 +682,7 @@ def build_row(render: Render, graph: dict, search_roots: list[Path],
     # claim the resolution was probed.
     if gen["width"] is None or gen["height"] is None or gen["length_frames"] is None:
         vid = render.video_audio or render.video_silent
-        dims = _probe_video_dims(vid) if vid else {"width": None, "height": None, "nb_frames": None}
+        dims = _probe_video_dims(vid) if vid else _empty_dims()
         probed_resolution = False
         if gen["width"] is None and dims["width"] is not None:
             gen["width"], probed_resolution = dims["width"], True
