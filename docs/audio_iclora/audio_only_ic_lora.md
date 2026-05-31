@@ -1,13 +1,14 @@
-Last updated: 2026-05-30
+Last updated: 2026-05-31
 
 # Audio-only IC-LoRA: how it works, how to run it, how to eval it
 
 An audio-only IC-LoRA for LTX-2.3-22B (distilled): an in-context reference **audio** clip (here, a voiced
 tone) steers an attribute of the jointly-generated audio+video. There is no image or video reference. The
 test attribute is pitch ("helium"), chosen because it is measurable, the base model does not already do it,
-and only the audio reference can carry it. This is a proof of concept; whether it cleanly steers pitch at
-inference is still under evaluation. Full write-up, data recipe, and checkpoints are on the model card (the
-LTX-2 fork, `audio_reference` strategy).
+and only the audio reference can carry it. Single-pass renders with the trained adapter **do** produce
+coherent, audio-steered output (see [Inference behavior](#inference-behavior-observed-single-pass) below);
+the **quantitative** verdict — the LoRA-vs-base F0 slope — is the gate and is not yet published. Full
+write-up, data recipe, and checkpoints are on the model card (the LTX-2 fork, `audio_reference` strategy).
 
 ## How the custom nodes work
 
@@ -29,6 +30,35 @@ The model (LTX-2) places the reference tokens at **negative RoPE positions**, i.
 context rather than part of the generated timeline (the ID-LoRA convention). That is what lets a reference
 steer an attribute without being something the model has to reproduce frame-for-frame. This mechanism suits
 **time-invariant** attributes (an average pitch, a timbre, a voice); it is not built for time-varying control.
+
+## Inference behavior (observed, single-pass)
+
+Single-pass generation with the trained adapter produces coherent, audio-steered talking-head video: the
+reference audio visibly drives the result with the prompt held constant. A few load-bearing behaviors to know
+before running a sweep (these are observations from a small sweep, not the published F0 gate):
+
+- **The reference audio is never length-clamped.** `LTXAddAudioICLoRAGuide` encodes the *entire* reference;
+  the model prepends all of it at negative RoPE positions (~25 reference tokens per second; 1 token ≈ 0.04 s)
+  and strips it after sampling. The generated length is fixed by `EmptyLTXVLatentVideo` /
+  `LTXVEmptyLatentAudio`, **independent of the reference**. Training used short (~2–5 s) references, so a
+  multi-second song is far out of distribution — that extrapolation is where the more surreal results come
+  from, not a bug. (Verified end-to-end through `nodes_audio_iclora.py` and the model's audio path.)
+- **LoRA `strength_model` has a usable band around 0.3–0.5.** It scales the applied adapter delta. A
+  short-trained adapter on the distilled (few-step) base has little room to recover off-manifold, so high
+  strength (→1.0) over-steers into washed-out / smeared output; 1.0 is effectively overdrive. This is a
+  **different knob** from the trainer's `reference_strength` (which was 1.0 and is baked into the checkpoint)
+  — do not conflate them. More training or more data is the lever for stronger coupling, not cranking
+  inference strength.
+- **Pitch / timbre drives apparent speaker identity.** With no init image, identity is synthesized from
+  prompt + audio, and the model has a learned voice→speaker coupling: a low/gravelly reference can shift the
+  generated speaker's apparent demographics. Expected, not a defect.
+- **Pure steady tones produce little speech.** The model maps the audio's syllabic envelope + formants to
+  mouth articulation; a flat sine has neither, so it yields weak or no speaking (and can destabilize). This is
+  about spectro-temporal structure, **not** a frequency ceiling — the gate tones (120–260 Hz) are all within
+  human speech F0.
+
+To turn a sweep of these renders (prompt × reference × strength → output) into queryable data, point
+[`../guides/build_multimodal_dataset.md`](../guides/build_multimodal_dataset.md) at the output folder.
 
 ## How to run it in ComfyUI
 
@@ -77,7 +107,9 @@ positive into a mirage. These checks fail loud rather than silently:
 
 ## Honest caveats
 
-- Inference efficacy is unproven until the F0 slope (LoRA versus base) is published.
+- Single-pass renders confirm the reference steers the output *qualitatively* (and that strength,
+  identity, and tone behave as in [Inference behavior](#inference-behavior-observed-single-pass)). The
+  **quantitative** efficacy — the LoRA-vs-base F0 slope — is still unproven until that gate is published.
 - The training data has a known confound: the target pitch correlates about 0.75 with the clip's own natural
   pitch, so a null result is ambiguous (the model could lean on the speaker's identity rather than the
   reference). The model card covers this and the next-run designs (reuse each clip at several pitches to

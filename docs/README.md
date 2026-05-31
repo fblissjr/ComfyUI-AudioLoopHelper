@@ -1,4 +1,4 @@
-Last updated: 2026-05-25
+Last updated: 2026-05-31
 
 # docs/ — ComfyUI-AudioLoopHelper documentation
 
@@ -63,7 +63,11 @@ linking out (parallel-scrubbed-copy convention retired 2026-04-25).
 - Offline + runtime analysis, AudioPitchDetect: [`guides/audio_analysis_guide.md`](guides/audio_analysis_guide.md)
 
 ### "I want to TRAIN an audio→video IC-LoRA (or fork the attempt)"
-- Experiment hub + method notes (process, not a working result; candid about confounds): [`audio_iclora/index.md`](audio_iclora/index.md)
+- Experiment hub + method notes (process, candid about confounds; single-pass steers qualitatively, F0 gate pending): [`audio_iclora/index.md`](audio_iclora/index.md)
+- Audio-reference IC-LoRA inference behavior (no reference-length clamp, 0.3–0.5 strength band, audio→identity, tone→speech): [`audio_iclora/audio_only_ic_lora.md`](audio_iclora/audio_only_ic_lora.md)
+
+### "I want to turn a folder of renders into a dataset"
+- Build a schema'd multimodal JSONL dataset from ComfyUI render PNGs (traces the graph; prompt × reference × LoRA-strength → output): [`guides/build_multimodal_dataset.md`](guides/build_multimodal_dataset.md)
 
 ### "My output looks wrong / workflow won't run"
 - **First stop**: [`guides/debugging_guide.md`](guides/debugging_guide.md) — symptom → first-check table
