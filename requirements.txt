@@ -1,0 +1,10 @@
+# Runtime dependencies for ComfyUI-AudioLoopHelper beyond what ComfyUI core already provides.
+#
+# Intentionally NOT listed:
+#   torch / torchaudio / torchvision / numpy / pillow / transformers / safetensors
+#     -- these ship with ComfyUI; pinning them here can clobber a user's CUDA build.
+#   sageattention
+#     -- optional (the Sage nodes fall back to PyTorch attention if it is absent) and is a
+#        Triton/CUDA-compiled package best installed by hand. Listing it would break more
+#        installs than it fixes.
+orjson>=3.9
