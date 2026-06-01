@@ -112,6 +112,43 @@ def lora_grammar_problems(keys) -> list[str]:
     return []
 
 
+# Cross-modal bridge modules: the ONLY path the audio reference reaches the video stream
+# (audio_to_video_attn = video queries attend to audio = voice->face; video_to_audio_attn = the
+# reverse). Splitting on these lets the per-stream loader steer the bridge independently of the
+# audio-only modules (audio_attn1/2, audio_ff). Substring match is robust to comfy's model-keyed
+# patch names, which embed the transformer module path.
+_BRIDGE_SUBSTRINGS = ("audio_to_video_attn", "video_to_audio_attn")
+
+
+def is_bridge_lora_key(key: str) -> bool:
+    """True if a LoRA patch key targets a cross-modal bridge module (voice<->face), not an
+    audio-only module. Pure + offline, so it unit-tests and drives the per-stream partition."""
+    return any(s in key for s in _BRIDGE_SUBSTRINGS)
+
+
+def partition_lora_patches(loaded: dict) -> tuple[dict, dict]:
+    """Split a loaded LoRA patch dict into (audio_only, bridge) by module name. An audio-only
+    LoRA (no cross-modal keys) yields an empty bridge dict, so the per-stream loader degrades
+    cleanly to a single-strength load (the audio strength applied to everything)."""
+    audio_only: dict = {}
+    bridge: dict = {}
+    for k, v in loaded.items():
+        (bridge if is_bridge_lora_key(k) else audio_only)[k] = v
+    return audio_only, bridge
+
+
+def trim_reference_waveform(waveform: torch.Tensor, sample_rate: int, seconds: float) -> torch.Tensor:
+    """Keep only the first ``seconds`` of a ``[..., n]`` waveform (last dim = samples). ``seconds``
+    <= 0, or a window >= the clip, returns it unchanged (use the whole clip). A REAL input change
+    (fewer reference samples -> fewer ref tokens), not a no-op; training used 3.5s references, so
+    ~3.5 is the in-distribution window."""
+    if seconds and seconds > 0:
+        n = int(round(seconds * sample_rate))
+        if 0 < n < waveform.shape[-1]:
+            return waveform[..., :n]
+    return waveform
+
+
 class LTXAddAudioICLoRAGuide(io.ComfyNode):
     """Attach a raw-audio in-context reference to the conditioning (audio twin of
     LTXAddVideoICLoRAGuide). Encodes the audio via the audio VAE and patchifies it into
@@ -334,6 +371,182 @@ class LTXAudioSetRefTokens(io.ComfyNode):
         _log(f"REFTOKENS: audio latent {tuple(samples.shape)} (b,c,t,f) dtype {samples.dtype}")
         ref_audio = patchify_audio_latent(samples)
         _log(f"REFTOKENS: tokens {tuple(ref_audio['tokens'].shape)} (b,t,c*f) -> attach to pos+neg")
+        positive = node_helpers.conditioning_set_values(positive, {"ref_audio": ref_audio})
+        negative = node_helpers.conditioning_set_values(negative, {"ref_audio": ref_audio})
+        return io.NodeOutput(positive, negative)
+
+
+class LTXAudioICLoRALoaderPerStream(io.ComfyNode):
+    """Audio IC-LoRA loader with SEPARATE strength for the cross-modal bridge vs the audio-only
+    modules. The reference's voice->face influence flows through the bridge (audio_to_video_attn /
+    video_to_audio_attn); voice->voice through the audio-only modules (audio_attn1/2, audio_ff). On
+    a guidance-distilled base (CFG fixed at 1) strength is the ONLY inference amplifier, and a single
+    global strength has a narrow usable band before garbling -- splitting it lets you push the bridge
+    (more identity transfer) while keeping the audio modules in-band. Same load path + zero-bind trust
+    gate as the debug loader. An audio-only LoRA (no bridge keys) loads fine: the bridge split is empty
+    and bridge_strength is a no-op."""
+
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="LTXAudioICLoRALoaderPerStream",
+            display_name="Audio IC-LoRA Loader (per-stream)",
+            category="Lightricks/IC-LoRA",
+            description=(
+                "Loads an audio IC-LoRA with separate strengths for the cross-modal bridge "
+                "(audio_to_video_attn / video_to_audio_attn -- the voice->face path) and the "
+                "audio-only modules (audio_attn / audio_ff). Amplify identity transfer via the "
+                "bridge while keeping the audio modules in their usable strength band, on a CFG=1 "
+                "distilled model where strength is the only inference knob. An audio-only LoRA has "
+                "no bridge keys, so bridge_strength is then a no-op."
+            ),
+            inputs=[
+                io.Model.Input("model"),
+                io.Combo.Input("lora_name", options=_folder_paths().get_filename_list("loras")),
+                io.Float.Input(
+                    "audio_strength", default=1.0, min=-100.0, max=100.0, step=0.01,
+                    tooltip="Strength for the audio-only modules (audio_attn1/2, audio_ff).",
+                ),
+                io.Float.Input(
+                    "bridge_strength", default=1.0, min=-100.0, max=100.0, step=0.01,
+                    tooltip="Strength for the cross-modal bridge (audio_to_video_attn / "
+                    "video_to_audio_attn) -- the voice->face path. Push above audio_strength to "
+                    "amplify identity transfer. No-op for an audio-only LoRA (no bridge keys).",
+                ),
+            ],
+            outputs=[io.Model.Output("model")],
+        )
+
+    @classmethod
+    def execute(cls, model, lora_name, audio_strength, bridge_strength) -> io.NodeOutput:
+        import comfy.lora
+        import comfy.lora_convert
+        import comfy.utils
+
+        fp = _folder_paths()
+        path = fp.get_full_path_or_raise("loras", lora_name)
+        lora, metadata = comfy.utils.load_torch_file(path, safe_load=True, return_metadata=True)
+        lora = comfy.lora_convert.convert_lora(lora)
+        lora_keys = list(lora.keys())
+        n_tensors = len(lora_keys)
+
+        _log("=" * 60)
+        _log(f"PER-STREAM LOADER: {lora_name}  audio_strength={audio_strength}  bridge_strength={bridge_strength}")
+        _log(f"PER-STREAM LOADER: {n_tensors} LoRA tensors in file; metadata={dict(metadata) if metadata else None}")
+
+        key_map = comfy.lora.model_lora_keys_unet(model.model, {})
+        loaded = comfy.lora.load_lora(lora, key_map)  # keyed by MODEL module
+        audio_patches, bridge_patches = partition_lora_patches(loaded)
+        _log(
+            f"PER-STREAM LOADER: {len(loaded)} patches -> {len(audio_patches)} audio-only @ {audio_strength}, "
+            f"{len(bridge_patches)} bridge @ {bridge_strength}"
+        )
+        if not bridge_patches:
+            _log("PER-STREAM LOADER: no cross-modal bridge keys (audio-only LoRA) -> bridge_strength is a no-op")
+
+        # Two add_patches calls = two patch tuples per stream; comfy sums them at forward time, so
+        # each stream gets its own strength. (strength=0 still 'applies' a tuple, so the zero-bind
+        # gate below only fires on a true binding failure, not a deliberate 0 strength.)
+        m = model.clone()
+        applied = set(m.add_patches(audio_patches, audio_strength))
+        applied |= set(m.add_patches(bridge_patches, bridge_strength))
+        n_applied = len(applied)
+
+        # Same zero-bind trust gate as the debug loader: a LoRA that binds nothing makes the eval
+        # silently meaningless. Refuse to return a no-op model; fail loud.
+        if n_applied == 0:
+            grammar = lora_grammar_problems(lora_keys)
+            why = "; ".join(grammar) if grammar else "grammar looks right, so most likely the wrong base model"
+            _log("=" * 60)
+            raise RuntimeError(
+                f"LTXAudioICLoRALoaderPerStream: '{lora_name}' bound ZERO patches to the model "
+                f"({n_tensors} tensors in file, {len(loaded)} built, model exposes {len(key_map)} LoRA "
+                f"targets). The LoRA is doing NOTHING. Cause: {why}. Sample keys: {lora_keys[:3]}."
+            )
+        _log(f"PER-STREAM LOADER: {n_applied} patches applied (audio @ {audio_strength}, bridge @ {bridge_strength})")
+        _log("=" * 60)
+        return io.NodeOutput(m)
+
+
+class LTXAddAudioICLoRAGuideAdvanced(io.ComfyNode):
+    """Advanced audio IC-LoRA guide: the basic guide plus two REAL reference knobs that work on a
+    CFG=1 distilled base. reference_window_sec trims the reference to its first N seconds (fewer ref
+    tokens; ~3.5s matches training); reference_scale multiplies the encoded reference latent
+    magnitude. Both default to a no-op (full clip, scale 1.0) == the basic guide. No CFG /
+    attention-strength knob is exposed: the distilled base is CFG=1 and the model's ref_audio path is
+    always-clean, so those would be SILENT no-ops without a model-side change (see module docstring).
+    The parity-locked bits (patchify layout, the model's negative-RoPE offset) are untouched."""
+
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="LTXAddAudioICLoRAGuideAdvanced",
+            display_name="Add Audio IC-LoRA Guide (Advanced)",
+            category="Lightricks/IC-LoRA",
+            description=(
+                "Audio in-context reference with extra knobs over the basic guide: trim the "
+                "reference to its first N seconds (reference_window_sec; ~3.5s matches training) "
+                "and scale the encoded reference latent magnitude (reference_scale). Both default "
+                "to the basic behavior (full clip, scale 1.0). Values far from the defaults push "
+                "the reference off the trained distribution (like strength >1.0), so sweep gently. "
+                "No CFG / attention-strength knob: the distilled base is CFG=1 and the ref_audio "
+                "path is always-clean, so those would do nothing without a model change."
+            ),
+            inputs=[
+                io.Conditioning.Input("positive", tooltip="Positive conditioning to attach the reference to."),
+                io.Conditioning.Input("negative", tooltip="Negative conditioning to attach the reference to."),
+                io.Vae.Input("audio_vae", tooltip="The audio VAE (e.g. from LTXV Audio VAE Loader)."),
+                io.Audio.Input(
+                    "reference_audio",
+                    tooltip="Raw reference audio (a voice sample). Mono is widened to stereo for the VAE.",
+                ),
+                io.Float.Input(
+                    "reference_window_sec", default=0.0, min=0.0, max=60.0, step=0.1,
+                    tooltip="Use only the first N seconds of the reference (0 = whole clip). Training "
+                    "used 3.5s, so ~3.5 is the in-distribution window.",
+                ),
+                io.Float.Input(
+                    "reference_scale", default=1.0, min=0.0, max=4.0, step=0.05,
+                    tooltip="Multiply the encoded reference latent magnitude (1.0 = unchanged). A coarse "
+                    "'reference loudness' lever; values far from 1.0 go off-distribution, so sweep gently.",
+                ),
+            ],
+            outputs=[
+                io.Conditioning.Output(
+                    display_name="positive", tooltip="Positive conditioning with the reference attached."
+                ),
+                io.Conditioning.Output(
+                    display_name="negative", tooltip="Negative conditioning with the reference attached."
+                ),
+            ],
+        )
+
+    @classmethod
+    def execute(
+        cls, positive, negative, audio_vae, reference_audio, reference_window_sec, reference_scale
+    ) -> io.NodeOutput:
+        import torchaudio
+
+        raw = reference_audio["waveform"]
+        sr = reference_audio["sample_rate"]
+        raw = trim_reference_waveform(raw, sr, reference_window_sec)  # REAL input change (or no-op at 0)
+        dur = raw.shape[-1] / sr
+        waveform = ensure_stereo(raw)
+        vae_sr = getattr(audio_vae, "audio_sample_rate", 44100)
+        if vae_sr != sr:
+            waveform = torchaudio.functional.resample(waveform, sr, vae_sr)
+        _log(
+            f"GUIDE-ADV: ref {tuple(raw.shape)} @ {sr}Hz ({dur:.2f}s, window={reference_window_sec or 'full'}) "
+            f"-> stereo {tuple(waveform.shape)}, vae_sr={vae_sr}; encoding channels-last"
+        )
+        latent = audio_vae.encode(waveform.movedim(1, -1))
+        samples = latent["samples"] if isinstance(latent, dict) else latent
+        if reference_scale != 1.0:
+            samples = samples * reference_scale  # REAL input change (off-distribution if far from 1.0)
+        _log(f"GUIDE-ADV: encoded ref latent {tuple(samples.shape)} dtype {samples.dtype} (scale={reference_scale})")
+
+        ref_audio = patchify_audio_latent(samples)
+        _log(f"GUIDE-ADV: patchified ref tokens {tuple(ref_audio['tokens'].shape)} -> attaching to pos+neg")
         positive = node_helpers.conditioning_set_values(positive, {"ref_audio": ref_audio})
         negative = node_helpers.conditioning_set_values(negative, {"ref_audio": ref_audio})
         return io.NodeOutput(positive, negative)

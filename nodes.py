@@ -4338,7 +4338,9 @@ class AudioLoopHelperExtension(ComfyExtension):
         from .nodes_analysis import AudioPitchDetect
         from .nodes_audio_iclora import (
             LTXAddAudioICLoRAGuide,
+            LTXAddAudioICLoRAGuideAdvanced,
             LTXAudioICLoRALoader,
+            LTXAudioICLoRALoaderPerStream,
             LTXAudioSetRefTokens,
         )
         from .nodes_audio_latent_slice import AudioLatentSlice
@@ -4370,7 +4372,9 @@ class AudioLoopHelperExtension(ComfyExtension):
             PurgeVRAM,
             AudioPitchDetect,
             LTXAddAudioICLoRAGuide,
+            LTXAddAudioICLoRAGuideAdvanced,
             LTXAudioICLoRALoader,
+            LTXAudioICLoRALoaderPerStream,
             LTXAudioSetRefTokens,
             LTXResolutionFromAspect,
             LTXFramePlanner,
