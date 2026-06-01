@@ -456,6 +456,37 @@ class WorkflowEditor:
         except ValueError:
             pass
 
+    def prune_orphan_output_links(self) -> int:
+        """Remove orphan ids from node `outputs[].links` caches.
+
+        ComfyUI's UI leaves stale link ids in a node's denormalized
+        `outputs[].links` list when a connection is rewired and re-saved:
+        the top-level `links` array (the source of truth) drops the old
+        link, but the source node's output cache keeps it. These orphans
+        are inert on load but fail strict link-integrity validation
+        (`audit_workflows.py` `link_integrity`,
+        `scripts/test_workflow_integrity.py`).
+
+        Removes any output-cache id with no matching entry in the
+        top-level `links` array. Pure normalization: it can only drop ids
+        that reference no actual link record, so graph topology is
+        unchanged. Returns the number of orphan ids removed; idempotent (a
+        second call returns 0). Top-level nodes only — subgraph internal
+        links use a different (dict) representation.
+        """
+        valid = {l[0] for l in self.wf.get("links", []) if isinstance(l, list) and l}
+        removed = 0
+        for n in self.wf["nodes"]:
+            for out in n.get("outputs", []):
+                links = out.get("links")
+                if not links:
+                    continue
+                kept = [lid for lid in links if lid in valid]
+                if len(kept) != len(links):
+                    removed += len(links) - len(kept)
+                    out["links"] = kept
+        return removed
+
     def find_link(self, src_node: int, tgt_node: int) -> int | None:
         """Find the FIRST link id between two nodes. Returns None if not found.
 
