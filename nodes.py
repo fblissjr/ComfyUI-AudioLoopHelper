@@ -2882,6 +2882,46 @@ class AudioTemporalMask(io.ComfyNode):
         return io.NodeOutput(out)
 
 
+def _keyframe_guide_placements(
+    *,
+    batch_size: int,
+    n_latent_frames: int,
+    output_fps: float,
+    seconds_per_keyframe: float,
+    temporal_scale: int,
+) -> list[tuple[int, int]]:
+    """Map a keyframe IMAGE batch to (image_index, target_frame_idx) pairs.
+
+    Keyframe `i` targets output time `i * seconds_per_keyframe`, i.e. pixel
+    frame `round(i * seconds_per_keyframe * output_fps)`. Single-frame guides
+    are NOT snapped to the 8-frame latent grid (core `LTXVAddGuide.get_latent_index`
+    only snaps multi-frame guides), so a keyframe lands at its EXACT pixel frame
+    — `1s @ 25fps -> frame 25`, dead on. `target_frame_idx` is forced strictly
+    increasing so dense keyframes never collide on the same pixel frame.
+
+    A keyframe is dropped once its latent index — `ceil(frame_idx / temporal_scale)`,
+    matching core's `(frame_idx + t - 1) // t` — reaches `n_latent_frames`
+    (core then rejects it via `latent_idx + 1 <= latent_length` for a 1-frame
+    guide). Dropping here avoids a wasted VAE encode of a keyframe that won't fit.
+
+    Pure (no torch / no ComfyUI) so the placement math is unit-testable. The
+    node wraps each emitted frame_idx with core `LTXVAddGuide.encode` (resize +
+    VAE) -> `get_latent_index` -> `append_keyframe`.
+    """
+    placements: list[tuple[int, int]] = []
+    prev_frame = -1
+    for i in range(max(0, int(batch_size))):
+        frame_idx = round(i * seconds_per_keyframe * output_fps)
+        if frame_idx <= prev_frame:
+            frame_idx = prev_frame + 1
+        latent_idx = (frame_idx + temporal_scale - 1) // temporal_scale  # ceil; matches core
+        if latent_idx >= n_latent_frames:
+            break
+        placements.append((i, frame_idx))
+        prev_frame = frame_idx
+    return placements
+
+
 class EvenlySpacedKeyframes(io.ComfyNode):
     """Pick `count` frames spread evenly across an IMAGE batch — auto keyframe sampling.
 
@@ -2932,6 +2972,167 @@ class EvenlySpacedKeyframes(io.ComfyNode):
             else:
                 idx = torch.linspace(0, total - 1, n, device=images.device).round().long()
         return io.NodeOutput(images[idx])
+
+
+class KeyframeGuidesFromBatch(io.ComfyNode):
+    """Auto-expand a DENSE keyframe IMAGE batch into time-spaced LTX latent
+    guides — one node, single pass, no loop.
+
+    Replaces the hand-wired N-guide chain (`Index -> Get Image from Batch ->
+    Math Expression -> LTXVAddGuideMulti.image_N/frame_idx_N`, repeated per
+    keyframe): feed the keyframe batch (e.g. a 1fps `VHS_LoadVideo`) plus the
+    target `output_fps` and `seconds_per_keyframe`, and every keyframe is
+    resized, VAE-encoded, and placed as an `LTXVAddGuide` keyframe at its
+    computed frame index. Output `(positive, negative, latent)` goes straight
+    to the sampler; LTX fills the gaps ("sparse keyframes -> fill in the middle").
+
+    vs KJNodes `LTXVAddGuidesFromBatch` (the existing batch-guide node):
+      - KJNodes places keyframe `i` at frame `i` (CONSECUTIVE), so spacing
+        requires a FULL-LENGTH batch with black gap-frames (it skips black
+        images). Feed it a dense 10-frame batch and they bunch at frames 0-9.
+      - This node computes the frame index from `i * seconds_per_keyframe *
+        output_fps`, so you feed only the keyframes (dense) and they land at
+        the right times — no black padding, no big sparse tensor in RAM.
+      - Both reuse the same core guide machinery; this one is the time-spacing
+        + dense-input companion. Use KJNodes' node when your batch already IS
+        the full-length sparse track.
+
+    Resolution: keyframes are resized to the latent's pixel size via core
+    `LTXVAddGuide.encode` (bilinear center-crop), so they need NOT be
+    pre-matched to the generation resolution.
+
+    Video-only: `latent` must be a video latent (e.g. `EmptyLTXVLatentVideo`),
+    NOT a combined AV latent — core `append_keyframe` rejects an AV latent with
+    "Adding guide to a combined AV latent is not supported", which is the
+    desired guard (this path leaves audio free to generate, it does not freeze
+    a fed-in audio track).
+
+    Composes core `comfy_extras.nodes_lt.LTXVAddGuide` (stable ComfyUI) rather
+    than the ComfyUI-LTXVideo custom node, so it does not couple to that
+    package's module layout.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="KeyframeGuidesFromBatch",
+            display_name="Keyframe Guides from Batch (auto-expand)",
+            category="looping/keyframes",
+            description=(
+                "Auto-expand a dense keyframe IMAGE batch into time-spaced LTX "
+                "guides in a single pass — no loop, no per-keyframe Index/Math/"
+                "Multi wiring, no black-frame padding. Feed keyframes + output_fps "
+                "+ seconds_per_keyframe; outputs (positive, negative, latent) ready "
+                "for the sampler. Video-only latent (no frozen audio)."
+            ),
+            inputs=[
+                io.Vae.Input("vae", tooltip="Video VAE (LTX 2.3). Resizes + encodes each keyframe to a single-frame guide latent."),
+                io.Conditioning.Input("positive"),
+                io.Conditioning.Input("negative"),
+                io.Latent.Input(
+                    "latent",
+                    tooltip=(
+                        "Empty VIDEO latent to fill (e.g. EmptyLTXVLatentVideo), sized "
+                        "for the clip duration. NOT a combined AV latent."
+                    ),
+                ),
+                io.Image.Input(
+                    "images",
+                    tooltip=(
+                        "Dense keyframe IMAGE batch in clip order (e.g. a 1fps "
+                        "VHS_LoadVideo). Index 0 = first frame. Resized to the "
+                        "generation resolution automatically."
+                    ),
+                ),
+                io.Float.Input(
+                    "output_fps",
+                    default=25.0, min=1.0, max=120.0, step=0.1,
+                    tooltip=(
+                        "Frame rate of the video you're generating (matches "
+                        "LTXVConditioning.frame_rate, canonical 25). Used only to convert "
+                        "seconds -> frames for keyframe placement."
+                    ),
+                ),
+                io.Float.Input(
+                    "seconds_per_keyframe",
+                    default=1.0, min=0.01, max=60.0, step=0.01,
+                    tooltip=(
+                        "Real-time gap between consecutive keyframes. 1.0 = one keyframe "
+                        "per second (a 1fps source). Single-frame guides land at the exact "
+                        "pixel frame (1s @ 25fps -> frame 25)."
+                    ),
+                ),
+                io.Float.Input(
+                    "strength",
+                    default=1.0, min=0.0, max=1.0, step=0.01,
+                    tooltip=(
+                        "Guide strength per keyframe (LTXVAddGuide). 1.0 = hard anchor; "
+                        "lower frees the model to interpolate more loosely."
+                    ),
+                ),
+            ],
+            outputs=[
+                io.Conditioning.Output(display_name="positive"),
+                io.Conditioning.Output(display_name="negative"),
+                io.Latent.Output(display_name="latent"),
+            ],
+        )
+
+    @classmethod
+    def execute(
+        cls, vae, positive, negative, latent, images,
+        output_fps: float, seconds_per_keyframe: float, strength: float,
+    ) -> io.NodeOutput:
+        import comfy_extras.nodes_lt as nodes_lt
+
+        add_guide = nodes_lt.LTXVAddGuide
+
+        with _profile_span("KeyframeGuidesFromBatch"):
+            scale_factors = vae.downscale_index_formula
+            temporal = int(scale_factors[0])
+
+            samples = latent["samples"]
+            noise_mask = nodes_lt.get_noise_mask(latent)
+            # latent_length/H/W are read ONCE pre-loop; append_keyframe grows
+            # samples along the frame axis but placement bounds use the original
+            # length (matches core/KJNodes batch-guide convention).
+            _, _, latent_length, latent_height, latent_width = samples.shape
+            batch_size = int(images.shape[0])
+
+            placements = _keyframe_guide_placements(
+                batch_size=batch_size,
+                n_latent_frames=latent_length,
+                output_fps=output_fps,
+                seconds_per_keyframe=seconds_per_keyframe,
+                temporal_scale=temporal,
+            )
+
+            for image_index, target_frame in placements:
+                img = images[image_index : image_index + 1]
+                # core encode: resize to latent resolution + VAE -> single-frame guide
+                _pixels, guide = add_guide.encode(
+                    vae, latent_width, latent_height, img, scale_factors,
+                )
+                # Delegate frame canonicalization to core (a passthrough for the
+                # single-frame guides this node produces, but inherits any future
+                # core change). The placement helper already dropped keyframes
+                # whose latent index falls past latent_length, so no per-iter
+                # bounds recheck is needed (it would be dead for positive frames).
+                frame_idx, _latent_idx = add_guide.get_latent_index(
+                    positive, latent_length, guide.shape[2], target_frame, scale_factors,
+                )
+                positive, negative, samples, noise_mask = add_guide.append_keyframe(
+                    positive, negative, frame_idx, samples, noise_mask,
+                    guide, strength, scale_factors,
+                )
+
+            logging.getLogger(__name__).info(
+                "[KeyframeGuidesFromBatch] placed %d/%d keyframes "
+                "(output_fps=%.1f, seconds_per_keyframe=%.2f, temporal=%dx)",
+                len(placements), batch_size, output_fps, seconds_per_keyframe, temporal,
+            )
+
+        return io.NodeOutput(positive, negative, {"samples": samples, "noise_mask": noise_mask})
 
 
 class KeyframeLatentScheduleBatchEncode(io.ComfyNode):
@@ -4364,6 +4565,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LatentSeamZoneMask,
             AudioTemporalMask,
             EvenlySpacedKeyframes,
+            KeyframeGuidesFromBatch,
             RunIdPrefix,
             LatentFrameCount,
             TrimVideoLatentToAudio,

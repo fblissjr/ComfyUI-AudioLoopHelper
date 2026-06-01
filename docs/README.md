@@ -93,6 +93,9 @@ linking out (parallel-scrubbed-copy convention retired 2026-04-25).
 - Guide chaining, `LTXVAddLatentGuide` hierarchy: [`analysis/comfyui_ltxvideo_multiframe_guide_analysis.md`](analysis/comfyui_ltxvideo_multiframe_guide_analysis.md)
 - `LTXVAddGuideMulti` (up to 20 guides), `LTXVAddGuidesFromBatch`: [`analysis/kjnodes_multiframe_guide_analysis.md`](analysis/kjnodes_multiframe_guide_analysis.md)
 
+### "I want sparse keyframes -> LTX fills the gaps (single pass, no loop, no frozen audio)"
+- Time-space a dense keyframe batch into guides with one node (`KeyframeGuidesFromBatch`): [`guides/keyframe_fill_single_pass.md`](guides/keyframe_fill_single_pass.md)
+
 ### "I want to understand lip-sync / frozen-audio prompting"
 - Replace someone's dialogue (voice-clone + lip-sync), step by step: [`guides/dialogue_replacement_guide.md`](guides/dialogue_replacement_guide.md)
 - Community research on lip-sync prompting + when it applies vs when our frozen-audio workflow diverges: [`analysis/audio_in_prompt_research.md`](analysis/audio_in_prompt_research.md)
