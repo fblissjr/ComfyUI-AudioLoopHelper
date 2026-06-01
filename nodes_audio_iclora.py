@@ -145,14 +145,11 @@ def partition_lora_patches(loaded: dict) -> tuple[dict, dict]:
 
 def trim_reference_waveform(waveform: torch.Tensor, sample_rate: int, seconds: float) -> torch.Tensor:
     """Keep only the first ``seconds`` of a ``[..., n]`` waveform (last dim = samples). ``seconds``
-    <= 0, or a window >= the clip, returns it unchanged (use the whole clip). A REAL input change
-    (fewer reference samples -> fewer ref tokens), not a no-op; training used 3.5s references, so
-    ~3.5 is the in-distribution window."""
-    if seconds and seconds > 0:
-        n = int(round(seconds * sample_rate))
-        if 0 < n < waveform.shape[-1]:
-            return waveform[..., :n]
-    return waveform
+    <= 0, or a window >= the clip, returns the whole clip. A REAL input change (fewer reference
+    samples -> fewer ref tokens), not a no-op; training used 3.5s references, so ~3.5 is the
+    in-distribution window. Head-trim is the ``head`` mode of the shared windowing primitive."""
+    start, end = _shaping.select_window_bounds(waveform, sample_rate, window_sec=seconds, mode="head")
+    return waveform[..., start:end]
 
 
 def _encode_and_attach_reference(positive, negative, audio_vae, waveform, sr, reference_scale: float = 1.0, log_tag: str = "GUIDE"):

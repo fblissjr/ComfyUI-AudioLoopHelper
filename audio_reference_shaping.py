@@ -89,6 +89,32 @@ def select_reference_window(
     return _clamp_window(start, window_samples, n)
 
 
+def select_window_bounds(
+    waveform: torch.Tensor,
+    sample_rate: int,
+    *,
+    window_sec: float,
+    mode: str = "auto",
+    offset_sec: float = 0.0,
+) -> tuple[int, int]:
+    """Single source of truth for which slice of a reference clip to use. Returns ``(start, end)``
+    sample indices. ``mode``: ``whole`` (whole clip), ``head`` (first ``window_sec``), ``manual``
+    (``window_sec`` starting at ``offset_sec``), ``auto`` (highest sustained-energy window). A
+    non-positive ``window_sec`` or a window at least as long as the clip returns the whole clip,
+    for any mode. Both the head-trim helper and shape_reference_waveform route through this."""
+    n = waveform.shape[-1]
+    window_samples = int(round(window_sec * sample_rate))   # negative/zero falls into the guard below
+    if mode == "whole" or window_samples <= 0 or window_samples >= n:
+        return (0, n)
+    if mode == "head":
+        return _clamp_window(0, window_samples, n)
+    if mode == "manual":
+        return _clamp_window(int(round(offset_sec * sample_rate)), window_samples, n)
+    if mode == "auto":
+        return select_reference_window(waveform, sample_rate, window_sec)  # sustained energy
+    raise ValueError(f"unknown window mode: {mode!r}")
+
+
 def build_emphasis_envelope(
     rms: torch.Tensor,
     *,
@@ -159,17 +185,18 @@ def shape_reference_waveform(
     if input_type not in _PRESET_MODE:
         raise ValueError(f"unknown input_type: {input_type!r}")
     n = waveform.shape[-1]
-    window_samples = int(round(window_sec * sample_rate)) if window_sec > 0 else 0
-
-    if window_select == "whole" or window_samples <= 0 or window_samples >= n:
-        start, end = 0, n
-    elif window_select == "manual":
-        start, end = _clamp_window(int(round(window_offset_sec * sample_rate)), window_samples, n)
-    else:  # auto
-        if input_type == "dialogue" and n <= int(round(window_sec * _DIALOGUE_SHORT_MULT * sample_rate)):
-            start, end = 0, n
-        else:
-            start, end = select_reference_window(waveform, sample_rate, window_sec)
+    # window_select drives where the window comes from; the one preset-specific nuance is that a
+    # short dialogue clip stays whole (don't go hunting). Everything else is the shared primitive.
+    mode = window_select
+    if (
+        window_select == "auto"
+        and input_type == "dialogue"
+        and n <= int(round(window_sec * _DIALOGUE_SHORT_MULT * sample_rate))
+    ):
+        mode = "whole"
+    start, end = select_window_bounds(
+        waveform, sample_rate, window_sec=window_sec, mode=mode, offset_sec=window_offset_sec
+    )
 
     windowed = waveform[..., start:end]
     flen = _frame_len(sample_rate)

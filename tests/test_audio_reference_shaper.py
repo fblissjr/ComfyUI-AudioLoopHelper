@@ -7,6 +7,7 @@ Run: uv run --group dev --group analysis python -m pytest tests/test_audio_refer
 
 from __future__ import annotations
 
+import pytest
 import torch
 
 import audio_reference_shaping as S
@@ -146,3 +147,43 @@ def test_shape_manual_offset_takes_requested_slice():
     )
     assert out.shape[-1] == int(round(1.0 * SR))
     assert torch.allclose(out, torch.full_like(out, 0.9), atol=1e-6)  # slice from the loud half
+
+
+# ---- select_window_bounds (the single windowing primitive) --------------------
+
+def test_window_bounds_head_takes_first_n():
+    wav = _const(0.5, 5.0)
+    assert S.select_window_bounds(wav, SR, window_sec=3.5, mode="head") == (0, int(round(3.5 * SR)))
+
+
+def test_window_bounds_manual_takes_offset_slice():
+    wav = _const(0.5, 5.0)
+    start, end = S.select_window_bounds(wav, SR, window_sec=1.0, mode="manual", offset_sec=2.0)
+    assert (start, end) == (int(round(2.0 * SR)), int(round(3.0 * SR)))
+
+
+def test_window_bounds_whole_ignores_window_sec():
+    wav = _const(0.5, 5.0)
+    assert S.select_window_bounds(wav, SR, window_sec=3.5, mode="whole") == (0, wav.shape[-1])
+
+
+def test_window_bounds_window_ge_clip_returns_whole():
+    wav = _const(0.5, 2.0)
+    for mode in ("head", "manual", "auto"):
+        assert S.select_window_bounds(wav, SR, window_sec=3.5, mode=mode) == (0, wav.shape[-1])
+
+
+def test_window_bounds_nonpositive_window_returns_whole():
+    wav = _const(0.5, 5.0)
+    assert S.select_window_bounds(wav, SR, window_sec=0.0, mode="head") == (0, wav.shape[-1])
+
+
+def test_window_bounds_auto_matches_select_reference_window():
+    wav = _concat(_const(0.02, 4.0), _const(1.0, 3.5), _const(0.02, 4.0))
+    assert S.select_window_bounds(wav, SR, window_sec=3.5, mode="auto") == S.select_reference_window(wav, SR, 3.5)
+
+
+def test_window_bounds_unknown_mode_raises():
+    wav = _const(0.5, 5.0)
+    with pytest.raises(ValueError):
+        S.select_window_bounds(wav, SR, window_sec=3.5, mode="bogus")
