@@ -478,7 +478,7 @@
       "widgets_values": [
         "LTX2_audio_vae_bf16.safetensors",
         "main_device",
-        "bf16"
+        "fp32"
       ],
       "color": "#1f1f48",
       "bgcolor": "rgba(24,24,27,.9)"
