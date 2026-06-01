@@ -66,6 +66,12 @@ except ImportError:
     node_helpers = _Passthrough()
 
 
+try:
+    from . import audio_reference_shaping as _shaping
+except ImportError:  # flat import under pytest (conftest puts the repo root on sys.path)
+    import audio_reference_shaping as _shaping
+
+
 def patchify_audio_latent(latent: torch.Tensor) -> dict:
     """(b, c, t, f) -> {"tokens": (b, t, c*f)}.
 
@@ -535,3 +541,99 @@ class LTXAddAudioICLoRAGuideAdvanced(io.ComfyNode):
         return _encode_and_attach_reference(
             positive, negative, audio_vae, waveform, sr, reference_scale=reference_scale, log_tag="GUIDE-ADV"
         )
+
+
+class LTXAudioReferenceShaper(io.ComfyNode):
+    """Pick which slice of a reference clip to use, and shape what within it the model weighs
+    most, BEFORE the guide node (AUDIO -> AUDIO). Drop between Load Audio and the guide's
+    reference_audio input; the guide's encode/patchify and the model's negative-RoPE attach are
+    untouched, so train/inference parity is preserved.
+
+    input_type picks a domain preset (the two real inputs are dialogue and songs):
+      - dialogue: whole short clip (or a sustained-energy window if long), gate breaths/silence
+        to the floor, otherwise flat -- conservative, matches the trained reference distribution.
+      - song: search the FULL clip for the most representative ~window_sec by SUSTAINED energy
+        (the hook/chorus, skipping quiet intro/outro -- head-trim is the wrong default here),
+        then gently energy-weight within it.
+      - manual: take the window at window_offset_sec and apply a spotlight at focus_center.
+
+    Honest limits (design doc): the gain is a waveform-domain PROXY for attention weight (louder
+    content -> bigger latents -> more pull), not a true per-token attention scalar; RMS can't tell
+    vocal from instrumental; high emphasis goes off-distribution. emphasis=0 is a no-op (the
+    selected window, unshaped). The shaping math lives in audio_reference_shaping (unit-tested)."""
+
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="LTXAudioReferenceShaper",
+            display_name="Audio Reference Shaper (window + emphasis)",
+            category="Lightricks/IC-LoRA",
+            description=(
+                "Pick which ~window_sec slice of a reference clip to use and shape what within it "
+                "the model weighs most, before the guide node. Presets: dialogue (gate silence, "
+                "stay near the trained distribution), song (find the loudest sustained window -- "
+                "the hook -- across a full track), manual (spotlight at an offset). Waveform-domain "
+                "gain is an in-distribution proxy for attention weight; emphasis=0 is a no-op. Drop "
+                "between Load Audio and the guide's reference_audio."
+            ),
+            inputs=[
+                io.Audio.Input("reference_audio", tooltip="Raw reference audio to window + shape."),
+                io.Combo.Input(
+                    "input_type", options=["dialogue", "song", "manual"], default="dialogue",
+                    tooltip="dialogue: gate silence, else flat (matches training). song: find the "
+                    "loudest sustained window across the whole clip, then energy-weight. manual: "
+                    "spotlight at window_offset_sec / focus_center.",
+                ),
+                io.Float.Input(
+                    "window_sec", default=3.5, min=0.0, max=60.0, step=0.1,
+                    tooltip="Seconds to keep (token-count parity with training, ~3.5s). 0 = whole clip.",
+                ),
+                io.Combo.Input(
+                    "window_select", options=["auto", "manual", "whole"], default="auto",
+                    tooltip="auto: sustained-energy search (song) / whole-if-short (dialogue). "
+                    "manual: start at window_offset_sec. whole: ignore window_sec, use it all.",
+                ),
+                io.Float.Input(
+                    "window_offset_sec", default=0.0, min=0.0, max=600.0, step=0.1,
+                    tooltip="Window start (seconds) when window_select = manual.",
+                ),
+                io.Float.Input(
+                    "emphasis", default=1.0, min=0.0, max=1.0, step=0.05,
+                    tooltip="How strongly to apply the shaping. 0 = flat (selected window, unshaped); "
+                    "1 = full preset envelope. High values go off-distribution -- sweep gently.",
+                ),
+                io.Float.Input(
+                    "silence_floor", default=0.1, min=0.0, max=1.0, step=0.01,
+                    tooltip="Minimum weight for de-emphasized frames (gated silence / quiet). 0 fully "
+                    "mutes them; ~0.1 keeps a little.",
+                ),
+                io.Float.Input(
+                    "focus_center", default=0.5, min=0.0, max=1.0, step=0.01,
+                    tooltip="manual spotlight peak position (0 = window start, 1 = window end).",
+                ),
+                io.Float.Input(
+                    "focus_width", default=0.5, min=0.05, max=1.0, step=0.01,
+                    tooltip="manual spotlight width (small = tight, large = broad).",
+                ),
+            ],
+            outputs=[io.Audio.Output(display_name="audio", tooltip="Windowed + shaped reference audio.")],
+        )
+
+    @classmethod
+    def execute(
+        cls, reference_audio, input_type, window_sec, window_select, window_offset_sec,
+        emphasis, silence_floor, focus_center, focus_width,
+    ) -> io.NodeOutput:
+        sr = int(reference_audio["sample_rate"])
+        wav = reference_audio["waveform"]
+        in_sec = wav.shape[-1] / sr
+        shaped = _shaping.shape_reference_waveform(
+            wav, sr, input_type=input_type, window_sec=window_sec, window_select=window_select,
+            window_offset_sec=window_offset_sec, silence_floor=silence_floor, emphasis=emphasis,
+            focus_center=focus_center, focus_width=focus_width,
+        )
+        _log(
+            f"SHAPER: {input_type}/{window_select} {in_sec:.2f}s -> {shaped.shape[-1] / sr:.2f}s "
+            f"(emphasis={emphasis}, floor={silence_floor})"
+        )
+        return io.NodeOutput({"waveform": shaped, "sample_rate": sr})
