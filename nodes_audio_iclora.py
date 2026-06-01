@@ -149,6 +149,32 @@ def trim_reference_waveform(waveform: torch.Tensor, sample_rate: int, seconds: f
     return waveform
 
 
+def _encode_and_attach_reference(positive, negative, audio_vae, waveform, sr, reference_scale: float = 1.0, log_tag: str = "GUIDE"):
+    """Shared body for the audio IC-LoRA guide nodes: widen mono->stereo, resample to the VAE's
+    sample rate, encode channels-last, optionally scale the latent magnitude, patchify, and attach as
+    `ref_audio` tokens on pos+neg. The stereo -> resample -> movedim(1,-1) sequence mirrors stock
+    VAEEncodeAudio EXACTLY (the train/inference parity that makes the trained LoRA read the reference);
+    it lives here once so the basic and advanced guides can't drift. The caller does any trimming."""
+    import torchaudio
+
+    stereo = ensure_stereo(waveform)
+    vae_sr = getattr(audio_vae, "audio_sample_rate", 44100)
+    if vae_sr != sr:
+        stereo = torchaudio.functional.resample(stereo, sr, vae_sr)
+    _log(f"{log_tag}: ref {tuple(waveform.shape)} @ {sr}Hz ({waveform.shape[-1] / sr:.2f}s) -> stereo "
+         f"{tuple(stereo.shape)}, vae_sr={vae_sr}; encoding channels-last")
+    latent = audio_vae.encode(stereo.movedim(1, -1))  # channels-last tensor
+    samples = latent["samples"] if isinstance(latent, dict) else latent
+    if reference_scale != 1.0:
+        samples = samples * reference_scale
+    _log(f"{log_tag}: encoded ref latent {tuple(samples.shape)} dtype {samples.dtype} (scale={reference_scale})")
+    ref_audio = patchify_audio_latent(samples)
+    _log(f"{log_tag}: patchified ref tokens {tuple(ref_audio['tokens'].shape)} (b,t,c*f) -> attach to pos+neg")
+    positive = node_helpers.conditioning_set_values(positive, {"ref_audio": ref_audio})
+    negative = node_helpers.conditioning_set_values(negative, {"ref_audio": ref_audio})
+    return io.NodeOutput(positive, negative)
+
+
 class LTXAddAudioICLoRAGuide(io.ComfyNode):
     """Attach a raw-audio in-context reference to the conditioning (audio twin of
     LTXAddVideoICLoRAGuide). Encodes the audio via the audio VAE and patchifies it into
@@ -197,33 +223,11 @@ class LTXAddAudioICLoRAGuide(io.ComfyNode):
 
     @classmethod
     def execute(cls, positive, negative, audio_vae, reference_audio) -> io.NodeOutput:
-        # Widen mono->stereo defensively, then encode via the audio VAE (same encoder the
-        # trainer precompute used -> identical [8,T,16] latent format).
-        import torchaudio
-
-        raw = reference_audio["waveform"]
-        sr = reference_audio["sample_rate"]
-        dur = raw.shape[-1] / sr
-        # Mirror the STOCK VAEEncodeAudio.execute invocation EXACTLY (the authoritative path):
-        #   1) widen mono->stereo on [b,c,n] BEFORE movedim,
-        #   2) resample to the VAE's own sample rate (default 44100), and
-        #   3) hand vae.encode a channels-LAST TENSOR (movedim(1,-1)) — NOT a {"waveform":...} dict.
-        # The earlier dict/no-movedim/no-resample form produced garbage latents (LTX-2 caught it).
-        waveform = ensure_stereo(raw)  # [b,c,n]
-        vae_sr = getattr(audio_vae, "audio_sample_rate", 44100)
-        if vae_sr != sr:
-            waveform = torchaudio.functional.resample(waveform, sr, vae_sr)
-        _log(f"GUIDE: ref audio {tuple(raw.shape)} @ {sr}Hz ({dur:.2f}s) -> stereo {tuple(waveform.shape)}, "
-             f"vae_sr={vae_sr} (resampled={vae_sr != sr}); encoding channels-last")
-        latent = audio_vae.encode(waveform.movedim(1, -1))  # channels-last tensor
-        samples = latent["samples"] if isinstance(latent, dict) else latent
-        _log(f"GUIDE: encoded ref latent shape {tuple(samples.shape)} dtype {samples.dtype}")
-
-        ref_audio = patchify_audio_latent(samples)
-        _log(f"GUIDE: patchified ref tokens {tuple(ref_audio['tokens'].shape)} (b,t,c*f) -> attaching to pos+neg")
-        positive = node_helpers.conditioning_set_values(positive, {"ref_audio": ref_audio})
-        negative = node_helpers.conditioning_set_values(negative, {"ref_audio": ref_audio})
-        return io.NodeOutput(positive, negative)
+        # Encode the raw reference + attach as ref_audio tokens (the model places them at negative
+        # RoPE positions as out-of-timeline context). Shared encode path -> _encode_and_attach_reference.
+        return _encode_and_attach_reference(
+            positive, negative, audio_vae, reference_audio["waveform"], reference_audio["sample_rate"]
+        )
 
 
 def _folder_paths():
@@ -525,28 +529,9 @@ class LTXAddAudioICLoRAGuideAdvanced(io.ComfyNode):
     def execute(
         cls, positive, negative, audio_vae, reference_audio, reference_window_sec, reference_scale
     ) -> io.NodeOutput:
-        import torchaudio
-
-        raw = reference_audio["waveform"]
+        # Trim (a real input change, or no-op at 0), then the shared encode+attach with the scale knob.
         sr = reference_audio["sample_rate"]
-        raw = trim_reference_waveform(raw, sr, reference_window_sec)  # REAL input change (or no-op at 0)
-        dur = raw.shape[-1] / sr
-        waveform = ensure_stereo(raw)
-        vae_sr = getattr(audio_vae, "audio_sample_rate", 44100)
-        if vae_sr != sr:
-            waveform = torchaudio.functional.resample(waveform, sr, vae_sr)
-        _log(
-            f"GUIDE-ADV: ref {tuple(raw.shape)} @ {sr}Hz ({dur:.2f}s, window={reference_window_sec or 'full'}) "
-            f"-> stereo {tuple(waveform.shape)}, vae_sr={vae_sr}; encoding channels-last"
+        waveform = trim_reference_waveform(reference_audio["waveform"], sr, reference_window_sec)
+        return _encode_and_attach_reference(
+            positive, negative, audio_vae, waveform, sr, reference_scale=reference_scale, log_tag="GUIDE-ADV"
         )
-        latent = audio_vae.encode(waveform.movedim(1, -1))
-        samples = latent["samples"] if isinstance(latent, dict) else latent
-        if reference_scale != 1.0:
-            samples = samples * reference_scale  # REAL input change (off-distribution if far from 1.0)
-        _log(f"GUIDE-ADV: encoded ref latent {tuple(samples.shape)} dtype {samples.dtype} (scale={reference_scale})")
-
-        ref_audio = patchify_audio_latent(samples)
-        _log(f"GUIDE-ADV: patchified ref tokens {tuple(ref_audio['tokens'].shape)} -> attaching to pos+neg")
-        positive = node_helpers.conditioning_set_values(positive, {"ref_audio": ref_audio})
-        negative = node_helpers.conditioning_set_values(negative, {"ref_audio": ref_audio})
-        return io.NodeOutput(positive, negative)
