@@ -447,7 +447,7 @@
       "title": "Audio IC-LoRA strength",
       "properties": {},
       "widgets_values": [
-        "**Start at ~0.5 strength.**\n\nPushing higher (toward 1.0) drives the audio attention off-distribution and the output degrades into instability/garble, and how far you can push depends on the content and the generation. 0.3-0.5 is the usable band; back off if it breaks up."
+        "**Start at ~0.5 strength.**\n\nPushing toward 1.0 drives the audio attention off-distribution and the output garbles; the usable band is ~0.3-0.75 and the ceiling is content/seed-dependent. Back off if it breaks up."
       ],
       "color": "#432",
       "bgcolor": "#653"
@@ -896,7 +896,7 @@
       "widgets_values": [
         "auto_mask_aware",
         true,
-        0
+        1024
       ]
     },
     {
@@ -1475,7 +1475,7 @@
         "Node name for S&R": "LTXAddAudioICLoRAGuideAdvanced"
       },
       "widgets_values": [
-        5,
+        3.5,
         1
       ]
     },
@@ -1539,7 +1539,7 @@
       "title": "Models (filename -> what it is)",
       "properties": {},
       "widgets_values": [
-        "## Models (filename -> what it is)\n\n**Transformer (UNETLoader):** `ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors`\nLTX-2.3 **22B distilled** transformer, fp8-scaled. -> `models/diffusion_models`. Distilled => runs at **CFG 1** (strength is the only guidance knob).\n\n**Text encoder (DualCLIPLoader):** `gemma_3_12B_it_fpmixed.safetensors` + `ltx-2.3_text_projection_bf16.safetensors`\nGemma-3 12B encoder + LTX text projection. -> `models/text_encoders`, type `ltxv`.\n\n**VAEs (VAELoaderKJ x2):** `LTX2_video_vae_bf16.safetensors` (video, bf16) + `LTX2_audio_vae_bf16.safetensors` (audio \u2014 ComfyUI force-runs it fp32; leave the dtype widget alone). -> `models/vae`.\n\nSwap in your own filenames if they differ. LoRA download is in \"Downloads & setup\"."
+        "## Models (filename -> what it is)\n\n**Transformer (UNETLoader):** `ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors`\nLTX-2.3 **22B distilled** transformer, fp8-scaled. -> `models/diffusion_models`. Distilled => runs at **CFG 1** (strength is the only guidance knob).\n\n**Text encoder (DualCLIPLoader):** `gemma_3_12B_it_fpmixed.safetensors` + `ltx-2.3_text_projection_bf16.safetensors`\nGemma-3 12B encoder + LTX text projection. -> `models/text_encoders`, type `ltxv`.\n\n**VAEs (VAELoaderKJ x2):** `LTX2_video_vae_bf16.safetensors` (video, bf16) + `LTX2_audio_vae_bf16.safetensors` (audio: ComfyUI forces fp32 regardless of the dtype widget, matching the fp32 training encode). -> `models/vae`.\n\nSwap in your own filenames if they differ. LoRA download is in \"Downloads & setup\"."
       ],
       "color": "#432",
       "bgcolor": "#653"
@@ -1587,7 +1587,7 @@
       "title": "Audio IC-LoRA Loader (per-stream)",
       "properties": {},
       "widgets_values": [
-        "## Audio IC-LoRA Loader (per-stream)\n\nLoads the audio IC-LoRA with a separate dial per stream:\n\n- **audio_strength** (band 0.3-0.9, start ~0.5): the audio modules (voice -> voice). The main dial.\n- **bridge_strength** (0 to ~1.0, ~0.8): the cross-modal bridge (voice -> on-screen face/motion). Push *above* audio_strength to amplify the picture's response; >1.0 extrapolates and smears. **No-op for the audio-only checkpoint** (no bridge).\n\nFails loud if the LoRA binds nothing (wrong base model) \u2014 watch the console."
+        "## Audio IC-LoRA Loader (per-stream)\n\nLoads the audio IC-LoRA with a separate dial per stream:\n\n- **audio_strength** (band 0.3-0.75, start ~0.5): the audio modules (voice -> voice). The main dial.\n- **bridge_strength** (0 to ~1.0, ~0.8): the cross-modal bridge (voice -> on-screen face/motion). Push *above* audio_strength to amplify the picture's response; >1.0 extrapolates and smears. **No-op for the audio-only checkpoint** (no bridge).\n\nFails loud if the LoRA binds nothing (wrong base model) \u2014 watch the console."
       ],
       "color": "#432",
       "bgcolor": "#653"
@@ -1635,7 +1635,7 @@
       "title": "Add Audio IC-LoRA Guide (Advanced)",
       "properties": {},
       "widgets_values": [
-        "## Add Audio IC-LoRA Guide (Advanced)\n\nAttaches the **audio-only** reference (encoded by the audio VAE) as context tokens at negative RoPE positions. No image/video reference.\n\n- **reference_window_sec** (0 = whole clip; ~3.5 matches training): trims the reference to its first N seconds. A full song/long clip is off-distribution-long; ~3.5-5s is the sweet spot.\n- **reference_scale** (1.0 default; ~0.5-2.0): scales the encoded reference magnitude. Far from 1.0 goes off-distribution \u2014 sweep gently.\n\nKeep the caption neutral so the *audio* drives the attribute. (For energy-based window selection + within-window emphasis, see the **Audio Reference Shaper** node.)"
+        "## Add Audio IC-LoRA Guide (Advanced)\n\nAttaches the **audio-only** reference (encoded by the audio VAE) as context tokens at negative RoPE positions. No image/video reference.\n\n- **reference_window_sec** (0 = whole clip; ~3.5 matches training): trims the reference to its first N seconds. A full song is longer than anything seen in training; ~3.5-5s is the sweet spot.\n- **reference_scale** (1.0 default, max 4.0; sweep ~0.5-2.0): scales the encoded reference magnitude. Far from 1.0 goes off-distribution.\n\nKeep the caption neutral so the *audio* drives the attribute. (For energy-based window selection + within-window emphasis, see the **Audio Reference Shaper** node.)"
       ],
       "color": "#432",
       "bgcolor": "#653"
