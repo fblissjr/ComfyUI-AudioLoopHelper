@@ -110,8 +110,8 @@
       "id": 1857,
       "type": "ManualSigmas",
       "pos": [
-        577.3819241966175,
-        1484.7273364500852
+        1430.0,
+        700.0
       ],
       "size": [
         271.305509971064,
@@ -145,8 +145,8 @@
       "id": 1853,
       "type": "KSamplerSelect",
       "pos": [
-        861.8864896633668,
-        1287.7690078031796
+        1430.0,
+        560.0
       ],
       "size": [
         271.305509971064,
@@ -546,8 +546,8 @@
       "id": 1847,
       "type": "LTXVAudioVAEDecode",
       "pos": [
-        1202.0984094743742,
-        466.2554603430535
+        2540.0,
+        470.0
       ],
       "size": [
         257.2388542190106,
@@ -713,8 +713,8 @@
       "id": 1837,
       "type": "VHS_VideoCombine",
       "pos": [
-        1482.7593102686487,
-        749.269517988257
+        2620.0,
+        760.0
       ],
       "size": [
         400,
@@ -871,7 +871,7 @@
       ],
       "flags": {},
       "order": 19,
-      "mode": 0,
+      "mode": 4,
       "inputs": [
         {
           "name": "model",
@@ -903,8 +903,8 @@
       "id": 1842,
       "type": "RandomNoise",
       "pos": [
-        88.00432901879088,
-        1069.7071572898137
+        1430.0,
+        420.0
       ],
       "size": [
         271.305509971064,
@@ -1421,8 +1421,8 @@
       "id": 1996,
       "type": "LTXAddAudioICLoRAGuideAdvanced",
       "pos": [
-        964.4116315207056,
-        310.60846077371764
+        1200.0,
+        470.0
       ],
       "size": [
         352.1802734375,
@@ -1483,8 +1483,8 @@
       "id": 1992,
       "type": "LTXAudioICLoRALoaderPerStream",
       "pos": [
-        1511.4810028272414,
-        -129.08384233257627
+        1300.0,
+        -129.0
       ],
       "size": [
         335.261328125,
@@ -1560,10 +1560,10 @@
       "mode": 0,
       "inputs": [],
       "outputs": [],
-      "title": "Sage Attention (optional speedup)",
+      "title": "Sage Attention (optional, off by default)",
       "properties": {},
       "widgets_values": [
-        "## AudioLoopHelper Sage Attention (optional)\n\n- **mode**: `auto_mask_aware` (safe default). `auto` is faster with the SageAttention-ada fork (sm89 + CUDA>=12.8) but lower precision on the masked reference path.\n- **fallback_on_error**: leave **on** (falls back to pytorch on a kernel error).\n- **skip_under_seq_len**: **1024** recommended \u2014 short text-encoder calls go to pytorch (sage is slower there); long video self-attn still uses sage. 0 = everything to sage."
+        "## Sage Attention (optional, off by default)\n\nThis **AudioLoopHelper Sage** node is **bypassed** by default and was tuned on a 4090 (sm89). SageAttention is an optional speedup, not required to run this workflow.\n\nIf you want it, the simplest general path is **KJNodes' \"Patch Sage Attention\" (PatchSageAttentionKJ)** node on the model line (or their **LTX2 Mem-Efficient Sage** patch for LTX-2 specifically).\n\nIf you do enable this node: mode `auto_mask_aware` (safe), fallback_on_error on, skip_under_seq_len 1024."
       ],
       "color": "#432",
       "bgcolor": "#653"
@@ -1572,7 +1572,7 @@
       "id": 1999,
       "type": "MarkdownNote",
       "pos": [
-        1511.0,
+        1300.0,
         -400.0
       ],
       "size": [
@@ -1620,7 +1620,7 @@
       "id": 2001,
       "type": "MarkdownNote",
       "pos": [
-        1340.0,
+        1200.0,
         240.0
       ],
       "size": [
