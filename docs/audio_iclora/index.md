@@ -1,18 +1,22 @@
 Last updated: 2026-05-31
 
-# Audio-only IC-LoRA ("helium")
+# Audio-only IC-LoRA
 
-The current effort: an audio-only IC-LoRA on LTX-2.3-22B (distilled) where an in-context reference
-**tone** steers the pitch of the jointly-generated speech. No image or video reference. Single-pass
-renders with the trained adapter qualitatively steer the output (the reference audio drives the result);
-the quantitative gate — the LoRA-vs-base F0 slope — is not yet published.
+An audio-only IC-LoRA on LTX-2.3-22B (distilled): an in-context reference **audio** clip steers the
+jointly-generated audio+video. No image or video reference. Two models so far, both proof-of-concept
+(qualitatively steered, no published quantitative eval): a **pitch** probe ("helium") and the broader
+**voice -> identity / mannerism** model (Audio-Only-Context).
 
 ## Start here
 
-- **[`audio_only_ic_lora.md`](./audio_only_ic_lora.md)**: how the custom nodes work, the observed
-  **inference behavior** (no reference-length clamp, the 0.3–0.5 strength band, audio→identity coupling,
-  why pure tones produce no speech), how to run it in ComfyUI, how to evaluate it (the F0-tracking gate),
-  and the automated trust gates that keep a broken setup from producing a meaningless result. Read this first.
+- **[`audio_only_context.md`](./audio_only_context.md)**: the current **Audio-Only-Context** model
+  (voice -> identity / mannerism), the two checkpoints (audio-only vs cross-modal), the granular-strength
+  nodes (per-stream loader + advanced guide), and the honest measurement note (why the reference-attribution
+  gap reads ~0 for an identity task and why generation-from-noise is the real test). Released on HF.
+- **[`audio_only_ic_lora.md`](./audio_only_ic_lora.md)**: the pitch ("helium") predecessor and the shared
+  node mechanics — how the custom nodes work, the observed **inference behavior** (no reference-length clamp,
+  the strength band, audio→identity coupling, why pure tones produce no speech), how to run it in ComfyUI,
+  the F0-tracking gate, and the automated trust gates.
 - **[`../guides/build_multimodal_dataset.md`](../guides/build_multimodal_dataset.md)**: turn a folder of
   sweep renders (prompt × reference × strength → output) into a schema'd JSONL dataset.
 
