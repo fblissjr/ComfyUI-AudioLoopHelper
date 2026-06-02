@@ -4589,6 +4589,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LTXAudioICLoRALoader,
             LTXAudioICLoRALoaderPerStream,
             LTXAudioReferenceShaper,
+            LTXLoadComposeReferenceAudio,
             LTXAudioSetRefTokens,
         )
         from .nodes_audio_latent_slice import AudioLatentSlice
@@ -4625,6 +4626,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LTXAudioICLoRALoader,
             LTXAudioICLoRALoaderPerStream,
             LTXAudioReferenceShaper,
+            LTXLoadComposeReferenceAudio,
             LTXAudioSetRefTokens,
             LTXResolutionFromAspect,
             LTXFramePlanner,
