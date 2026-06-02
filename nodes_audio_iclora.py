@@ -641,48 +641,37 @@ class LTXAudioReferenceShaper(io.ComfyNode):
 
 
 class LTXLoadComposeReferenceAudio(io.ComfyNode):
-    """Load a reference audio file and COMPOSE the in-context reference from one or more (possibly
-    non-contiguous) slices, each with its own gain. A LoadAudio replacement for the audio IC-LoRA
-    reference path: drop it in, pick the slices (hand-edit the `segments` JSON for now; a visual
-    waveform editor will populate it), and it outputs the assembled AUDIO -> feed the guide's reference_audio.
+    """Compose the in-context reference from one or more (possibly non-contiguous) slices of an input
+    reference clip, each with its own gain. Sits between Load Audio and the guide's reference_audio
+    (AUDIO -> AUDIO): wire `Load Audio -> here -> guide.reference_audio`.
 
     A single slice == a simple window; `[]` segments == the whole clip. **Keep the TOTAL composed
     duration to ~a few seconds**: the reference becomes ~15 tokens/sec at negative RoPE positions and
     the model only saw short references in training, so longer is off-distribution (see
     internal/audio_iclora_training/reference_window_selection.png). Slice *selection* is in-distribution;
-    per-slice *gain* is an off-distribution emphasis proxy (default unity 1.0 = no emphasis)."""
+    per-slice *gain* is an off-distribution emphasis proxy (default unity 1.0 = no emphasis). Slices are
+    given as `segments` JSON (hand-edit for now; a visual waveform editor that owns the upload + draws
+    the waveform is forthcoming -- owning the upload is coupled to shipping that widget, so until then
+    this takes an AUDIO socket)."""
 
     @classmethod
     def define_schema(cls):
-        import os
-
-        fp = _folder_paths()
-        input_dir = fp.get_input_directory()
-        try:
-            os.makedirs(input_dir, exist_ok=True)
-            files = fp.filter_files_content_types(os.listdir(input_dir), ["audio", "video"])
-        except Exception:
-            files = []
         return io.Schema(
             node_id="LTXLoadComposeReferenceAudio",
-            display_name="Load + Compose Reference Audio",
+            display_name="Compose Reference Audio (slices)",
             category="Lightricks/IC-LoRA",
             description=(
-                "Load a reference clip and compose the IC-LoRA reference from one or more slices "
-                "(each with a gain). LoadAudio replacement: outputs AUDIO -> the guide's "
-                "reference_audio. One slice = a window; no slices = whole clip. Keep total duration "
-                "to ~a few seconds (longer is off-distribution). Slices are given as `segments` JSON "
-                "(hand-edit for now; a waveform editor will manage it)."
+                "Compose the IC-LoRA reference from one or more slices (each with a gain) of the input "
+                "audio. Wire Load Audio -> here -> the guide's reference_audio. One slice = a window; no "
+                "slices = whole clip. Keep total duration to ~a few seconds (longer is off-distribution). "
+                "Slices are `segments` JSON (hand-edit for now; a waveform editor will manage it)."
             ),
             inputs=[
-                io.Combo.Input(
-                    "audio", upload=io.UploadType.audio, options=sorted(files),
-                    tooltip="Reference audio file (upload, or pick from the input/ folder).",
-                ),
+                io.Audio.Input("reference_audio", tooltip="The reference clip (e.g. from Load Audio)."),
                 io.String.Input(
                     "segments", default="[]", multiline=False,
                     tooltip="JSON list of slices: [{\"start_sec\":..,\"end_sec\":..,\"gain\":1.0}, ...]. "
-                    "Hand-edit for now (a waveform editor will manage this); [] = whole clip. Keep total duration small.",
+                    "[] = whole clip. Keep total duration small. (A waveform editor will manage this.)",
                 ),
                 io.Float.Input(
                     "fade_sec", default=0.01, min=0.0, max=0.5, step=0.005,
@@ -694,15 +683,11 @@ class LTXLoadComposeReferenceAudio(io.ComfyNode):
         )
 
     @classmethod
-    def execute(cls, audio, segments, fade_sec) -> io.NodeOutput:
+    def execute(cls, reference_audio, segments, fade_sec) -> io.NodeOutput:
         import json
 
-        from comfy_extras.nodes_audio import load as _load_audio
-
-        fp = _folder_paths()
-        path = fp.get_annotated_filepath(audio)
-        waveform, sample_rate = _load_audio(path)   # [C, n]
-        waveform = waveform.unsqueeze(0)             # [1, C, n] (comfy AUDIO layout)
+        sr = int(reference_audio["sample_rate"])
+        waveform = reference_audio["waveform"]
         try:
             segs = json.loads(segments) if segments else []
         except Exception:
@@ -710,28 +695,6 @@ class LTXLoadComposeReferenceAudio(io.ComfyNode):
         if not isinstance(segs, list):
             _log(f"COMPOSE: segments not a JSON list, using whole clip: {str(segments)[:80]!r}")
             segs = []
-        composed = _shaping.compose_reference(waveform, sample_rate, segs, fade_sec=float(fade_sec))
-        _log(f"COMPOSE: {audio} | {len(segs)} slice(s) -> {composed.shape[-1] / sample_rate:.2f}s @ {sample_rate}Hz")
-        return io.NodeOutput({"waveform": composed, "sample_rate": int(sample_rate)})
-
-    @classmethod
-    def fingerprint_inputs(cls, audio, segments, fade_sec):
-        import hashlib
-
-        fp = _folder_paths()
-        m = hashlib.sha256()
-        try:
-            with open(fp.get_annotated_filepath(audio), "rb") as f:
-                m.update(f.read())
-        except Exception:
-            pass
-        m.update(str(segments).encode())
-        m.update(str(fade_sec).encode())
-        return m.digest().hex()
-
-    @classmethod
-    def validate_inputs(cls, audio, segments, fade_sec):
-        fp = _folder_paths()
-        if not fp.exists_annotated_filepath(audio):
-            return f"Invalid audio file: {audio}"
-        return True
+        composed = _shaping.compose_reference(waveform, sr, segs, fade_sec=float(fade_sec))
+        _log(f"COMPOSE: {len(segs)} slice(s) -> {composed.shape[-1] / sr:.2f}s @ {sr}Hz")
+        return io.NodeOutput({"waveform": composed, "sample_rate": sr})
