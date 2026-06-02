@@ -241,3 +241,20 @@ def compose_reference(waveform, sample_rate, segments, fade_sec: float = 0.01):
     if not parts:
         return waveform
     return torch.cat(parts, dim=-1)
+
+
+def reference_envelope(waveform, sample_rate, buckets: int = 800) -> dict:
+    """Downsampled peak envelope of a ``[..., n]`` waveform, for the visual compose editor to draw
+    the input clip's waveform (the audio reaches the node as a tensor the browser can't read, so the
+    node emits this compact envelope). Returns ``{"peaks": [0..1] * ~buckets, "duration": seconds,
+    "sr": sample_rate}`` -- peak (max |amp|) per bucket, normalized to the clip's loudest. Empty -> []."""
+    n = waveform.shape[-1]
+    sr = int(sample_rate)
+    if n <= 0:
+        return {"peaks": [], "duration": 0.0, "sr": sr}
+    amp = waveform.reshape(-1, n).abs().amax(dim=0).float()   # per-sample peak across channels
+    step = max(1, n // buckets)
+    usable = (n // step) * step
+    peaks = amp[:usable].reshape(-1, step).amax(dim=1)
+    peaks = (peaks / (float(peaks.max()) + 1e-9)).clamp(0.0, 1.0)
+    return {"peaks": [round(float(p), 3) for p in peaks.tolist()], "duration": n / float(sr), "sr": sr}

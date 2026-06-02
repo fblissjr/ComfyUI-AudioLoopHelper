@@ -233,3 +233,20 @@ def test_compose_invalid_segments_fall_back_to_whole():
     wav = _const(0.5, 5.0)
     out = S.compose_reference(wav, SR, [{"start_sec": 2.0, "end_sec": 1.0, "gain": 1.0}])  # end<=start
     assert out.shape == wav.shape
+
+
+# ---- reference_envelope (for the visual editor) ------------------------------
+
+def test_reference_envelope_shape_norm_and_duration():
+    wav = _concat(_const(0.1, 1.0), _const(1.0, 1.0))   # 2s: quiet half then loud half
+    env = S.reference_envelope(wav, SR, buckets=100)
+    assert abs(env["duration"] - 2.0) < 1e-3
+    assert env["sr"] == SR
+    assert 0 < len(env["peaks"]) <= 105
+    assert max(env["peaks"]) == 1.0                      # normalized to the loudest bucket
+    assert env["peaks"][0] < env["peaks"][-1]            # quiet first half < loud second half
+
+
+def test_reference_envelope_empty_clip():
+    env = S.reference_envelope(torch.zeros(1, 1, 0), SR)
+    assert env["peaks"] == [] and env["duration"] == 0.0

@@ -697,4 +697,7 @@ class LTXLoadComposeReferenceAudio(io.ComfyNode):
             segs = []
         composed = _shaping.compose_reference(waveform, sr, segs, fade_sec=float(fade_sec))
         _log(f"COMPOSE: {len(segs)} slice(s) -> {composed.shape[-1] / sr:.2f}s @ {sr}Hz")
-        return io.NodeOutput({"waveform": composed, "sample_rate": sr})
+        # Emit the INPUT clip's waveform envelope so the visual editor (web/js) can draw it and
+        # place slices on it -- the audio arrives as a tensor the browser can't read directly.
+        env = json.dumps(_shaping.reference_envelope(waveform, sr))
+        return io.NodeOutput({"waveform": composed, "sample_rate": sr}, ui={"ltxcompose": [env]})

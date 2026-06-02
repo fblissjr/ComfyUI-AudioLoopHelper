@@ -35,3 +35,8 @@ else:
         profile_dir.mkdir(parents=True, exist_ok=True)
 
     _clear_profiler_run_artifacts()
+
+
+# Frontend assets (the Compose Reference Audio waveform/slice editor widget). Module-level so
+# ComfyUI serves web/ regardless of the ComfyExtension probe above.
+WEB_DIRECTORY = "./web"
