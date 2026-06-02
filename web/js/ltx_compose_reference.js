@@ -7,6 +7,7 @@
 // data channel + serialize via a String widget). v1: SELECTION only (gain fixed 1.0, the
 // in-distribution part); per-slice gain editing is a follow-up.
 import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
 
 const NODE = "LTXLoadComposeReferenceAudio";
 const MAX_TOTAL_SEC = 5.0; // soft budget; over this the readout warns (off-distribution territory)
@@ -57,9 +58,9 @@ async function loadFromFile(node, value) {
   const st = node._compose;
   if (!st || !value) return;
   const { name, subfolder, type } = splitFilePath(value);
-  const url = `/api/view?filename=${encodeURIComponent(name)}&type=${type}&subfolder=${encodeURIComponent(subfolder)}`;
+  const params = new URLSearchParams({ filename: name, type, subfolder });
   try {
-    const resp = await fetch(url);
+    const resp = await fetch(api.apiURL("/view?" + params));
     if (!resp.ok) throw new Error("view " + resp.status);
     const buf = await resp.arrayBuffer();
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -77,9 +78,8 @@ async function loadFromFile(node, value) {
       peaks.push(p);
       if (p > mx) mx = p;
     }
-    st.peaks = peaks.map((p) => Math.round((p / mx) * 1000) / 1000);
+    st.peaks = peaks.map((p) => p / mx);   // normalize to the loudest bucket (drawn, never serialized)
     st.duration = audio.duration;
-    st.sr = audio.sampleRate;
     node._composeDraw?.();
     log("client-side waveform:", st.duration.toFixed(2) + "s", st.peaks.length + " pts,", value);
   } catch (err) {
@@ -88,7 +88,7 @@ async function loadFromFile(node, value) {
 }
 
 function initEditor(node) {
-  const st = (node._compose = { peaks: [], duration: 0, sr: 0, slices: readSlices(node), drag: null });
+  const st = (node._compose = { peaks: [], duration: 0, slices: readSlices(node), drag: null });
 
   const container = document.createElement("div");
   container.style.cssText = "width:100%;height:170px;position:relative;box-sizing:border-box;";
@@ -110,8 +110,11 @@ function initEditor(node) {
   function draw() {
     const dpr = window.devicePixelRatio || 1;
     const w = cw(), h = ch();
-    canvas.width = Math.max(1, Math.round(w * dpr));
-    canvas.height = Math.max(1, Math.round(h * dpr));
+    // Only reassign the backing bitmap when the size actually changes -- writing canvas.width/height
+    // always reallocates + clears, and draw() runs on every pointermove during a drag.
+    const bw = Math.max(1, Math.round(w * dpr)), bh = Math.max(1, Math.round(h * dpr));
+    if (canvas.width !== bw) canvas.width = bw;
+    if (canvas.height !== bh) canvas.height = bh;
     const ctx = canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
@@ -155,11 +158,9 @@ function initEditor(node) {
   function hit(px) {
     for (let i = st.slices.length - 1; i >= 0; i--) {
       const s = st.slices[i], x0 = secToX(s.start), x1 = secToX(s.end);
-      if (px >= x0 - EDGE_PX && px <= x1 + EDGE_PX) {
-        if (Math.abs(px - x0) <= EDGE_PX) return { idx: i, edge: "l" };
-        if (Math.abs(px - x1) <= EDGE_PX) return { idx: i, edge: "r" };
-        if (px > x0 && px < x1) return { idx: i, edge: "body" };
-      }
+      if (Math.abs(px - x0) <= EDGE_PX) return { idx: i, edge: "l" };
+      if (Math.abs(px - x1) <= EDGE_PX) return { idx: i, edge: "r" };
+      if (px > x0 && px < x1) return { idx: i, edge: "body" };
     }
     return null;
   }
@@ -176,7 +177,8 @@ function initEditor(node) {
       return;
     }
     if (h) {
-      st.drag = { idx: h.idx, edge: h.edge, px0: px, s0: { ...st.slices[h.idx] } };
+      const s = st.slices[h.idx];
+      st.drag = { idx: h.idx, edge: h.edge, px0: px, s0: { start: s.start, end: s.end } };
     } else {
       const start = xToSec(px);
       const end = Math.min(st.duration, start + 2.0); // default ~2s, then drag the right edge
@@ -242,7 +244,6 @@ app.registerExtension({
         if (st) {
           st.peaks = p.peaks || [];
           st.duration = p.duration || 0;
-          st.sr = p.sr || 0;
           this._composeDraw?.();
           log("waveform loaded:", st.duration.toFixed(2) + "s", st.peaks.length, "pts");
         }
