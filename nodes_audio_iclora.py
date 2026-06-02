@@ -641,37 +641,49 @@ class LTXAudioReferenceShaper(io.ComfyNode):
 
 
 class LTXLoadComposeReferenceAudio(io.ComfyNode):
-    """Compose the in-context reference from one or more (possibly non-contiguous) slices of an input
-    reference clip, each with its own gain. Sits between Load Audio and the guide's reference_audio
-    (AUDIO -> AUDIO): wire `Load Audio -> here -> guide.reference_audio`.
+    """Load a reference clip and COMPOSE the in-context reference from one or more (possibly
+    non-contiguous) slices, each with a gain. The audio IC-LoRA reference loader: pick a file, draw
+    slices on the waveform (visual editor), output AUDIO -> the guide's reference_audio. Replaces
+    Load Audio for the reference path.
 
-    A single slice == a simple window; `[]` segments == the whole clip. **Keep the TOTAL composed
-    duration to ~a few seconds**: the reference becomes ~15 tokens/sec at negative RoPE positions and
-    the model only saw short references in training, so longer is off-distribution (see
-    internal/audio_iclora_training/reference_window_selection.png). Slice *selection* is in-distribution;
-    per-slice *gain* is an off-distribution emphasis proxy (default unity 1.0 = no emphasis). Slices are
-    given as `segments` JSON (hand-edit for now; a visual waveform editor that owns the upload + draws
-    the waveform is forthcoming -- owning the upload is coupled to shipping that widget, so until then
-    this takes an AUDIO socket)."""
+    A single slice == a window; `[]` == the whole clip. **Keep the TOTAL composed duration to ~a few
+    seconds** (the reference is ~15-25 tokens/sec at negative RoPE positions; the model only saw short
+    references in training, so longer is off-distribution -- see internal/audio_iclora_training/
+    reference_window_selection.png). Slice *selection* is in-distribution; per-slice *gain* is an
+    off-distribution emphasis proxy (default unity 1.0 = no emphasis). Uses a plain file combo (NOT
+    core's audio-upload widget, which assumes a preview widget and crashes) so our editor can draw the
+    waveform client-side; drop reference files in ComfyUI's input/ folder."""
 
     @classmethod
     def define_schema(cls):
+        import os
+
+        fp = _folder_paths()
+        try:
+            os.makedirs(fp.get_input_directory(), exist_ok=True)
+            files = fp.filter_files_content_types(os.listdir(fp.get_input_directory()), ["audio", "video"])
+        except Exception:
+            files = []
         return io.Schema(
             node_id="LTXLoadComposeReferenceAudio",
             display_name="Compose Reference Audio (slices)",
             category="Lightricks/IC-LoRA",
             description=(
-                "Compose the IC-LoRA reference from one or more slices (each with a gain) of the input "
-                "audio. Wire Load Audio -> here -> the guide's reference_audio. One slice = a window; no "
-                "slices = whole clip. Keep total duration to ~a few seconds (longer is off-distribution). "
-                "Slices are `segments` JSON (hand-edit for now; a waveform editor will manage it)."
+                "Load a reference file and compose the IC-LoRA reference from one or more slices (each "
+                "with a gain). Replaces Load Audio: outputs AUDIO -> the guide's reference_audio. One "
+                "slice = a window; no slices = whole clip. Keep total duration to ~a few seconds (longer "
+                "is off-distribution). The waveform editor draws the clip and manages `segments`."
             ),
             inputs=[
-                io.Audio.Input("reference_audio", tooltip="The reference clip (e.g. from Load Audio)."),
+                io.Combo.Input(
+                    "audio", options=sorted(files),
+                    tooltip="Reference audio file from ComfyUI's input/ folder. The editor draws its "
+                    "waveform; drop files in input/ to add them.",
+                ),
                 io.String.Input(
                     "segments", default="[]", multiline=False,
                     tooltip="JSON list of slices: [{\"start_sec\":..,\"end_sec\":..,\"gain\":1.0}, ...]. "
-                    "[] = whole clip. Keep total duration small. (A waveform editor will manage this.)",
+                    "[] = whole clip. Keep total duration small. (The waveform editor manages this.)",
                 ),
                 io.Float.Input(
                     "fade_sec", default=0.01, min=0.0, max=0.5, step=0.005,
@@ -683,11 +695,15 @@ class LTXLoadComposeReferenceAudio(io.ComfyNode):
         )
 
     @classmethod
-    def execute(cls, reference_audio, segments, fade_sec) -> io.NodeOutput:
+    def execute(cls, audio, segments, fade_sec) -> io.NodeOutput:
         import json
 
-        sr = int(reference_audio["sample_rate"])
-        waveform = reference_audio["waveform"]
+        from comfy_extras.nodes_audio import load as _load_audio
+
+        fp = _folder_paths()
+        waveform, sr = _load_audio(fp.get_annotated_filepath(audio))  # [C, n]
+        waveform = waveform.unsqueeze(0)                              # [1, C, n] (comfy AUDIO layout)
+        sr = int(sr)
         try:
             segs = json.loads(segments) if segments else []
         except Exception:
@@ -696,8 +712,28 @@ class LTXLoadComposeReferenceAudio(io.ComfyNode):
             _log(f"COMPOSE: segments not a JSON list, using whole clip: {str(segments)[:80]!r}")
             segs = []
         composed = _shaping.compose_reference(waveform, sr, segs, fade_sec=float(fade_sec))
-        _log(f"COMPOSE: {len(segs)} slice(s) -> {composed.shape[-1] / sr:.2f}s @ {sr}Hz")
-        # Emit the INPUT clip's waveform envelope so the visual editor (web/js) can draw it and
-        # place slices on it -- the audio arrives as a tensor the browser can't read directly.
+        _log(f"COMPOSE: {audio} | {len(segs)} slice(s) -> {composed.shape[-1] / sr:.2f}s @ {sr}Hz")
+        # Envelope of the INPUT clip for the editor (fallback path -- the widget normally draws the
+        # waveform client-side from the file, but this keeps it working if that fetch ever fails).
         env = json.dumps(_shaping.reference_envelope(waveform, sr))
         return io.NodeOutput({"waveform": composed, "sample_rate": sr}, ui={"ltxcompose": [env]})
+
+    @classmethod
+    def fingerprint_inputs(cls, audio, segments, fade_sec):
+        import hashlib
+
+        m = hashlib.sha256()
+        try:
+            with open(_folder_paths().get_annotated_filepath(audio), "rb") as f:
+                m.update(f.read())
+        except Exception:
+            pass
+        m.update(str(segments).encode())
+        m.update(str(fade_sec).encode())
+        return m.digest().hex()
+
+    @classmethod
+    def validate_inputs(cls, audio, segments, fade_sec):
+        if not _folder_paths().exists_annotated_filepath(audio):
+            return f"Invalid audio file: {audio}"
+        return True

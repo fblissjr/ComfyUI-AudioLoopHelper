@@ -42,6 +42,51 @@ function writeSlices(node, slices) {
   node.setDirtyCanvas?.(true, true);
 }
 
+// Parse a ComfyUI file-combo value ("name", "sub/name", or "name [type]") into /api/view parts.
+function splitFilePath(value) {
+  let name = value || "", subfolder = "", type = "input";
+  const m = name.match(/^(.*) \[(\w+)\]$/);
+  if (m) { name = m[1]; type = m[2]; }
+  const i = name.lastIndexOf("/");
+  if (i >= 0) { subfolder = name.slice(0, i); name = name.slice(i + 1); }
+  return { name, subfolder, type };
+}
+
+// Fetch the chosen file + decode it in the browser to draw the waveform instantly (no Queue).
+async function loadFromFile(node, value) {
+  const st = node._compose;
+  if (!st || !value) return;
+  const { name, subfolder, type } = splitFilePath(value);
+  const url = `/api/view?filename=${encodeURIComponent(name)}&type=${type}&subfolder=${encodeURIComponent(subfolder)}`;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error("view " + resp.status);
+    const buf = await resp.arrayBuffer();
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ac = new AC();
+    const audio = await ac.decodeAudioData(buf);
+    ac.close?.();
+    const data = audio.getChannelData(0);
+    const n = data.length, BUCKETS = 800, step = Math.max(1, Math.floor(n / BUCKETS));
+    const peaks = [];
+    let mx = 1e-9;
+    for (let i = 0; i < n; i += step) {
+      let p = 0;
+      const end = Math.min(i + step, n);
+      for (let j = i; j < end; j++) { const a = Math.abs(data[j]); if (a > p) p = a; }
+      peaks.push(p);
+      if (p > mx) mx = p;
+    }
+    st.peaks = peaks.map((p) => Math.round((p / mx) * 1000) / 1000);
+    st.duration = audio.duration;
+    st.sr = audio.sampleRate;
+    node._composeDraw?.();
+    log("client-side waveform:", st.duration.toFixed(2) + "s", st.peaks.length + " pts,", value);
+  } catch (err) {
+    log("client-side load failed (Queue once to load via the node instead):", err.message || err);
+  }
+}
+
 function initEditor(node) {
   const st = (node._compose = { peaks: [], duration: 0, sr: 0, slices: readSlices(node), drag: null });
 
@@ -158,6 +203,19 @@ function initEditor(node) {
   const endDrag = () => { if (st.drag) { st.drag = null; writeSlices(node, st.slices); draw(); } };
   canvas.addEventListener("pointerup", endDrag);
   canvas.addEventListener("pointercancel", endDrag);
+
+  // Draw the waveform client-side from the chosen file -- instant, no Queue. Re-load when the
+  // file combo changes; also load whatever is selected now.
+  const audioW = node.widgets?.find((w) => w.name === "audio");
+  if (audioW) {
+    const orig = audioW.callback;
+    audioW.callback = function () {
+      const r = orig?.apply(this, arguments);
+      loadFromFile(node, audioW.value);
+      return r;
+    };
+    if (audioW.value) loadFromFile(node, audioW.value);
+  }
 
   try { new ResizeObserver(() => draw()).observe(container); } catch {}
   if (node.size) node.size[1] = Math.max(node.size[1] || 0, 400);
