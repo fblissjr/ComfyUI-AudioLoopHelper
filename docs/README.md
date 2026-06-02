@@ -94,7 +94,7 @@ linking out (parallel-scrubbed-copy convention retired 2026-04-25).
 - `LTXVAddGuideMulti` (up to 20 guides), `LTXVAddGuidesFromBatch`: [`analysis/kjnodes_multiframe_guide_analysis.md`](analysis/kjnodes_multiframe_guide_analysis.md)
 
 ### "I want sparse keyframes -> LTX fills the gaps (single pass, no loop, no frozen audio)"
-- Time-space a dense keyframe batch into guides with one node (`KeyframeGuidesFromBatch`): [`guides/keyframe_fill_single_pass.md`](guides/keyframe_fill_single_pass.md)
+- Time-space a dense keyframe batch into guides with one node (`KeyframeGuidesTimeSpaced`): [`guides/keyframe_fill_single_pass.md`](guides/keyframe_fill_single_pass.md)
 
 ### "I want to understand lip-sync / frozen-audio prompting"
 - Replace someone's dialogue (voice-clone + lip-sync), step by step: [`guides/dialogue_replacement_guide.md`](guides/dialogue_replacement_guide.md)

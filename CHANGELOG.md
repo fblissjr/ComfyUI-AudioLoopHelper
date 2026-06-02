@@ -7,7 +7,7 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- **`KeyframeGuidesFromBatch` node — single-pass keyframe fill.** Collapses the
+- **`KeyframeGuidesTimeSpaced` node — single-pass keyframe fill.** Collapses the
   hand-wired N-guide fan-out (`Index -> Get Image from Batch -> Math Expression
   -> LTXVAddGuideMulti`) into one node: feed a dense keyframe IMAGE batch plus
   `output_fps` + `seconds_per_keyframe` and each keyframe is resized, encoded,
@@ -16,7 +16,10 @@ This project uses [Semantic Versioning](https://semver.org/).
   (audio left free to generate; a combined AV latent is rejected by core as a
   guard). Time-spacing + dense-input companion to KJNodes `LTXVAddGuidesFromBatch`
   (which places consecutively and needs a full-length sparse batch); reuses the
-  same core `LTXVAddGuide` machinery. Guide: `docs/guides/keyframe_fill_single_pass.md`.
+  same core `LTXVAddGuide` machinery. Surfaces a `placement_info` output and
+  WARNs (never silently) when keyframes are dropped past the latent end or when
+  `output_fps` disagrees with the conditioning's stamped frame_rate. Guide:
+  `docs/guides/keyframe_fill_single_pass.md`.
 - **`start.sh` launcher warns when `--cache-none` is active.** The
   `nodynvram`/`safe`/`minimal` modes disable ComfyUI's node-output cache
   (`NullCache`), which is benchmark-only. Looping (TensorLoop) workflows

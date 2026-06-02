@@ -1,4 +1,4 @@
-Last updated: 2026-06-01
+Last updated: 2026-06-02
 
 # Single-pass keyframe fill ("sparse keyframes -> LTX fills the gaps")
 
@@ -29,32 +29,37 @@ audio path.
 
 ## The node
 
-`KeyframeGuidesFromBatch` (category `looping/keyframes`) collapses the entire
+`KeyframeGuidesTimeSpaced` (category `looping/keyframes`) collapses the entire
 `Index -> Get Image from Batch -> Math Expression -> LTXVAddGuideMulti` fan-out
 into one node. Feed it a **dense** keyframe batch (just the keyframes, no black
 padding) plus the playback fps and the real-time gap between keyframes; it
 resizes, encodes, and places each keyframe at its exact frame index.
 
 Inputs: `vae, positive, negative, latent, images, output_fps,
-seconds_per_keyframe, strength`. Outputs `(positive, negative, latent)` straight
-into the sampler.
+seconds_per_keyframe, strength`. Outputs `(positive, negative, latent,
+placement_info)` — the first three go straight into the sampler.
 
 - `output_fps` — fps of the video you're generating (match
-  `LTXVConditioning.frame_rate`; canonical **25**).
+  `LTXVConditioning.frame_rate`; canonical **25**). If it disagrees with the
+  conditioning's stamped `frame_rate`, the node **warns** in the console —
+  keyframes would otherwise land at the wrong times with no signal.
 - `seconds_per_keyframe` — real-time gap between consecutive keyframes. `1.0`
   for a 1 fps source. Keyframe `i` lands at the exact pixel frame
   `round(i * seconds_per_keyframe * output_fps)` (1 s @ 25 fps -> frame 25).
 - `strength` — `1.0` = hard anchor per keyframe; lower frees interpolation.
+- `placement_info` (output) — `placed N/M keyframes`, naming any dropped.
 
-Size the empty latent for the clip duration; keyframes whose frame index falls
-past the latent length are dropped (logged as `placed N/M keyframes`).
+Size the empty latent for the clip duration. Keyframes whose frame index falls
+past the latent length are **dropped with a WARN** (and named in
+`placement_info`) — never silently. If you see drops, lengthen the
+`EmptyLTXVLatentVideo` or raise `seconds_per_keyframe`.
 
 ### vs KJNodes `LTXVAddGuidesFromBatch`
 
 KJNodes ships a batch-guide node too, but it places keyframe `i` at frame `i`
 (consecutive) — to space keyframes you must feed a **full-length** batch with
 black frames in the gaps (it skips black images). Use it when your batch already
-*is* the full-length sparse track. Use `KeyframeGuidesFromBatch` when you have a
+*is* the full-length sparse track. Use `KeyframeGuidesTimeSpaced` when you have a
 dense batch and want it time-spaced without building (and VAE-iterating) a big
 mostly-black tensor. Both reuse the same core `LTXVAddGuide` machinery.
 
@@ -71,7 +76,7 @@ VHS_LoadVideo (force_rate=1)──┐
    LTXFramePlanner ─ w/h/len ─→ EmptyLTXVLatentVideo ─ latent ─┐
                             │││                                 │
                             ▼▼▼                                 ▼
-                       KeyframeGuidesFromBatch(output_fps=25, seconds_per_keyframe=1.0)
+                       KeyframeGuidesTimeSpaced(output_fps=25, seconds_per_keyframe=1.0)
                             │ positive │ negative │ latent
                             ▼          ▼          ▼
                        CFGGuider(cfg=1) ── ManualSigmas(distilled 8-step) ── KSamplerSelect(euler)

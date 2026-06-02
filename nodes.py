@@ -2922,6 +2922,19 @@ def _keyframe_guide_placements(
     return placements
 
 
+def _conditioning_frame_rate(cond) -> float | None:
+    """Best-effort read of the `frame_rate` LTXVConditioning stamps into the
+    conditioning dict (`[[tensor, {"frame_rate": fps, ...}], ...]`).
+
+    Returns None when absent or the structure isn't the expected shape, so
+    callers can skip the consistency check without a false alarm.
+    """
+    try:
+        return cond[0][1].get("frame_rate")
+    except (IndexError, TypeError, AttributeError):
+        return None
+
+
 class EvenlySpacedKeyframes(io.ComfyNode):
     """Pick `count` frames spread evenly across an IMAGE batch — auto keyframe sampling.
 
@@ -2974,7 +2987,7 @@ class EvenlySpacedKeyframes(io.ComfyNode):
         return io.NodeOutput(images[idx])
 
 
-class KeyframeGuidesFromBatch(io.ComfyNode):
+class KeyframeGuidesTimeSpaced(io.ComfyNode):
     """Auto-expand a DENSE keyframe IMAGE batch into time-spaced LTX latent
     guides — one node, single pass, no loop.
 
@@ -3015,8 +3028,8 @@ class KeyframeGuidesFromBatch(io.ComfyNode):
     @classmethod
     def define_schema(cls) -> io.Schema:
         return io.Schema(
-            node_id="KeyframeGuidesFromBatch",
-            display_name="Keyframe Guides from Batch (auto-expand)",
+            node_id="KeyframeGuidesTimeSpaced",
+            display_name="Keyframe Guides (Time-Spaced)",
             category="looping/keyframes",
             description=(
                 "Auto-expand a dense keyframe IMAGE batch into time-spaced LTX "
@@ -3075,6 +3088,14 @@ class KeyframeGuidesFromBatch(io.ComfyNode):
                 io.Conditioning.Output(display_name="positive"),
                 io.Conditioning.Output(display_name="negative"),
                 io.Latent.Output(display_name="latent"),
+                io.String.Output(
+                    display_name="placement_info",
+                    tooltip=(
+                        "Human-readable 'placed N/M keyframes' summary (names any "
+                        "dropped past the latent end). Wire to a preview, or read the "
+                        "WARN in the console."
+                    ),
+                ),
             ],
         )
 
@@ -3086,10 +3107,24 @@ class KeyframeGuidesFromBatch(io.ComfyNode):
         import comfy_extras.nodes_lt as nodes_lt
 
         add_guide = nodes_lt.LTXVAddGuide
+        log = logging.getLogger(__name__)
 
-        with _profile_span("KeyframeGuidesFromBatch"):
+        with _profile_span("KeyframeGuidesTimeSpaced"):
             scale_factors = vae.downscale_index_formula
             temporal = int(scale_factors[0])
+
+            # Placement is driven by output_fps; if the conditioning carries a
+            # different stamped frame_rate, every keyframe lands at the wrong
+            # time with no other signal — warn loudly (validation only, no
+            # behavior change; output_fps stays authoritative).
+            cond_fps = _conditioning_frame_rate(positive)
+            if cond_fps is not None and abs(float(cond_fps) - float(output_fps)) > 0.01:
+                log.warning(
+                    "[KeyframeGuidesTimeSpaced] output_fps=%.3f disagrees with the "
+                    "conditioning's frame_rate=%.3f — keyframes will land at the wrong "
+                    "times. Set output_fps to match LTXVConditioning.frame_rate.",
+                    float(output_fps), float(cond_fps),
+                )
 
             samples = latent["samples"]
             noise_mask = nodes_lt.get_noise_mask(latent)
@@ -3126,13 +3161,24 @@ class KeyframeGuidesFromBatch(io.ComfyNode):
                     guide, strength, scale_factors,
                 )
 
-            logging.getLogger(__name__).info(
-                "[KeyframeGuidesFromBatch] placed %d/%d keyframes "
-                "(output_fps=%.1f, seconds_per_keyframe=%.2f, temporal=%dx)",
-                len(placements), batch_size, output_fps, seconds_per_keyframe, temporal,
+            dropped = batch_size - len(placements)
+            placement_info = f"placed {len(placements)}/{batch_size} keyframes"
+            if dropped > 0:
+                # NOT silent: a too-short latent drops user keyframes; say so loudly.
+                placement_info += (
+                    f"; {dropped} dropped past the latent end "
+                    f"(holds {latent_length} latent-frames). Increase "
+                    f"EmptyLTXVLatentVideo length or seconds_per_keyframe."
+                )
+            log.log(
+                logging.WARNING if dropped else logging.INFO,
+                "[KeyframeGuidesTimeSpaced] %s (output_fps=%.1f, seconds_per_keyframe=%.2f)",
+                placement_info, output_fps, seconds_per_keyframe,
             )
 
-        return io.NodeOutput(positive, negative, {"samples": samples, "noise_mask": noise_mask})
+        return io.NodeOutput(
+            positive, negative, {"samples": samples, "noise_mask": noise_mask}, placement_info,
+        )
 
 
 class KeyframeLatentScheduleBatchEncode(io.ComfyNode):
@@ -4566,7 +4612,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LatentSeamZoneMask,
             AudioTemporalMask,
             EvenlySpacedKeyframes,
-            KeyframeGuidesFromBatch,
+            KeyframeGuidesTimeSpaced,
             RunIdPrefix,
             LatentFrameCount,
             TrimVideoLatentToAudio,
