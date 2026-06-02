@@ -187,3 +187,49 @@ def test_window_bounds_unknown_mode_raises():
     wav = _const(0.5, 5.0)
     with pytest.raises(ValueError):
         S.select_window_bounds(wav, SR, window_sec=3.5, mode="bogus")
+
+
+# ---- compose_reference (multi-slice composer) --------------------------------
+
+def test_compose_empty_returns_whole_clip():
+    wav = _const(0.5, 5.0)
+    out = S.compose_reference(wav, SR, [])
+    assert out.shape == wav.shape
+
+
+def test_compose_single_slice_is_that_window():
+    wav = _const(0.5, 5.0)
+    out = S.compose_reference(wav, SR, [{"start_sec": 1.0, "end_sec": 2.0, "gain": 1.0}])
+    assert out.shape[-1] == int(round(1.0 * SR))
+
+
+def test_compose_two_slices_concatenate_in_order():
+    wav = _concat(_const(0.2, 2.0), _const(0.9, 2.0))   # quiet [0,2), loud [2,4)
+    # request the LOUD slice first, then the QUIET one — order must be preserved
+    out = S.compose_reference(wav, SR, [
+        {"start_sec": 2.5, "end_sec": 3.5, "gain": 1.0},
+        {"start_sec": 0.5, "end_sec": 1.5, "gain": 1.0},
+    ], fade_sec=0.0)
+    assert out.shape[-1] == int(round(2.0 * SR))
+    half = int(round(1.0 * SR))
+    assert abs(out[..., half // 2].item() - 0.9) < 1e-4    # first slice = loud
+    assert abs(out[..., half + half // 2].item() - 0.2) < 1e-4  # second slice = quiet
+
+
+def test_compose_per_slice_gain():
+    wav = _const(1.0, 5.0)
+    out = S.compose_reference(wav, SR, [{"start_sec": 1.0, "end_sec": 2.0, "gain": 0.5}], fade_sec=0.0)
+    assert abs(out[..., out.shape[-1] // 2].item() - 0.5) < 1e-5
+
+
+def test_compose_edge_fade_avoids_click():
+    wav = _const(1.0, 5.0)
+    out = S.compose_reference(wav, SR, [{"start_sec": 1.0, "end_sec": 2.0, "gain": 1.0}], fade_sec=0.05)
+    assert out[..., 0].item() < 0.2                         # faded in from ~0
+    assert abs(out[..., out.shape[-1] // 2].item() - 1.0) < 1e-5  # full in the middle
+
+
+def test_compose_invalid_segments_fall_back_to_whole():
+    wav = _const(0.5, 5.0)
+    out = S.compose_reference(wav, SR, [{"start_sec": 2.0, "end_sec": 1.0, "gain": 1.0}])  # end<=start
+    assert out.shape == wav.shape

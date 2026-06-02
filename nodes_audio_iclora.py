@@ -146,8 +146,9 @@ def partition_lora_patches(loaded: dict) -> tuple[dict, dict]:
 def trim_reference_waveform(waveform: torch.Tensor, sample_rate: int, seconds: float) -> torch.Tensor:
     """Keep only the first ``seconds`` of a ``[..., n]`` waveform (last dim = samples). ``seconds``
     <= 0, or a window >= the clip, returns the whole clip. A REAL input change (fewer reference
-    samples -> fewer ref tokens), not a no-op; training used 3.5s references, so ~3.5 is the
-    in-distribution window. Head-trim is the ``head`` mode of the shared windowing primitive."""
+    samples -> fewer ref tokens), not a no-op; training used short references (~3.5s for the
+    audio-only-context model; the length is dataset-specific), so a few-second window is
+    in-distribution. Head-trim is the ``head`` mode of the shared windowing primitive."""
     start, end = _shaping.select_window_bounds(waveform, sample_rate, window_sec=seconds, mode="head")
     return waveform[..., start:end]
 
@@ -583,7 +584,8 @@ class LTXAudioReferenceShaper(io.ComfyNode):
                 ),
                 io.Float.Input(
                     "window_sec", default=3.5, min=0.0, max=60.0, step=0.1,
-                    tooltip="Seconds to keep (token-count parity with training, ~3.5s). 0 = whole clip.",
+                    tooltip="Seconds to keep (token-count parity with training; ~3.5s for the audio-only-context "
+                    "model -- the trained length is dataset-specific). 0 = whole clip.",
                 ),
                 io.Combo.Input(
                     "window_select", options=["auto", "manual", "whole"], default="auto",
@@ -595,9 +597,11 @@ class LTXAudioReferenceShaper(io.ComfyNode):
                     tooltip="Window start (seconds) when window_select = manual.",
                 ),
                 io.Float.Input(
-                    "emphasis", default=1.0, min=0.0, max=1.0, step=0.05,
-                    tooltip="How strongly to apply the shaping. 0 = flat (selected window, unshaped); "
-                    "1 = full preset envelope. High values go off-distribution -- sweep gently.",
+                    "emphasis", default=0.0, min=0.0, max=1.0, step=0.05,
+                    tooltip="How strongly to apply the within-window shaping. **Default 0 = window-only** "
+                    "(the in-distribution behaviour: training never saw a weighted reference). Raising it "
+                    "imposes a loudness contour the model didn't train on -- an off-distribution proxy, "
+                    "experimental, sweep gently. 1 = full preset envelope.",
                 ),
                 io.Float.Input(
                     "silence_floor", default=0.1, min=0.0, max=1.0, step=0.01,

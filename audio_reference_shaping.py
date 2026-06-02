@@ -211,3 +211,33 @@ def shape_reference_waveform(
     )
     gain = _expand_frames_to_samples(env, flen, windowed.shape[-1]).to(windowed.dtype)
     return windowed * gain
+
+
+def compose_reference(waveform, sample_rate, segments, fade_sec: float = 0.01):
+    """Assemble a reference from one or more (possibly non-contiguous) slices.
+
+    ``segments`` is a list of ``{"start_sec", "end_sec", "gain"}`` (gain optional, default 1.0).
+    Each slice is cut from ``waveform``, scaled by its gain, edge-faded by ``fade_sec`` (so the
+    butt-joins don't encode as clicks), and concatenated **in the given order**. A single
+    unity-gain slice is just the window case; empty or all-invalid ``segments`` returns the whole
+    clip. Total composed duration is what governs in-distribution-ness — keep the sum small."""
+    n = waveform.shape[-1]
+    if not segments:
+        return waveform
+    fade = max(0, int(round(fade_sec * sample_rate)))
+    parts = []
+    for seg in segments:
+        s = max(0, int(round(float(seg["start_sec"]) * sample_rate)))
+        e = min(n, int(round(float(seg["end_sec"]) * sample_rate)))
+        if e <= s:
+            continue
+        part = waveform[..., s:e].clone().float() * float(seg.get("gain", 1.0))
+        f = min(fade, part.shape[-1] // 2)
+        if f > 0:
+            ramp = torch.linspace(0.0, 1.0, f, dtype=part.dtype)
+            part[..., :f] = part[..., :f] * ramp
+            part[..., -f:] = part[..., -f:] * ramp.flip(0)
+        parts.append(part)
+    if not parts:
+        return waveform
+    return torch.cat(parts, dim=-1)
