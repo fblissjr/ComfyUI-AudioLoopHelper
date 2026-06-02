@@ -65,7 +65,6 @@
           "name": "value",
           "type": "INT",
           "links": [
-            3632,
             3635
           ]
         }
@@ -347,7 +346,6 @@
           "name": "value",
           "type": "INT",
           "links": [
-            3633,
             3643
           ]
         }
@@ -411,7 +409,6 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            3592,
             3595
           ]
         }
@@ -522,7 +519,6 @@
           "name": "video_prefix",
           "type": "STRING",
           "links": [
-            3634,
             3638
           ]
         },
@@ -654,8 +650,6 @@
           "name": "value",
           "type": "INT",
           "links": [
-            3627,
-            3628,
             3642,
             3644
           ]
@@ -1064,7 +1058,6 @@
           "name": "video_latent",
           "type": "LATENT",
           "links": [
-            3593,
             3657
           ]
         },
@@ -1072,7 +1065,6 @@
           "name": "audio_latent",
           "type": "LATENT",
           "links": [
-            3594,
             3598
           ]
         }
@@ -1201,8 +1193,6 @@
           "name": "AUDIO",
           "type": "AUDIO",
           "links": [
-            3587,
-            3621,
             3662
           ]
         }
@@ -1327,10 +1317,8 @@
           "name": "VAE",
           "type": "VAE",
           "links": [
-            3586,
             3602,
             3614,
-            3620,
             3661
           ]
         }
@@ -1388,7 +1376,6 @@
           "name": "positive",
           "type": "CONDITIONING",
           "links": [
-            3584,
             3667
           ]
         },
@@ -1396,7 +1383,6 @@
           "name": "negative",
           "type": "CONDITIONING",
           "links": [
-            3585,
             3668
           ]
         }
@@ -1587,7 +1573,7 @@
       "title": "Audio IC-LoRA Loader (per-stream)",
       "properties": {},
       "widgets_values": [
-        "## Audio IC-LoRA Loader (per-stream)\n\nLoads the audio IC-LoRA with a separate dial per stream:\n\n- **audio_strength** (band 0.3-0.75, start ~0.5): the audio modules (voice -> voice). The main dial.\n- **bridge_strength** (0 to ~1.0, ~0.8): the cross-modal bridge (voice -> on-screen face/motion). Push *above* audio_strength to amplify the picture's response; >1.0 extrapolates and smears. **No-op for the audio-only checkpoint** (no bridge).\n\nFails loud if the LoRA binds nothing (wrong base model) \u2014 watch the console."
+        "## Audio IC-LoRA Loader (per-stream)\n\nLoads the audio IC-LoRA with a separate dial per stream:\n\n- **audio_strength** (band 0.3-0.75, start ~0.5): the audio modules (voice -> voice). The main dial.\n- **bridge_strength** (0 to ~1.0, ~0.8): the cross-modal bridge (voice -> on-screen face/motion). Push *above* audio_strength to amplify the picture's response; >1.0 extrapolates and smears. **No-op for the audio-only checkpoint** (no bridge).\n\nFails loud if the LoRA binds nothing (wrong base model) — watch the console."
       ],
       "color": "#432",
       "bgcolor": "#653"
@@ -1608,7 +1594,7 @@
       "mode": 0,
       "inputs": [],
       "outputs": [],
-      "title": "Audio IC-LoRA Loader (basic) \u2014 bypassed",
+      "title": "Audio IC-LoRA Loader (basic) — bypassed",
       "properties": {},
       "widgets_values": [
         "## Audio IC-LoRA Loader (basic)\n\n**Bypassed by default.** Single-strength alternative to the per-stream loader: **strength_model** ~0.5 (band 0.3-0.75) applied to all LoRA modules. Use it if you don't need the separate bridge dial. To switch: un-bypass this, bypass the per-stream loader."
@@ -1970,7 +1956,7 @@
         },
         "class_type": "LTXVGemmaCLIPModelLoader",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Gemma 3 Model Loader"
+          "title": "🅛🅣🅧 Gemma 3 Model Loader"
         }
       },
       "3": {
@@ -1988,7 +1974,7 @@
       },
       "4": {
         "inputs": {
-          "text": "blurry, out of focus, overexposed, underexposed, low contrast, washed out colors, excessive noise, grainy texture, poor lighting, flickering, motion blur, distorted proportions, unnatural skin tones, deformed facial features, asymmetrical face, missing facial features, extra limbs, disfigured hands, wrong hand count, artifacts around text, unreadable text on shirt or hat, incorrect lettering on cap (\u201cPNTR\u201d), incorrect t-shirt slogan (\u201cJUST DO IT\u201d), missing microphone, misplaced microphone, inconsistent perspective, camera shake, incorrect depth of field, background too sharp, background clutter, distracting reflections, harsh shadows, inconsistent lighting direction, color banding, cartoonish rendering, 3D CGI look, unrealistic materials, uncanny valley effect, incorrect ethnicity, wrong gender, exaggerated expressions, smiling, laughing, exaggerated sadness, wrong gaze direction, eyes looking at camera, mismatched lip sync, silent or muted audio, distorted voice, robotic voice, echo, background noise, off-sync audio, missing sniff sounds, incorrect dialogue, added dialogue, repetitive speech, jittery movement, awkward pauses, incorrect timing, unnatural transitions, inconsistent framing, tilted camera, missing door or shelves, missing shallow depth of field, flat lighting, inconsistent tone, cinematic oversaturation, stylized filters, or AI artifacts.",
+          "text": "blurry, out of focus, overexposed, underexposed, low contrast, washed out colors, excessive noise, grainy texture, poor lighting, flickering, motion blur, distorted proportions, unnatural skin tones, deformed facial features, asymmetrical face, missing facial features, extra limbs, disfigured hands, wrong hand count, artifacts around text, unreadable text on shirt or hat, incorrect lettering on cap (“PNTR”), incorrect t-shirt slogan (“JUST DO IT”), missing microphone, misplaced microphone, inconsistent perspective, camera shake, incorrect depth of field, background too sharp, background clutter, distracting reflections, harsh shadows, inconsistent lighting direction, color banding, cartoonish rendering, 3D CGI look, unrealistic materials, uncanny valley effect, incorrect ethnicity, wrong gender, exaggerated expressions, smiling, laughing, exaggerated sadness, wrong gaze direction, eyes looking at camera, mismatched lip sync, silent or muted audio, distorted voice, robotic voice, echo, background noise, off-sync audio, missing sniff sounds, incorrect dialogue, added dialogue, repetitive speech, jittery movement, awkward pauses, incorrect timing, unnatural transitions, inconsistent framing, tilted camera, missing door or shelves, missing shallow depth of field, flat lighting, inconsistent tone, cinematic oversaturation, stylized filters, or AI artifacts.",
           "clip": [
             "2",
             0
@@ -2056,7 +2042,7 @@
         },
         "class_type": "LTXVAudioVAELoader",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Audio VAE Loader"
+          "title": "🅛🅣🅧 LTXV Audio VAE Loader"
         }
       },
       "14": {
@@ -2072,7 +2058,7 @@
         },
         "class_type": "LTXVAudioVAEDecode",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Audio VAE Decode"
+          "title": "🅛🅣🅧 LTXV Audio VAE Decode"
         }
       },
       "15": {
@@ -2101,7 +2087,7 @@
         },
         "class_type": "VHS_VideoCombine",
         "_meta": {
-          "title": "Video Combine \ud83c\udfa5\ud83c\udd65\ud83c\udd57\ud83c\udd62"
+          "title": "Video Combine 🎥🅥🅗🅢"
         }
       },
       "17": {
@@ -2126,7 +2112,7 @@
         },
         "class_type": "MultimodalGuider",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Multimodal Guider"
+          "title": "🅛🅣🅧 Multimodal Guider"
         }
       },
       "18": {
@@ -2143,7 +2129,7 @@
         },
         "class_type": "GuiderParameters",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Guider Parameters"
+          "title": "🅛🅣🅧 Guider Parameters"
         }
       },
       "19": {
@@ -2156,7 +2142,7 @@
         },
         "class_type": "GuiderParameters",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Guider Parameters"
+          "title": "🅛🅣🅧 Guider Parameters"
         }
       },
       "21": {
@@ -2215,7 +2201,7 @@
         },
         "class_type": "LTXVEmptyLatentAudio",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Empty Latent Audio"
+          "title": "🅛🅣🅧 LTXV Empty Latent Audio"
         }
       },
       "27": {
@@ -2244,7 +2230,7 @@
         },
         "class_type": "LTXVConcatAVLatent",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Concat AV Latent"
+          "title": "🅛🅣🅧 LTXV Concat AV Latent"
         }
       },
       "29": {
@@ -2260,7 +2246,7 @@
         },
         "class_type": "LTXVSeparateAVLatent",
         "_meta": {
-          "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Separate AV Latent"
+          "title": "🅛🅣🅧 LTXV Separate AV Latent"
         }
       },
       "41": {
