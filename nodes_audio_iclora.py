@@ -643,8 +643,8 @@ class LTXAudioReferenceShaper(io.ComfyNode):
 class LTXLoadComposeReferenceAudio(io.ComfyNode):
     """Load a reference audio file and COMPOSE the in-context reference from one or more (possibly
     non-contiguous) slices, each with its own gain. A LoadAudio replacement for the audio IC-LoRA
-    reference path: drop it in, pick the slices (a visual waveform editor populates `segments`), and
-    it outputs the assembled AUDIO -> feed the guide's reference_audio.
+    reference path: drop it in, pick the slices (hand-edit the `segments` JSON for now; a visual
+    waveform editor will populate it), and it outputs the assembled AUDIO -> feed the guide's reference_audio.
 
     A single slice == a simple window; `[]` segments == the whole clip. **Keep the TOTAL composed
     duration to ~a few seconds**: the reference becomes ~15 tokens/sec at negative RoPE positions and
@@ -671,7 +671,8 @@ class LTXLoadComposeReferenceAudio(io.ComfyNode):
                 "Load a reference clip and compose the IC-LoRA reference from one or more slices "
                 "(each with a gain). LoadAudio replacement: outputs AUDIO -> the guide's "
                 "reference_audio. One slice = a window; no slices = whole clip. Keep total duration "
-                "to ~a few seconds (longer is off-distribution). The visual editor manages `segments`."
+                "to ~a few seconds (longer is off-distribution). Slices are given as `segments` JSON "
+                "(hand-edit for now; a waveform editor will manage it)."
             ),
             inputs=[
                 io.Combo.Input(
@@ -681,7 +682,7 @@ class LTXLoadComposeReferenceAudio(io.ComfyNode):
                 io.String.Input(
                     "segments", default="[]", multiline=False,
                     tooltip="JSON list of slices: [{\"start_sec\":..,\"end_sec\":..,\"gain\":1.0}, ...]. "
-                    "Managed by the visual waveform editor; [] = whole clip. Keep total duration small.",
+                    "Hand-edit for now (a waveform editor will manage this); [] = whole clip. Keep total duration small.",
                 ),
                 io.Float.Input(
                     "fade_sec", default=0.01, min=0.0, max=0.5, step=0.005,
@@ -704,16 +705,13 @@ class LTXLoadComposeReferenceAudio(io.ComfyNode):
         waveform = waveform.unsqueeze(0)             # [1, C, n] (comfy AUDIO layout)
         try:
             segs = json.loads(segments) if segments else []
-            if not isinstance(segs, list):
-                segs = []
         except Exception:
-            _log(f"COMPOSE: bad segments JSON, using whole clip: {str(segments)[:80]!r}")
+            segs = None
+        if not isinstance(segs, list):
+            _log(f"COMPOSE: segments not a JSON list, using whole clip: {str(segments)[:80]!r}")
             segs = []
         composed = _shaping.compose_reference(waveform, sample_rate, segs, fade_sec=float(fade_sec))
-        _log(
-            f"COMPOSE: {audio} | {len(segs)} slice(s) -> {composed.shape[-1] / sample_rate:.2f}s "
-            f"@ {sample_rate}Hz (whole-clip fallback if 0)"
-        )
+        _log(f"COMPOSE: {audio} | {len(segs)} slice(s) -> {composed.shape[-1] / sample_rate:.2f}s @ {sample_rate}Hz")
         return io.NodeOutput({"waveform": composed, "sample_rate": int(sample_rate)})
 
     @classmethod
