@@ -249,6 +249,16 @@ def _folder_paths():
         return _FP()
 
 
+def _load_reference_audio(value):
+    """Load an annotated input-dir file into comfy AUDIO layout: ``(waveform [1, C, n], sr:int)``.
+    Shared by the Compose node's ``execute`` and the auto-window route so both resolve the path and
+    shape the tensor identically (the ``[1, C, n]`` layout the ``_shaping`` functions assume)."""
+    from comfy_extras.nodes_audio import load as _load_audio
+
+    waveform, sr = _load_audio(_folder_paths().get_annotated_filepath(value))  # [C, n]
+    return waveform.unsqueeze(0), int(sr)                                      # [1, C, n]
+
+
 class LTXAudioICLoRALoader(io.ComfyNode):
     """Debug-instrumented IC-LoRA loader for the AUDIO IC-LoRA. Functionally the same patch
     path as comfy's LoraLoaderModelOnly / LTXICLoRALoaderModelOnly (key_map -> load_lora ->
@@ -602,12 +612,7 @@ class LTXLoadComposeReferenceAudio(io.ComfyNode):
     def execute(cls, audio, segments, fade_sec) -> io.NodeOutput:
         import json
 
-        from comfy_extras.nodes_audio import load as _load_audio
-
-        fp = _folder_paths()
-        waveform, sr = _load_audio(fp.get_annotated_filepath(audio))  # [C, n]
-        waveform = waveform.unsqueeze(0)                              # [1, C, n] (comfy AUDIO layout)
-        sr = int(sr)
+        waveform, sr = _load_reference_audio(audio)
         try:
             segs = json.loads(segments) if segments else []
         except Exception:
@@ -668,12 +673,8 @@ def register_auto_window_route() -> None:
             body = await request.json()
             value = str(body.get("audio") or "")
             window_sec = float(body.get("window_sec", 3.5))
-            from comfy_extras.nodes_audio import load as _load_audio
-
-            fp = _folder_paths()
-            waveform, sr = _load_audio(fp.get_annotated_filepath(value))  # [C, n] -- same load as execute
-            waveform = waveform.unsqueeze(0)                              # [1, C, n]
-            seg = _shaping.auto_window_segment(waveform, int(sr), window_sec=window_sec)
+            waveform, sr = _load_reference_audio(value)
+            seg = _shaping.auto_window_segment(waveform, sr, window_sec=window_sec)
             _log(f"AUTO-WINDOW: {value} @ {window_sec}s -> [{seg['start_sec']:.2f}, {seg['end_sec']:.2f}]s")
             return web.json_response(seg)
         except Exception as exc:  # noqa: BLE001 -- benign: the button falls back to a default slice

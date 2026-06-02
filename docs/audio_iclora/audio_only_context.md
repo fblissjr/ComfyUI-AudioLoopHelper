@@ -1,4 +1,4 @@
-Last updated: 2026-06-01
+Last updated: 2026-06-02
 
 # Audio-Only-Context IC-LoRA (voice -> identity / mannerism)
 
@@ -53,6 +53,13 @@ strength, not CFG, is the only inference amplifier):
   untouched. There is deliberately **no** reference-strength / attention-strength knob: the model reads
   the reference tokens with no scalar applied, so such a knob would be a silent no-op without a
   model-side change.
+- **`LTXLoadComposeReferenceAudio`** ("Compose Reference Audio"): the reference loader (replaces
+  Load Audio). A visual waveform editor for picking one or more (non-contiguous) slices of the
+  reference clip, plus an **Auto-find hook** button that drops a slice on the loudest sustained
+  window — the in-band, few-second window selection, run server-side through the same tested
+  engine the head-trim uses (no graph queue). When you use it, set the Advanced guide's
+  `reference_window_sec = 0` so the two don't double-trim. Keep the total composed duration to a
+  few seconds (longer goes off-distribution).
 
 ## Usage
 

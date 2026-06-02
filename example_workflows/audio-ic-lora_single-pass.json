@@ -1621,7 +1621,7 @@
       "title": "Add Audio IC-LoRA Guide (Advanced)",
       "properties": {},
       "widgets_values": [
-        "## Add Audio IC-LoRA Guide (Advanced)\n\nAttaches the **audio-only** reference (encoded by the audio VAE) as context tokens at negative RoPE positions. No image/video reference.\n\n- **reference_window_sec** (0 = whole clip; ~3.5 matches training): trims the reference to its first N seconds. A full song is longer than anything seen in training; ~3.5-5s is the sweet spot.\n- **reference_scale** (1.0 default, max 4.0; sweep ~0.5-2.0): scales the encoded reference magnitude. Far from 1.0 goes off-distribution.\n\nKeep the caption neutral so the *audio* drives the attribute. (For energy-based window selection + within-window emphasis, see the **Audio Reference Shaper** node.)"
+        "## Add Audio IC-LoRA Guide (Advanced)\n\nAttaches the **audio-only** reference (encoded by the audio VAE) as context tokens at negative RoPE positions. No image/video reference.\n\n- **reference_window_sec** (0 = whole clip; ~3.5 matches training): trims the reference to its first N seconds. A full song is longer than anything seen in training; ~3.5-5s is the sweet spot.\n- **reference_scale** (1.0 default, max 4.0; sweep ~0.5-2.0): scales the encoded reference magnitude. Far from 1.0 goes off-distribution.\n\nKeep the caption neutral so the *audio* drives the attribute. (For energy-based window selection, use the **Compose Reference Audio** node's *Auto-find hook* button.)"
       ],
       "color": "#432",
       "bgcolor": "#653"
