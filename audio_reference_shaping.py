@@ -243,6 +243,27 @@ def compose_reference(waveform, sample_rate, segments, fade_sec: float = 0.01):
     return torch.cat(parts, dim=-1)
 
 
+def auto_window_segment(waveform, sample_rate, *, window_sec: float) -> dict:
+    """Find the single most representative ``window_sec`` window by **sustained energy** (the
+    hook / voiced passage) and return it as ONE compose segment ``{"start_sec","end_sec","gain"}``.
+
+    This is the engine behind the Compose node's "auto-find hook" button. It is exactly
+    ``select_window_bounds(mode="auto")`` re-expressed in seconds as a compose slice -- the same
+    windowing primitive ``trim_reference_waveform`` uses (in head mode), so the window math lives
+    in one tested place. A clip shorter than ``window_sec`` (or ``window_sec <= 0``) returns the
+    whole clip. Gain is unity (selection only -- per-slice gain stays an opt-in, off-distribution
+    knob).
+
+    NOTE: this is an INFERENCE-TIME convenience, not a training-time step. The trainer does no
+    energy-based window selection (references were already short clips), so auto-find just
+    extracts an in-distribution (short, energetic) window from a long clip; it does not replicate
+    a training behaviour. The load-bearing train/inference parity is the negative-RoPE token
+    PLACEMENT in the guide node, which this does not touch."""
+    start, end = select_window_bounds(waveform, sample_rate, window_sec=window_sec, mode="auto")
+    sr = float(sample_rate)
+    return {"start_sec": start / sr, "end_sec": end / sr, "gain": 1.0}
+
+
 def reference_envelope(waveform, sample_rate, buckets: int = 800) -> dict:
     """Downsampled peak envelope of a ``[..., n]`` waveform, for the visual compose editor to draw
     the input clip's waveform (the audio reaches the node as a tensor the browser can't read, so the

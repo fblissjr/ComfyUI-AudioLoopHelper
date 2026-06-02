@@ -516,7 +516,10 @@ class LTXAddAudioICLoRAGuideAdvanced(io.ComfyNode):
                 io.Float.Input(
                     "reference_scale", default=1.0, min=0.0, max=4.0, step=0.05,
                     tooltip="Multiply the encoded reference latent magnitude (1.0 = unchanged). A coarse "
-                    "'reference loudness' lever; values far from 1.0 go off-distribution, so sweep gently.",
+                    "'reference loudness' lever; values far from 1.0 go off-distribution, so sweep gently. "
+                    "This is the latent-domain (bluntest) twin of the Compose Reference Audio node's "
+                    "per-slice gain -- prefer that waveform-domain knob; both are experimental until the "
+                    "windowing/gain eval validates them.",
                 ),
             ],
             outputs=[
@@ -539,105 +542,6 @@ class LTXAddAudioICLoRAGuideAdvanced(io.ComfyNode):
         return _encode_and_attach_reference(
             positive, negative, audio_vae, waveform, sr, reference_scale=reference_scale, log_tag="GUIDE-ADV"
         )
-
-
-class LTXAudioReferenceShaper(io.ComfyNode):
-    """Pick which slice of a reference clip to use, and shape what within it the model weighs
-    most, BEFORE the guide node (AUDIO -> AUDIO). Drop between Load Audio and the guide's
-    reference_audio input; the guide's encode/patchify and the model's negative-RoPE attach are
-    untouched, so train/inference parity is preserved.
-
-    input_type picks a domain preset (the two real inputs are dialogue and songs):
-      - dialogue: whole short clip (or a sustained-energy window if long), gate breaths/silence
-        to the floor, otherwise flat -- conservative, matches the trained reference distribution.
-      - song: search the FULL clip for the most representative ~window_sec by SUSTAINED energy
-        (the hook/chorus, skipping quiet intro/outro -- head-trim is the wrong default here),
-        then gently energy-weight within it.
-      - manual: take the window at window_offset_sec and apply a spotlight at focus_center.
-
-    Honest limits (design doc): the gain is a waveform-domain PROXY for attention weight (louder
-    content -> bigger latents -> more pull), not a true per-token attention scalar; RMS can't tell
-    vocal from instrumental; high emphasis goes off-distribution. emphasis=0 is a no-op (the
-    selected window, unshaped). The shaping math lives in audio_reference_shaping (unit-tested)."""
-
-    @classmethod
-    def define_schema(cls):
-        return io.Schema(
-            node_id="LTXAudioReferenceShaper",
-            display_name="Audio Reference Shaper (window + emphasis)",
-            category="Lightricks/IC-LoRA",
-            description=(
-                "Pick which ~window_sec slice of a reference clip to use and shape what within it "
-                "the model weighs most, before the guide node. Presets: dialogue (gate silence, "
-                "stay near the trained distribution), song (find the loudest sustained window -- "
-                "the hook -- across a full track), manual (spotlight at an offset). Waveform-domain "
-                "gain is an in-distribution proxy for attention weight; emphasis=0 is a no-op. Drop "
-                "between Load Audio and the guide's reference_audio."
-            ),
-            inputs=[
-                io.Audio.Input("reference_audio", tooltip="Raw reference audio to window + shape."),
-                io.Combo.Input(
-                    "input_type", options=["dialogue", "song", "manual"], default="dialogue",
-                    tooltip="dialogue: gate silence, else flat (matches training). song: find the "
-                    "loudest sustained window across the whole clip, then energy-weight. manual: "
-                    "spotlight at window_offset_sec / focus_center.",
-                ),
-                io.Float.Input(
-                    "window_sec", default=3.5, min=0.0, max=60.0, step=0.1,
-                    tooltip="Seconds to keep (token-count parity with training; ~3.5s for the audio-only-context "
-                    "model -- the trained length is dataset-specific). 0 = whole clip.",
-                ),
-                io.Combo.Input(
-                    "window_select", options=["auto", "manual", "whole"], default="auto",
-                    tooltip="auto: sustained-energy search (song) / whole-if-short (dialogue). "
-                    "manual: start at window_offset_sec. whole: ignore window_sec, use it all.",
-                ),
-                io.Float.Input(
-                    "window_offset_sec", default=0.0, min=0.0, max=600.0, step=0.1,
-                    tooltip="Window start (seconds) when window_select = manual.",
-                ),
-                io.Float.Input(
-                    "emphasis", default=0.0, min=0.0, max=1.0, step=0.05,
-                    tooltip="How strongly to apply the within-window shaping. **Default 0 = window-only** "
-                    "(the in-distribution behaviour: training never saw a weighted reference). Raising it "
-                    "imposes a loudness contour the model didn't train on -- an off-distribution proxy, "
-                    "experimental, sweep gently. 1 = full preset envelope.",
-                ),
-                io.Float.Input(
-                    "silence_floor", default=0.1, min=0.0, max=1.0, step=0.01,
-                    tooltip="Minimum weight for de-emphasized frames (gated silence / quiet). 0 fully "
-                    "mutes them; ~0.1 keeps a little.",
-                ),
-                io.Float.Input(
-                    "focus_center", default=0.5, min=0.0, max=1.0, step=0.01,
-                    tooltip="manual spotlight peak position (0 = window start, 1 = window end).",
-                ),
-                io.Float.Input(
-                    "focus_width", default=0.5, min=0.05, max=1.0, step=0.01,
-                    tooltip="manual spotlight width (small = tight, large = broad).",
-                ),
-            ],
-            outputs=[io.Audio.Output(display_name="audio", tooltip="Windowed + shaped reference audio.")],
-        )
-
-    @classmethod
-    def execute(
-        cls, reference_audio, input_type, window_sec, window_select, window_offset_sec,
-        emphasis, silence_floor, focus_center, focus_width,
-    ) -> io.NodeOutput:
-        sr = int(reference_audio["sample_rate"])
-        wav = reference_audio["waveform"]
-        in_sec = wav.shape[-1] / sr
-        shaped = _shaping.shape_reference_waveform(
-            wav, sr, input_type=input_type, window_sec=window_sec, window_select=window_select,
-            window_offset_sec=window_offset_sec, silence_floor=silence_floor, emphasis=emphasis,
-            focus_center=focus_center, focus_width=focus_width,
-        )
-        _log(
-            f"SHAPER: {input_type}/{window_select} {in_sec:.2f}s -> {shaped.shape[-1] / sr:.2f}s "
-            f"(emphasis={emphasis}, floor={silence_floor})"
-        )
-        return io.NodeOutput({"waveform": shaped, "sample_rate": sr})
 
 
 class LTXLoadComposeReferenceAudio(io.ComfyNode):
@@ -737,3 +641,41 @@ class LTXLoadComposeReferenceAudio(io.ComfyNode):
         if not _folder_paths().exists_annotated_filepath(audio):
             return f"Invalid audio file: {audio}"
         return True
+
+
+def register_auto_window_route() -> None:
+    """Register ``POST /audioloophelper/auto_window`` for the Compose node's "auto-find hook"
+    button: given a reference filename + ``window_sec``, return the sustained-energy hook window
+    as a compose segment ``{"start_sec","end_sec","gain"}``. The button can then place that slice
+    on the waveform WITHOUT a graph Queue, while the *selection* stays in the one tested Python
+    engine (``auto_window_segment`` -> ``select_window_bounds``) -- not a second copy of the
+    algorithm in JS. Auto-find is an inference-time convenience (the trainer does no energy-based
+    selection); "parity" that matters lives in the guide's negative-RoPE placement, untouched here.
+
+    Called from ``__init__.py`` at import time (router still unfrozen). No-op when the server /
+    aiohttp aren't importable (pytest, headless), mirroring this module's stub philosophy."""
+    try:
+        from aiohttp import web
+        from server import PromptServer  # type: ignore
+    except ImportError:
+        return
+    if not hasattr(PromptServer, "instance") or PromptServer.instance is None:
+        return
+
+    @PromptServer.instance.routes.post("/audioloophelper/auto_window")
+    async def _auto_window(request):  # noqa: ANN001 -- aiohttp handler
+        try:
+            body = await request.json()
+            value = str(body.get("audio") or "")
+            window_sec = float(body.get("window_sec", 3.5))
+            from comfy_extras.nodes_audio import load as _load_audio
+
+            fp = _folder_paths()
+            waveform, sr = _load_audio(fp.get_annotated_filepath(value))  # [C, n] -- same load as execute
+            waveform = waveform.unsqueeze(0)                              # [1, C, n]
+            seg = _shaping.auto_window_segment(waveform, int(sr), window_sec=window_sec)
+            _log(f"AUTO-WINDOW: {value} @ {window_sec}s -> [{seg['start_sec']:.2f}, {seg['end_sec']:.2f}]s")
+            return web.json_response(seg)
+        except Exception as exc:  # noqa: BLE001 -- benign: the button falls back to a default slice
+            _log(f"AUTO-WINDOW failed: {exc}")
+            return web.json_response({"error": str(exc)}, status=400)

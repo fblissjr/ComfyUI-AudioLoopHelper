@@ -7,6 +7,29 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **"Auto-find hook" in the Compose Reference Audio node.** The reference slice
+  editor gains an `auto_window_sec` knob plus an *Auto-find hook* button that
+  places a single slice on the most representative sustained-energy window (the
+  hook / voiced passage) of the loaded clip — instantly, with no graph Queue. A
+  small server route (`POST /audioloophelper/auto_window`) runs the selection in
+  the one tested Python engine (`audio_reference_shaping.auto_window_segment` →
+  `select_window_bounds`), so the window math lives in one place rather than a
+  second copy of the algorithm in JavaScript. Auto-find is an inference-time
+  convenience (the trainer does no energy-based window selection — references
+  were already short); the load-bearing train/inference parity is the
+  negative-RoPE token placement in the guide, untouched here.
+
+### Removed
+- **`Audio Reference Shaper` node (`LTXAudioReferenceShaper`).** Folded into the
+  Compose Reference Audio node: its only in-distribution capability (auto window
+  selection) is now the *Auto-find hook* button there, and its emphasis envelope
+  was the off-distribution proxy that already defaulted to a no-op. One
+  reference-prep node instead of two. The underlying shaping engine
+  (`shape_reference_waveform`, `build_emphasis_envelope`) stays in
+  `audio_reference_shaping.py` (still unit-tested) in case per-slice emphasis
+  returns as a Compose-editor property. Not referenced by any shipped workflow.
+
+### Added
 - **`KeyframeGuidesTimeSpaced` node — single-pass keyframe fill.** Collapses the
   hand-wired N-guide fan-out (`Index -> Get Image from Batch -> Math Expression
   -> LTXVAddGuideMulti`) into one node: feed a dense keyframe IMAGE batch plus

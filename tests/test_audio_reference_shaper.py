@@ -235,6 +235,37 @@ def test_compose_invalid_segments_fall_back_to_whole():
     assert out.shape == wav.shape
 
 
+# ---- auto_window_segment (the "auto-find hook" button engine) ----------------
+
+def test_auto_window_segment_returns_single_hook_slice():
+    """A quiet/loud/quiet clip: auto-find returns ONE segment sitting on the loud hook,
+    window_sec long, with unity gain — i.e. a single compose slice."""
+    wav = _concat(_const(0.02, 4.0), _const(1.0, 3.5), _const(0.02, 4.0))  # quiet, hook, quiet
+    seg = S.auto_window_segment(wav, SR, window_sec=3.5)
+    assert set(seg) == {"start_sec", "end_sec", "gain"}
+    assert seg["gain"] == 1.0
+    assert abs((seg["end_sec"] - seg["start_sec"]) - 3.5) < 1e-3   # window length
+    assert seg["start_sec"] >= 4.0 - 0.05                          # landed on/after the hook start
+
+
+def test_auto_window_segment_short_clip_returns_whole():
+    """A clip shorter than window_sec comes back as the whole clip (start 0, end == duration)."""
+    wav = _const(0.5, 2.0)
+    seg = S.auto_window_segment(wav, SR, window_sec=3.5)
+    assert seg["start_sec"] == 0.0
+    assert abs(seg["end_sec"] - 2.0) < 1e-3
+
+
+def test_auto_window_segment_matches_select_window_bounds():
+    """Parity lock: the segment bounds equal select_window_bounds(mode='auto') / sr, so the
+    button can never drift from the engine the head-trim + training selection use."""
+    wav = _concat(_const(0.02, 4.0), _const(1.0, 3.5), _const(0.02, 4.0))
+    start, end = S.select_window_bounds(wav, SR, window_sec=3.5, mode="auto")
+    seg = S.auto_window_segment(wav, SR, window_sec=3.5)
+    assert abs(seg["start_sec"] - start / SR) < 1e-9
+    assert abs(seg["end_sec"] - end / SR) < 1e-9
+
+
 # ---- reference_envelope (for the visual editor) ------------------------------
 
 def test_reference_envelope_shape_norm_and_duration():

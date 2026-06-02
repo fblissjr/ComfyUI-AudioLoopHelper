@@ -5,6 +5,12 @@ except ImportError:
 else:
     from .nodes import comfy_entrypoint  # noqa: F401
 
+    # Server route for the Compose node's "auto-find hook" button (reuses the Python selection
+    # engine; no graph Queue). Registered here at import time while the aiohttp router is unfrozen.
+    from .nodes_audio_iclora import register_auto_window_route
+
+    register_auto_window_route()
+
     # Unified tracer framework. Installs process-lifecycle tracers
     # (currently exec_log; monkey-patches ComfyUI's executor) at import.
     # Render-lifecycle tracers (ffn_attn, torch_profile) are installed

@@ -4,8 +4,11 @@
 // them into the node's hidden-ish `segments` String widget as [{start_sec,end_sec,gain}].
 //
 // Pattern cloned from ComfyUI-LTXVideo's sparse_track_editor.js (addDOMWidget canvas + onExecuted
-// data channel + serialize via a String widget). v1: SELECTION only (gain fixed 1.0, the
-// in-distribution part); per-slice gain editing is a follow-up.
+// data channel + serialize via a String widget). SELECTION only (gain fixed 1.0, the
+// in-distribution part); per-slice gain editing is a follow-up. The "Auto-find hook" button asks
+// the server (POST /audioloophelper/auto_window) for the sustained-energy window via the one
+// tested Python engine (not a second copy here) and drops it as a single slice. Inference-time
+// convenience: the trainer does no energy selection -- the real parity is RoPE placement, in the guide.
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 
@@ -87,6 +90,31 @@ async function loadFromFile(node, value) {
   }
 }
 
+// Ask the server for the sustained-energy "hook" window (reuses the one tested Python engine) and
+// REPLACE the slices with that one window. Instant: no graph Queue.
+async function autoFindHook(node) {
+  const st = node._compose;
+  const audioW = node.widgets?.find((w) => w.name === "audio");
+  if (!st || !audioW?.value) { log("auto-find: no file selected"); return; }
+  const winW = node.widgets?.find((w) => w.name === "auto_window_sec");
+  const window_sec = winW?.value ?? 3.5;
+  try {
+    const resp = await api.fetchApi("/audioloophelper/auto_window", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ audio: audioW.value, window_sec }),
+    });
+    const seg = await resp.json();
+    if (!resp.ok || typeof seg.start_sec !== "number") throw new Error(seg.error || resp.status);
+    st.slices = [{ start: seg.start_sec, end: seg.end_sec, gain: 1.0 }];
+    writeSlices(node, st.slices);
+    node._composeDraw?.();
+    log("auto-find hook:", seg.start_sec.toFixed(2) + "-" + seg.end_sec.toFixed(2) + "s");
+  } catch (err) {
+    log("auto-find hook failed (slices unchanged):", err.message || err);
+  }
+}
+
 function initEditor(node) {
   const st = (node._compose = { peaks: [], duration: 0, slices: readSlices(node), drag: null });
 
@@ -97,6 +125,14 @@ function initEditor(node) {
     "width:100%;height:100%;display:block;border-radius:6px;background:#17171c;cursor:crosshair;touch-action:none;";
   container.appendChild(canvas);
   node._composeCanvas = canvas;
+
+  // Auto-find controls, drawn above the waveform. Neither is serialized: auto_window_sec only
+  // feeds the search, and the button's result lands in `segments` (the real serialized state).
+  const winW = node.addWidget("number", "auto_window_sec", 3.5, () => {},
+    { min: 0.5, max: 30.0, step: 0.5, precision: 1 });
+  winW.serialize = false;
+  const findBtn = node.addWidget("button", "Auto-find hook", null, () => autoFindHook(node));
+  findBtn.serialize = false;
 
   const widget = node.addDOMWidget("compose_editor", "ComposeEditor", container, { serialize: false });
   widget.computeSize = () => [node.size?.[0] ?? 320, 180];
@@ -133,7 +169,7 @@ function initEditor(node) {
       ctx.fillStyle = "#888";
       ctx.font = "12px sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText("Queue once to load the waveform, then click/drag to add slices", w / 2, mid);
+      ctx.fillText("Pick a file to load its waveform, then click/drag to add slices (or Auto-find hook)", w / 2, mid);
     }
 
     let total = 0;

@@ -4588,7 +4588,6 @@ class AudioLoopHelperExtension(ComfyExtension):
             LTXAddAudioICLoRAGuideAdvanced,
             LTXAudioICLoRALoader,
             LTXAudioICLoRALoaderPerStream,
-            LTXAudioReferenceShaper,
             LTXLoadComposeReferenceAudio,
             LTXAudioSetRefTokens,
         )
@@ -4625,7 +4624,6 @@ class AudioLoopHelperExtension(ComfyExtension):
             LTXAddAudioICLoRAGuideAdvanced,
             LTXAudioICLoRALoader,
             LTXAudioICLoRALoaderPerStream,
-            LTXAudioReferenceShaper,
             LTXLoadComposeReferenceAudio,
             LTXAudioSetRefTokens,
             LTXResolutionFromAspect,
