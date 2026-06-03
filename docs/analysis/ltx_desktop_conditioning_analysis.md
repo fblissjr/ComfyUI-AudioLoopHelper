@@ -1,6 +1,15 @@
-Last updated: 2026-04-16
+Last updated: 2026-06-03 (status banner added; research body unchanged from 2026-04-16)
 
 # LTX-Desktop: Conditioning Capabilities Analysis
+
+> **STATUS UPDATE (2026-06-03):** The "#1 missing capability" this doc calls out —
+> a temporal-region **RetakeNode** — has SHIPPED as `LatentTemporalMask` +
+> `example_workflows/audio-loop-music-video_retake.json` (guide
+> `docs/guides/retake_guide.md`); audio-side regeneration shipped as
+> `AudioTemporalMask` + `_latent_av_inversion.json` (guide
+> `docs/guides/dialogue_replacement_guide.md`). Treat the "High Priority / build
+> this" items below as point-in-time (2026-04); the `ModalitySpec` /
+> `TemporalRegionMask` reference content remains useful.
 
 Analysis of LTX-Desktop's conditioning system, focused on capabilities we can
 borrow or adapt for the AudioLoopHelper ComfyUI workflow.

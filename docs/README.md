@@ -1,4 +1,4 @@
-Last updated: 2026-05-31
+Last updated: 2026-06-03
 
 # docs/ — ComfyUI-AudioLoopHelper documentation
 
@@ -151,7 +151,7 @@ linking out (parallel-scrubbed-copy convention retired 2026-04-25).
 | `ltxv_looping_sampler_reference.md` | Video-only structural reference for `LTXVLoopingSampler`. We don't recommend building this for music video (AV-incompatible). |
 | `nag_technical_reference.md` | LTX2_NAG — attention math, widgets, closure-capture mechanism, NAG×CFG composition, troubleshooting. |
 | `pipeline_flow_latent.md` | LATENT workflow node-by-node trace — the primary working baseline. |
-| `sage_attention.md` | `AudioLoopHelperSageAttention` — parameters, arch-filtered mode combo, mask-aware routing (default `auto_mask_aware`), JSONL telemetry schema. |
+| `sage_attention.md` | `AudioLoopHelperSageAttention` — parameters, arch-filtered mode combo, mask-aware routing (default `auto` since 2026-05-15), JSONL telemetry schema. |
 | `sampler_reference.md` | `euler` vs `euler_ancestral` vs `euler_ancestral_cfg_pp` with ComfyUI + MultimodalGuider source walkthrough. |
 | `standup_system_prompt.md` | LLM system prompt for standup / dialogue schedule generation. |
 | `telemetry_and_tracing.md` | What's captured (and what isn't), output paths, retention, end-to-end aggregator workflow. |

@@ -1,4 +1,4 @@
-Last updated: 2026-04-23 (trimmed + moved from docs/guides/latent_loop_build_guide.md — this workflow is video-only; we don't recommend building it for music video)
+Last updated: 2026-06-03 (trimmed + moved from docs/guides/latent_loop_build_guide.md — this workflow is video-only; we don't recommend building it for music video)
 
 # LTXVLoopingSampler reference (video-only; not recommended for music video)
 
@@ -82,9 +82,9 @@ If you're building a video-only LTXVLoopingSampler workflow:
   `LTXVChunkFeedForward`, `LTX2AttentionTunerPatch`. These are
   generic LTX 2.3 performance patches — nothing audio-specific.
 - Distilled sigma chain: if using the merged distilled-1.1 22B
-  checkpoint, the 8-step linear-quadratic sigma schedule
-  (`DISTILLED_SIGMAS`) still applies. See
-  `docs/reference/sampler_reference.md` for the walkthrough.
+  checkpoint, the canonical 8 fixed `DISTILLED_SIGMAS` apply via a
+  `ManualSigmas` node (NOT `linear_quadratic` / `ModelSamplingSD3`).
+  See `docs/reference/sampler_reference.md` for the walkthrough.
 - `LTX2_NAG` still applies but scale=11 default is too aggressive
   for distilled — dial to 3-7 per
   `docs/reference/nag_technical_reference.md`.

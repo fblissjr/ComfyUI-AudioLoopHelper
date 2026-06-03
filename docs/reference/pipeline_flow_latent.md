@@ -1,4 +1,4 @@
-Last updated: 2026-05-16 (canonical `LTXVConditioning.frame_rate=25` per `docs/reference/ltx23_model_reference.md` § "`frame_rate`: canonical inference value is 25"; the 2026-05-15 sweep to 24 was reverted on 2026-05-16, production render validation pending. Widget snapshots below reflect the canonical `fps=25` and `497`-frame values.)
+Last updated: 2026-06-03 (canonical `LTXVConditioning.frame_rate=25` per `docs/reference/ltx23_model_reference.md` § "`frame_rate`: canonical inference value is 25"; `fps=25` is live in all shipped workflows. Sampling chain is `ManualSigmas` — the `ModelSamplingSD3` shift node and `BasicScheduler` were stripped 2026-05-01. Widget snapshots below reflect the canonical `fps=25` and `497`-frame values.)
 
 # Pipeline Flow: LATENT-Based Music Video Workflow
 
@@ -134,7 +134,7 @@ Output Assembly:
 - **Outputs**:
   | Output | Type | Connected To |
   |--------|------|-------------|
-  | MODEL | MODEL | #572 Set_model (slot 0), #1513 ModelSamplingSD3 (slot 0) |
+  | MODEL | MODEL | #572 Set_model (slot 0) |
 
 ### Node 572 -- Set_model
 - **Type**: `SetNode` (KJNodes)
@@ -485,18 +485,18 @@ Output Assembly:
 
 ### Sampling Configuration (Initial Render)
 
-#### Node 1513 -- ModelSamplingSD3
-- **Type**: `ModelSamplingSD3` (ComfyUI core)
-- **What**: Configures sigma shift for the sampling schedule
-- **Inputs**: MODEL from #503
-- **Widgets**: `shift`: `13`
-- **Outputs**: MODEL -> #1421 BasicScheduler (slot 0)
+> **No `ModelSamplingSD3` shift node.** Node 1513 (`ModelSamplingSD3 shift=13`)
+> and the `BasicScheduler linear_quadratic` that used to live here were removed
+> 2026-05-01 (`scripts/apply_strip_sd3_shift_node.py`). The canonical distilled
+> path feeds the fixed sigmas directly via `ManualSigmas`. The MODEL chain now
+> ends at #503 -> Set_model with no sampling-shift node. See
+> `docs/reference/sampler_reference.md`.
 
-#### Node 1421 -- BasicScheduler
-- **Type**: `BasicScheduler` (ComfyUI core)
-- **What**: Generates the sigma schedule for sampling
-- **Inputs**: MODEL from #1513
-- **Widgets**: `scheduler`: `linear_quadratic`, `steps`: `8`, `denoise`: `1`
+#### Node 1421 -- ManualSigmas
+- **Type**: `ManualSigmas` (KJNodes)
+- **What**: Emits the fixed distilled sigma schedule directly (no MODEL input, no scheduler approximation)
+- **Inputs**: none (sigma string is a widget)
+- **Widgets**: `sigmas`: `1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0` (Lightricks `DISTILLED_SIGMA_VALUES`)
 - **Outputs**: SIGMAS -> #1422 VisualizeSigmasKJ (slot 0)
 
 #### Node 1422 -- VisualizeSigmasKJ
@@ -1100,10 +1100,7 @@ The upscale chain is bypassed because per-loop VAE round-trip quality loss and V
 | Widget | Node | Default | What It Controls | Valid Range |
 |--------|------|---------|-----------------|-------------|
 | `sampler_name` | #154 KSamplerSelect | `euler` | Sampling algorithm | Any ComfyUI sampler |
-| `scheduler` | #1421 BasicScheduler | `linear_quadratic` | Sigma schedule shape | Any ComfyUI scheduler |
-| `steps` | #1421 BasicScheduler | `8` | Number of denoising steps per window | 1+ |
-| `denoise` | #1421 BasicScheduler | `1` | Denoise strength (1.0 = full denoise) | 0.0 -- 1.0 |
-| `shift` | #1513 ModelSamplingSD3 | `13` | Sigma shift for sampling distribution | 0+ |
+| `sigmas` | #1421 ManualSigmas | `1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0` | The 8 fixed distilled sigmas, fed directly | Fixed (don't edit per-run) |
 | `cfg` | #153 CFGGuider (initial), #644 (subgraph) | `1` | CFG scale (1.0 because NAG handles guidance) | 0+ |
 | `start_seed` (value) | #1527 INTConstant | `42` | Base seed. iteration_seed = seed + current_iteration | 0 -- 2^64 |
 
@@ -1251,10 +1248,10 @@ Paths are given relative to your ComfyUI install root (`<comfyui>`).
 | 60 | 503 | LTX2SamplingPreviewOverride | LTX2SamplingPreviewOverride | Model Loading |
 | 61 | 566 | LTXVAudioVAEEncode | LTXVAudioVAEEncode | Audio Prep |
 | 62 | 572 | SetNode | Set_model | Model Loading |
-| 63 | 1513 | ModelSamplingSD3 | ModelSamplingSD3 | Sampling Config |
+| 63 | 1513 | _(removed)_ | ~~ModelSamplingSD3~~ — stripped 2026-05-01 | Sampling Config |
 | 64 | 570 | SetLatentNoiseMask | SetLatentNoiseMask | Audio Prep |
 | 65 | 153 | CFGGuider | CFGGuider (initial) | Initial Render |
-| 66 | 1421 | BasicScheduler | BasicScheduler | Sampling Config |
+| 66 | 1421 | ManualSigmas | ManualSigmas | Sampling Config |
 | 67 | 350 | LTXVConcatAVLatent | LTXVConcatAVLatent (initial) | Initial Render |
 | 68 | 575 | SetNode | Set_guider | Sampling Config |
 | 69 | 1422 | VisualizeSigmasKJ | VisualizeSigmasKJ | Sampling Config |

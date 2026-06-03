@@ -1,4 +1,4 @@
-Last updated: 2026-04-23 (added reference-doc pointer)
+Last updated: 2026-06-03 (added reference-doc pointer)
 
 > **Reader pointer.** This doc is the forensic root-cause postmortem.
 > For the conceptual explanation of NAG and the operational rule
@@ -198,9 +198,10 @@ pre-materialized structure inside the loop.
   independent of upstream AudioLoopController re-execution. Low
   priority because empirically the encoder only runs once per run
   today.
-- Apply the same migration to `_image.json`, `_latent_stg.json`,
-  `_latent_keyframe.json`. The apply script is parameterized — one
-  invocation per variant.
+- Apply the same migration to `_latent_keyframe.json` and any other
+  live loop variant. The apply script is parameterized — one invocation
+  per variant. (`_image.json` was retired and `_latent_stg.json` is now
+  in `example_workflows/archive/`.)
 - Upstream this doc (or a shorter version) to ComfyUI-KJNodes as a
   maintainer note, so other custom nodes using `add_object_patch`
   with captured tensors pick the same pattern.

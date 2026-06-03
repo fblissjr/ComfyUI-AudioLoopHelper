@@ -1,21 +1,25 @@
 """calc_ltx_resolution — offline companion to the LTXResolutionFromAspect node.
 
-Last updated: 2026-04-25
+Last updated: 2026-06-03
 
 Resolves a target aspect ratio + long edge to LTX 2.3-valid (W, H) and
-classifies the resulting latent volume against the doc-authoritative
-ceiling (`docs/reference/ltx23_model_reference.md` §"Resolution and
-latent volume"). Use this when picking dimensions for
+reports the resulting latent volume with an informational VRAM advisory
+(there is no hard latent-volume ceiling — see
+`docs/reference/frame_planner_reference.md` §"Latent-volume
+classification"). Use this when picking dimensions for
 `EmptyLTXVLatentVideo` widgets without opening ComfyUI.
+
+Exit code is 0 for any LTX-valid resolution (incl. HIGH_VRAM, which is
+informational, not an error); a `(frames-1)%8` violation raises.
 
 Examples:
     # 16:9-ish at 832 long edge for 497-frame window (cinema 1.85:1 = 832x448)
     uv run python scripts/calc_ltx_resolution.py --aspect 1.778 --long 832
 
-    # Square 1:1 at 704 long edge — diagnoses the canonical's stale 704x704
+    # Square 1:1 at 704 long edge
     uv run python scripts/calc_ltx_resolution.py --aspect 1.0 --long 704 --orientation square
 
-    # Probe the latent-volume ceiling at higher long edges
+    # Higher long edge — reports HIGH_VRAM advisory (still valid, exits 0)
     uv run python scripts/calc_ltx_resolution.py --aspect 1.778 --long 1216
 
 The shared math lives in `nodes._compute_ltx_resolution`; this script
@@ -68,7 +72,9 @@ def main() -> int:
     print(f"frames:        {args.frames}")
     print(f"latent_volume: {volume}")
     print(f"status:        {status}")
-    return 0 if status.startswith("OK") else 1
+    # Any LTX-valid resolution exits 0 — HIGH_VRAM is an informational advisory,
+    # not an error (a (frames-1)%8 violation raises before we get here).
+    return 0
 
 
 if __name__ == "__main__":

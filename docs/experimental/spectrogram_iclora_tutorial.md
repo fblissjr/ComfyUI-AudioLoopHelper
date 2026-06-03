@@ -1,4 +1,4 @@
-Last updated: 2026-05-16
+Last updated: 2026-06-03
 
 # Spectrogram-as-reference IC-LoRA — experimental test rig
 
@@ -19,7 +19,7 @@ Forks the production `example_workflows/audio-loop-music-video_latent.json` init
 
 The output mp4 has **generated video + generated audio** baked in. You compare the generated audio against the original song to see what the spectrogram-driven generation "thinks" the audio should sound like.
 
-Keeps the full production patch chain (sage → chunk-FF → tuner → NAG → preview-override → ModelSamplingSD3 shift=13), authoritative distilled sigmas (linear_quadratic 8 1), distilled I2V init via `LTXVImgToVideoInplaceKJ(reference_image.png)`. An earlier scratch-built "minimal" topology (fewer nodes, no patch chain) produced chroma noise in testing — the full patch chain is load-bearing for distilled LTX 2.3.
+Keeps the full production patch chain (sage → chunk-FF → tuner → NAG → preview-override; **no `ModelSamplingSD3` shift node** — stripped 2026-05-01), authoritative distilled sigmas via `ManualSigmas` (the 8 fixed `DISTILLED_SIGMAS`, not `linear_quadratic`; see `docs/reference/sampler_reference.md`), distilled I2V init via `LTXVImgToVideoInplaceKJ(reference_image.png)`. An earlier scratch-built "minimal" topology (fewer nodes, no patch chain) produced chroma noise in testing — the full patch chain is load-bearing for distilled LTX 2.3.
 
 Post-build DAG verified via `scripts/analyze_workflow_dag.py`.
 
@@ -128,7 +128,7 @@ Then play both side-by-side.
 
 ### With vs without sage attention
 
-Set `AudioLoopHelperSageAttention(268).mode` to `4` (bypassed) via right-click → Bypass, queue again, compare. Tells us whether sage's attention routing affects the IC-LoRA × spectrogram interaction. Per CLAUDE.md, `auto_mask_aware` is the production default and is preserved here; ablating it isolates its contribution.
+Set `AudioLoopHelperSageAttention(268).mode` to `4` (bypassed) via right-click → Bypass, queue again, compare. Tells us whether sage's attention routing affects the IC-LoRA × spectrogram interaction. Per CLAUDE.md, `auto` is the production default (since 2026-05-15) and is preserved here; ablating it isolates sage's contribution.
 
 ### Different IC-LoRA files
 
@@ -157,7 +157,7 @@ Currently the apply script always switches to generated audio. For a frozen-audi
 
 ## Troubleshooting
 
-**"Output is pure static / chroma noise."** Production's patch chain (sage → chunk-FF → tuner → NAG → preview-override → ModelSamplingSD3) is load-bearing for distilled LTX 2.3. If you've edited the workflow and stripped any of those nodes, re-generate from the apply script. Run `uv run --group dev python scripts/analyze_workflow_dag.py example_workflows/experimental/spectrogram_iclora_minimal.json --format ascii | tail -30` and verify every link into the sampler is connected.
+**"Output is pure static / chroma noise."** Production's patch chain (sage → chunk-FF → tuner → NAG → preview-override) is load-bearing for distilled LTX 2.3. If you've edited the workflow and stripped any of those nodes, re-generate from the apply script. Run `uv run --group dev python scripts/analyze_workflow_dag.py example_workflows/experimental/spectrogram_iclora_minimal.json --format ascii | tail -30` and verify every link into the sampler is connected.
 
 **"Output is 0 seconds / empty mp4."** A node downstream of the sampler has a dangling input. Common cause: in past debugging a `LatentConcat(1605)` "Prepend Initial Render" had a dangling second input once the loop was stripped. The apply script strips it and rewires `LTXVCropGuides → LTXVTiledVAEDecode(1604)` directly; if you see this, re-run the apply script.
 

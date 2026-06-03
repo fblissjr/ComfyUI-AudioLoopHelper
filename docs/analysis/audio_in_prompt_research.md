@@ -1,4 +1,4 @@
-Last updated: 2026-04-23 (merged audio_in_prompt_analysis.md + audio_in_prompt_guide_notebooklm.md; added project-workflow framing)
+Last updated: 2026-06-03 (merged audio_in_prompt_analysis.md + audio_in_prompt_guide_notebooklm.md; added project-workflow framing)
 
 # Audio-in-prompt research: community practices for LTX-2 lip-sync
 
@@ -25,8 +25,7 @@ already carried by the frozen latent, the prompt is better when
 - Over-specifying audio descriptors double-signals and can over-crank
   visual intensity at beats.
 
-See `CLAUDE.md` (Critical constraints → "Audio is FROZEN in our
-workflow"). The strip rules above are derived from internal A/B runs
+See `CLAUDE.md` (Critical constraints → "Audio is FROZEN"). The strip rules above are derived from internal A/B runs
 that validated the empirical mechanism.
 
 **This doc is preserved** because future workflows (audio-generating

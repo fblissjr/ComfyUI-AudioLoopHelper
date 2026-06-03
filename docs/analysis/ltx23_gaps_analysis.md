@@ -1,6 +1,15 @@
-Last updated: 2026-04-23 (LTXVLoopingSampler section tightened: 2 root blockers + 3 cascades)
+Last updated: 2026-06-03 (status banner added; research body unchanged from 2026-04-23)
 
 # LTX 2.3 Gaps Analysis: ComfyUI-LTXVideo vs LTX-2 Native vs LTX-Desktop
+
+> **STATUS UPDATE (2026-06-03):** Capabilities this doc flags as "missing / build
+> this" have since SHIPPED in AudioLoopHelper — temporal-region **retake**
+> (`LatentTemporalMask` + `example_workflows/audio-loop-music-video_retake.json`,
+> guide `docs/guides/retake_guide.md`) and **audio regeneration / dialogue
+> replacement** (`AudioTemporalMask` + `_latent_av_inversion.json`, guide
+> `docs/guides/dialogue_replacement_guide.md`). The cross-codebase comparison
+> below is preserved as the original research record — read its
+> "missing / not available" verdicts as point-in-time (2026-04).
 
 Cross-reference of capabilities across all three codebases. Identifies what
 exists where, what's missing, and what could be brought into ComfyUI workflows.

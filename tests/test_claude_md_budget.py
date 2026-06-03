@@ -2,7 +2,7 @@
 
 Three assertions:
 
-1. Root CLAUDE.md is bounded (200 lines / 30 KB hard cap). Subtree CLAUDE.md
+1. Root CLAUDE.md is bounded (220 lines / 32 KB hard cap). Subtree CLAUDE.md
    files soft-warn at 500 lines.
 2. Every repo-relative path mentioned in any CLAUDE.md (docs/X.md,
    scripts/X.py, internal/X.md, tests/X.py) resolves to an existing file.
@@ -24,8 +24,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 ROOT_CLAUDE_MD = REPO_ROOT / "CLAUDE.md"
-ROOT_LINE_BUDGET = 200
-ROOT_BYTE_BUDGET = 30 * 1024  # 30 KB
+ROOT_LINE_BUDGET = 220
+ROOT_BYTE_BUDGET = 32 * 1024  # 32 KB
 SUBTREE_LINE_SOFT_WARN = 500
 
 

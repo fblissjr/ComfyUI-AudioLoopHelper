@@ -1,4 +1,4 @@
-Last updated: 2026-05-25
+Last updated: 2026-06-03
 
 # Architecture overview — ComfyUI-AudioLoopHelper
 
@@ -78,7 +78,7 @@ Key open bugs (§9):
          │
          ▼
 ┌─ Model patch chain ────────────────────────────────┐
-│ UNETLoader → SageAttn(268, bypassed) →             │
+│ UNETLoader → SageAttn(268, active, mode=auto) →    │
 │ ChunkFeedForward(504) → AttentionTuner(1523) →     │
 │ LTX2_NAG(508) → SamplingPreviewOverride(503) →     │
 │ Set_model(572)                                     │
@@ -110,8 +110,8 @@ Key open bugs (§9):
 │   noise:     RandomNoise(1322, seed=0 fixed)       │
 │   guider:    CFGGuider(153, cfg=1, model=post-NAG) │
 │   sampler:   KSamplerSelect(154, "euler")          │
-│   sigmas:    BasicScheduler(1421, linear_quadratic,│
-│              8, 1) → ModelSamplingSD3(1513, 13) →  │
+│   sigmas:    ManualSigmas(1421, 8 fixed distilled  │
+│              sigmas, NO ModelSamplingSD3 shift) →  │
 │              VisualizeSigmasKJ(1422) → Set_sigmas  │
 │   latent:    LTXVConcatAVLatent(350)               │
 │                                                    │
@@ -153,7 +153,7 @@ Per-iteration inputs from outside the subgraph:
 
 Loop collects outputs via `LatentConcat(1605)`: outer-render slice
 prepended, then all loop-body slices appended. Final
-`LTXVTiledVAEDecode(1604, [2,2,1,True,'auto','auto'])` + audio →
+`LTXVTiledVAEDecode(1604, [1,1,1,True,'auto','auto'])` (single-tile, 24GB+ default; [2,2,1] is the ≤16GB fallback) + audio →
 `VHS_VideoCombine(617)`.
 
 **Deeper:** `docs/reference/pipeline_flow_latent.md` for the long-form
@@ -419,7 +419,7 @@ What it ships that we use:
 | `LTXVCropGuides` | Strip guide frames | 381 (outer), 655 (inside) |
 | `LTXVPreprocess` | H.264-compression noise on init | 446 |
 | `LTXVTiledVAEDecode` | Spatial-only tiled VAE decode | 1604 |
-| `MultimodalGuider` + `GuiderParameters` | Joint AV guidance | not wired in `_latent.json`; available in `_latent_stg.json` A/B variant |
+| `MultimodalGuider` + `GuiderParameters` | Joint AV guidance | not wired in `_latent.json`; available in the archived `_latent_stg.json` A/B variant (`example_workflows/archive/`) |
 | `EmptyLTXVLatentVideo` | Blank latent | 344 |
 
 What they ship that we DON'T use:
@@ -522,10 +522,10 @@ Classification for each native primitive:
 | `ModalitySpec(frozen=True)` (`a2vid_two_stage.py:184-188`) | no direct analog | MAJOR PORT | ComfyUI doesn't have a first-class "frozen modality" concept. Implicit via `denoise_mask=0`. Native custom node would preserve the API. |
 | `SimpleDenoiser` (`packages/ltx-pipelines/src/ltx_pipelines/distilled.py:129`) | `CFGGuider(cfg=1)` | ~AS-IS | At CFG=1 the uncond branch is skipped (§4). Mathematically equivalent for distilled. |
 | `euler_denoising_loop` (`packages/ltx-pipelines/src/ltx_pipelines/samplers.py:34-74`) | `sample_euler` (ComfyUI core `comfy/k_diffusion/sampling.py:190-212`) | AS-IS | Same Karras Alg 2 step formula. No material divergence. |
-| `MultiModalGuider` | `ComfyUI-LTXVideo/guiders/multimodal_guider.py` | AS-IS | Ported by Lightricks. Our baseline doesn't wire it, but the A/B `_latent_stg.json` variant does. |
+| `MultiModalGuider` | `ComfyUI-LTXVideo/guiders/multimodal_guider.py` | AS-IS | Ported by Lightricks. Our baseline doesn't wire it, but the archived A/B `_latent_stg.json` variant (`example_workflows/archive/`) does. |
 | `APG` (orthogonal projection guidance) | `ComfyUI-LTXVideo/stg.py:55-71` | AS-IS | Ported by Lightricks. Could replace NAG if we wanted Lightricks-style guidance. |
 | A2V two-stage pipeline | — | INFEASIBLE | Two imperative stages with frozen-modality flip between them. ComfyUI DAG can't express this directly; needs a custom node encapsulating both stages with explicit handoff wiring. |
-| `DISTILLED_SIGMA_VALUES` (`distilled.py:16-22`) = `[1.0, 0.994, 0.988, 0.981, 0.975, 0.909, 0.725, 0.422, 0.0]` | `BasicScheduler(linear_quadratic, 8, 1)` + `ModelSamplingSD3(shift=13)` | AS-IS by derivation | Verified bit-exact via `VisualizeSigmasKJ` once; re-verify per-run when changing any part of the chain. |
+| `DISTILLED_SIGMA_VALUES` (`distilled.py:16-22`) = `[1.0, 0.994, 0.988, 0.981, 0.975, 0.909, 0.725, 0.422, 0.0]` | `ManualSigmas` with the 8 fixed distilled values (NO `ModelSamplingSD3` shift node) | AS-IS by literal values | Canonical distilled path feeds the values directly; verified bit-exact via `VisualizeSigmasKJ`. See `docs/reference/sampler_reference.md`. |
 
 **Ranking.** 6 of 9 primitives port AS-IS or with minor tweaks. The
 two MAJOR-PORT items are both about modality-frozen semantics —

@@ -29,6 +29,22 @@ This project uses [Semantic Versioning](https://semver.org/).
   `audio_reference_shaping.py` (still unit-tested) in case per-slice emphasis
   returns as a Compose-editor property. Not referenced by any shipped workflow.
 
+### Changed
+- **Retired the false latent-volume "artifact ceiling"; rebased to an
+  informational VRAM advisory.** LTX-2 reference research confirmed there is no
+  hard model-side latent-volume/token ceiling — the only hard rules are grid
+  alignment (div-32 spatial, `(frames-1)%8==0` temporal) plus VRAM, and the
+  shipped 960×544 @ 497 = 32,130 tokens is exactly LTX-2's own HQ production
+  default. `LTXFramePlanner` / `LTXResolutionFromAspect` now emit `OK` /
+  `HIGH_VRAM` (anchored on 32,130) instead of `OK` / `NEAR_EDGE` / `OVER_EDGE`
+  (anchored on a stale 20,000/24,570 heuristic). `audit_workflows.py` no longer
+  ERRs/WARNs on latent volume — it's informational only, because the real safe
+  limit is hardware-dependent and not ours to impose. Docs reconciled
+  (`frame_planner_reference.md`, `ltx23_model_reference.md`,
+  `ltz23_max_length_research.md`). `apply_canonical_resolution_fix.py` is
+  deprecated (it dodged the retired ceiling). Audio VAE confirmed to impose no
+  divisibility rule; our audio nodes correctly infer latents/sec empirically.
+
 ### Added
 - **`KeyframeGuidesTimeSpaced` node — single-pass keyframe fill.** Collapses the
   hand-wired N-guide fan-out (`Index -> Get Image from Batch -> Math Expression

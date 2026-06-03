@@ -1,4 +1,4 @@
-Last updated: 2026-05-16
+Last updated: 2026-06-03
 
 # LTX 2.3 Model Reference
 
@@ -43,19 +43,32 @@ comfy_extras/nodes_lt.py (append_keyframe), comfy/ldm/lightricks/model.py
 
 ## Resolution and latent volume
 
-- **Latent volume limit**: `(width/32) * (height/32) * ((frames-1)/8 + 1)` should
-  stay below ~15,000-20,000. Exceeding causes artifacts, grid patterns, color loss.
-- **832x480 at 497 frames**: 26*15*63 = 24,570 -- already at the edge. Don't increase
-  resolution without reducing frame count per window.
-- **Higher resolution improves motion/lip-sync/audio quality** but costs more VRAM
-  and risks latent volume overflow. 720p+ with 48-50fps gives smoother motion.
+- **No hard model-side latent-volume ceiling.** Latent token count =
+  `(width/32) * (height/32) * ((frames-1)/8 + 1)`. The only *structural* limits
+  are grid alignment (div-32 spatial, `(frames-1)%8==0` temporal —
+  `coderef/LTX-2/packages/ltx-core/src/ltx_core/types.py:33`) and VRAM. LTX 2.3's
+  RoPE `positional_embedding_max_pos` values are fractional-position *normalizers*,
+  not caps (positions beyond them extrapolate, they don't error); the distilled
+  path's fixed sigmas are token-count-independent. Quality degrades *gradually* at
+  very high token counts — there is no sharp artifact cliff.
+- **Known-good reference points** (use as calibration, not a limit): 768x512 @ 121 ≈
+  9,072 (LTX-2 base default); **960x544 @ 497 = 32,130 — the shipped AudioLoopHelper
+  resolution, which is exactly LTX-2's own HQ production default**
+  (`LTX_2_3_HQ_PARAMS` stage-1 960x544 → 2× → 1920x1088,
+  `coderef/LTX-2/.../utils/constants.py:78-81`) and renders artifact-free. An older
+  "~24,570 ceiling / 832x480 at the edge" figure in this repo's docs was a single-point
+  empirical heuristic, not a real limit; the shipped 32,130 is well past it and clean.
+- **Higher resolution improves motion/lip-sync/audio quality** but costs more VRAM.
+  720p+ with 48-50fps gives smoother motion. Above ~32k tokens the practical limit
+  is VRAM (and tile thresholds), not a model-quality cliff.
 - **Portrait (vertical) resolutions are unstable** -- keep height < 1600px.
   Landscape and square work best.
 - **Two-stage approach is the recommended workaround**: generate at lower res (720p),
   then spatial latent upscale to 1080p+. This is what LTX-Desktop and native LTX-2
-  both do. See `docs/analysis/ltx23_gaps_analysis.md` (upscale workflow is designed but not yet shipped — see `internal/design/upscale_workflow_design.md` (private clone only)).
-- For our loop workflow: each window is 497 frames at 832x480. Changing resolution
-  requires adjusting window_seconds or temporal_tile_size to stay under the limit.
+  both do. The two-stage upscale chain has shipped — see `docs/guides/upscale_guide.md` (LoadLatent upscale chain + bypassed `SaveLatent` toggle via `scripts/apply_run_id_layout.py`).
+- For our loop workflow: each window is 497 frames at 960x544 (the shipped
+  resolution = LTX-2's HQ stage-1 default). Changing resolution trades VRAM against
+  per-window token count; there's no fixed ceiling to "stay under," just your GPU.
 
 ## Color drift prevention (AdaIN)
 
@@ -63,25 +76,26 @@ Loop iterations progressively darken because each iteration's latent statistics
 drift from the initial render. The init_image guide anchors composition but not
 color -- guide strength controls the denoise mask, not cross-attention style.
 
-Two AdaIN approaches (can be used together or independently):
-
-**Per-iteration AdaIN** (LTXVAdainLatent, inside subgraph):
+**Per-iteration AdaIN** (LTXVAdainLatent, inside subgraph) — the production approach:
 - Location: after SeparateAVLatent (#596), before CropGuides (#655)
 - Reference: initial render video latent from SeparateAV #245
 - Factor: 0.2 default (gentle). Increase to 0.5 for stronger correction.
 - per_frame=False (global statistics). Try True if per-frame flickering occurs.
-- Present in all three workflows. Bypass (mode=4) to disable.
+- **Present in all shipped loop workflows** (`_latent`, `_retake`, `_keyframe`,
+  `_av_inversion`, `audio_reactive_loop`). Bypass (mode=4) to disable.
 
-**Per-step AdaIN** (LTXVPerStepAdainPatcher, model chain):
-- Location: after SamplingPreviewOverride, before Set_model
+**Per-step AdaIN** (LTXVPerStepAdainPatcher, model chain) — *archived approach*:
+- This lived only in `audio-loop-music-video_image_adain_perstep.json`, which is
+  now in `example_workflows/archive/` (the LATENT loop is the sole production
+  path). Documented here for reference, not as a live alternative.
+- Location was: after SamplingPreviewOverride, before Set_model
 - Reference: node 531 (init image embed latent, available before sampling)
 - Factors: per-denoising-step, e.g., "0.3,0.2,0.1,0.05,0.0,0.0,0.0,0.0"
-  (stronger at early noisy steps, none at late detail steps)
-- Only in `audio-loop-music-video_image_adain_perstep.json`
-- More aggressive than per-iteration. Applied during sampling, not after.
+  (stronger at early noisy steps, none at late detail steps); more aggressive
+  than per-iteration, applied during sampling rather than after.
 
-**Testing order**: Start with per-iteration only (factor=0.2). If drift persists,
-try the per-step workflow. Compare iteration 5+ brightness against initial render.
+**If drift persists** beyond per-iteration AdaIN (factor=0.2): raise the factor
+toward 0.5 first. Compare iteration 5+ brightness against the initial render.
 
 ## LTX 2.3 prompt format
 
@@ -155,16 +169,17 @@ Prompt creation guide: `docs/guides/prompt_creation_guide.md`
   removed 2026-04-27 in favor of the auto-stripping LatentContextExtract /
   LatentOverlapTrim path.)
 
-## Dual workflow support (IMAGE vs LATENT)
+## Workflow lineage (LATENT is the production path)
 
-- **IMAGE-AdaIN workflow** (`audio-loop-music-video_image_adain_perstep.json`):
-  Subgraph uses GetImageRangeFromBatch + VAEEncode/Decode plus
-  LTXVPerStepAdainPatcher on the model chain. ImageBatch prepends initial
-  render. Use only when you specifically need per-iteration AdaIN; latent
-  is the production default. (The plain image workflow was retired 2026-04-27.)
-- **LATENT workflow** (`audio-loop-music-video_latent.json`): Subgraph uses
-  LatentContextExtract + LatentOverlapTrim. LatentConcat prepends initial render.
-  No per-iteration VAE round-trip.
+- **LATENT workflow** (`audio-loop-music-video_latent.json` + the keyframe /
+  retake / av_inversion / audio_reactive variants): Subgraph uses
+  LatentContextExtract + LatentOverlapTrim. LatentConcat prepends the initial
+  render. No per-iteration VAE round-trip. **This is the sole production path.**
+- **IMAGE-AdaIN workflow** (`audio-loop-music-video_image_adain_perstep.json`) —
+  *archived* (`example_workflows/archive/`): subgraph used
+  GetImageRangeFromBatch + VAEEncode/Decode plus LTXVPerStepAdainPatcher with a
+  per-iteration VAE round-trip. Superseded by the LATENT path; kept for
+  reference only. (The plain image workflow was retired 2026-04-27.)
 - AudioLoopController outputs work for both: overlap_frames (pixel) + overlap_latent_frames (latent).
 
 ## Extension subgraph (Node 843)
@@ -183,7 +198,7 @@ Full trace: `docs/reference/pipeline_flow_latent.md` (LATENT workflow, the prima
 
 - TrimAudioDuration (Node 567) start_index is song-dependent. It trims
   instrumental intro that doesn't contribute to lip sync.
-- Audio and video durations must match. Canonical LTX 2.3 inference fps = 25 (see `frame_rate` section below): 497 frames / 25 = 19.88s, satisfies `(L-1)%8==0`. A 2026-05-15 sweep briefly flipped widgets to 24 based on a misread of a library placeholder default; reverted to 25 on 2026-05-16 (production render validation pending).
+- Audio and video durations must match. Canonical LTX 2.3 inference fps = 25 (see `frame_rate` section below): 497 frames / 25 = 19.88s, satisfies `(L-1)%8==0`. A 2026-05-15 sweep briefly flipped widgets to 24 based on a misread of a library placeholder default; reverted to 25 on 2026-05-16. `fps=25` is live in all shipped workflows.
 
 ### `frame_rate`: canonical inference value is 25
 
@@ -221,4 +236,4 @@ Getting this wrong silently misconfigures the node.
   3-step refinement sampler -> VAEDecodeTiled.
 - Model: `ltx-2.3-spatial-upscaler-x2-1.1.safetensors`
 - Refinement sigmas: [0.85, 0.725, 0.4219, 0.0] (3 steps).
-- Design doc (workflow not yet shipped): `internal/design/upscale_workflow_design.md` (private clone only)
+- Shipped: `docs/guides/upscale_guide.md` (build via `scripts/build_upscale_workflow.py`). Design doc: `internal/design/upscale_workflow_design.md` (private clone only).

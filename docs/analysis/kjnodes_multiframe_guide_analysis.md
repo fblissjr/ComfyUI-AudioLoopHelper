@@ -1,6 +1,14 @@
-Last updated: 2026-04-16
+Last updated: 2026-06-03 (status banner added; research body unchanged from 2026-04-16)
 
 # KJNodes: Multi-Frame Guide Capabilities Analysis
+
+> **STATUS UPDATE (2026-06-03):** The Phase-1/2/3 plan below assumes
+> `KeyframeImageSchedule` as the current keyframe path; it is now **legacy**
+> (per-iter VAE). The current design is `KeyframeLatentScheduleBatchEncode` +
+> `LatentSelectByIteration` (VAE-encodes once outside the loop) and the
+> `LTXIterKeyframeSchedule` selector. The KJNodes capability content
+> (`LTXVAddGuideMulti`, `LTXVAddGuidesFromBatch`, node-606 wiring) remains
+> accurate; treat the phased recommendations as point-in-time (2026-04).
 
 Analysis of KJNodes' LTX-specific nodes for multi-frame conditioning,
 focused on capabilities we can leverage in the AudioLoopHelper workflow.

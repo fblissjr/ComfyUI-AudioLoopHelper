@@ -1,6 +1,6 @@
 # scripts/ — apply scripts, audit, utilities
 
-Last updated: 2026-05-26
+Last updated: 2026-06-03
 
 This subtree holds workflow-mutation scripts (`apply_*.py`), workflow validators (`audit_workflows.py`, `validate_docs_consistency.py`, `analyze_workflow_dag.py`, `trace_node_source.py`), the canonical edit utility (`workflow_utils.py`), audio analysis tools, and templates. Loads only when Claude is operating inside `scripts/`. Root project rules: `../CLAUDE.md`. Governance policy: `../.claude/CLAUDE.md`.
 
@@ -20,13 +20,13 @@ Node-dict factories (static methods): `WorkflowEditor.make_get_node(node_id, var
 
 ### Importing `scripts/workflow_utils.py` from package modules
 
-`workflow_utils.py` lives at `scripts/`, NOT package root. Naive `from .workflow_utils import run_artifact_path` from a top-level package module (e.g. `ffn_attn_tracer.py`, `exec_logger.py`, `nodes_sage.py`) silently fails; any try/except fallback runs and the caller may land in the wrong path with no error. Canonical pattern at `nodes_sage.py:72-80`:
+`workflow_utils.py` lives at `scripts/`, NOT package root. Naive `from .workflow_utils import run_artifact_path` from a top-level package module (e.g. `ffn_attn_tracer.py`, `exec_logger.py`, `nodes_sage.py`) silently fails; any try/except fallback runs and the caller may land in the wrong path with no error. Canonical pattern at `nodes_sage.py` (the `run_artifact_path` import-fallback block):
 
 ```python
 sys.path.insert(0, str(Path(__file__).parent / "scripts"))
 try:
     from workflow_utils import run_artifact_path  # type: ignore
-except Exception:
+except ImportError:
     def run_artifact_path(category: str, ext: str) -> Path:
         # inline fallback path
         ...
@@ -51,7 +51,7 @@ Every `apply_*.py` script ships with:
 - **`--dry-run`** — show what would change without writing. HyDE pattern: `apply_X.py --dry-run | audit_workflows.py` verifies a hypothetical state before committing.
 - **Idempotence** — applying twice is a no-op. Achieved via signature checks (e.g. detecting whether the target node already exists with expected wires).
 - **`require_nodes` pre-flight guards** — refuse with an actionable message when expected upstream nodes are missing.
-- **Pre-flight chaining** — when one migration depends on another, detect the prerequisite's signature and refuse with "Run scripts/apply_<X>.py first." Reference: `apply_iclora_video_reference.py` refuses if `#1625/#1626/#1627` are still present (Step 0 strip unrun).
+- **Pre-flight chaining** — when one migration depends on another, detect the prerequisite's signature and refuse with "Run scripts/apply_<X>.py first." Reference: `scripts/archive/apply_iclora_video_reference.py` refuses if `#1625/#1626/#1627` are still present (Step 0 strip unrun).
 - **Don't stash revert metadata as keys on workflow JSON nodes/groups** (e.g. `_X_pre`). The keys persist into shipped JSON on apply. For revert: use hardcoded canonical defaults (legacy shapes are stable across shipped variants); for non-trivial dynamic state, a sidecar at `internal/.apply_state/<script>.json`.
 - **Widget defaults that DROP user content must be opt-in, not opt-out.** The 2026-05-10 `#567 TrimAudioDuration [start_index=5, duration=300]` default ate the first 5 seconds of every song silently because the user had to notice the widget to disable it. When defining a new node or setting widget defaults via apply scripts, ANY default that removes/clips/transforms user input should default to a no-op (`start_index=0`, `strength=0`, `bypass=True` / `mode=4`). Make destructive behavior require explicit user opt-in. Footgun-by-default eats render time + user trust.
 
@@ -81,7 +81,7 @@ Verdict rule: archive only if (a) the migration is baked AND idempotent on curre
 
 Every fix that ships an apply script ships a matching audit check in `audit_workflows.py`. The check returns ERR with a `Run scripts/apply_<X>.py` remediation pointer when the invariant is violated. This prevents silent regression of fixes a sibling branch might revert.
 
-**Carve-out for staged-variant scripts:** apply scripts that stage drafts into `internal/workflows/` (don't mutate `example_workflows/`) skip the F-pair audit-invariant requirement. F-pair applies at promotion time — when a draft graduates to `example_workflows/` and a regression-protection invariant earns its keep on the shipped surface. Reference: `apply_lanczos_init_preprocess.py`, `apply_p3_retake_edit_lora.py` ship without paired audits because their outputs are gitignored drafts.
+**Carve-out for staged-variant scripts:** apply scripts that stage drafts into `internal/workflows/` (don't mutate `example_workflows/`) skip the F-pair audit-invariant requirement. F-pair applies at promotion time — when a draft graduates to `example_workflows/` and a regression-protection invariant earns its keep on the shipped surface. Reference: `scripts/archive/apply_lanczos_init_preprocess.py`, `apply_p3_retake_edit_lora.py` ship without paired audits because their outputs are gitignored drafts.
 
 Inventory (canonical list + remediation pointers): **`docs/reference/debug_tools.md`**. Pairs are referenced by F-number throughout root CLAUDE.md and elsewhere. The audit IS the rule — when in doubt, look at the live `record(...)` call sites in `audit_workflows.py` rather than re-deriving from prose.
 
@@ -151,7 +151,7 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 
 ## Inventory (current scripts/, post-2026-05-05 cleanup)
 
-74 scripts (+ 3 helpers under `scripts/_helpers/`) grouped by purpose. Each row: **script** — purpose · *primary callers*. Scripts with **no callers** are leaf utilities (CLI-invoked directly or emergency fallbacks). Archive entries: `scripts/archive/CLAUDE.md`.
+105 scripts (+ 4 helpers under `scripts/_helpers/`: `_apply_helpers.py`, `_fml2v_helpers.py`, `_layout_classifications.py`, `_layout_grid.py`) grouped by purpose. Each row: **script** — purpose · *primary callers*. Scripts with **no callers** are leaf utilities (CLI-invoked directly or emergency fallbacks). Archive entries: `scripts/archive/CLAUDE.md`. The late-May IC-LoRA / pitch-gate / audio-swap script push is itemized under "Audio IC-LoRA dataset + pitch-gate eval (12)" below.
 
 ### Core editing + audit (always-live foundations)
 
@@ -231,7 +231,7 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 | `apply_alc_seed_rename.py` | Rename `seed` → `base_seed` (avoids ComfyUI's auto-`control_after_generate`) · `audit_workflows.py`, `apply_strip_alc_control_after_generate.py` |
 | `apply_strip_alc_control_after_generate.py` | Strip leftover `randomize` widget value post-rename · `audit_workflows.py`, `audio_loop_controller.md` |
 | `apply_frame_planner_consolidation.py` | Migrate to `LTXFramePlanner` as single dim source · `apply_skip_under_seq_len.py`, `apply_initial_render_audio_duration_autowire.py` |
-| `apply_canonical_resolution_fix.py` | Bring `EmptyLTXVLatentVideo` widgets to LTX-valid resolution · `audit_workflows.py` |
+| `apply_canonical_resolution_fix.py` | **DEPRECATED 2026-06-03** (do not run — forced resolution down to dodge the retired latent-volume "ceiling"; would now downgrade the shipped 960x544). Historical record only. |
 
 ### Apply scripts — conditioning + prompt schedule (3)
 
@@ -252,7 +252,7 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 | `apply_loop_cropguides_symmetry.py` | Wire loop-body `CFGGuider` through `LTXVCropGuides` (F3) · `debug_tools.md`, `debugging_guide.md`, `audit_workflows.py` |
 | `apply_loop_guide_preprocess_symmetry.py` | Match init + loop `LTXVPreprocess(img_compression=18)` (F2) · `apply_loop_cropguides_symmetry.py`, `templates/README.md`, `debug_tools.md` |
 | `apply_split_cropguides.py` | Split `LTXVCropGuides` into two instances to break loop cycle · `audit_workflows.py` |
-| `apply_lanczos_init_preprocess.py` | Two-stage lanczos init preprocess · `debug_tools.md` |
+| `archive/apply_lanczos_init_preprocess.py` (archived) | Two-stage lanczos init preprocess · `debug_tools.md` |
 
 ### Apply scripts — IC-LoRA / ID-LoRA / amplification (5)
 
@@ -349,6 +349,25 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 |---|---|
 | `align_ref_video.py` | Align driving reference video to audio-loop IC-LoRA workflow params (F12) · CLI-only |
 | `spectrogram_to_reference.py` | Render Mel spectrogram as PNG frame sequence (IC-LoRA spectrogram-as-reference, Phase 2.0) · scripts/CLAUDE.md, `spectrogram_iclora_tutorial.md` |
+
+### Audio IC-LoRA dataset + pitch-gate eval (12)
+
+*Add here for the audio→video IC-LoRA training-data + eval pipeline. The node/eval surface here was co-developed with the LTX-2 trainer repo; the dataset builder is local. Many are CLI-only (run by the training/eval loop, not by `apply_*`/CI).*
+
+| Script | Purpose · callers |
+|---|---|
+| `build_multimodal_dataset.py` | Build a schema'd multimodal JSONL dataset from ComfyUI render PNGs (traces the graph; prompt × reference × LoRA-strength → output) · `docs/guides/build_multimodal_dataset.md`, `tests/test_build_multimodal_dataset.py` |
+| `pitch_gate_data.py` | Pitch-gate data generator (audio-loop side) — DSP core + manifest · `build_pitch_gate_dataset.py`, `tests/` |
+| `build_pitch_gate_dataset.py` | Build the pitch-gate dataset (CPU media-gen stage; no GPU/VAE) · CLI-only |
+| `filter_pitch_gate_dataset.py` | F0-measurability filter for the pitch-gate dataset (the one real quality gate) · CLI-only |
+| `gen_pitch_gate_eval_tones.py` | Generate held-out voiced-tone reference wavs for the pitch-gate eval · CLI-only |
+| `pitch_gate_eval.py` | Pitch-gate F0-tracking metric (the eval gate) · CLI-only |
+| `build_pitch_gate_eval_workflow.py` | Build the pitch-gate eval workflow template from the proven stock single-stage A+V graph · CLI-only |
+| `wire_iclora_guide_into_eval_template.py` | One-shot: add `LTXAddVideoICLoRAGuideAdvanced` + `VHS_LoadVideo` to the eval template · CLI-only |
+| `build_keyframe_i2v_audio_iclora.py` | Build `example_workflows/experimental/keyframe-i2v_audio-ic-lora.json` · CLI-only |
+| `convert_lora_for_comfyui.py` | Re-key a trained ltx-trainer LoRA for ComfyUI-LTXVideo's expected naming · CLI-only |
+| `build_audio_swap_manifest.py` | Build the audio-swap eval manifest from a directory of rendered A/B videos · `generate_audio_swap_workflows.py` |
+| `generate_audio_swap_workflows.py` | Generate the A/B audio-swap eval workflow variants (E1.1) · CLI-only |
 
 ### Sage trace verification (1)
 

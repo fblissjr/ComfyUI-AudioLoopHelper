@@ -1,4 +1,4 @@
-Last updated: 2026-04-17
+Last updated: 2026-06-03
 
 # Audio Analysis Guide
 
@@ -126,10 +126,10 @@ audio implies a different action (dancing, instrument, etc.).
 
 | Tier | Name | Maps to | Sub-variants |
 |------|------|---------|--------------|
-| 1 | performance_live      | `internal/prompt.md`   | 1a close-up concert, 1b wide stage, 1c studio-live |
-| 2 | performance_dynamic   | `internal/prompt2.md`  | 2a handheld energetic (DEFAULT), 2b steady-cam polished |
-| 3 | cinematic             | `internal/prompt3.md`  | 3a urban night, 3b natural outdoor, 3c interior character, 3d perf + b-roll |
-| 4 | narrative             | `internal/prompt4.md`  | 4a linear story, 4b flashback / dream |
+| 1 | performance_live      | `internal/prompts/prompt.md`   | 1a close-up concert, 1b wide stage, 1c studio-live |
+| 2 | performance_dynamic   | `internal/prompts/prompt2.md`  | 2a handheld energetic (DEFAULT), 2b steady-cam polished |
+| 3 | cinematic             | `internal/prompts/prompt3.md`  | 3a urban night, 3b natural outdoor, 3c interior character, 3d perf + b-roll |
+| 4 | narrative             | `internal/prompts/prompt4.md`  | 4a linear story, 4b flashback / dream |
 | 5 | stylized              | —                      | 5a noir monochrome, 5b surreal, 5c retro / period |
 | 6 | avant_garde           | —                      | (abstract / non-linear; no sub-letters) |
 

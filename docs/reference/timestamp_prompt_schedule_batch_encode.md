@@ -1,6 +1,6 @@
 # TimestampPromptScheduleBatchEncode reference
 
-Last updated: 2026-05-16
+Last updated: 2026-06-03
 
 ## Role
 
@@ -19,7 +19,7 @@ Last updated: 2026-05-16
 - Singleton per workflow; lives top-level (not in subgraph). Loop body has only `ConditioningSelectByIteration`.
 - Pairs with: `nodes.py::ConditioningSelectByIteration`.
 - Caching: module-level `_BATCH_ENCODE_CACHE` is an `OrderedDict` LRU of size 4 (covers A/B runs). Keyed on `(id(clip), schedule, stride_seconds, audio_duration, snap_boundaries, frame_rate)`. Dies on ComfyUI restart.
-- Stamps `frame_rate` on every emitted CONDITIONING via `node_helpers.conditioning_set_values`. Canonical LTX 2.3 inference value is 25.0 (`docs/reference/ltx23_model_reference.md` § "`frame_rate`: canonical inference value is 25"); must match the `frame_rate` set on the initial-render's `LTXVConditioning`. A 2026-05-15 sweep flipped to 24.0; reverted 2026-05-16 (production render validation pending).
+- Stamps `frame_rate` on every emitted CONDITIONING via `node_helpers.conditioning_set_values`. Canonical LTX 2.3 inference value is 25.0 (`docs/reference/ltx23_model_reference.md` § "`frame_rate`: canonical inference value is 25"); must match the `frame_rate` set on the initial-render's `LTXVConditioning`. A 2026-05-15 sweep flipped to 24.0; reverted 2026-05-16. `fps=25` is live in all shipped workflows.
 - Iteration count output includes **+1 headroom** beyond expected loop length so the selector's clamp absorbs overshoot.
 - Dedup: identical prompt strings encoded once regardless of how many iterations span them.
 

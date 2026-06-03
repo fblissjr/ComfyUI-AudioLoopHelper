@@ -112,10 +112,10 @@ path).
 
 Staged under `example_workflows/experimental/audio-loop-music-video_latent_av_extension.json`.
 A related probe: rather than replacing dialogue, it tests **audio continuation**
-— freeze the first N seconds of audio as context and regenerate the tail,
-pairing the video stream's `LatentTemporalMask` with `AudioTemporalMask` on the
-SAME seconds so both clean prefixes align in time. Distinct source layout
-(separate `LoadAudio`); same `AudioTemporalMask` mechanism.
+— freeze the first N seconds of audio as context and regenerate the tail
+via a single `AudioTemporalMask` on the audio stream (the shipped variant
+masks audio only; it does not pair a video-stream `LatentTemporalMask`).
+Distinct source layout (separate `LoadAudio`); same `AudioTemporalMask` mechanism.
 
 ## Cross-links
 

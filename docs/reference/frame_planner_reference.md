@@ -1,6 +1,6 @@
 # LTXFramePlanner reference
 
-Last updated: 2026-05-16
+Last updated: 2026-06-03
 
 ## Role
 
@@ -8,7 +8,7 @@ Single source of truth for LTX 2.3 dimension config in shipped workflows. The us
 
 ## Key facts
 
-- **Node ID**: `LTXFramePlanner`. Defined in `nodes.py` (~line 1505).
+- **Node ID**: `LTXFramePlanner`. Defined in `nodes.py` (class `LTXFramePlanner`).
 - **Inputs**: `target_width` (default 832), `target_height` (default 448), `target_seconds` (default 19.88), `fps` (default 25; LTX 2.3 canonical inference value — see fps gotcha below).
 - **Outputs**: `width`, `height`, `frames`, `actual_seconds`, `fps_int`, `fps_float`, `latent_volume`, `status`, `summary`.
 - **One node per workflow.** All shipped workflows wire its outputs into 6 consumer inputs (see Wiring map).
@@ -29,11 +29,18 @@ Single source of truth for LTX 2.3 dimension config in shipped workflows. The us
 
 | Status | Range | Meaning |
 |---|---|---|
-| `OK` | ≤ 20,000 | Inside the artifact-free regime |
-| `NEAR_EDGE` | 20,001 – 24,570 | At/near the artifact ceiling; render quality degrades |
-| `OVER_EDGE` | > 24,570 | Past the ceiling; banding / artifacts likely |
+| `OK` | ≤ 32,130 | At/under LTX-2's HQ production default; comfortable token budget |
+| `HIGH_VRAM` | > 32,130 | Above the HQ production default — more VRAM on your card (informational, NOT a quality cliff) |
 
-Ceiling reference: `docs/reference/ltx23_model_reference.md`.
+> **The status is an informational VRAM advisory, NOT a hard ceiling.** There is
+> no model-side latent-volume cap (only div-32 / 8k+1 grid alignment + VRAM — see
+> `docs/reference/ltx23_model_reference.md` § "Resolution and latent volume").
+> The anchor is LTX-2's own HQ production default — **960x544 @ 497 = 32,130**
+> (`LTX_2_3_HQ_PARAMS`, `coderef/LTX-2/.../utils/constants.py:78-81`), the shipped
+> resolution — so the shipped config reads `OK`. `HIGH_VRAM` just means "above
+> that token budget; watch memory," and the real safe limit is hardware-dependent,
+> so the node never errors on it. (Rebased from the retired 20,000/24,570
+> artifact-ceiling heuristic 2026-06-03.)
 
 ## Wiring map
 
@@ -57,7 +64,7 @@ The `apply_frame_planner_consolidation.py` migration removes four pre-existing h
 
 - **`target_seconds` is per-iteration window duration, NOT total video length.** Total length is determined by the audio. Default 19.88s @ 25fps = 497 frames (`(497-1)%8==0`) ≈ 9 iterations on a 3-min song.
 - **Lower `target_seconds` = more iterations = more re-anchoring.** Tradeoffs: better identity preservation, higher resolution headroom, more boundary seams. There's no universally-right value; tune per render.
-- **`fps=25` is the LTX 2.3 canonical inference value.** Lightricks's shipped ComfyUI-LTXVideo example workflows set `LTXVConditioning.frame_rate=25` across T2V/I2V distilled + full; V2V uses 24 (preserves source-video fps). 8n+1 latent boundary aligns cleanly at 25. Full evidence + mechanism + symptom of mismatch: `docs/reference/ltx23_model_reference.md` § "`frame_rate`: canonical inference value is 25". A 2026-05-15 sweep flipped widgets to 24 on a misread of a library placeholder default; reverted 2026-05-16 (production render validation pending).
+- **`fps=25` is the LTX 2.3 canonical inference value.** Lightricks's shipped ComfyUI-LTXVideo example workflows set `LTXVConditioning.frame_rate=25` across T2V/I2V distilled + full; V2V uses 24 (preserves source-video fps). 8n+1 latent boundary aligns cleanly at 25. Full evidence + mechanism + symptom of mismatch: `docs/reference/ltx23_model_reference.md` § "`frame_rate`: canonical inference value is 25". A 2026-05-15 sweep flipped widgets to 24 on a misread of a library placeholder default; reverted 2026-05-16. `fps=25` is live in all shipped workflows.
 - **The wire supersedes the widget value at execution time** (verified at `apply_frame_planner_consolidation.py:44-48` source-level audit). Widget defaults exist only for orphan-node smoke testing; in shipped workflows they're never consulted.
 - **`EmptyLTXVLatentVideo` silently floors invalid `length`** with `((L-1)//8)+1`. Without the planner upstream, the user-typed length and the actual rendered length can disagree by up to 7 frames. With the planner, they always agree.
 
@@ -73,15 +80,15 @@ Idempotent + reversible. Operates on `example_workflows/_latent.json` by default
 
 ## Audit + tests
 
-- **Audit check**: `frame_planner_present` in `scripts/audit_workflows.py` (~line 305). ERR on production workflows missing the node; WARN on experimental forks.
+- **Audit check**: `frame_planner_present` in `scripts/audit_workflows.py`. ERR on production workflows missing the node; WARN on experimental forks.
 - **Unit tests**: `tests/test_frame_planner.py` covers snap math, latent-volume classification, output type contracts.
 - **Audit tests**: `tests/test_audit_frame_planner.py` covers the audit-check behavior on present/missing/bypassed configurations.
 
 ## References
 
-- `nodes.py` — class `LTXFramePlanner` (~line 1505)
+- `nodes.py` — class `LTXFramePlanner`
 - `scripts/apply_frame_planner_consolidation.py` — migration
-- `scripts/audit_workflows.py` — `frame_planner_present` check (~line 299)
+- `scripts/audit_workflows.py` — `frame_planner_present` check
 - `tests/test_frame_planner.py`
 - `tests/test_audit_frame_planner.py`
 - `docs/reference/ltx23_model_reference.md` — artifact-ceiling source

@@ -40,8 +40,7 @@ from workflow_utils import (
     is_active,
 )
 from nodes import (
-    _LTX_LATENT_VOLUME_OK_MAX as _VOLUME_OK_MAX,
-    _LTX_LATENT_VOLUME_EDGE_MAX as _VOLUME_EDGE_MAX,
+    _LTX_HQ_PRODUCTION_VOLUME as _VOLUME_HQ_DEFAULT,
 )
 # Sibling-script import: LIST_WIDGET_NODES is the authoritative
 # fps-widget index table for F16/F18. Importing the dict (not the
@@ -541,14 +540,13 @@ def _audit_one(wf_path: Path) -> list[Finding]:
             record("OK", "length_mod8", f"length={L}")
         if w_ok and h_ok and L_ok and not _is_validator(name):
             volume = (w // 32) * (h // 32) * ((L - 1) // 8 + 1)
-            if volume > _VOLUME_EDGE_MAX:
-                record(
-                    "ERR", "latent_volume",
-                    f"{volume} > {_VOLUME_EDGE_MAX:,} (artifact ceiling per ltx23_model_reference.md). "
-                    f"Run scripts/apply_canonical_resolution_fix.py.",
-                )
-            elif volume > _VOLUME_OK_MAX:
-                record("WARN", "latent_volume", f"{volume} > {_VOLUME_OK_MAX:,} (near edge)")
+            # Informational only: there is NO hard latent-volume ceiling (the
+            # real limits are grid alignment — already checked above — + VRAM,
+            # which is hardware-dependent and not ours to impose). We never
+            # ERR/WARN on volume; just report it, noting when it exceeds LTX-2's
+            # HQ production default (960x544x497=32,130) as a VRAM heads-up.
+            if volume > _VOLUME_HQ_DEFAULT:
+                record("OK", "latent_volume", f"{volume} (> LTX-2 HQ default {_VOLUME_HQ_DEFAULT:,}; higher VRAM, not a limit)")
             else:
                 record("OK", "latent_volume", f"{volume}")
 

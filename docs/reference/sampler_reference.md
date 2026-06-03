@@ -1,4 +1,4 @@
-Last updated: 2026-04-27
+Last updated: 2026-06-03
 
 # Sampler reference — `euler` vs `euler_ancestral` vs `euler_ancestral_cfg_pp`
 
@@ -11,7 +11,7 @@ sigma schedule, and which to use for each of our workflows.
 **Sampler**: `euler` (plain). Confirmed against Lightricks's own
 distilled inference in `coderef/LTX-Desktop/.../ltx_pipeline_common.py`
 (uses `SimpleDenoiser` + `euler_denoising_loop`) and
-`coderef/ID-LoRA-2.3/.../diffusion_steps.py::EulerDiffusionStep`
+`coderef/ID-LoRA/packages/ltx-core/src/ltx_core/components/diffusion_steps.py::EulerDiffusionStep`
 (first-order Euler). NOT `euler_ancestral_cfg_pp` — that's a community
 variant in some ComfyUI workflows; the 4-step plateau near σ≈0.99 in
 the canonical sigma curve amplifies ancestral re-noise enough to bleed
@@ -20,13 +20,16 @@ across our TensorLoop iteration boundaries.
 **Sigmas**: `ManualSigmas "1.0, 0.99375, 0.9875, 0.98125, 0.975,
 0.909375, 0.725, 0.421875, 0.0"`. These are Lightricks's hand-tuned
 `DISTILLED_SIGMA_VALUES` from
-`coderef/ID-LoRA-2.3/packages/ltx-pipelines/utils/constants.py` — what
+`coderef/LTX-2/packages/ltx-pipelines/src/ltx_pipelines/utils/constants.py:16` — what
 their distilled checkpoint was trained to denoise. Pre-2026-04-27 we
 used `BasicScheduler linear_quadratic 8 1` which approximated this
 curve parametrically; the canonical hand-tuned values are the spec.
 Migration: `scripts/apply_canonical_sigmas.py`.
 
-**Other settings**: `ModelSamplingSD3 shift=13`, `CFGGuider cfg=1`,
+**Other settings**: `CFGGuider cfg=1`, **no `ModelSamplingSD3` shift
+node** (stripped from all distilled workflows 2026-05-01 via
+`scripts/apply_strip_sd3_shift_node.py`; the canonical path feeds the
+fixed sigmas directly — see CLAUDE.md "No flow-matching shift node"),
 decoder `LTXVTiledVAEDecode [1,1,1,true,"auto","auto"]` on 24GB+
 (single-tile, ~3× faster cold-pass than [2,2,1]); fall back to
 [2,2,1] on ≤16GB. Migration: `scripts/apply_no_tile_vae_decode.py`.
@@ -237,9 +240,9 @@ but it's still half the directed modification.
 | Workflow | Guider | CFG | KSamplerSelect | Why |
 |---|---|---|---|---|
 | `_latent.json` (baseline) | `CFGGuider` | 1.0 | **`euler`** | Matches `coderef/LTX-2/.../distilled.py` `SimpleDenoiser` pipeline — deterministic Euler on fixed sigmas. Zero iteration drift. |
-| `_latent_stg.json` (STG hybrid) | `MultimodalGuider` | 2.0 (AUDIO + VIDEO) | **`euler`** | STG adds quality via attention-block perturbation. Adding ancestral re-noise on top re-introduces the iter-drift mechanism STG was meant to help avoid. `euler_ancestral_cfg_pp` only makes sense single-shot. |
+| `_latent_stg.json` (STG hybrid; **archived** — `example_workflows/archive/`) | `MultimodalGuider` | 2.0 (AUDIO + VIDEO) | **`euler`** | STG adds quality via attention-block perturbation. Adding ancestral re-noise on top re-introduces the iter-drift mechanism STG was meant to help avoid. `euler_ancestral_cfg_pp` only makes sense single-shot. |
 | `_latent_keyframe.json` | `CFGGuider` | 1.0 | **`euler`** | Same rationale as baseline; keyframes are orthogonal to sampling choice. |
-| `_image.json` / `_image_adain_perstep.json` | `CFGGuider` | 1.0 | **`euler`** | Same baseline config; AdaIN is orthogonal. |
+| `_image_adain_perstep.json` (**archived** — `example_workflows/archive/`; the plain `_image.json` was retired) | `CFGGuider` | 1.0 | **`euler`** | Same baseline config; AdaIN is orthogonal. |
 | Upstream `LTX-2.3_T2V_I2V_Single_Stage_Distilled_Full.json` (LoRA-on-full-22B, NOT our config) | `MultimodalGuider` | 3/7 (VIDEO/AUDIO) | `euler_ancestral_cfg_pp` | Single-shot, so iteration drift doesn't apply. CFG at 3-7 makes CFG++ direction meaningful. Ancestral adds dynamic range. Different model (LoRA not merged) + different use case. **Do not copy this stack onto our merged distilled-1.1.** |
 
 ## 5. When to reach for `euler_ancestral_cfg_pp`
@@ -293,4 +296,4 @@ For our default 10-iter audio-loop use case: **always `euler`**.
 - `ComfyUI/comfy/k_diffusion/sampling.py:1288-1290` — `sample_euler_cfg_pp` (delegates to ancestral_cfg_pp with eta=0, s_noise=0)
 - `ComfyUI-LTXVideo/guiders/multimodal_guider.py:138-281` — `MultimodalGuider.predict_noise` (CFG=1.0 uncond-branch bug at :161-179 + :269)
 - `coderef/LTX-2/packages/ltx-pipelines/src/ltx_pipelines/utils/samplers.py:34-74` — LTX-2's own `euler_denoising_loop` (what our `euler` choice matches)
-- `coderef/LTX-2/packages/ltx-pipelines/src/ltx_pipelines/utils/constants.py:16` — `DISTILLED_SIGMAS` (the fixed schedule our `linear_quadratic 8 1` + `shift=13` reproduces)
+- `coderef/LTX-2/packages/ltx-pipelines/src/ltx_pipelines/utils/constants.py:16` — `DISTILLED_SIGMAS` (the fixed schedule our `ManualSigmas` node feeds directly — no `linear_quadratic` / `shift=13` approximation)

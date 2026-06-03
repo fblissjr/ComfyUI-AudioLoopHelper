@@ -98,7 +98,7 @@ class TestLTXFramePlanner:
         assert fps_int == 25
         assert fps_float == pytest.approx(25.0)
         assert latent_volume == 22932
-        assert "OK" in status or "NEAR_EDGE" in status
+        assert "OK" in status
         # Summary is human-readable: must mention key values
         assert "832" in summary and "448" in summary
         assert "19.88" in summary or "19.9" in summary
@@ -116,8 +116,11 @@ class TestLTXFramePlanner:
         width, height = out[0], out[1]
         assert width == 832 and height == 448
 
-    def test_high_res_over_ceiling(self):
-        # 960 x 544 x 497 = 32130 — over the 24570 ceiling
+    def test_shipped_960x544_hq_default_is_ok(self):
+        # 960 x 544 x 497 = 32,130 = LTX-2's HQ production default. It MUST
+        # classify OK (regression guard against the retired 24,570 "ceiling"
+        # that wrongly flagged the shipped resolution). There is no hard
+        # latent-volume ceiling — only grid alignment + VRAM.
         out = LTXFramePlanner.execute(
             target_width=960,
             target_height=544,
@@ -126,11 +129,26 @@ class TestLTXFramePlanner:
         )
         latent_volume = out[6]
         status = out[7]
-        assert latent_volume > 24570
-        assert "OVER" in status or "ERR" in status
+        assert latent_volume == 32130
+        assert "OK" in status
+        assert "OVER" not in status and "ERR" not in status
 
-    def test_high_res_with_short_window_under_ceiling(self):
-        # 960 x 544 x 121 = 8160 — under the 20K OK threshold
+    def test_well_above_hq_default_is_high_vram_advisory(self):
+        # 1216 x 672 x 497 = 50,274 — above the HQ production default. Flagged
+        # HIGH_VRAM (informational VRAM heads-up), NOT an error / not a cliff.
+        out = LTXFramePlanner.execute(
+            target_width=1216,
+            target_height=672,
+            target_seconds=20.0,
+            fps=25,
+        )
+        latent_volume = out[6]
+        status = out[7]
+        assert latent_volume == 50274
+        assert "HIGH_VRAM" in status
+
+    def test_high_res_with_short_window_is_ok(self):
+        # 960 x 544 x 121 = 8160 — well within the HQ production budget
         out = LTXFramePlanner.execute(
             target_width=960,
             target_height=544,

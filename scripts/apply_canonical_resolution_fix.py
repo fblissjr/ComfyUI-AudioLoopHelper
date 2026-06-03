@@ -1,17 +1,21 @@
 """apply_canonical_resolution_fix.
 
-Last updated: 2026-04-25
+Last updated: 2026-06-03
 
-Brings every shipped production workflow's `EmptyLTXVLatentVideo`
-widget into spec with `docs/reference/ltx23_model_reference.md`
-§"Resolution and latent volume" AND with `ImageResizeKJv2`'s actual
-target. Default fix: 704x704 (volume 30,492 — over the 24,570 artifact
-ceiling) -> 832x448 (22,932 — NEAR_EDGE, users' actual operating
-point). Idempotent + `--revert` + `--dry-run`.
+DEPRECATED (2026-06-03) — DO NOT RUN. One-time 2026-04-25 migration that
+forced `EmptyLTXVLatentVideo` down to 832x448 to dodge a "24,570
+latent-volume artifact ceiling." That ceiling was a stale single-point
+heuristic: LTX-2 research confirms there is NO hard latent-volume ceiling,
+and the shipped 960x544 @ 497 = 32,130 is exactly LTX-2's own HQ production
+default (`LTX_2_3_HQ_PARAMS`). The paired audit ERR has been removed
+(`audit_workflows.py` now treats latent volume as an informational VRAM
+advisory). Running this today would DOWNGRADE the shipped resolution. Kept
+only as a historical record; see
+`docs/reference/frame_planner_reference.md` § "Latent-volume classification".
 
-Audit pairing: `scripts/audit_workflows.py` ERRs on volumes >24,570
-with a remediation pointer back to this script — re-introducing
-704x704 anywhere will trip the audit.
+Original purpose (historical): bring shipped workflows' `EmptyLTXVLatentVideo`
+into spec with the (now-retired) latent-volume ceiling. Idempotent +
+`--revert` + `--dry-run`.
 """
 
 from __future__ import annotations

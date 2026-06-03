@@ -1,6 +1,14 @@
-Last updated: 2026-04-16
+Last updated: 2026-06-03 (status banner added; research body unchanged from 2026-04-16)
 
 # ComfyUI-LTXVideo: Multi-Frame Guide Conditioning Analysis
+
+> **STATUS UPDATE (2026-06-03):** This analysis builds its Phase-1/2/3
+> recommendations on `KeyframeImageSchedule`, which is now the **legacy** keyframe
+> path (per-iter VAE). The current keyframe design is
+> `KeyframeLatentScheduleBatchEncode` + `LatentSelectByIteration` (VAE-encodes
+> once outside the loop) and the `LTXIterKeyframeSchedule` selector. The
+> ComfyUI-LTXVideo capability content below remains accurate; treat the
+> phased recommendations as point-in-time (2026-04).
 
 Analysis of multi-frame conditioning capabilities in ComfyUI-LTXVideo nodes,
 focused on what can be leveraged for per-iteration and intra-window visual

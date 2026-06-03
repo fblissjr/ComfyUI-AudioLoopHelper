@@ -194,7 +194,9 @@ Promotion to layer 3 requires **all three**:
 
 ### Budget (root CLAUDE.md)
 
-Hard cap: **200 lines / 30 KB**. Enforced by `tests/test_claude_md_budget.py`.
+Hard cap: **220 lines / 32 KB** (a self-imposed discipline knob, not an Anthropic
+limit — bumped from 200/30 KB on 2026-06-03 to give correctness-fix headroom; keep
+it tight regardless). Enforced by `tests/test_claude_md_budget.py`.
 New rule in = old rule earns its way out (down to layer 1/2/4) or compresses
 to a one-line pointer. Subtree CLAUDE.md files soft-warn at 500 lines.
 

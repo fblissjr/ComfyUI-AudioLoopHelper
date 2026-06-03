@@ -4,7 +4,7 @@
   <img src="assets/hero.webp" alt="ComfyUI-AudioLoopHelper" width="500">
 </p>
 
-Last updated: 2026-05-25
+Last updated: 2026-06-03
 
 Custom ComfyUI nodes for full-length music video generation with LTX 2.3.
 Drives loop timing from integer-latent counts, freezes audio via
@@ -73,7 +73,7 @@ This project coordinates with two kinds of sister repos:
 
 The split is by upstream lineage: **forks** patch an upstream library's internals (small surface, rebase tax accepted); **umbrellas** build *on top of* upstream libraries (no lineage, free to grow modularly).
 
-**SageAttention-ada specifics:** the shipped workflows wire `AudioLoopHelperSageAttention` (`auto_mask_aware`, ~1.22× e2e speedup on production iclora workload) which expects this build. **No build, or incompatible hardware?** Bypass `AudioLoopHelperSageAttention` (set `mode=4`) and either run with default attention or use KJNodes sage in its place.
+**SageAttention-ada specifics:** the shipped workflows wire `AudioLoopHelperSageAttention` in `auto` mode (the default since 2026-05-15; the mask-aware path gives ~1.22× e2e speedup on the production iclora workload) which expects this build. **No build, or incompatible hardware?** Bypass `AudioLoopHelperSageAttention` (set `mode=4`) and either run with default attention or use KJNodes sage in its place.
 
 **Optional:**
 
@@ -91,6 +91,7 @@ Shipped (top-level `example_workflows/`) — what each does and when to reach fo
 | `audio-loop-music-video_latent_keyframe.json` | **Per-section keyframe re-anchoring.** Pin different reference images to different loop iterations (combats DiT drift on long renders; drives scene changes synced to song structure) via `LTXIterKeyframeSchedule`. `target_iters` ships pre-filled to `1,2,3` (keyframes fire on the first three iters) — re-spread per row across your song's iter count for long renders. Clearing a row back to empty makes that keyframe silently fall back to the init image. |
 | `audio-loop-music-video_retake.json` | **Regenerate one section.** Re-roll a `[start, end]` window of an existing render while holding the rest as fixed context (`LatentTemporalMask`). |
 | `audio_reactive_loop.json` | **Audio-driven motion.** Init image animated so its motion tracks the (frozen) audio via LTX 2.3's joint cross-attention. Full-length loop; tune the look on the single-shot rig first. Writeup: [`docs/experimental/audio_reactive_workflows.md`](docs/experimental/audio_reactive_workflows.md). |
+| `audio-ic-lora_single-pass.json` | **Audio-reference IC-LoRA (single-pass).** Drive a single render from a reference-audio adapter — load + window a reference clip with the Compose Reference Audio node, attach it via the audio IC-LoRA guide chain. No loop. Background: [`docs/audio_iclora/index.md`](docs/audio_iclora/index.md). |
 
 **Experimental** (`example_workflows/experimental/`, paired with `docs/experiments/` run logs; graduate to top-level on a render gate). The dialogue-replacement family in progress: `_av_voiceref` (clone the voice via `LTXVReferenceAudio` conditioning — *no* original words in the output, vs the mask-seed inversion), `_av_extension` (audio-continuation probe), `_keyframe_autoextract` (keyframes auto-sampled from a loaded clip via `EvenlySpacedKeyframes` — no hand-loading). Plus older forks (`_window15s`/`_window19_88s`, `_promptrelay`, `fml2v`, amplification/spectrogram POCs).
 

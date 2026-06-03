@@ -1,8 +1,10 @@
-Last updated: 2026-05-15
+Last updated: 2026-06-03
 
 # LTX 2.3 maximum video length per single sampler call
 
 > **Partially stale (added 2026-05-16)**: scattered references to fps=24 as canonical OR `first_frame_guide_strength=1.0` are pre-2026-05-16. **Today's canonical: fps=25, first_frame_guide_strength=0.7, target_seconds=19.88.** Body content is otherwise current.
+>
+> **Latent-volume correction (2026-06-03):** the "≲ 20,000–24,570 quality cliff" framing throughout this doc is superseded. LTX-2 research confirms **no hard model-side ceiling** — the shipped 960x544 @ 497 = 32,130 latent tokens is LTX-2's own HQ production default and renders clean. Read all `NEAR_EDGE/OVER_EDGE` / latent-budget rows below as **VRAM advisories on 24GB**, not quality limits. Canonical: `docs/reference/frame_planner_reference.md` § "Latent-volume classification" + `docs/reference/ltx23_model_reference.md` § "Resolution and latent volume".
 
 Research note answering: what caps frames-per-call on the 22B distilled
 variant, and why the audio-loop workflow exists. Numbers are cited to
@@ -15,11 +17,15 @@ source files / line ranges in `coderef/` or to upstream paper / repo URLs.
   is a *normalization divisor* for RoPE fractional positions, not a hard
   index bound — you can exceed it, the model just extrapolates and quality
   degrades. Source: `coderef/LTX-2/packages/ltx-core/src/ltx_core/model/transformer/rope.py:114-123`.
-- **Practical empirical ceiling = the latent-volume budget.**
-  `(W/32) * (H/32) * ((F-1)/8 + 1) ≲ 20,000–24,570` before artifacts /
-  banding / grid patterns dominate. This is the *quality* cliff, derived
-  empirically and codified at `nodes.py::LTXFramePlanner` and
-  `docs/reference/ltx23_model_reference.md:46-51`.
+- **No fixed latent-volume "quality cliff."** Token count =
+  `(W/32) * (H/32) * ((F-1)/8 + 1)`. The `20,000–24,570` figure in
+  `nodes.py::LTXFramePlanner` is a legacy single-point heuristic (extrapolated
+  from 832x480), NOT a real limit. The shipped **960x544 @ 497 = 32,130** is
+  exactly LTX-2's own HQ production default
+  (`coderef/LTX-2/.../utils/constants.py:78-81`) and renders artifact-free — 31%
+  past that "ceiling." Real constraints are grid alignment + VRAM; quality
+  degrades *gradually*, not at a sharp boundary. See
+  `docs/reference/frame_planner_reference.md` § "Latent-volume classification".
 - **Practical VRAM ceiling on 24GB.** At 832x448, 473 frames (~19.7s @
   24fps; canonical) ≈ 18 GB peak with sage attention + single-tile tiled VAE decode.
   Source: `docs/experimental/spectrogram_iclora_tutorial.md:168`,
@@ -103,13 +109,18 @@ Classification (codified in `nodes.py::LTXFramePlanner`):
 | `NEAR_EDGE` | 20,001 – 24,570 | Quality degrades near the cliff |
 | `OVER_EDGE` | > 24,570 | Banding, grid patterns, color loss likely |
 
-### Audio-loop default (832 x 448, 24fps)
+### Audio-loop config (shipped: 960 x 544 @ 25fps)
 
-- 832 / 32 * 448 / 32 = 26 * 14 = 364 spatial patches per latent frame.
-- For F=497 (default): 364 * 63 = **22,932** → `NEAR_EDGE`. The shipped
-  workflow runs right at the artifact cliff already.
-- F=249 (10s): 364 * 32 = 11,648 → `OK`.
-- F=121 (~5s, Lightricks default): 364 * 16 = 5,824 → `OK`.
+> The shipped `LTXFramePlanner` widget is **960x544 @ 497 = 32,130** latent
+> tokens (= LTX-2's HQ production default; renders artifact-free). The node's
+> *schema* default is 832x448, but no shipped workflow uses it. The numbers
+> below are kept as a token-count worked example; the `NEAR_EDGE`/`OVER_EDGE`
+> labels are VRAM advisories, not a quality cliff (see top banner).
+
+- 960 / 32 * 544 / 32 = 30 * 17 = 510 spatial patches per latent frame.
+- For F=497 (shipped): 510 * 63 = **32,130** (LTX-2 HQ default; clean).
+- 832x448 schema-default worked example — F=497: 26 * 14 * 63 = 22,932;
+  F=249 (10s): 11,648; F=121 (~5s): 5,824.
 
 **Measured peak VRAM**: `~18 GB` on 24GB cards at 832x448 / 497 frames
 with sage attention + FP8 LoRAs + single-tile VAE decode

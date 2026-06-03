@@ -1,4 +1,4 @@
-Last updated: 2026-04-23
+Last updated: 2026-06-03
 
 # Profiling Guide: End-to-End Audio Loop Profiling
 
@@ -175,8 +175,8 @@ Drop `trace.json` into [perfetto.dev](https://ui.perfetto.dev/).
 
 Key views:
 - **Iteration boundaries** show as markers from `profiler.step()` calls.
-- **Our named spans** appear with labels like `CachedTextEncode.hit`,
-  `IterationCleanup.always`, `LatentContextExtract`, `LatentOverlapTrim`
+- **Our named spans** appear with labels like `CachedTextEncode.miss`,
+  `IterationCleanup`, `LatentContextExtract`, `LatentOverlapTrim`
   — look for them to see exactly when our code runs and for how long.
 - **Gaps in GPU activity** reveal Python/dispatch overhead — if CPU is
   running but GPU is idle, that's a latency issue to investigate.
@@ -213,13 +213,12 @@ You placed `ProfileIterStep` (or `ProfileEnd`) but didn't wire
 wire a `ProfileBegin` node before the loop, or disable the remaining
 profile nodes via bypass.
 
-**If this happens mid-workflow**: the profiler state is kept on the `torch`
-module specifically to survive `ComfyUI-HotReloadHack` reimports of our
-package. If you see the warning appear AFTER `ProfileBegin` logged its
-"recording to ..." line, a hot reload may have orphaned the prior profiler.
-The fix is already applied (state persists on `torch`), but if you edit
-our source files during a profile run, results are undefined — finish the
-run first, then edit.
+Profiler state is stashed on the `torch` module (not on our package) so it
+survives package reimports rather than being lost. If the warning appears
+AFTER `ProfileBegin` logged its "recording to ..." line, the most likely cause
+is the `ProfileBegin` -> `ProfileIterStep`/`ProfileEnd` chain not actually being
+connected through the loop — re-check the wiring (or bypass the orphaned
+profile nodes).
 
 ### Harmless warnings in the console during a profile run
 

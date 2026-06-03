@@ -1503,10 +1503,17 @@ def _warn_legacy_use(class_name: str, replacement: str) -> None:
     )
 
 
-# Latent-volume thresholds. Source: docs/reference/ltx23_model_reference.md
-# §"Resolution and latent volume". 832x480x497=24,570 is "already at the edge".
-_LTX_LATENT_VOLUME_OK_MAX = 20_000
-_LTX_LATENT_VOLUME_EDGE_MAX = 24_570
+# Latent-volume advisory anchor. There is NO hard model-side latent-volume
+# ceiling (RoPE max_pos are normalizers, not caps; the distilled path is
+# token-count-independent — see docs/reference/frame_planner_reference.md
+# §"Latent-volume classification"). The only structural limits are grid
+# alignment (div-32 spatial, (frames-1)%8==0 temporal) + VRAM. We anchor an
+# *informational* VRAM advisory on LTX-2's own HQ production default:
+# 960x544 @ 497 = 32,130 latent tokens (coderef/LTX-2/.../utils/constants.py
+# LTX_2_3_HQ_PARAMS). At/under = OK; above = HIGH_VRAM (informational — more
+# VRAM, NOT a quality cliff; we deliberately don't impose an OOM limit because
+# we don't know the user's hardware).
+_LTX_HQ_PRODUCTION_VOLUME = 32_130
 
 _LTXOrientation = Literal["landscape", "portrait", "square"]
 
@@ -1516,8 +1523,9 @@ def _snap_dimensions(target_width: int, target_height: int) -> tuple[int, int]:
     boundary, with a floor of 32. LTX 2.3 requires div-by-32 dimensions
     (single-stage); both axes are independently snapped.
 
-    Snap DOWN (not nearest, not up) biases toward latent-volume safety —
-    shrinking is always safer than growing for the artifact ceiling."""
+    Snap DOWN (not nearest, not up) keeps dims at/under the requested size and
+    biases toward lower VRAM. (The only hard constraint is div-by-32 grid
+    alignment, not a latent-volume ceiling — there is none.)"""
     w = max(32, (target_width // 32) * 32)
     h = max(32, (target_height // 32) * 32)
     return w, h
@@ -1548,14 +1556,14 @@ def _compute_ltx_resolution(
     orientation: _LTXOrientation = "landscape",
 ) -> tuple[int, int, int, str]:
     """Snap an aspect ratio + target long edge to LTX 2.3-valid (W, H), and
-    classify the resulting latent volume against the doc-authoritative
-    ceiling.
+    return the resulting latent volume + an informational VRAM advisory.
 
     Returns (width, height, latent_volume, status_string).
 
-    width/height are guaranteed div-by-32. frames must satisfy (frames-1)%8==0.
-    Status is one of OK / NEAR_EDGE / OVER_EDGE; the volume value is included
-    in the string so callers can parse it without recomputing.
+    width/height are guaranteed div-by-32. frames must satisfy (frames-1)%8==0
+    (the only hard model-side constraints). Status is one of OK / HIGH_VRAM (a
+    VRAM advisory, not a quality cliff — see `_classify_latent_volume`); the
+    volume value is included in the string so callers can parse it.
     """
     assert (frames - 1) % 8 == 0, (
         f"frames {frames} violates LTX video VAE temporal constraint "
@@ -1574,10 +1582,9 @@ def _compute_ltx_resolution(
         width = long_edge
         raw_height = long_edge / aspect_ratio
         height = max(32, (int(raw_height) // 32) * 32)
-    # Short-edge snap is DOWN (not up) — biases the resolved volume toward
-    # the safe side of the latent ceiling. Matches users' empirical practice
-    # of running cinema 1.85:1 (832x448 = 22,932) over true 16:9
-    # (832x480 = 24,570 = "at the edge" per ltx23_model_reference.md).
+    # Short-edge snap is DOWN (not up) — keeps the resolved dims at or under
+    # the requested long edge and biases toward lower VRAM. (Not about an
+    # artifact ceiling — there is none; see _classify_latent_volume.)
 
     latent_volume, status = _classify_latent_volume(width, height, frames)
     return width, height, latent_volume, status
@@ -1585,21 +1592,24 @@ def _compute_ltx_resolution(
 
 def _classify_latent_volume(width: int, height: int, frames: int) -> tuple[int, str]:
     """Compute LTX 2.3 latent volume = (W/32) * (H/32) * ((L-1)/8 + 1) and
-    classify against the artifact ceiling (24,570 hard, 20,000 soft).
-    Returns (latent_volume, status_string). Shared between
-    `_compute_ltx_resolution` and `LTXFramePlanner.execute` so the
-    classification rule lives in one place.
+    return an *informational VRAM advisory* (NOT a quality cliff).
+
+    There is no hard latent-volume ceiling; the anchor is LTX-2's own HQ
+    production default (`_LTX_HQ_PRODUCTION_VOLUME` = 32,130). At/under = OK;
+    above = HIGH_VRAM (more VRAM on this rig — not a limit we impose, since the
+    safe ceiling is hardware-dependent). Returns (latent_volume, status_string).
+    Shared between `_compute_ltx_resolution` and `LTXFramePlanner.execute` so
+    the rule lives in one place.
     """
     latent_volume = (width // 32) * (height // 32) * ((frames - 1) // 8 + 1)
-    if latent_volume <= _LTX_LATENT_VOLUME_OK_MAX:
+    if latent_volume <= _LTX_HQ_PRODUCTION_VOLUME:
         category = "OK"
-    elif latent_volume <= _LTX_LATENT_VOLUME_EDGE_MAX:
-        category = "NEAR_EDGE"
     else:
-        category = "OVER_EDGE"
+        category = "HIGH_VRAM"
     status = (
         f"{category}: latent_volume={latent_volume} "
-        f"(ok<={_LTX_LATENT_VOLUME_OK_MAX}, edge<={_LTX_LATENT_VOLUME_EDGE_MAX})"
+        f"(informational VRAM advisory; LTX-2 HQ production default = "
+        f"{_LTX_HQ_PRODUCTION_VOLUME}, no hard limit)"
     )
     return latent_volume, status
 
@@ -1682,12 +1692,13 @@ class LTXVCropGuidesNoLatent(io.ComfyNode):
 
 class LTXResolutionFromAspect(io.ComfyNode):
     """Resolve a target aspect ratio to LTX 2.3-valid (width, height) + report
-    the latent volume against the doc-authoritative ceiling.
+    the latent volume with an informational VRAM advisory.
 
-    Wire `width` / `height` into `EmptyLTXVLatentVideo`. Read `latent_volume`
-    + `status` to confirm the chosen long-edge stays below the artifact
-    threshold (>24,570 produces grid patterns / color loss per
-    `docs/reference/ltx23_model_reference.md`).
+    Wire `width` / `height` into `EmptyLTXVLatentVideo`. `latent_volume` +
+    `status` are informational: there is no hard latent-volume ceiling, only
+    grid-alignment (div-32 / 8k+1) + VRAM. `HIGH_VRAM` means "above LTX-2's HQ
+    production default (32,130 tokens) — watch memory on your card", not
+    "expect artifacts" (see `docs/reference/frame_planner_reference.md`).
     """
 
     @classmethod
@@ -1698,8 +1709,8 @@ class LTXResolutionFromAspect(io.ComfyNode):
             category="AudioLoopHelper/utility",
             description=(
                 "Snap an aspect ratio + target long edge to an LTX 2.3-valid "
-                "(W, H) pair (both div-by-32). Computes latent volume and "
-                "warns when crossing the doc ceiling."
+                "(W, H) pair (both div-by-32). Computes latent volume + an "
+                "informational VRAM advisory (no hard ceiling)."
             ),
             inputs=[
                 io.Float.Input(
@@ -1757,8 +1768,9 @@ class LTXFramePlanner(io.ComfyNode):
       - width and height are each div-by-32 (LTX 2.3 single-stage rule)
       - frames satisfies (frames - 1) % 8 == 0 (video VAE temporal rule)
       - actual_seconds = frames / fps (always self-consistent)
-      - latent_volume reported with status (OK / NEAR_EDGE / OVER_EDGE) vs
-        the artifact ceiling at 24,570 (per docs/reference/ltx23_model_reference.md)
+      - latent_volume reported with an informational VRAM advisory status
+        (OK / HIGH_VRAM vs LTX-2's HQ production default 32,130 — NOT a hard
+        ceiling; see docs/reference/frame_planner_reference.md)
 
     Wiring map (apply via scripts/apply_frame_planner_consolidation.py):
       LTXFramePlanner outputs:
@@ -1801,7 +1813,8 @@ class LTXFramePlanner(io.ComfyNode):
                     tooltip=(
                         "Desired output height in pixels. Snapped DOWN to the "
                         "nearest div-32 boundary. 448 pairs with 832 width for "
-                        "1.86:1 cinema aspect (volume 22,932 — under ceiling)."
+                        "1.86:1 cinema aspect (volume 22,932). The shipped "
+                        "960x544 = 32,130 = LTX-2's HQ production default."
                     ),
                 ),
                 io.Float.Input(

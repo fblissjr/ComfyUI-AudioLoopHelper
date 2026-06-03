@@ -1,6 +1,6 @@
 # ComfyUI-AudioLoopHelper
 
-Last updated: 2026-06-02
+Last updated: 2026-06-03
 
 ComfyUI nodes that automate loop timing + audio analysis for full-length music video generation with LTX 2.3. Core pattern: `AudioLoopController` drives stride from integer latent counts, audio is frozen via `noise_mask=0`, prompts pre-encoded once outside the loop (CLIP must never enter the loop body). **Start here:** `docs/architecture_overview.md`; task-first nav at `docs/README.md`.
 
@@ -37,7 +37,7 @@ Add `--group experiments` for autoresearch contract tests (`tests/test_autoresea
 
 ## Architecture
 
-Runtime files: `nodes.py` (core loop), `nodes_analysis.py` (torchaudio audio analysis), `nodes_sage.py` (sage attention), `nodes_validation.py` (config validator). Entry point: `comfy_entrypoint()` in `nodes.py`.
+Runtime node modules: `nodes.py` (core loop), `nodes_analysis.py` (torchaudio audio analysis), `nodes_sage.py` (sage attention), `nodes_validation.py` (config validator), `nodes_audio_iclora.py` (audio-reference IC-LoRA: loaders + guides + Compose Reference Audio), `nodes_audio_latent_slice.py`, `nodes_easycache.py`, `nodes_ffn.py`, `nodes_regional_compile.py`. `audio_reference_shaping.py` is the reference-windowing engine backing `nodes_audio_iclora` (no node class). Entry point: `comfy_entrypoint()` in `nodes.py`.
 
 Core nodes (per-node role + wiring in each class's docstring; full reference at `docs/reference/ltx23_model_reference.md`):
 
@@ -79,7 +79,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 
 ### Conditioning + prompts
 
-- **Verb choice drives cross-attention; generic verbs dilute it. Token budget is shared.** LTX 2.3's audio-video cross-attention binds the visible action to the verb in the prompt — but it's not "singing"-specific (confirmed working with `dancing` and other action verbs when the verb matches what the audio implies). Pick the verb for the action you want: `is singing` / `are singing together` for vocal performance, `is dancing` for movement, `is playing <instrument>` for instrumental. Generic verbs (`performing`, `vocalizing`) dilute the signal. Prompt tokens compete with audio + image cross-attention for budget; **concise > verbose, especially with i2v init** (which carries scene/style for free). Without i2v, text has to do more work and may need more length. Decide where your constraints live. Not a hard "must contain singing" rule.
+- **Verb choice drives cross-attention; generic verbs dilute it; token budget is shared.** LTX 2.3 binds the visible action to the prompt's verb — not "singing"-specific (works with `is dancing`, `is playing <instrument>`, etc. when the verb matches the audio). Generic verbs (`performing`, `vocalizing`) dilute it. Prompt tokens compete with audio + image cross-attention; **concise > verbose, especially with i2v init** (carries scene/style for free); without i2v, text does more work. Not a hard "must contain singing" rule. Full guidance: `docs/guides/prompt_creation_guide.md`.
 - **Use `In a [shot], [camera]` continuation framing for non-first entries — NOT `Cut to a ...`.** Lightricks's official LTX 2.3 system prompt explicitly trains the model to treat scene-cut language as a discontinuation directive. Guide: `docs/guides/prompt_creation_guide.md`. Evidence: `docs/reference/ltx23_prompt_system_prompts.md`.
 - **Node 169 prompt matches schedule 0:00 entry** structurally (`_build_prompt_for_section` via shared `_prepare_sections`; byte-exact).
 - **CLIP must not enter the loop body.** Pre-encode via `TimestampPromptScheduleBatchEncode` outside; `ConditioningSelectByIteration` plucks per-iter inside. Mechanism + cache + failure modes: `docs/reference/timestamp_prompt_schedule_batch_encode.md`.
@@ -89,7 +89,8 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 
 ### Resolution + dimensions
 
-- **Dimension config flows from `LTXFramePlanner` (single source of truth).** All shipped workflows wire its outputs to consumers. See `docs/reference/frame_planner_reference.md` for snap rules, latent-volume ceiling, wiring map, migration. Audit: `frame_planner_present` (F8).
+- **Dimension config flows from `LTXFramePlanner` (single source of truth).** All shipped workflows wire its outputs to consumers. See `docs/reference/frame_planner_reference.md` for snap rules, the latent-volume **VRAM advisory** (no hard ceiling — `OK`/`HIGH_VRAM` vs LTX-2's HQ default 32,130; rebased 2026-06-03), wiring map, migration. Audit: `frame_planner_present` (F8).
+- **The ONLY hard resolution/length rules are grid alignment** (video VAE): **div-by-32** spatial (single-stage; **div-by-64** two-stage), `(frames-1)%8==0` temporal. There is no model-side latent-volume/token ceiling — high volume = more VRAM, not artifacts. Audio VAE has NO divisibility rule (`latents/sec` from checkpoint config, runtime uses `ceil`; our audio nodes infer the rate empirically from the encoded latent's `T` — never hard-code `round(duration*25)`). Stride↔frames matches the reference (`stride_px = new_latents*8`).
 - **Resolution div-by-32** (single-stage) or **div-by-64** (two-stage). Two-stage = anything with `LTXVLatentUpsampler` + half-res pass1 → 2x → full-res pass2 (e.g. fml2v variants). For two-stage, init-render dim must equal pass2 output dim so downstream `LatentConcat` welds across iters — 960x544 fails (272 not div-32 at half-res); 960x512 works. `scripts/audit_workflows.py` checks the div constraint.
 - **`snap_boundaries=True`** (default) lets `overlap_seconds` change without schedule re-authoring.
 - **Iterations auto-track audio length.** `AudioLoopPlanner.total_iterations → TensorLoopOpen.iterations_in` is wired in every shipped workflow. For short tests, drag in an `INTConstant` and rewire — recipe in `docs/guides/debugging_guide.md`. Audit: `iterations_autowired` (F5).
@@ -185,7 +186,7 @@ Public: `docs/README.md` (task-first nav) → `docs/guides/` (how-to), `docs/ref
 
 Reference codebases (read-only): `coderef/LTX-2/`, `coderef/LTX-Desktop/`, ComfyUI-LTXVideo upstream.
 
-Example workflows (`example_workflows/`, all run `AudioLoopHelperSageAttention auto`): `_latent` (default loop), `_av_inversion` (video→audio dialogue replacement), `_keyframe` (per-iter re-anchoring; `target_iters` ships pre-filled 1,2,3, re-spread per song), `_retake`, `audio_reactive_loop`. More variants in `experimental/`; retired ones in `archive/`. Validate via `scripts/audit_workflows.py`.
+Example workflows (`example_workflows/`, all run `AudioLoopHelperSageAttention auto`): `_latent` (default loop), `_av_inversion` (video→audio dialogue replacement), `_keyframe` (per-iter re-anchoring; `target_iters` ships pre-filled 1,2,3, re-spread per song), `_retake`, `audio_reactive_loop`, `audio-ic-lora_single-pass` (single-pass audio-reference IC-LoRA). More variants in `experimental/`; retired ones in `archive/`. Validate via `scripts/audit_workflows.py`.
 
 Subtree CLAUDE.md files (auto-loaded when working in that subtree):
 - `scripts/CLAUDE.md` — apply-script conventions, audit invariants, WorkflowEditor patterns.

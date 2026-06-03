@@ -1,6 +1,15 @@
-Last updated: 2026-04-16
+Last updated: 2026-06-03 (status banner added; research body unchanged from 2026-04-16)
 
 # LTX-2 Native: Conditioning Types and Pipeline Analysis
+
+> **STATUS UPDATE (2026-06-03):** The "RetakePipeline opportunity" /
+> "TemporalRegionMask not available in ComfyUI" framing below has been
+> fulfilled — `LatentTemporalMask` / `AudioTemporalMask` shipped with
+> `example_workflows/audio-loop-music-video_retake.json` and
+> `_latent_av_inversion.json` (guides `docs/guides/retake_guide.md`,
+> `docs/guides/dialogue_replacement_guide.md`). Read the "to be built / not
+> available" items as point-in-time (2026-04); the native-pipeline reference
+> detail remains accurate.
 
 Analysis of LTX-2's native conditioning system (Lightricks' canonical reference
 implementation), focused on what's available for multi-frame conditioning.
