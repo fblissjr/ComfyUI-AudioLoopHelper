@@ -95,19 +95,23 @@ Source: `docs/reference/ltx23_model_reference.md:44-58`,
 `docs/experimental/spectrogram_iclora_tutorial.md:168`,
 `docs/guides/upscale_guide.md:118`.
 
-### Latent-volume budget (quality cliff, not OOM)
+### Latent-volume budget (VRAM advisory, not a quality cliff)
 
 ```
 latent_volume = (W / 32) * (H / 32) * ((F - 1) / 8 + 1)
 ```
 
-Classification (codified in `nodes.py::LTXFramePlanner`):
+Classification (codified in `nodes.py::LTXFramePlanner`, rebased 2026-06-03 —
+there is no hard latent-volume ceiling; this is an informational VRAM advisory
+anchored on LTX-2's HQ production default of 32,130):
 
 | Status | Range | Behavior |
 |---|---|---|
-| `OK` | ≤ 20,000 | Artifact-free regime |
-| `NEAR_EDGE` | 20,001 – 24,570 | Quality degrades near the cliff |
-| `OVER_EDGE` | > 24,570 | Banding, grid patterns, color loss likely |
+| `OK` | ≤ 32,130 | At/under LTX-2's HQ production default; comfortable token budget |
+| `HIGH_VRAM` | > 32,130 | More VRAM on your card (informational — NOT a quality cliff) |
+
+The retired `NEAR_EDGE`/`OVER_EDGE` labels (20,001–24,570 / >24,570) referenced
+below are the old framing; read them as VRAM advisories.
 
 ### Audio-loop config (shipped: 960 x 544 @ 25fps)
 
@@ -155,9 +159,9 @@ with sage attention + FP8 LoRAs + single-tile VAE decode
   measurement** in this repo; LTX-Desktop API spec implies it's
   achievable on cloud hardware.
 - On 48GB cards: **unknown — needs measurement.** Not benched in this
-  repo. Doubling VRAM doesn't lift the latent-volume *artifact* cliff,
-  only the *OOM* cliff. So 48GB lets you push closer to 24,570 latent
-  volume comfortably, but past that the model degrades regardless.
+  repo. There is no latent-volume *artifact* cliff to worry about — more
+  VRAM straightforwardly lets you run higher resolutions / longer windows
+  (higher token counts), bounded by memory, not by a quality limit.
 
 ### LTX-Desktop / Lightricks API caps (canonical user-facing maxes)
 
@@ -313,21 +317,23 @@ see `internal/analysis/empirical_bench_findings.md` for the bench math.
 
 ## Putting it together: why we loop
 
-The audio-loop workflow generates 2-4 minute music videos. Per the
-numbers above, the model can't do that in a single sampler call:
+The audio-loop workflow generates 2-4 minute music videos. The model
+can't do that in a single sampler call — but NOT because of a latent-volume
+artifact ceiling (there is none). The real reasons:
 
-- **Latent-volume cliff at ~20s @ 832x448** (97% of the artifact ceiling).
-- **VRAM cliff at ~20s @ 832x448 on 24GB** (~18 GB measured, leaving
-  little headroom for FP8 LoRAs + VAE + Gemma).
-- **Lightricks's own training distribution is ~5s** (121 frames @ 24fps).
-  Pushing F much past 497 takes RoPE further out-of-distribution along
-  the time axis (max_pos[0] = 20; 497/8+1 = 63 latent frames, fractional
-  position 63/20 = 3.15).
+- **VRAM** — a single ~2-4 min call at the shipped resolution would far
+  exceed any consumer GPU (~18 GB measured for just a ~20s window @ 960x544
+  on 24GB, leaving little headroom for FP8 LoRAs + VAE + Gemma).
+- **RoPE goes out-of-distribution along the time axis.** Lightricks's
+  training distribution is ~5s (121 frames @ 24fps). Pushing F much past 497
+  takes the temporal RoPE further OOD (max_pos[0] = 20; 497/8+1 = 63 latent
+  frames → fractional position 63/20 = 3.15). This degrades gradually, but
+  a multi-minute single call would be deep OOD.
 
-So the loop holds resolution fixed (832x448), holds the per-iteration
-length fixed (497 frames = 19.88s @ 25fps), and chains windows together
-with `noise_mask=0` overlap context to extend duration indefinitely.
-Each call stays inside both the artifact regime and the VRAM regime.
+So the loop holds resolution fixed (shipped 960x544), holds the per-iteration
+length fixed (497 frames = 19.88s @ 25fps), and chains windows together with
+`noise_mask=0` overlap context to extend duration indefinitely. Each call
+stays inside the VRAM budget and near the training distribution.
 
 ## Open questions ("unknown — needs measurement")
 
@@ -335,9 +341,10 @@ Each call stays inside both the artifact regime and the VRAM regime.
   workflow in this repo runs these resolutions; LTX-Desktop's API spec
   implies they're feasible on cloud hardware (likely H100 80GB or A100
   80GB based on the 1440p/2160p tier).
-- Real-world quality cliff vs the codified 24,570 latent-volume number.
-  The audio-loop default (22,932) is `NEAR_EDGE`, and the workflow ships
-  it — implying the artifact regime is gradient, not sharp.
+- Where (if anywhere) real quality degradation from token count actually
+  begins. The shipped 960x544 (32,130) renders clean and is LTX-2's HQ
+  production default, so any degradation regime is well above that and is
+  gradient, not a sharp cliff — VRAM is the practical limit, not quality.
 - Whether RoPE fractional-position extrapolation past `max_pos[0]=20` on
   the time axis contributes measurably to drift across loop iterations
   vs the photoreal-cross-attention drift documented in
@@ -359,7 +366,7 @@ Each call stays inside both the artifact regime and the VRAM regime.
 - `<comfyui>/comfy_extras/nodes_lt.py:36` — `((L-1)//8)+1` silent floor in ComfyUI's EmptyLTXVLatentVideo
 - `nodes.py::LTXFramePlanner` — local latent-volume classifier
 - `docs/reference/frame_planner_reference.md` — snap rules + latent-volume thresholds
-- `docs/reference/ltx23_model_reference.md:44-58` — latent-volume ceiling (24,570) source
+- `docs/reference/ltx23_model_reference.md` § "Resolution and latent volume" — latent-volume facts (no hard ceiling; grid alignment + VRAM only)
 - `docs/experimental/spectrogram_iclora_tutorial.md:168` — 18 GB VRAM measurement at 497 frames
 - `docs/guides/upscale_guide.md:118` — VRAM peak measurement on 24GB
 - `docs/analysis/ltx23_gaps_analysis.md:267-321` — why tiled spatial sampling can't extend a single call past the budget on AV

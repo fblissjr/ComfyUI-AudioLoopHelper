@@ -16,9 +16,10 @@ render whose only twist is the guide source.
 
 Single pass holds while the whole clip fits one generation:
 
-- Total frames under the latent-volume ceiling (see
+- Total frames the clip's latent volume fits in your VRAM (no hard
+  model-side ceiling — see
   [`reference/frame_planner_reference.md`](../reference/frame_planner_reference.md)).
-  At ~960x544 / 25 fps that's roughly 10-15 s comfortably.
+  At ~960x544 / 25 fps that's roughly 10-15 s comfortably on a 24GB card.
 - The clip length is the only real limit on keyframe count here (each guide is
   one latent frame); past the single-pass frame budget you must chunk across a
   loop — that's what the rest of this repo is for.
