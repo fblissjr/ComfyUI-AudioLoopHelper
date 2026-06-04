@@ -1,8 +1,8 @@
 {
   "id": "3db70343-fd10-483b-8d66-6be2395b9681",
   "revision": 0,
-  "last_node_id": 2052,
-  "last_link_id": 3270,
+  "last_node_id": 2059,
+  "last_link_id": 3288,
   "nodes": [
     {
       "id": 252,
@@ -2303,14 +2303,16 @@
           "name": "stride_seconds",
           "type": "FLOAT",
           "links": [
-            3187
+            3187,
+            3277
           ]
         },
         {
           "name": "audio_duration",
           "type": "FLOAT",
           "links": [
-            3188
+            3188,
+            3278
           ]
         }
       ],
@@ -2432,9 +2434,7 @@
           "links": [
             2037,
             3051,
-            3218,
-            3224,
-            3230
+            3275
           ]
         }
       ],
@@ -2614,7 +2614,7 @@
           "label": "init_image",
           "name": "guide_latent",
           "type": "LATENT",
-          "link": 3236
+          "link": 3286
         },
         {
           "label": "Audio VAE",
@@ -2697,13 +2697,13 @@
           "label": "end keyframe (one ahead)",
           "name": "end_guide_latent",
           "type": "LATENT",
-          "link": 3260
+          "link": 3287
         },
         {
           "label": "mid keyframe (one ahead)",
           "name": "mid_guide_latent",
           "type": "LATENT",
-          "link": 3261
+          "link": 3288
         }
       ],
       "outputs": [
@@ -2817,9 +2817,8 @@
             2936,
             3047,
             3054,
-            3232,
-            3251,
-            3256
+            3279,
+            3283
           ]
         }
       ],
@@ -3387,9 +3386,7 @@
         {
           "name": "LATENT",
           "type": "LATENT",
-          "links": [
-            3231
-          ]
+          "links": []
         }
       ],
       "title": "VAE Encode (init image → guide latent)",
@@ -3512,9 +3509,7 @@
             3129,
             3132,
             3144,
-            3214,
-            3220,
-            3226
+            3272
           ]
         },
         {
@@ -3524,9 +3519,7 @@
             3130,
             3133,
             3145,
-            3215,
-            3221,
-            3227
+            3273
           ]
         },
         {
@@ -4788,920 +4781,6 @@
       "title": "Trim to audio"
     },
     {
-      "id": 2030,
-      "type": "LoadImage",
-      "pos": [
-        -2000,
-        7000
-      ],
-      "size": [
-        240,
-        310
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 4,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": []
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": []
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.8.2",
-        "Node name for S&R": "LoadImage"
-      },
-      "widgets_values": [
-        "reference_image.png",
-        "image"
-      ],
-      "title": "Parked: manual keyframe 1 (rewire to resize to use)"
-    },
-    {
-      "id": 2031,
-      "type": "LTXSmartImageResize",
-      "pos": [
-        -1720,
-        7000
-      ],
-      "size": [
-        270,
-        336
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "image",
-          "type": "IMAGE",
-          "link": 3266
-        },
-        {
-          "name": "width",
-          "type": "INT",
-          "widget": {
-            "name": "width"
-          },
-          "link": 3214
-        },
-        {
-          "name": "height",
-          "type": "INT",
-          "widget": {
-            "name": "height"
-          },
-          "link": 3215
-        },
-        {
-          "name": "keep_proportion",
-          "type": "BOOLEAN",
-          "widget": {
-            "name": "keep_proportion"
-          },
-          "link": null
-        },
-        {
-          "name": "crop_position",
-          "type": "COMBO",
-          "widget": {
-            "name": "crop_position"
-          },
-          "link": null
-        }
-      ],
-      "outputs": [
-        {
-          "name": "image",
-          "type": "IMAGE",
-          "links": [
-            3216
-          ]
-        },
-        {
-          "name": "width",
-          "type": "INT",
-          "links": []
-        },
-        {
-          "name": "height",
-          "type": "INT",
-          "links": []
-        }
-      ],
-      "properties": {
-        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
-        "cnr_id": "comfyui-audioloophelper",
-        "Node name for S&R": "LTXSmartImageResize"
-      },
-      "widgets_values": [
-        832,
-        448,
-        true,
-        "top"
-      ]
-    },
-    {
-      "id": 2032,
-      "type": "LTXVPreprocess",
-      "pos": [
-        -1420,
-        7000
-      ],
-      "size": [
-        270,
-        58
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "image",
-          "type": "IMAGE",
-          "link": 3216
-        }
-      ],
-      "outputs": [
-        {
-          "name": "output_image",
-          "type": "IMAGE",
-          "links": [
-            3217
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.9.2",
-        "Node name for S&R": "LTXVPreprocess"
-      },
-      "widgets_values": [
-        18
-      ]
-    },
-    {
-      "id": 2033,
-      "type": "VAEEncode",
-      "pos": [
-        -1120,
-        7000
-      ],
-      "size": [
-        210,
-        46
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "pixels",
-          "type": "IMAGE",
-          "link": 3217
-        },
-        {
-          "name": "vae",
-          "type": "VAE",
-          "link": 3218
-        }
-      ],
-      "outputs": [
-        {
-          "name": "LATENT",
-          "type": "LATENT",
-          "links": [
-            3233
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.20.1",
-        "Node name for S&R": "VAEEncode"
-      },
-      "widgets_values": []
-    },
-    {
-      "id": 2034,
-      "type": "LoadImage",
-      "pos": [
-        -2000,
-        7360
-      ],
-      "size": [
-        240,
-        310
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 4,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": []
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": []
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.8.2",
-        "Node name for S&R": "LoadImage"
-      },
-      "widgets_values": [
-        "reference_image.png",
-        "image"
-      ],
-      "title": "Parked: manual keyframe 2 (rewire to resize to use)"
-    },
-    {
-      "id": 2035,
-      "type": "LTXSmartImageResize",
-      "pos": [
-        -1720,
-        7360
-      ],
-      "size": [
-        270,
-        336
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "image",
-          "type": "IMAGE",
-          "link": 3267
-        },
-        {
-          "name": "width",
-          "type": "INT",
-          "widget": {
-            "name": "width"
-          },
-          "link": 3220
-        },
-        {
-          "name": "height",
-          "type": "INT",
-          "widget": {
-            "name": "height"
-          },
-          "link": 3221
-        },
-        {
-          "name": "keep_proportion",
-          "type": "BOOLEAN",
-          "widget": {
-            "name": "keep_proportion"
-          },
-          "link": null
-        },
-        {
-          "name": "crop_position",
-          "type": "COMBO",
-          "widget": {
-            "name": "crop_position"
-          },
-          "link": null
-        }
-      ],
-      "outputs": [
-        {
-          "name": "image",
-          "type": "IMAGE",
-          "links": [
-            3222
-          ]
-        },
-        {
-          "name": "width",
-          "type": "INT",
-          "links": []
-        },
-        {
-          "name": "height",
-          "type": "INT",
-          "links": []
-        }
-      ],
-      "properties": {
-        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
-        "cnr_id": "comfyui-audioloophelper",
-        "Node name for S&R": "LTXSmartImageResize"
-      },
-      "widgets_values": [
-        832,
-        448,
-        true,
-        "top"
-      ]
-    },
-    {
-      "id": 2036,
-      "type": "LTXVPreprocess",
-      "pos": [
-        -1420,
-        7360
-      ],
-      "size": [
-        270,
-        58
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "image",
-          "type": "IMAGE",
-          "link": 3222
-        }
-      ],
-      "outputs": [
-        {
-          "name": "output_image",
-          "type": "IMAGE",
-          "links": [
-            3223
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.9.2",
-        "Node name for S&R": "LTXVPreprocess"
-      },
-      "widgets_values": [
-        18
-      ]
-    },
-    {
-      "id": 2037,
-      "type": "VAEEncode",
-      "pos": [
-        -1120,
-        7360
-      ],
-      "size": [
-        210,
-        46
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "pixels",
-          "type": "IMAGE",
-          "link": 3223
-        },
-        {
-          "name": "vae",
-          "type": "VAE",
-          "link": 3224
-        }
-      ],
-      "outputs": [
-        {
-          "name": "LATENT",
-          "type": "LATENT",
-          "links": [
-            3234,
-            3252,
-            3257
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.20.1",
-        "Node name for S&R": "VAEEncode"
-      },
-      "widgets_values": []
-    },
-    {
-      "id": 2038,
-      "type": "LoadImage",
-      "pos": [
-        -2000,
-        7720
-      ],
-      "size": [
-        240,
-        310
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 4,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": []
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": []
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.8.2",
-        "Node name for S&R": "LoadImage"
-      },
-      "widgets_values": [
-        "reference_image.png",
-        "image"
-      ],
-      "title": "Parked: manual keyframe 3 (rewire to resize to use)"
-    },
-    {
-      "id": 2039,
-      "type": "LTXSmartImageResize",
-      "pos": [
-        -1720,
-        7720
-      ],
-      "size": [
-        270,
-        336
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "image",
-          "type": "IMAGE",
-          "link": 3268
-        },
-        {
-          "name": "width",
-          "type": "INT",
-          "widget": {
-            "name": "width"
-          },
-          "link": 3226
-        },
-        {
-          "name": "height",
-          "type": "INT",
-          "widget": {
-            "name": "height"
-          },
-          "link": 3227
-        },
-        {
-          "name": "keep_proportion",
-          "type": "BOOLEAN",
-          "widget": {
-            "name": "keep_proportion"
-          },
-          "link": null
-        },
-        {
-          "name": "crop_position",
-          "type": "COMBO",
-          "widget": {
-            "name": "crop_position"
-          },
-          "link": null
-        }
-      ],
-      "outputs": [
-        {
-          "name": "image",
-          "type": "IMAGE",
-          "links": [
-            3228
-          ]
-        },
-        {
-          "name": "width",
-          "type": "INT",
-          "links": []
-        },
-        {
-          "name": "height",
-          "type": "INT",
-          "links": []
-        }
-      ],
-      "properties": {
-        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
-        "cnr_id": "comfyui-audioloophelper",
-        "Node name for S&R": "LTXSmartImageResize"
-      },
-      "widgets_values": [
-        832,
-        448,
-        true,
-        "top"
-      ]
-    },
-    {
-      "id": 2040,
-      "type": "LTXVPreprocess",
-      "pos": [
-        -1420,
-        7720
-      ],
-      "size": [
-        270,
-        58
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "image",
-          "type": "IMAGE",
-          "link": 3228
-        }
-      ],
-      "outputs": [
-        {
-          "name": "output_image",
-          "type": "IMAGE",
-          "links": [
-            3229
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.9.2",
-        "Node name for S&R": "LTXVPreprocess"
-      },
-      "widgets_values": [
-        18
-      ]
-    },
-    {
-      "id": 2041,
-      "type": "VAEEncode",
-      "pos": [
-        -1120,
-        7720
-      ],
-      "size": [
-        210,
-        46
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "pixels",
-          "type": "IMAGE",
-          "link": 3229
-        },
-        {
-          "name": "vae",
-          "type": "VAE",
-          "link": 3230
-        }
-      ],
-      "outputs": [
-        {
-          "name": "LATENT",
-          "type": "LATENT",
-          "links": [
-            3235,
-            3253,
-            3254,
-            3258,
-            3259,
-            3269,
-            3270
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.20.1",
-        "Node name for S&R": "VAEEncode"
-      },
-      "widgets_values": []
-    },
-    {
-      "id": 2042,
-      "type": "LTXIterKeyframeSchedule",
-      "pos": [
-        -700,
-        7200
-      ],
-      "size": [
-        320,
-        240
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "fallback_latent",
-          "type": "LATENT",
-          "link": 3231
-        },
-        {
-          "name": "current_iteration",
-          "type": "INT",
-          "widget": {
-            "name": "current_iteration"
-          },
-          "link": 3232
-        },
-        {
-          "label": "keyframe_latent_1",
-          "name": "num_keyframes.keyframe_latent_1",
-          "shape": 7,
-          "type": "LATENT",
-          "link": 3233
-        },
-        {
-          "name": "num_keyframes.target_iters_1",
-          "type": "STRING",
-          "widget": {
-            "name": "target_iters_1"
-          },
-          "shape": 7,
-          "link": null
-        },
-        {
-          "label": "keyframe_latent_2",
-          "name": "num_keyframes.keyframe_latent_2",
-          "shape": 7,
-          "type": "LATENT",
-          "link": 3234
-        },
-        {
-          "name": "num_keyframes.target_iters_2",
-          "type": "STRING",
-          "widget": {
-            "name": "target_iters_2"
-          },
-          "shape": 7,
-          "link": null
-        },
-        {
-          "label": "keyframe_latent_3",
-          "name": "num_keyframes.keyframe_latent_3",
-          "shape": 7,
-          "type": "LATENT",
-          "link": 3235
-        },
-        {
-          "name": "num_keyframes.target_iters_3",
-          "type": "STRING",
-          "widget": {
-            "name": "target_iters_3"
-          },
-          "shape": 7,
-          "link": null
-        }
-      ],
-      "outputs": [
-        {
-          "name": "latent",
-          "type": "LATENT",
-          "links": [
-            3236
-          ]
-        }
-      ],
-      "properties": {
-        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
-        "Node name for S&R": "LTXIterKeyframeSchedule"
-      },
-      "widgets_values": [
-        0,
-        "3",
-        "1",
-        "2",
-        "3"
-      ],
-      "title": "LTX Iter Keyframe Schedule (per-iter keyframe anchor)"
-    },
-    {
-      "id": 2045,
-      "type": "LTXIterKeyframeSchedule",
-      "pos": [
-        -280,
-        540
-      ],
-      "size": [
-        340,
-        260
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "fallback_latent",
-          "type": "LATENT",
-          "link": 3269
-        },
-        {
-          "name": "current_iteration",
-          "type": "INT",
-          "widget": {
-            "name": "current_iteration"
-          },
-          "link": 3251
-        },
-        {
-          "label": "keyframe_latent_1",
-          "name": "num_keyframes.keyframe_latent_1",
-          "shape": 7,
-          "type": "LATENT",
-          "link": 3252
-        },
-        {
-          "name": "num_keyframes.target_iters_1",
-          "type": "STRING",
-          "widget": {
-            "name": "target_iters_1"
-          },
-          "shape": 7,
-          "link": null
-        },
-        {
-          "label": "keyframe_latent_2",
-          "name": "num_keyframes.keyframe_latent_2",
-          "shape": 7,
-          "type": "LATENT",
-          "link": 3253
-        },
-        {
-          "name": "num_keyframes.target_iters_2",
-          "type": "STRING",
-          "widget": {
-            "name": "target_iters_2"
-          },
-          "shape": 7,
-          "link": null
-        },
-        {
-          "label": "keyframe_latent_3",
-          "name": "num_keyframes.keyframe_latent_3",
-          "shape": 7,
-          "type": "LATENT",
-          "link": 3254
-        },
-        {
-          "name": "num_keyframes.target_iters_3",
-          "type": "STRING",
-          "widget": {
-            "name": "target_iters_3"
-          },
-          "shape": 7,
-          "link": null
-        }
-      ],
-      "outputs": [
-        {
-          "name": "latent",
-          "type": "LATENT",
-          "links": [
-            3260
-          ]
-        }
-      ],
-      "properties": {
-        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
-        "Node name for S&R": "LTXIterKeyframeSchedule"
-      },
-      "widgets_values": [
-        0,
-        "3",
-        "1",
-        "2",
-        "3"
-      ],
-      "title": "LTX Iter Keyframe Schedule (END anchor — one keyframe ahead)"
-    },
-    {
-      "id": 2046,
-      "type": "LTXIterKeyframeSchedule",
-      "pos": [
-        -280,
-        720
-      ],
-      "size": [
-        340,
-        260
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 4,
-      "inputs": [
-        {
-          "name": "fallback_latent",
-          "type": "LATENT",
-          "link": 3270
-        },
-        {
-          "name": "current_iteration",
-          "type": "INT",
-          "widget": {
-            "name": "current_iteration"
-          },
-          "link": 3256
-        },
-        {
-          "label": "keyframe_latent_1",
-          "name": "num_keyframes.keyframe_latent_1",
-          "shape": 7,
-          "type": "LATENT",
-          "link": 3257
-        },
-        {
-          "name": "num_keyframes.target_iters_1",
-          "type": "STRING",
-          "widget": {
-            "name": "target_iters_1"
-          },
-          "shape": 7,
-          "link": null
-        },
-        {
-          "label": "keyframe_latent_2",
-          "name": "num_keyframes.keyframe_latent_2",
-          "shape": 7,
-          "type": "LATENT",
-          "link": 3258
-        },
-        {
-          "name": "num_keyframes.target_iters_2",
-          "type": "STRING",
-          "widget": {
-            "name": "target_iters_2"
-          },
-          "shape": 7,
-          "link": null
-        },
-        {
-          "label": "keyframe_latent_3",
-          "name": "num_keyframes.keyframe_latent_3",
-          "shape": 7,
-          "type": "LATENT",
-          "link": 3259
-        },
-        {
-          "name": "num_keyframes.target_iters_3",
-          "type": "STRING",
-          "widget": {
-            "name": "target_iters_3"
-          },
-          "shape": 7,
-          "link": null
-        }
-      ],
-      "outputs": [
-        {
-          "name": "latent",
-          "type": "LATENT",
-          "links": [
-            3261
-          ]
-        }
-      ],
-      "properties": {
-        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
-        "Node name for S&R": "LTXIterKeyframeSchedule"
-      },
-      "widgets_values": [
-        0,
-        "3",
-        "1",
-        "2",
-        "3"
-      ],
-      "title": "LTX Iter Keyframe Schedule (MID anchor — one keyframe ahead, bypassed)"
-    },
-    {
       "id": 2047,
       "type": "VHS_LoadVideo",
       "pos": [
@@ -5791,9 +4870,7 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            3263,
-            3264,
-            3265
+            3271
           ]
         }
       ],
@@ -5802,144 +4879,9 @@
         "aux_id": "fblissjr/ComfyUI-AudioLoopHelper"
       },
       "widgets_values": [
-        3
+        15
       ],
-      "title": "3 evenly-spaced keyframes (first/middle/last)"
-    },
-    {
-      "id": 2049,
-      "type": "GetImageRangeFromBatch",
-      "pos": [
-        -560,
-        540
-      ],
-      "size": [
-        260,
-        100
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 3263
-        }
-      ],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": [
-            3266
-          ]
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": []
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "GetImageRangeFromBatch",
-        "cnr_id": "comfyui-kjnodes"
-      },
-      "widgets_values": [
-        0,
-        1
-      ],
-      "title": "keyframe 1 (clip start)"
-    },
-    {
-      "id": 2050,
-      "type": "GetImageRangeFromBatch",
-      "pos": [
-        -560,
-        660
-      ],
-      "size": [
-        260,
-        100
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 3264
-        }
-      ],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": [
-            3267
-          ]
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": []
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "GetImageRangeFromBatch",
-        "cnr_id": "comfyui-kjnodes"
-      },
-      "widgets_values": [
-        1,
-        1
-      ],
-      "title": "keyframe 2 (clip middle)"
-    },
-    {
-      "id": 2051,
-      "type": "GetImageRangeFromBatch",
-      "pos": [
-        -560,
-        780
-      ],
-      "size": [
-        260,
-        100
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 3265
-        }
-      ],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": [
-            3268
-          ]
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": []
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "GetImageRangeFromBatch",
-        "cnr_id": "comfyui-kjnodes"
-      },
-      "widgets_values": [
-        2,
-        1
-      ],
-      "title": "keyframe 3 (clip end)"
+      "title": "15 evenly-spaced keyframes (14 windows + 1; count = windows+1)"
     },
     {
       "id": 2052,
@@ -5961,9 +4903,402 @@
         "Node name for S&R": "MarkdownNote"
       },
       "widgets_values": [
-        "## END/MID keyframe anchoring (experimental)\n\n**START anchor** = window k-1's frozen END, carried via the overlap context. No start guide — the existing identity guide (in-subgraph #1519, latent_idx=-1) stays.\n\n**END anchor (active)**: selector wired ONE KEYFRAME AHEAD (window k <- keyframe k+1) -> in-subgraph guide at the window's LAST latent index (62), strength 0.7. Anchoring the END also sets the NEXT window's START (tail becomes next frozen context). A hard 1.0 end anchor can visibly 'snap' near seams; 0.7 is softer.\n\n**MID anchor (bypassed, mode=4)**: third selector + guide at the window's MIDDLE latent index (31), strength 0.5. Un-bypass BOTH the MID selector and the in-subgraph MID guide to use it.\n\n### latent_idx derivation (RE-CHECK if you change the window)\nPer-window video latent T = window_latent_frames =\n`(round(window_seconds*fps) - 1)//8 + 1`.\nShipped config (window 19.88s, fps 25, 960x544): T = 63, so END latent_idx = T-1 = 62, MID latent_idx = T//2 = 31.\nlatent_idx > 0 -> frame_idx = 1+(idx-1)*8 (positional, in-window). These are NODE WIDGETS on the two LTXVAddLatentGuide nodes — if you change window_seconds/fps, recompute T and re-set both widgets.\n\n### keyframe -> window mapping\nWindow k needs keyframe k+1, so you need N+1 keyframes for N anchored windows. With 3 keyframes the last anchored window re-uses the final keyframe; any iter no selector row claims falls back to the init image (no-op end anchor). target_iters is 1-BASED.\n\n### flexible keyframe source\nDefault source = the 3 hand-loaded LoadImage shots. A parked VHS_LoadVideo(force_rate=1) -> EvenlySpacedKeyframes(3) -> 3x GetImageRangeFromBatch branch is BYPASSED below. To switch a keyframe to the video-extracted frame, either (a) rewire that keyframe's LTXSmartImageResize.image input to the matching GetImageRangeFromBatch.IMAGE output, or (b) route both sources through a KJNodes **LazySwitchKJ** (boolean switch, lazy — only the selected branch runs) into the resize. Un-bypass the parked branch first (mode 4 -> 0)."
+        "## END/MID keyframe anchoring (experimental)\n\n**START anchor** = window k-1's frozen END, carried via the overlap context. No start guide — the existing identity guide (in-subgraph #1519, latent_idx=-1) stays.\n\n**END anchor (active)**: selector wired ONE ITERATION AHEAD (window k <- keyframe k+1) -> in-subgraph guide at the window's LAST latent index (62), strength 0.7. Anchoring the END also sets the NEXT window's START (tail becomes next frozen context). A hard 1.0 end anchor can visibly 'snap' near seams; 0.7 is softer.\n\n**MID anchor (bypassed, mode=4)**: third selector + guide at the window's MIDDLE latent index (31), strength 0.5. Un-bypass BOTH the MID selector and the in-subgraph MID guide to use it.\n\n### latent_idx derivation (RE-CHECK if you change the window)\nPer-window video latent T = window_latent_frames =\n`(round(window_seconds*fps) - 1)//8 + 1`.\nShipped config (window 19.88s, fps 25, 960x544): T = 63, so END latent_idx = T-1 = 62, MID latent_idx = T//2 = 31.\nlatent_idx > 0 -> frame_idx = 1+(idx-1)*8 (positional, in-window). These are NODE WIDGETS on the two LTXVAddLatentGuide nodes — if you change window_seconds/fps, recompute T and re-set both widgets.\n\n### keyframe count is ONE widget now (batch pattern)\nKeyframe count is the **EvenlySpacedKeyframes `count` widget** — no per-keyframe node chains. The pipeline is:\n\n  VHS_LoadVideo(force_rate=1) -> EvenlySpacedKeyframes(count) -> ONE LTXSmartImageResize\n    -> ONE LTXVPreprocess(img_compression=18) -> KeyframeLatentScheduleBatchEncode\n\nThe batch encoder VAE-encodes every keyframe ONCE, OUTSIDE the loop (memoized id-keyed LRU, like the prompt-side TimestampPromptScheduleBatchEncode). Inside the loop, three LatentSelectByIteration nodes pluck per-iter latents (no per-iter VAE).\n\n**N+1 rule = count widget is windows + 1.** For N anchored windows set `count = N + 1` (default 15 = 14 windows + 1). Window k's END anchor needs keyframe k+1, so you always want one extra. **Clamp IS the fallback**: the selector clamps current_iteration to the last list entry, so any overshoot (END/MID one-ahead past the end, or audio longer than the keyframe schedule) just holds the LAST keyframe — no init-image fallback wiring needed. EvenlySpacedKeyframes also clamps `count` to the loaded clip's frame count, so a short clip just yields fewer (still endpoint-inclusive) frames.\n\n**Schedule** maps window k -> keyframe k as snap-friendly ranges at stride multiples (stride = AudioLoopPlanner.stride_seconds, 19.88s shipped). snap_boundaries=True rounds each range to the iteration grid; `_match_schedule_generic` last-match-wins + the batch encoder's +1 headroom + the selector clamp together make overshoot hold the final keyframe. Re-spread the schedule if you change stride or keyframe count.\n\n**stride_seconds / audio_duration come from AudioLoopPlanner (out2 / out3), NOT AudioLoopController** — the controller's outputs are iteration-dependent and would close a cycle through TensorLoopOpen (audit graph_acyclic). The BASE selector takes raw current_iteration (1-based, same source the old selectors used); END/MID take current_iteration+1 via a SimpleCalculatorKJ (expression `a + 1`).\n\n### switching keyframe source\nDefault source = a VHS_LoadVideo clip. To use a different clip just change the VHS_LoadVideo widget; `count` controls how many evenly-spaced frames are sampled (endpoints always included for count >= 2). No node dragging."
       ],
       "title": "END/MID anchor — design + latent_idx derivation"
+    },
+    {
+      "id": 2053,
+      "type": "LTXSmartImageResize",
+      "pos": [
+        -1720,
+        7000
+      ],
+      "size": [
+        270,
+        336
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 3271
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          },
+          "link": 3272
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          },
+          "link": 3273
+        },
+        {
+          "name": "keep_proportion",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "keep_proportion"
+          }
+        },
+        {
+          "name": "crop_position",
+          "type": "COMBO"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [
+            3274
+          ]
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "links": []
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "links": []
+        }
+      ],
+      "properties": {
+        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+        "cnr_id": "comfyui-audioloophelper",
+        "Node name for S&R": "LTXSmartImageResize"
+      },
+      "widgets_values": [
+        832,
+        448,
+        true,
+        "top"
+      ],
+      "title": "Keyframe resize (batch, all N at once)"
+    },
+    {
+      "id": 2054,
+      "type": "LTXVPreprocess",
+      "pos": [
+        -1420,
+        7000
+      ],
+      "size": [
+        270,
+        58
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 3274
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output_image",
+          "type": "IMAGE",
+          "links": [
+            3276
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.9.2",
+        "Node name for S&R": "LTXVPreprocess"
+      },
+      "widgets_values": [
+        18
+      ],
+      "title": "Keyframe preprocess (batch, img_compression=18)"
+    },
+    {
+      "id": 2055,
+      "type": "KeyframeLatentScheduleBatchEncode",
+      "pos": [
+        -1120,
+        7000
+      ],
+      "size": [
+        360,
+        220
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 3275
+        },
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 3276
+        },
+        {
+          "name": "schedule",
+          "type": "STRING",
+          "widget": {
+            "name": "schedule"
+          }
+        },
+        {
+          "name": "stride_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "stride_seconds"
+          },
+          "link": 3277
+        },
+        {
+          "name": "audio_duration",
+          "type": "FLOAT",
+          "widget": {
+            "name": "audio_duration"
+          },
+          "link": 3278
+        },
+        {
+          "name": "snap_boundaries",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "snap_boundaries"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent_list",
+          "type": "*",
+          "links": [
+            3280,
+            3281,
+            3282
+          ]
+        },
+        {
+          "name": "iteration_count",
+          "type": "INT",
+          "links": []
+        }
+      ],
+      "properties": {
+        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+        "cnr_id": "comfyui-audioloophelper",
+        "Node name for S&R": "KeyframeLatentScheduleBatchEncode"
+      },
+      "widgets_values": [
+        "0:00.00-0:19.88: 0\n0:19.88-0:39.76: 1\n0:39.76-0:59.64: 2\n0:59.64-1:19.52: 3\n1:19.52-1:39.40: 4\n1:39.40-1:59.28: 5\n1:59.28-2:19.16: 6\n2:19.16-2:39.04: 7\n2:39.04-2:58.92: 8\n2:58.92-3:18.80: 9\n3:18.80-3:38.68: 10\n3:38.68-3:58.56: 11\n3:58.56-4:18.44: 12\n4:18.44-4:38.32: 13\n4:38.32+: 14",
+        19.88,
+        180.0,
+        true
+      ],
+      "title": "Keyframe Latent Schedule (Batch Encode) — count = EvenlySpacedKeyframes widget"
+    },
+    {
+      "id": 2056,
+      "type": "SimpleCalculatorKJ",
+      "pos": [
+        -700,
+        6700
+      ],
+      "size": [
+        210,
+        80
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "a",
+          "name": "variables.a",
+          "shape": 7,
+          "type": "INT,FLOAT,BOOLEAN",
+          "link": 3279
+        },
+        {
+          "label": "b",
+          "name": "variables.b",
+          "shape": 7,
+          "type": "INT,FLOAT,BOOLEAN",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "FLOAT",
+          "type": "FLOAT",
+          "links": []
+        },
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [
+            3284,
+            3285
+          ]
+        },
+        {
+          "name": "BOOLEAN",
+          "type": "BOOLEAN",
+          "links": []
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-kjnodes",
+        "Node name for S&R": "SimpleCalculatorKJ"
+      },
+      "widgets_values": [
+        "a + 1"
+      ],
+      "title": "current_iteration + 1 (END/MID one-ahead)"
+    },
+    {
+      "id": 2057,
+      "type": "LatentSelectByIteration",
+      "pos": [
+        -700,
+        7000
+      ],
+      "size": [
+        260,
+        80
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "latent_list",
+          "type": "*",
+          "link": 3280
+        },
+        {
+          "name": "current_iteration",
+          "type": "INT",
+          "link": 3283
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "links": [
+            3286
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+        "cnr_id": "comfyui-audioloophelper",
+        "Node name for S&R": "LatentSelectByIteration"
+      },
+      "widgets_values": [],
+      "title": "Keyframe select — BASE anchor (window k)"
+    },
+    {
+      "id": 2058,
+      "type": "LatentSelectByIteration",
+      "pos": [
+        -700,
+        7120
+      ],
+      "size": [
+        260,
+        80
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "latent_list",
+          "type": "*",
+          "link": 3281
+        },
+        {
+          "name": "current_iteration",
+          "type": "INT",
+          "link": 3284
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "links": [
+            3287
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+        "cnr_id": "comfyui-audioloophelper",
+        "Node name for S&R": "LatentSelectByIteration"
+      },
+      "widgets_values": [],
+      "title": "Keyframe select — END anchor (window k+1)"
+    },
+    {
+      "id": 2059,
+      "type": "LatentSelectByIteration",
+      "pos": [
+        -700,
+        7240
+      ],
+      "size": [
+        260,
+        80
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "latent_list",
+          "type": "*",
+          "link": 3282
+        },
+        {
+          "name": "current_iteration",
+          "type": "INT",
+          "link": 3285
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "links": [
+            3288
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper",
+        "cnr_id": "comfyui-audioloophelper",
+        "Node name for S&R": "LatentSelectByIteration"
+      },
+      "widgets_values": [],
+      "title": "Keyframe select — MID anchor (window k+1, bypassed)"
     }
   ],
   "links": [
@@ -7072,254 +6407,6 @@
       "INT"
     ],
     [
-      3214,
-      1634,
-      0,
-      2031,
-      1,
-      "INT"
-    ],
-    [
-      3215,
-      1634,
-      1,
-      2031,
-      2,
-      "INT"
-    ],
-    [
-      3216,
-      2031,
-      0,
-      2032,
-      0,
-      "IMAGE"
-    ],
-    [
-      3217,
-      2032,
-      0,
-      2033,
-      0,
-      "IMAGE"
-    ],
-    [
-      3218,
-      619,
-      0,
-      2033,
-      1,
-      "VAE"
-    ],
-    [
-      3220,
-      1634,
-      0,
-      2035,
-      1,
-      "INT"
-    ],
-    [
-      3221,
-      1634,
-      1,
-      2035,
-      2,
-      "INT"
-    ],
-    [
-      3222,
-      2035,
-      0,
-      2036,
-      0,
-      "IMAGE"
-    ],
-    [
-      3223,
-      2036,
-      0,
-      2037,
-      0,
-      "IMAGE"
-    ],
-    [
-      3224,
-      619,
-      0,
-      2037,
-      1,
-      "VAE"
-    ],
-    [
-      3226,
-      1634,
-      0,
-      2039,
-      1,
-      "INT"
-    ],
-    [
-      3227,
-      1634,
-      1,
-      2039,
-      2,
-      "INT"
-    ],
-    [
-      3228,
-      2039,
-      0,
-      2040,
-      0,
-      "IMAGE"
-    ],
-    [
-      3229,
-      2040,
-      0,
-      2041,
-      0,
-      "IMAGE"
-    ],
-    [
-      3230,
-      619,
-      0,
-      2041,
-      1,
-      "VAE"
-    ],
-    [
-      3231,
-      1617,
-      0,
-      2042,
-      0,
-      "LATENT"
-    ],
-    [
-      3232,
-      1539,
-      3,
-      2042,
-      1,
-      "INT"
-    ],
-    [
-      3233,
-      2033,
-      0,
-      2042,
-      2,
-      "LATENT"
-    ],
-    [
-      3234,
-      2037,
-      0,
-      2042,
-      4,
-      "LATENT"
-    ],
-    [
-      3235,
-      2041,
-      0,
-      2042,
-      6,
-      "LATENT"
-    ],
-    [
-      3236,
-      2042,
-      0,
-      843,
-      8,
-      "LATENT"
-    ],
-    [
-      3251,
-      1539,
-      3,
-      2045,
-      1,
-      "INT"
-    ],
-    [
-      3252,
-      2037,
-      0,
-      2045,
-      2,
-      "LATENT"
-    ],
-    [
-      3253,
-      2041,
-      0,
-      2045,
-      4,
-      "LATENT"
-    ],
-    [
-      3254,
-      2041,
-      0,
-      2045,
-      6,
-      "LATENT"
-    ],
-    [
-      3256,
-      1539,
-      3,
-      2046,
-      1,
-      "INT"
-    ],
-    [
-      3257,
-      2037,
-      0,
-      2046,
-      2,
-      "LATENT"
-    ],
-    [
-      3258,
-      2041,
-      0,
-      2046,
-      4,
-      "LATENT"
-    ],
-    [
-      3259,
-      2041,
-      0,
-      2046,
-      6,
-      "LATENT"
-    ],
-    [
-      3260,
-      2045,
-      0,
-      843,
-      20,
-      "LATENT"
-    ],
-    [
-      3261,
-      2046,
-      0,
-      843,
-      21,
-      "LATENT"
-    ],
-    [
       3262,
       2047,
       0,
@@ -7328,67 +6415,147 @@
       "IMAGE"
     ],
     [
-      3263,
+      3271,
       2048,
       0,
-      2049,
+      2053,
       0,
       "IMAGE"
     ],
     [
-      3264,
-      2048,
+      3272,
+      1634,
       0,
-      2050,
+      2053,
+      1,
+      "INT"
+    ],
+    [
+      3273,
+      1634,
+      1,
+      2053,
+      2,
+      "INT"
+    ],
+    [
+      3274,
+      2053,
+      0,
+      2054,
       0,
       "IMAGE"
     ],
     [
-      3265,
-      2048,
+      3275,
+      619,
       0,
-      2051,
+      2055,
       0,
+      "VAE"
+    ],
+    [
+      3276,
+      2054,
+      0,
+      2055,
+      1,
       "IMAGE"
     ],
     [
-      3266,
-      2049,
-      0,
-      2031,
-      0,
-      "IMAGE"
+      3277,
+      1560,
+      2,
+      2055,
+      3,
+      "FLOAT"
     ],
     [
-      3267,
-      2050,
-      0,
-      2035,
-      0,
-      "IMAGE"
+      3278,
+      1560,
+      3,
+      2055,
+      4,
+      "FLOAT"
     ],
     [
-      3268,
-      2051,
+      3279,
+      1539,
+      3,
+      2056,
       0,
-      2039,
-      0,
-      "IMAGE"
+      "INT"
     ],
     [
-      3269,
-      2041,
+      3280,
+      2055,
       0,
-      2045,
+      2057,
       0,
+      "*"
+    ],
+    [
+      3281,
+      2055,
+      0,
+      2058,
+      0,
+      "*"
+    ],
+    [
+      3282,
+      2055,
+      0,
+      2059,
+      0,
+      "*"
+    ],
+    [
+      3283,
+      1539,
+      3,
+      2057,
+      1,
+      "INT"
+    ],
+    [
+      3284,
+      2056,
+      1,
+      2058,
+      1,
+      "INT"
+    ],
+    [
+      3285,
+      2056,
+      1,
+      2059,
+      1,
+      "INT"
+    ],
+    [
+      3286,
+      2057,
+      0,
+      843,
+      8,
       "LATENT"
     ],
     [
-      3270,
-      2041,
+      3287,
+      2058,
       0,
-      2046,
+      843,
+      20,
+      "LATENT"
+    ],
+    [
+      3288,
+      2059,
       0,
+      843,
+      21,
       "LATENT"
     ]
   ],
