@@ -275,7 +275,10 @@ def _make_selector(ed: WorkflowEditor, title: str, pos: list, mode: int) -> int:
 def _new_sg_input(name: str, label: str, pos: list) -> dict:
     """Build a subgraph boundary input slot dict (appended to sg['inputs'])."""
     return {
-        "id": str(uuid.uuid4()),
+        # uuid5 keyed on the input name: deterministic across regenerations,
+        # so re-running the generator stays byte-stable (md5 regen discipline,
+        # scripts/CLAUDE.md "Byte-identical refactor validation").
+        "id": str(uuid.uuid5(uuid.NAMESPACE_OID, name)),
         "name": name,
         "type": "LATENT",
         "linkIds": [],
@@ -293,6 +296,7 @@ def _add_subgraph_input(ed: WorkflowEditor, name: str, label: str, pos: list) ->
     save time; removal shifts higher slots). The new slot lands at the end.
     """
     sg = ed.get_subgraph(0)
+    assert sg is not None, "subgraph[0] validated by _assert_required_nodes_present"
     slot = len(sg["inputs"])
     sg["inputs"].append(_new_sg_input(name, label, pos))
     # Mirror on the invoker node (same order; link filled by the top-level wire).
@@ -306,11 +310,9 @@ def _add_inner_guide(
 ) -> int:
     """Add an in-subgraph LTXVAddLatentGuide. `strength` is carried as a WIDGET
     (its own per-node dial); `guiding_latent` is wired from the distributor."""
-    nid = ed.next_node_id()
-    node = {
-        "id": nid, "type": "LTXVAddLatentGuide", "pos": pos,
-        "size": [294.5, 162], "flags": {}, "order": 0, "mode": mode,
-        "inputs": [
+    return ed.add_subgraph_node(
+        "LTXVAddLatentGuide", pos=pos, size=[294.5, 162], mode=mode,
+        inputs=[
             {"localized_name": "vae", "name": "vae", "type": "VAE", "link": None},
             {"localized_name": "positive", "name": "positive", "type": "CONDITIONING", "link": None},
             {"localized_name": "negative", "name": "negative", "type": "CONDITIONING", "link": None},
@@ -319,31 +321,17 @@ def _add_inner_guide(
             {"localized_name": "strength", "name": "strength", "type": "FLOAT",
              "widget": {"name": "strength"}, "link": None},
         ],
-        "outputs": [
+        outputs=[
             {"localized_name": "positive", "name": "positive", "type": "CONDITIONING", "links": []},
             {"localized_name": "negative", "name": "negative", "type": "CONDITIONING", "links": []},
             {"localized_name": "latent", "name": "latent", "type": "LATENT", "links": []},
         ],
-        "properties": {
+        properties={
             "cnr_id": "ComfyUI-LTXVideo",
             "Node name for S&R": "LTXVAddLatentGuide",
             "aux_id": "Lightricks/ComfyUI-LTXVideo",
         },
-        "widgets_values": [latent_idx, strength],
-        "title": title,
-    }
-    sg = ed.get_subgraph(0)
-    sg["nodes"].append(node)
-    return nid
-
-
-def _make_loadimage(ed: WorkflowEditor, pos: list, fname: str, title: str) -> int:
-    return ed.add_top_level_node(
-        "LoadImage", pos=pos, size=[240, 310],
-        inputs=[],
-        outputs=[WorkflowEditor.out("IMAGE", "IMAGE"), WorkflowEditor.out("MASK", "MASK")],
-        widgets_values=[fname, "image"],
-        properties={"cnr_id": "comfy-core", "ver": "0.8.2", "Node name for S&R": "LoadImage"},
+        widgets_values=[latent_idx, strength],
         title=title,
     )
 
@@ -363,6 +351,7 @@ def _make_note(ed: WorkflowEditor, pos: list, size: list, text: str, title: str)
 # --------------------------------------------------------------------------
 def _apply(ed: WorkflowEditor) -> None:
     sg = ed.get_subgraph(0)
+    assert sg is not None, "subgraph[0] validated by _assert_required_nodes_present"
 
     # 1. Two new subgraph inputs (APPENDED at the end -> slots 20, 21).
     end_slot = _add_subgraph_input(ed, "end_guide_latent",
@@ -377,7 +366,6 @@ def _apply(ed: WorkflowEditor) -> None:
     # 2. Two new in-subgraph guides, chained #1519 -> END -> MID -> #1640.
     #    Re-route #1519's three outputs (pos/neg/latent) into END's inputs,
     #    then END -> MID -> (whatever #1519 used to feed = #1640).
-    start = ed.find_subgraph_node(START_GUIDE, 0)
     # Capture the current consumers of #1519's three outputs (the #1640 chain).
     sg_links = sg["links"]
     downstream = {}  # out_slot -> list of (tgt_id, tgt_slot, dtype)
