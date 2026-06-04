@@ -16,11 +16,22 @@ Drives loop timing from integer-latent counts, freezes audio via
 Click play — **sound on**. The audio is frozen and *drives* the picture; the
 motion is generated against the waveform, not added after.
 
-https://github.com/user-attachments/assets/49620f67-2403-438b-87e1-1ed9e16d0df4
+https://github.com/user-attachments/assets/ed1657c5-35a7-48e0-b384-7e58b4aafafe
 
-<sub>30s of one continuous **2:51 render** from the default workflow
-([`audio-loop-music-video_latent.json`](example_workflows/audio-loop-music-video_latent.json)) —
+<sub>30s of one continuous **2:53 render** — a painted heart pulsing to a drum
+loop. Workflow: [`audio_reactive_loop.json`](example_workflows/audio_reactive_loop.json) ·
+[writeup](docs/experimental/audio_reactive_workflows.md)</sub>
+
+<details>
+<summary><b>▶ Full-length music video — the default workflow</b></summary>
+
+https://github.com/user-attachments/assets/51d96aaf-c938-4ae4-8c58-34524e8fe79d
+
+<sub>Opening 30s of one continuous **2:51 render** from
+[`audio-loop-music-video_latent.json`](example_workflows/audio-loop-music-video_latent.json) —
 one song + one init image + a timestamp prompt schedule.</sub>
+
+</details>
 
 <details>
 <summary><b>▶ One image, three songs — the audio reshapes everything</b></summary>
@@ -29,7 +40,7 @@ https://github.com/user-attachments/assets/80b02031-87f5-44fe-9448-da0021339494
 
 https://github.com/user-attachments/assets/e276fb04-b411-4d38-b03b-2ee30122f7e7
 
-https://github.com/user-attachments/assets/dda412ac-229f-4b1a-8f0f-3ba8b2809807
+https://github.com/user-attachments/assets/e3920e6b-9540-461b-9b65-0c1e7424c0d6
 
 <sub>Three full renders through the default workflow from the **same single init
 image**; the first two share essentially the same prompt (the astronaut run
@@ -54,17 +65,11 @@ the audio alone sets the performance: timing, delivery, gesture.</sub>
 </details>
 
 <details>
-<summary><b>▶ Audio-reactive variant — the waveform drives the subject's motion</b></summary>
-
-https://github.com/user-attachments/assets/ed1657c5-35a7-48e0-b384-7e58b4aafafe
-
-<sub>30s of a continuous 2:53 render — a painted heart pulsing to a drum loop.
-Workflow: [`audio_reactive_loop.json`](example_workflows/audio_reactive_loop.json) ·
-[writeup](docs/experimental/audio_reactive_workflows.md)</sub>
+<summary><b>▶ Audio-reactive, second take</b></summary>
 
 https://github.com/user-attachments/assets/3760b301-8fc7-4b43-8f24-3128558cff69
 
-<sub>Same drumbeat, different init — the stomps land on the beat.</sub>
+<sub>Same drumbeat as the heart, different init — the stomps land on the beat.</sub>
 
 </details>
 
