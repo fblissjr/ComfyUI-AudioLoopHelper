@@ -2,7 +2,7 @@
   "id": "3db70343-fd10-483b-8d66-6be2395b9681",
   "revision": 0,
   "last_node_id": 2052,
-  "last_link_id": 3265,
+  "last_link_id": 3268,
   "nodes": [
     {
       "id": 252,
@@ -4802,15 +4802,13 @@
       ],
       "flags": {},
       "order": 0,
-      "mode": 0,
+      "mode": 4,
       "inputs": [],
       "outputs": [
         {
           "name": "IMAGE",
           "type": "IMAGE",
-          "links": [
-            3213
-          ]
+          "links": []
         },
         {
           "name": "MASK",
@@ -4826,7 +4824,8 @@
       "widgets_values": [
         "reference_image.png",
         "image"
-      ]
+      ],
+      "title": "Parked: manual keyframe 1 (rewire to resize to use)"
     },
     {
       "id": 2031,
@@ -4846,7 +4845,7 @@
         {
           "name": "image",
           "type": "IMAGE",
-          "link": 3213
+          "link": 3266
         },
         {
           "name": "width",
@@ -5006,15 +5005,13 @@
       ],
       "flags": {},
       "order": 0,
-      "mode": 0,
+      "mode": 4,
       "inputs": [],
       "outputs": [
         {
           "name": "IMAGE",
           "type": "IMAGE",
-          "links": [
-            3219
-          ]
+          "links": []
         },
         {
           "name": "MASK",
@@ -5030,7 +5027,8 @@
       "widgets_values": [
         "reference_image.png",
         "image"
-      ]
+      ],
+      "title": "Parked: manual keyframe 2 (rewire to resize to use)"
     },
     {
       "id": 2035,
@@ -5050,7 +5048,7 @@
         {
           "name": "image",
           "type": "IMAGE",
-          "link": 3219
+          "link": 3267
         },
         {
           "name": "width",
@@ -5212,15 +5210,13 @@
       ],
       "flags": {},
       "order": 0,
-      "mode": 0,
+      "mode": 4,
       "inputs": [],
       "outputs": [
         {
           "name": "IMAGE",
           "type": "IMAGE",
-          "links": [
-            3225
-          ]
+          "links": []
         },
         {
           "name": "MASK",
@@ -5236,7 +5232,8 @@
       "widgets_values": [
         "reference_image.png",
         "image"
-      ]
+      ],
+      "title": "Parked: manual keyframe 3 (rewire to resize to use)"
     },
     {
       "id": 2039,
@@ -5256,7 +5253,7 @@
         {
           "name": "image",
           "type": "IMAGE",
-          "link": 3225
+          "link": 3268
         },
         {
           "name": "width",
@@ -5717,7 +5714,7 @@
       ],
       "flags": {},
       "order": 0,
-      "mode": 4,
+      "mode": 0,
       "inputs": [
         {
           "name": "meta_batch",
@@ -5757,7 +5754,7 @@
         "cnr_id": "comfyui-videohelpersuite"
       },
       "widgets_values": {
-        "video": "your_keyframe_clip.mp4",
+        "video": "test_keyframes_9s.mp4",
         "force_rate": 1,
         "custom_width": 0,
         "custom_height": 0,
@@ -5766,7 +5763,7 @@
         "select_every_nth": 1,
         "format": "LTXV"
       },
-      "title": "Parked keyframe source clip (force_rate=1) — bypassed"
+      "title": "Keyframe source clip (force_rate=1)"
     },
     {
       "id": 2048,
@@ -5781,7 +5778,7 @@
       ],
       "flags": {},
       "order": 0,
-      "mode": 4,
+      "mode": 0,
       "inputs": [
         {
           "name": "images",
@@ -5807,7 +5804,7 @@
       "widgets_values": [
         3
       ],
-      "title": "Parked: 3 evenly-spaced — bypassed"
+      "title": "3 evenly-spaced keyframes (first/middle/last)"
     },
     {
       "id": 2049,
@@ -5822,7 +5819,7 @@
       ],
       "flags": {},
       "order": 0,
-      "mode": 4,
+      "mode": 0,
       "inputs": [
         {
           "name": "images",
@@ -5834,7 +5831,9 @@
         {
           "name": "IMAGE",
           "type": "IMAGE",
-          "links": []
+          "links": [
+            3266
+          ]
         },
         {
           "name": "MASK",
@@ -5850,7 +5849,7 @@
         0,
         1
       ],
-      "title": "Parked: keyframe 1 (frame 0) — bypassed"
+      "title": "keyframe 1 (clip start)"
     },
     {
       "id": 2050,
@@ -5865,7 +5864,7 @@
       ],
       "flags": {},
       "order": 0,
-      "mode": 4,
+      "mode": 0,
       "inputs": [
         {
           "name": "images",
@@ -5877,7 +5876,9 @@
         {
           "name": "IMAGE",
           "type": "IMAGE",
-          "links": []
+          "links": [
+            3267
+          ]
         },
         {
           "name": "MASK",
@@ -5893,7 +5894,7 @@
         1,
         1
       ],
-      "title": "Parked: keyframe 2 (frame 1) — bypassed"
+      "title": "keyframe 2 (clip middle)"
     },
     {
       "id": 2051,
@@ -5908,7 +5909,7 @@
       ],
       "flags": {},
       "order": 0,
-      "mode": 4,
+      "mode": 0,
       "inputs": [
         {
           "name": "images",
@@ -5920,7 +5921,9 @@
         {
           "name": "IMAGE",
           "type": "IMAGE",
-          "links": []
+          "links": [
+            3268
+          ]
         },
         {
           "name": "MASK",
@@ -5936,7 +5939,7 @@
         2,
         1
       ],
-      "title": "Parked: keyframe 3 (frame 2) — bypassed"
+      "title": "keyframe 3 (clip end)"
     },
     {
       "id": 2052,
@@ -7069,14 +7072,6 @@
       "INT"
     ],
     [
-      3213,
-      2030,
-      0,
-      2031,
-      0,
-      "IMAGE"
-    ],
-    [
       3214,
       1634,
       0,
@@ -7117,14 +7112,6 @@
       "VAE"
     ],
     [
-      3219,
-      2034,
-      0,
-      2035,
-      0,
-      "IMAGE"
-    ],
-    [
       3220,
       1634,
       0,
@@ -7163,14 +7150,6 @@
       2037,
       1,
       "VAE"
-    ],
-    [
-      3225,
-      2038,
-      0,
-      2039,
-      0,
-      "IMAGE"
     ],
     [
       3226,
@@ -7385,6 +7364,30 @@
       2048,
       0,
       2051,
+      0,
+      "IMAGE"
+    ],
+    [
+      3266,
+      2049,
+      0,
+      2031,
+      0,
+      "IMAGE"
+    ],
+    [
+      3267,
+      2050,
+      0,
+      2035,
+      0,
+      "IMAGE"
+    ],
+    [
+      3268,
+      2051,
+      0,
+      2039,
       0,
       "IMAGE"
     ]
