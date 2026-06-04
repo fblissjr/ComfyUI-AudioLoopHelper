@@ -7,6 +7,14 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **`Keyframe Fill Length` node (`KeyframeFillLength`).** Computes the
+  `EmptyLTXVLatentVideo` length (PIXEL frames) a time-spaced keyframe batch
+  needs, snapped UP to the `(length - 1) % 8 == 0` grid. Wire its `length`
+  output into `EmptyLTXVLatentVideo.length` and `KeyframeGuidesTimeSpaced` can
+  never under-size and drop keyframes — it prevents the drop the companion node
+  only warns about after the fact. Optional `tail_seconds` adds room after the
+  last keyframe. Pure sizing math, no VAE. Guide:
+  `docs/guides/keyframe_fill_single_pass.md`.
 - **"Auto-find hook" in the Compose Reference Audio node.** The reference slice
   editor gains an `auto_window_sec` knob plus an *Auto-find hook* button that
   places a single slice on the most representative sustained-energy window (the

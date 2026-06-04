@@ -2935,6 +2935,37 @@ def _keyframe_guide_placements(
     return placements
 
 
+def _required_pixel_length(
+    *,
+    batch_size: int,
+    output_fps: float,
+    seconds_per_keyframe: float,
+    tail_seconds: float,
+) -> int:
+    """Smallest valid PIXEL length for an `EmptyLTXVLatentVideo` that holds a
+    time-spaced keyframe batch with no keyframe dropped.
+
+    The last keyframe (index `batch_size - 1`) lands at pixel frame
+    `round((batch_size - 1) * seconds_per_keyframe * output_fps)` — identical to
+    `_keyframe_guide_placements`' per-keyframe math, so this sizes the latent to
+    hold exactly that frame. Required length = last_target_px + 1 (1-based count)
+    + `round(tail_seconds * output_fps)` extra room, then snapped UP to satisfy
+    the video VAE temporal grid `(length - 1) % 8 == 0`.
+
+    Snap is always UP, never down: rounding down would re-introduce the very
+    keyframe drop this node exists to prevent. `batch_size <= 0` is degenerate
+    (no keyframes) — returns the minimal valid length 9 rather than crashing.
+
+    Pure (no torch / no ComfyUI) so the sizing math is unit-testable.
+    """
+    bs = max(0, int(batch_size))
+    last_target_px = round((bs - 1) * seconds_per_keyframe * output_fps) if bs >= 1 else 0
+    raw = last_target_px + 1 + round(tail_seconds * output_fps)
+    # Snap UP to the next 8n+1 (== smallest L >= raw with (L-1) % 8 == 0).
+    snapped = ((raw - 1 + 7) // 8) * 8 + 1
+    return max(9, snapped)
+
+
 def _conditioning_frame_rate(cond) -> float | None:
     """Best-effort read of the `frame_rate` LTXVConditioning stamps into the
     conditioning dict (`[[tensor, {"frame_rate": fps, ...}], ...]`).
@@ -3192,6 +3223,100 @@ class KeyframeGuidesTimeSpaced(io.ComfyNode):
         return io.NodeOutput(
             positive, negative, {"samples": samples, "noise_mask": noise_mask}, placement_info,
         )
+
+
+class KeyframeFillLength(io.ComfyNode):
+    """Compute the `EmptyLTXVLatentVideo.length` (PIXEL frames) a time-spaced
+    keyframe batch needs — so the latent can never under-size and drop keyframes.
+
+    Companion to `KeyframeGuidesTimeSpaced`: that node only WARNS (and drops the
+    keyframe) once a keyframe's frame index falls past the latent end. Wire this
+    node's `length` output into `EmptyLTXVLatentVideo.length` and the drop can't
+    happen — the latent is always sized to hold the full keyframe batch.
+
+    The last keyframe lands at pixel frame `round((batch_size - 1) *
+    seconds_per_keyframe * output_fps)` (same placement math as
+    `KeyframeGuidesTimeSpaced`); `length` = that + 1 + `round(tail_seconds *
+    output_fps)`, snapped UP to the video VAE temporal grid `(length - 1) % 8
+    == 0`. Snap is always UP — rounding down would re-introduce the drop.
+
+    Feed the SAME `images` / `output_fps` / `seconds_per_keyframe` you feed
+    `KeyframeGuidesTimeSpaced`. Sizing only — no VAE, no encode; pure int math.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="KeyframeFillLength",
+            display_name="Keyframe Fill Length",
+            category="looping/keyframes",
+            description=(
+                "Compute the EmptyLTXVLatentVideo length (PIXEL frames) needed to "
+                "hold a time-spaced keyframe batch, snapped UP to the 8n+1 grid. "
+                "Wire length -> EmptyLTXVLatentVideo.length so KeyframeGuidesTimeSpaced "
+                "never under-sizes and drops keyframes. Pure sizing — no VAE."
+            ),
+            inputs=[
+                io.Image.Input(
+                    "images",
+                    tooltip=(
+                        "The SAME dense keyframe IMAGE batch you feed "
+                        "KeyframeGuidesTimeSpaced. batch_size = images.shape[0]."
+                    ),
+                ),
+                io.Float.Input(
+                    "output_fps",
+                    default=25.0, min=1.0, max=120.0, step=0.1,
+                    tooltip=(
+                        "Frame rate of the video you're generating (match "
+                        "LTXVConditioning.frame_rate, canonical 25 — same value you give "
+                        "KeyframeGuidesTimeSpaced). Converts seconds -> PIXEL frames."
+                    ),
+                ),
+                io.Float.Input(
+                    "seconds_per_keyframe",
+                    default=1.0, min=0.01, max=60.0, step=0.01,
+                    tooltip=(
+                        "Real-time gap between consecutive keyframes (same value you give "
+                        "KeyframeGuidesTimeSpaced). The last keyframe lands at PIXEL frame "
+                        "round((batch_size - 1) * seconds_per_keyframe * output_fps)."
+                    ),
+                ),
+                io.Float.Input(
+                    "tail_seconds",
+                    default=0.0, min=0.0, max=60.0, step=0.01,
+                    tooltip=(
+                        "Extra room (real seconds) after the LAST keyframe, in PIXEL "
+                        "frames. Default 0.0 = no tail (the latent ends one frame past the "
+                        "last keyframe, pre-snap). Raise to give the model room to settle "
+                        "after the final anchor."
+                    ),
+                ),
+            ],
+            outputs=[
+                io.Int.Output(
+                    display_name="length",
+                    tooltip=(
+                        "EmptyLTXVLatentVideo length in PIXEL frames, snapped UP to satisfy "
+                        "(length - 1) % 8 == 0. Wire to EmptyLTXVLatentVideo.length."
+                    ),
+                ),
+            ],
+        )
+
+    @classmethod
+    def execute(
+        cls, images, output_fps: float, seconds_per_keyframe: float, tail_seconds: float,
+    ) -> io.NodeOutput:
+        with _profile_span("KeyframeFillLength"):
+            batch_size = int(images.shape[0])
+            length = _required_pixel_length(
+                batch_size=batch_size,
+                output_fps=output_fps,
+                seconds_per_keyframe=seconds_per_keyframe,
+                tail_seconds=tail_seconds,
+            )
+        return io.NodeOutput(length)
 
 
 class KeyframeLatentScheduleBatchEncode(io.ComfyNode):
@@ -4626,6 +4751,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             AudioTemporalMask,
             EvenlySpacedKeyframes,
             KeyframeGuidesTimeSpaced,
+            KeyframeFillLength,
             RunIdPrefix,
             LatentFrameCount,
             TrimVideoLatentToAudio,

@@ -1,4 +1,4 @@
-Last updated: 2026-06-02
+Last updated: 2026-06-04
 
 # Single-pass keyframe fill ("sparse keyframes -> LTX fills the gaps")
 
@@ -54,6 +54,12 @@ Size the empty latent for the clip duration. Keyframes whose frame index falls
 past the latent length are **dropped with a WARN** (and named in
 `placement_info`) — never silently. If you see drops, lengthen the
 `EmptyLTXVLatentVideo` or raise `seconds_per_keyframe`.
+
+To make under-sizing impossible, wire `KeyframeFillLength.length ->
+EmptyLTXVLatentVideo.length`. Feed it the same `images` / `output_fps` /
+`seconds_per_keyframe` (plus optional `tail_seconds` room after the last
+keyframe); it returns the PIXEL length — snapped UP to the 8n+1 grid — that
+holds every keyframe, so the drop above can't happen at all.
 
 ### vs KJNodes `LTXVAddGuidesFromBatch`
 
