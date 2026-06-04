@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Repo pre-commit checks: workflow link-integrity + root CLAUDE.md budget.
+#
+# WHY: both check-classes regressed silently in the past — a UI re-save
+# shipped orphan output-link caches three commits in a row, and a CLAUDE.md
+# addition blew the 200-line/30KB budget — because nothing gated the commit.
+# CI catches them later; this catches them at commit time, from ANY session.
+#
+# INSTALL (per clone): the path-privacy wrapper at .git/hooks/pre-commit runs
+# .git/hooks/pre-commit.local first if present, so:
+#   ln -sf ../../scripts/githooks/pre-commit.local .git/hooks/pre-commit.local
+#
+# Scope-gated: each check runs only when matching files are staged, so
+# unrelated commits stay fast (<0.1s when nothing matches). Fails CLOSED on a
+# failing check — that is the point; do not bypass with --no-verify, fix the
+# file. (The fail-open rule in .claude/CLAUDE.md applies to PreToolUse hooks,
+# not to commit gates.)
+set -u
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+staged="$(git diff --cached --name-only)"
+
+# 1) Workflow link-integrity on staged TOP-LEVEL example workflows (parity
+#    with CI's tests/test_workflows.py glob — experimental/ is not gated).
+wf_staged="$(printf '%s\n' "$staged" | grep -E '^example_workflows/[^/]+\.json$' || true)"
+if [ -n "$wf_staged" ]; then
+  # shellcheck disable=SC2086  # repo workflow filenames contain no spaces
+  if ! uv run --group dev python scripts/test_workflow_integrity.py $wf_staged; then
+    echo "" >&2
+    echo "pre-commit: workflow link-integrity FAILED on a staged workflow." >&2
+    echo "UI re-saves leave orphan outputs[].links cache ids; repair with" >&2
+    echo "WorkflowEditor.prune_orphan_output_links() (scripts/workflow_utils.py)." >&2
+    exit 1
+  fi
+fi
+
+# 2) Root CLAUDE.md budget (200 lines / 30KB) when CLAUDE.md is staged.
+if printf '%s\n' "$staged" | grep -qx 'CLAUDE.md'; then
+  if ! uv run --group dev --group analysis python -m pytest \
+      "tests/test_claude_md_budget.py::test_root_claude_md_within_budget" \
+      -q --rootdir=. >/dev/null 2>&1; then
+    echo "" >&2
+    echo "pre-commit: root CLAUDE.md is over its 200-line/30KB budget." >&2
+    echo "Trim per .claude/CLAUDE.md governance (new rule in = old rule out)." >&2
+    exit 1
+  fi
+fi
+
+exit 0
