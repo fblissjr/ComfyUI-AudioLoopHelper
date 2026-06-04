@@ -20,12 +20,12 @@
 #   ./start.sh -h | --help           # show this help
 #
 # Modes:
-#   default     Balanced for LTX 2.3 / WAN2.1 (cuda-malloc + fp8-compute + 0.5GB reserve)
+#   default     LTX 2.3 / WAN2.1: perf flags + 0.5GB reserve + NO dynamic VRAM (node cache ON)
 #   safe        Fallback when default OOMs (lowvram, fp16-unet, fp32-vae, 4GB reserve)
 #   extreme     Maximum speed, may OOM (fp8_e4m3fn-unet, fp16-vae)
 #   minimal     Last resort, very slow (novram, cpu-vae, async-offload)
-#   nodynvram   Clean baseline for kernel OOM testing (disables dynamic VRAM,
-#               async offload, and node cache — see comments in that case)
+#   nodynvram   BENCH ONLY (alias: bench) — default's flags + --cache-none +
+#               reserve 0 for clean repro (see comments in that case)
 #   highvram    Keep models resident after use (may OOM with large models
 #               + heavy text encoder on a 24GB card)
 #
@@ -98,10 +98,19 @@ CMD_ARGS=("${BASE_ARGS[@]}")
 
 case "$MODE" in
     default)
-        echo "[start.sh] mode=default — balanced for LTX 2.3 / WAN2.1 (perf flags + 0.5GB reserve)"
+        echo "[start.sh] mode=default — LTX 2.3 / WAN2.1, no dynamic VRAM (perf flags + 0.5GB reserve, node cache ON)"
+        # 2026-06-04: --disable-dynamic-vram + --disable-async-offload promoted
+        # into default (previously nodynvram-only). Deliberate tradeoff:
+        # OOM-instead-of-offload-slowdown on oversized renders. If a render
+        # OOMs in default, the FIRST lever is removing these two flags (or
+        # shrinking the render), not raising reserve. The node cache stays ON
+        # — NEVER add --cache-none here (fatal for loop renders; see
+        # docs/reference/debug_tools.md).
         CMD_ARGS+=(
             "${PERF_ARGS[@]}"
             --reserve-vram 0.5
+            --disable-dynamic-vram
+            --disable-async-offload
         )
         ;;
 
@@ -136,8 +145,8 @@ case "$MODE" in
         )
         ;;
 
-    nodynvram)
-        echo "[start.sh] mode=nodynvram — clean baseline for kernel OOM testing (no dynamic VRAM, no async offload, no node cache)"
+    nodynvram|bench)
+        echo "[start.sh] mode=bench (nodynvram) — BENCH ONLY: default's no-dynvram flags + --cache-none + reserve 0 (NEVER for loop renders)"
         # Targets the "ComfyUI memory management is masking my kernel's actual
         # memory profile" scenario. Model load/unload between stages stays
         # normal (text encoder offloads after use, etc.), but during a forward

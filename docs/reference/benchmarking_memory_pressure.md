@@ -1,6 +1,6 @@
 # Benchmarking memory pressure on ComfyUI + LTX 2.3
 
-Last updated: 2026-05-26
+Last updated: 2026-06-04
 
 ## Role
 
@@ -69,7 +69,7 @@ Goal: compare sage routing modes (e.g. `auto` vs `auto_mask_aware`) under identi
 
 ## Removing the offload safety valve
 
-When you want "would this OOM without the loader catching it" signal, disable dynamic VRAM via `--disable-dynamic-vram`:
+As of 2026-06-04, `start.sh` `default` mode already passes `--disable-dynamic-vram --disable-async-offload` (node cache kept) — the manual flag below is only needed on launchers predating that change:
 
 ```bash
 bash start_experiment.sh default --disable-dynamic-vram
