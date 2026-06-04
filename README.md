@@ -11,9 +11,19 @@ Drives loop timing from integer-latent counts, freezes audio via
 `noise_mask=0`, pre-encodes prompts once outside the loop. Originally built this repo as a few helper nodes for experimenting with
 [kijai's LTX 2.3 long-loop extension](https://github.com/kijai/ComfyUI-NativeLooping_testing/blob/main/ltx23_long_loop_extension_test.json) - thanks to Kijai for all his work, and for giving me some fun ideas to explore.
 
+## Demos
+
+| | |
+|---|---|
+| <img src="assets/demo_heartbeat_loop.webp" width="420" alt="painted heart pulsing to a drum loop"> | <img src="assets/demo_dino_loop.webp" width="420" alt="dino stomping on the beat"> |
+| <sub>7s of one continuous **2:53 render** — a painted heart pulsing to a drum loop. Workflow: [`audio_reactive_loop.json`](example_workflows/audio_reactive_loop.json) · [writeup](docs/experimental/audio_reactive_workflows.md)</sub> | <sub>Same drumbeat, different init + effect — the stomps land on the beat. Same workflow, different image.</sub> |
+
+The audio is frozen and *drives* the picture — these aren't videos with music
+added after; the motion is generated against the waveform.
+
 **Three ways in:**
 
-- **"Just show me."** The [model-card examples](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context#examples) are short generated clips from the audio-steering side. The core music-video loop: open the default workflow ([Quick start](#quick-start)), drop a song + an image, run.
+- **"Just show me."** [Demos](#demos) above; more variants in the [workflow table](#workflow-variants) below. The [model-card examples](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context#examples) cover the audio-steering (IC-LoRA) side. To run one yourself: open the default workflow ([Quick start](#quick-start)), drop a song + an image, run.
 - **"I want to use it."** Quick start below, then the **docs hub: [`docs/README.md`](docs/README.md)** — the task-first index ("I want to do X, which doc?"). Power-user repo; assumes you know ComfyUI.
 - **"I want to verify, reproduce, or extend it."** Architecture walkthrough: [`docs/architecture_overview.md`](docs/architecture_overview.md), then per-node docstrings + [`docs/reference/`](docs/reference/). The audio IC-LoRA training story: [`docs/audio_iclora/index.md`](docs/audio_iclora/index.md) + the [trained adapters](#trained-adapters-audio-reference-ic-lora) below (data recipe + config + train fork). Invariants are enforced as code — the pytest suite and the workflow-topology audit (`scripts/audit_workflows.py`) run in CI.
 
