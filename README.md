@@ -4,12 +4,41 @@
   <img src="assets/hero.webp" alt="ComfyUI-AudioLoopHelper" width="500">
 </p>
 
-Last updated: 2026-06-03
+Last updated: 2026-06-04
+
+> [!NOTE]
+> **Experimental repo — it moves fast and changes often.** Treat these as
+> experimental nodes: fork it, customize it, or point your agent of choice at
+> the codebase and take the patterns you like (and skip the ones you don't).
 
 Custom ComfyUI nodes for full-length music video generation with LTX 2.3.
 Drives loop timing from integer-latent counts, freezes audio via
 `noise_mask=0`, pre-encodes prompts once outside the loop. Originally built this repo as a few helper nodes for experimenting with
 [kijai's LTX 2.3 long-loop extension](https://github.com/kijai/ComfyUI-NativeLooping_testing/blob/main/ltx23_long_loop_extension_test.json) - thanks to Kijai for all his work, and for giving me some fun ideas to explore.
+
+## Trained adapters (audio-reference IC-LoRA)
+
+Two cuts of the same 1000-step experiment, released as
+[**LTX-2.3-22b-IC-LoRA-Audio-Only-Context**](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context)
+— an IC-LoRA where the in-context reference is *only audio* (no image, no
+video). Load either with the audio IC-LoRA nodes via the single-pass workflow
+(see the [workflow table](#workflow-variants) below); background + node
+mechanics: [`docs/audio_iclora/index.md`](docs/audio_iclora/index.md).
+
+| Adapter | What it's supposed to do (in theory) | Suggested start |
+|---|---|---|
+| [`cross_modal_step_01000`](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context/blob/main/cross_modal_step_01000.safetensors) | Adapts the audio stack **and** the cross-modal bridges — gives the audio reference a direct path into the video stream. Default pick if you want the audio to move the picture (mannerisms, energy, expression timing). | Strength ~0.5 (working band ~0.3–0.75, reference-dependent). With the per-stream loader, push `bridge_strength` above `audio_strength` to amplify the audio→video coupling. |
+| [`audio_only_step_01000`](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context/blob/main/audio_only_step_01000.safetensors) | Adapts the audio stack only — the reference shapes the generated **audio**; the video follows via the frozen base coupling. Subtler, more emergent video effect; perturbs the base video path least. | Strength ~0.5 (same band). No bridge keys, so `bridge_strength` is inert. |
+
+Both are early proof-of-concepts: many variables influence the end result
+(reference level/quality/content, prompt, seed), each cut has its own strengths,
+weaknesses, and tradeoffs, and both may behave differently when retrained on a
+better dataset. Reproduce or extend:
+[data recipe](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context/blob/main/data_recipe.md) ·
+[training config](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context/blob/main/train_config.yaml) ·
+[LTX-2 train fork (audio-only IC-LoRA strategy)](https://github.com/fblissjr/LTX-2/tree/audio-guidance-iclora-vtv).
+
+<sub>First proof-of-concept run (the pitch "Helium" probe): [LTX-2.3-22b-IC-LoRA-Helium](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Helium).</sub>
 
 ## Demos
 
@@ -21,6 +50,15 @@ https://github.com/user-attachments/assets/ed1657c5-35a7-48e0-b384-7e58b4aafafe
 <sub>30s of one continuous **2:53 render** — a painted heart pulsing to a drum
 loop. Workflow: [`audio_reactive_loop.json`](example_workflows/audio_reactive_loop.json) ·
 [writeup](docs/experimental/audio_reactive_workflows.md)</sub>
+
+<details>
+<summary><b>▶ Audio-reactive, second take</b></summary>
+
+https://github.com/user-attachments/assets/3760b301-8fc7-4b43-8f24-3128558cff69
+
+<sub>Same drumbeat as the heart, different init — the stomps land on the beat.</sub>
+
+</details>
 
 <details>
 <summary><b>▶ One 5-second audio clip, four takes — a sketch line drives the whole scene</b></summary>
@@ -64,20 +102,11 @@ differs). The audio is the change — and it redraws pacing, motion, and mood.</
 
 </details>
 
-<details>
-<summary><b>▶ Audio-reactive, second take</b></summary>
-
-https://github.com/user-attachments/assets/3760b301-8fc7-4b43-8f24-3128558cff69
-
-<sub>Same drumbeat as the heart, different init — the stomps land on the beat.</sub>
-
-</details>
-
 **Three ways in:**
 
 - **"Just show me."** [Demos](#demos) above; more variants in the [workflow table](#workflow-variants) below. The [model-card examples](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context#examples) cover the audio-steering (IC-LoRA) side. To run one yourself: open the default workflow ([Quick start](#quick-start)), drop a song + an image, run.
 - **"I want to use it."** Quick start below, then the **docs hub: [`docs/README.md`](docs/README.md)** — the task-first index ("I want to do X, which doc?"). Power-user repo; assumes you know ComfyUI.
-- **"I want to verify, reproduce, or extend it."** Architecture walkthrough: [`docs/architecture_overview.md`](docs/architecture_overview.md), then per-node docstrings + [`docs/reference/`](docs/reference/). The audio IC-LoRA training story: [`docs/audio_iclora/index.md`](docs/audio_iclora/index.md) + the [trained adapters](#trained-adapters-audio-reference-ic-lora) below (data recipe + config + train fork). Invariants are enforced as code — the pytest suite and the workflow-topology audit (`scripts/audit_workflows.py`) run in CI.
+- **"I want to verify, reproduce, or extend it."** Architecture walkthrough: [`docs/architecture_overview.md`](docs/architecture_overview.md), then per-node docstrings + [`docs/reference/`](docs/reference/). The audio IC-LoRA training story: [`docs/audio_iclora/index.md`](docs/audio_iclora/index.md) + the [trained adapters](#trained-adapters-audio-reference-ic-lora) above (data recipe + config + train fork). Invariants are enforced as code — the pytest suite and the workflow-topology audit (`scripts/audit_workflows.py`) run in CI.
 
 ## Quick start
 
@@ -117,16 +146,20 @@ lower for expressivity) are annotated in the workflow itself. For the rest:
 | [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes) | Set/Get nodes, LTX2_NAG, LTXVImgToVideoInplaceKJ, ImageResizeKJv2, and more |
 | [ComfyUI-VideoHelperSuite](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite) | VHS_LoadVideo, VHS_VideoCombine |
 
-**Sage attention:** shipped workflows wire `AudioLoopHelperSageAttention` in
-`auto` mode, built for the sister fork
-[fblissjr/SageAttention-ada](https://github.com/fblissjr/SageAttention-ada)
-(recommended on Ada / RTX 40xx). No build, or incompatible hardware? Bypass the
-node (`mode=4`) or swap in KJNodes sage. Deep dive: [`docs/reference/sage_attention.md`](docs/reference/sage_attention.md).
-
 **Optional:** [ComfyUI-MelBandRoFormer](https://github.com/DrJKL/ComfyUI-MelBandRoFormer)
 for vocal separation (bypassed by default). Companion repo:
 [fblissjr/comfy-workbench](https://github.com/fblissjr/comfy-workbench)
 (shared tooling + conventions across my ComfyUI work).
+
+## SageAttention fork (optional)
+
+The sister fork [fblissjr/SageAttention-ada](https://github.com/fblissjr/SageAttention-ada)
+is tested and optimized for **RTX 4090 / Ada** architectures. **You don't need
+it** — unless you use our sage node: the shipped workflows wire
+`AudioLoopHelperSageAttention` (`auto` mode), which expects this build. No
+build, or different hardware? Bypass the node (`mode=4`) or swap in KJNodes
+sage — everything else works without it. Deep dive:
+[`docs/reference/sage_attention.md`](docs/reference/sage_attention.md).
 
 ## Workflow variants
 
@@ -139,35 +172,12 @@ Shipped at top-level `example_workflows/`:
 | `audio-loop-music-video_latent_keyframe.json` | **Per-section keyframe re-anchoring** — combats drift on long renders; scene changes synced to song structure. | [`example_workflows/working_docs/keyframe_iter_anchor_design.md`](example_workflows/working_docs/keyframe_iter_anchor_design.md) |
 | `audio-loop-music-video_retake.json` | **Regenerate one section** — re-roll a `[start, end]` window, rest held as fixed context. | [`docs/guides/retake_guide.md`](docs/guides/retake_guide.md) |
 | `audio_reactive_loop.json` | **Audio-driven motion** — init image animated so its motion tracks the (frozen) audio. | [`docs/experimental/audio_reactive_workflows.md`](docs/experimental/audio_reactive_workflows.md) |
-| `audio-ic-lora_single-pass.json` | **Audio-reference IC-LoRA (single pass)** — steer a render from a reference audio clip, using the [trained adapters](#trained-adapters-audio-reference-ic-lora) below. | [`docs/audio_iclora/index.md`](docs/audio_iclora/index.md) |
+| `audio-ic-lora_single-pass.json` | **Audio-reference IC-LoRA (single pass)** — steer a render from a reference audio clip, using the [trained adapters](#trained-adapters-audio-reference-ic-lora) above. | [`docs/audio_iclora/index.md`](docs/audio_iclora/index.md) |
 
 More variants in `example_workflows/experimental/` (paired with run logs in
 `docs/experiments/`; inventory in [`docs/experimental/README.md`](docs/experimental/README.md));
 retired ones in `example_workflows/archive/`. Design notes for the shipped
 variants live in [`example_workflows/working_docs/`](example_workflows/working_docs/).
-
-## Trained adapters (audio-reference IC-LoRA)
-
-Two cuts of the same 1000-step experiment, released as
-[**LTX-2.3-22b-IC-LoRA-Audio-Only-Context**](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context)
-— an IC-LoRA where the in-context reference is *only audio* (no image, no
-video). Load either with the audio IC-LoRA nodes via the single-pass workflow
-above; background + node mechanics: [`docs/audio_iclora/index.md`](docs/audio_iclora/index.md).
-
-| Adapter | What it's supposed to do (in theory) | Suggested start |
-|---|---|---|
-| [`cross_modal_step_01000`](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context/blob/main/cross_modal_step_01000.safetensors) | Adapts the audio stack **and** the cross-modal bridges — gives the audio reference a direct path into the video stream. Default pick if you want the audio to move the picture (mannerisms, energy, expression timing). | Strength ~0.5 (working band ~0.3–0.75, reference-dependent). With the per-stream loader, push `bridge_strength` above `audio_strength` to amplify the audio→video coupling. |
-| [`audio_only_step_01000`](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context/blob/main/audio_only_step_01000.safetensors) | Adapts the audio stack only — the reference shapes the generated **audio**; the video follows via the frozen base coupling. Subtler, more emergent video effect; perturbs the base video path least. | Strength ~0.5 (same band). No bridge keys, so `bridge_strength` is inert. |
-
-Both are early proof-of-concepts: many variables influence the end result
-(reference level/quality/content, prompt, seed), each cut has its own strengths,
-weaknesses, and tradeoffs, and both may behave differently when retrained on a
-better dataset. Reproduce or extend:
-[data recipe](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context/blob/main/data_recipe.md) ·
-[training config](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context/blob/main/train_config.yaml) ·
-[LTX-2 train fork (audio-only IC-LoRA strategy)](https://github.com/fblissjr/LTX-2/tree/audio-guidance-iclora-vtv).
-
-<sub>First proof-of-concept run (the pitch "Helium" probe): [LTX-2.3-22b-IC-LoRA-Helium](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Helium).</sub>
 
 ## Validation + debugging
 
