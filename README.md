@@ -13,13 +13,60 @@ Drives loop timing from integer-latent counts, freezes audio via
 
 ## Demos
 
-| | |
-|---|---|
-| <img src="assets/demo_heartbeat_loop.webp" width="420" alt="painted heart pulsing to a drum loop"> | <img src="assets/demo_dino_loop.webp" width="420" alt="dino stomping on the beat"> |
-| <sub>7s of one continuous **2:53 render** — a painted heart pulsing to a drum loop. Workflow: [`audio_reactive_loop.json`](example_workflows/audio_reactive_loop.json) · [writeup](docs/experimental/audio_reactive_workflows.md)</sub> | <sub>Same drumbeat, different init + effect — the stomps land on the beat. Same workflow, different image.</sub> |
+Click play — **sound on**. The audio is frozen and *drives* the picture; the
+motion is generated against the waveform, not added after.
 
-The audio is frozen and *drives* the picture — these aren't videos with music
-added after; the motion is generated against the waveform.
+https://github.com/user-attachments/assets/49620f67-2403-438b-87e1-1ed9e16d0df4
+
+<sub>30s of one continuous **2:51 render** from the default workflow
+([`audio-loop-music-video_latent.json`](example_workflows/audio-loop-music-video_latent.json)) —
+one song + one init image + a timestamp prompt schedule.</sub>
+
+<details>
+<summary><b>▶ One image, three songs — the audio reshapes everything</b></summary>
+
+https://github.com/user-attachments/assets/80b02031-87f5-44fe-9448-da0021339494
+
+https://github.com/user-attachments/assets/e276fb04-b411-4d38-b03b-2ee30122f7e7
+
+https://github.com/user-attachments/assets/dda412ac-229f-4b1a-8f0f-3ba8b2809807
+
+<sub>Three full renders through the default workflow from the **same single init
+image**; the first two share essentially the same prompt (the astronaut run
+differs). The audio is the change — and it redraws pacing, motion, and mood.</sub>
+
+</details>
+
+<details>
+<summary><b>▶ One 5-second audio clip, four takes — a sketch line drives the whole scene</b></summary>
+
+https://github.com/user-attachments/assets/5464d767-85ba-4827-b448-5e93a2fd8871
+
+https://github.com/user-attachments/assets/c3149832-b830-4013-8701-d562ee91eceb
+
+https://github.com/user-attachments/assets/a96cc95c-3268-4d95-a45d-6e3c0d17dcbb
+
+https://github.com/user-attachments/assets/e198faa1-4fbf-4e88-996d-7af7634e8144
+
+<sub>Four generations from the **same ~5s comedy-sketch audio + one init image** —
+the audio alone sets the performance: timing, delivery, gesture.</sub>
+
+</details>
+
+<details>
+<summary><b>▶ Audio-reactive variant — the waveform drives the subject's motion</b></summary>
+
+https://github.com/user-attachments/assets/ed1657c5-35a7-48e0-b384-7e58b4aafafe
+
+<sub>30s of a continuous 2:53 render — a painted heart pulsing to a drum loop.
+Workflow: [`audio_reactive_loop.json`](example_workflows/audio_reactive_loop.json) ·
+[writeup](docs/experimental/audio_reactive_workflows.md)</sub>
+
+https://github.com/user-attachments/assets/3760b301-8fc7-4b43-8f24-3128558cff69
+
+<sub>Same drumbeat, different init — the stomps land on the beat.</sub>
+
+</details>
 
 **Three ways in:**
 
