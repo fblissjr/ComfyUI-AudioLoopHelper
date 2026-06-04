@@ -1,6 +1,6 @@
 #!/bin/bash
 # ComfyUI startup script — canonical deploy template.
-# Last updated: 2026-05-26
+# Last updated: 2026-06-04
 #
 # Tuned for 24GB-class consumer cards (RTX 4090 etc.) running LTX 2.3 /
 # WAN2.1 / similar fp8-scaled video diffusion models. Adjust the mode
@@ -94,23 +94,31 @@ PERF_ARGS=(
     --mmap-torch-files
 )
 
+# Dynamic-VRAM kill switch shared by default + bench. OOM-instead-of-offload:
+#   --disable-dynamic-vram  : kills aimdo page-level offload during inference
+#   --disable-async-offload : kills async weight streams (the lower-level mechanism)
+# Bench's "default's no-dynvram flags" claim holds structurally because both
+# modes spread this same array.
+NODYNVRAM_ARGS=(
+    --disable-dynamic-vram
+    --disable-async-offload
+)
+
 CMD_ARGS=("${BASE_ARGS[@]}")
 
 case "$MODE" in
     default)
         echo "[start.sh] mode=default — LTX 2.3 / WAN2.1, no dynamic VRAM (perf flags + 0.5GB reserve, node cache ON)"
-        # 2026-06-04: --disable-dynamic-vram + --disable-async-offload promoted
-        # into default (previously nodynvram-only). Deliberate tradeoff:
-        # OOM-instead-of-offload-slowdown on oversized renders. If a render
-        # OOMs in default, the FIRST lever is removing these two flags (or
-        # shrinking the render), not raising reserve. The node cache stays ON
-        # — NEVER add --cache-none here (fatal for loop renders; see
-        # docs/reference/debug_tools.md).
+        # 2026-06-04: NODYNVRAM_ARGS promoted into default (previously
+        # nodynvram-only). Deliberate tradeoff: OOM-instead-of-offload-slowdown
+        # on oversized renders. If a render OOMs in default, the FIRST lever is
+        # removing NODYNVRAM_ARGS (or shrinking the render), not raising
+        # reserve. The node cache stays ON — NEVER add --cache-none here
+        # (fatal for loop renders; see docs/reference/debug_tools.md).
         CMD_ARGS+=(
             "${PERF_ARGS[@]}"
             --reserve-vram 0.5
-            --disable-dynamic-vram
-            --disable-async-offload
+            "${NODYNVRAM_ARGS[@]}"
         )
         ;;
 
@@ -150,11 +158,9 @@ case "$MODE" in
         # Targets the "ComfyUI memory management is masking my kernel's actual
         # memory profile" scenario. Model load/unload between stages stays
         # normal (text encoder offloads after use, etc.), but during a forward
-        # pass nothing shuffles weights — so if a kernel's per-call working
-        # set exceeds budget, you OOM cleanly instead of seeing offload
-        # slowdown. Notes:
-        #   --disable-dynamic-vram  : kills aimdo page-level offload during inference
-        #   --disable-async-offload : kills async weight streams (the lower-level mechanism)
+        # pass nothing shuffles weights (NODYNVRAM_ARGS, defined above) — so if
+        # a kernel's per-call working set exceeds budget, you OOM cleanly
+        # instead of seeing offload slowdown. Notes:
         #   --cache-none            : no node-output cache between renders (cleaner repro).
         #                             WARNING: catastrophic for TensorLoop/looping
         #                             workflows — see the cache-none guard below esac.
@@ -165,8 +171,7 @@ case "$MODE" in
         CMD_ARGS+=(
             "${PERF_ARGS[@]}"
             --reserve-vram 0
-            --disable-dynamic-vram
-            --disable-async-offload
+            "${NODYNVRAM_ARGS[@]}"
             --cache-none
         )
         ;;

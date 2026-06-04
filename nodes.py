@@ -2945,12 +2945,12 @@ def _required_pixel_length(
     """Smallest valid PIXEL length for an `EmptyLTXVLatentVideo` that holds a
     time-spaced keyframe batch with no keyframe dropped.
 
-    The last keyframe (index `batch_size - 1`) lands at pixel frame
-    `round((batch_size - 1) * seconds_per_keyframe * output_fps)` — identical to
-    `_keyframe_guide_placements`' per-keyframe math, so this sizes the latent to
-    hold exactly that frame. Required length = last_target_px + 1 (1-based count)
-    + `round(tail_seconds * output_fps)` extra room, then snapped UP to satisfy
-    the video VAE temporal grid `(length - 1) % 8 == 0`.
+    Asks `_keyframe_guide_placements` (the canonical placement seam) for the
+    last keyframe's pixel frame — with an unbounded latent so nothing drops —
+    which includes the strictly-increasing collision bump for dense keyframes
+    (`seconds_per_keyframe * output_fps < 1`). Required length = last frame + 1
+    (1-based count) + `round(tail_seconds * output_fps)` extra room, then
+    snapped UP to satisfy the video VAE temporal grid `(length - 1) % 8 == 0`.
 
     Snap is always UP, never down: rounding down would re-introduce the very
     keyframe drop this node exists to prevent. `batch_size <= 0` is degenerate
@@ -2958,11 +2958,18 @@ def _required_pixel_length(
 
     Pure (no torch / no ComfyUI) so the sizing math is unit-testable.
     """
-    bs = max(0, int(batch_size))
-    last_target_px = round((bs - 1) * seconds_per_keyframe * output_fps) if bs >= 1 else 0
+    placements = _keyframe_guide_placements(
+        batch_size=batch_size,
+        n_latent_frames=sys.maxsize,  # unbounded: sizing wants the no-drop last frame
+        output_fps=output_fps,
+        seconds_per_keyframe=seconds_per_keyframe,
+        temporal_scale=LTX_TEMPORAL_SCALE,
+    )
+    last_target_px = placements[-1][1] if placements else 0
     raw = last_target_px + 1 + round(tail_seconds * output_fps)
-    # Snap UP to the next 8n+1 (== smallest L >= raw with (L-1) % 8 == 0).
-    snapped = ((raw - 1 + 7) // 8) * 8 + 1
+    # Snap UP: smallest L >= raw with (L - 1) % LTX_TEMPORAL_SCALE == 0.
+    scale = LTX_TEMPORAL_SCALE
+    snapped = ((raw - 1 + scale - 1) // scale) * scale + 1
     return max(9, snapped)
 
 

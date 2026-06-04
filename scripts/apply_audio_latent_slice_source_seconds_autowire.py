@@ -1,6 +1,6 @@
 """apply_audio_latent_slice_source_seconds_autowire.
 
-Last updated: 2026-05-04
+Last updated: 2026-06-04
 
 Replaces the hardcoded `source_seconds=300` widget on AudioLatentSlice
 with a wire from `AudioLoopController.audio_duration`. Eliminates the
@@ -58,7 +58,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -117,32 +116,15 @@ def _apply(ed: WorkflowEditor) -> tuple[bool, str]:
     if _find_existing_input_slot(ed) is not None:
         return False, "already applied (subgraph already has 'source_seconds' input)"
 
-    sg = ed.get_subgraph(0)
-    assert sg is not None
-
-    # 1. Append new input slot to subgraph schema.
-    sg_inputs = sg.setdefault("inputs", [])
-    new_sg_slot = len(sg_inputs)
-    sg_inputs.append({
-        "id": str(uuid.uuid4()),
-        "name": NEW_SUBGRAPH_INPUT_NAME,
-        "type": "FLOAT",
-        "linkIds": [],
-        "localized_name": NEW_SUBGRAPH_INPUT_NAME,
-        "label": NEW_SUBGRAPH_INPUT_LABEL,
-        "pos": [-3015, 3850],
-    })
-
-    # 2. Append matching invoker input slot (top-level).
+    # 1+2. Append boundary input + matching invoker slot (shared editor helper).
+    new_sg_slot = ed.add_subgraph_input(
+        NEW_SUBGRAPH_INPUT_NAME, "FLOAT",
+        label=NEW_SUBGRAPH_INPUT_LABEL,
+        pos=[-3015, 3850],
+    )
     invoker = ed.find_subgraph_invoker(0)
     assert invoker is not None
-    invoker_inputs = invoker.setdefault("inputs", [])
-    new_invoker_slot = len(invoker_inputs)
-    invoker_inputs.append({
-        "name": NEW_SUBGRAPH_INPUT_NAME,
-        "type": "FLOAT",
-        "link": None,
-    })
+    new_invoker_slot = len(invoker["inputs"]) - 1  # the mirror just appended
 
     # 3. Top-level link: AudioLoopController.audio_duration → invoker[new_slot]
     ed.add_link(

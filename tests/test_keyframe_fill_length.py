@@ -56,7 +56,7 @@ class TestRequiredPixelLength:
         bs, fps, spk = 7, 24.0, 0.7
         length = self._len(batch_size=bs, output_fps=fps, seconds_per_keyframe=spk, tail_seconds=0.0)
         placements = _keyframe_guide_placements(
-            batch_size=bs, n_latent_frames=length, output_fps=fps,
+            batch_size=bs, n_latent_frames=(length - 1) // 8 + 1, output_fps=fps,
             seconds_per_keyframe=spk, temporal_scale=8,
         )
         # All keyframes fit (none dropped) once the latent is this long.
@@ -65,6 +65,22 @@ class TestRequiredPixelLength:
         # length is the smallest valid 8n+1 >= last_px + 1.
         assert length >= last_px + 1
         assert length - 8 < last_px + 1  # not over-sized by a whole grid step
+
+    def test_dense_keyframes_collision_bump_is_accounted_for(self):
+        # spk*fps < 1: round(i*spk*fps) collides repeatedly, and
+        # _keyframe_guide_placements bumps frames to strictly increasing —
+        # the REAL last frame is bs-1=29, far past the naive
+        # round((bs-1)*spk*fps)=7. The sizing helper must hold the bumped
+        # placement (no drop), not the naive formula.
+        from nodes import _keyframe_guide_placements
+        bs, fps, spk = 30, 25.0, 0.01
+        length = self._len(batch_size=bs, output_fps=fps, seconds_per_keyframe=spk)
+        placements = _keyframe_guide_placements(
+            batch_size=bs, n_latent_frames=(length - 1) // 8 + 1, output_fps=fps,
+            seconds_per_keyframe=spk, temporal_scale=8,
+        )
+        assert len(placements) == bs  # no keyframe dropped at the computed length
+        assert (length - 1) % 8 == 0
 
     def test_batch_size_one_is_first_frame_plus_tail(self):
         # last px = round(0*...) = 0 -> +1 = 1 -> snap UP to 9 (minimal valid).

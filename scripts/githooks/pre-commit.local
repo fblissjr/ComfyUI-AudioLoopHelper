@@ -3,7 +3,7 @@
 #
 # WHY: both check-classes regressed silently in the past — a UI re-save
 # shipped orphan output-link caches three commits in a row, and a CLAUDE.md
-# addition blew the 200-line/30KB budget — because nothing gated the commit.
+# addition blew the size budget — because nothing gated the commit.
 # CI catches them later; this catches them at commit time, from ANY session.
 #
 # INSTALL (per clone): the path-privacy wrapper at .git/hooks/pre-commit runs
@@ -34,13 +34,15 @@ if [ -n "$wf_staged" ]; then
   fi
 fi
 
-# 2) Root CLAUDE.md budget (200 lines / 30KB) when CLAUDE.md is staged.
+# 2) Root CLAUDE.md size budget when CLAUDE.md is staged. The caps live in
+#    tests/test_claude_md_budget.py (single source of truth) — not restated here.
 if printf '%s\n' "$staged" | grep -qx 'CLAUDE.md'; then
   if ! uv run --group dev --group analysis python -m pytest \
       "tests/test_claude_md_budget.py::test_root_claude_md_within_budget" \
       -q --rootdir=. >/dev/null 2>&1; then
     echo "" >&2
-    echo "pre-commit: root CLAUDE.md is over its 200-line/30KB budget." >&2
+    echo "pre-commit: root CLAUDE.md is over its size budget" >&2
+    echo "(caps: tests/test_claude_md_budget.py — run it for the numbers)." >&2
     echo "Trim per .claude/CLAUDE.md governance (new rule in = old rule out)." >&2
     exit 1
   fi
