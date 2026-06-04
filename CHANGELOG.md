@@ -7,6 +7,19 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Timestep-range gate on the Advanced audio IC-LoRA guide.**
+  `reference_start_percent` / `reference_end_percent` apply the in-context
+  reference only over a band of the denoise schedule; outside the band the ref
+  tokens vanish from the model call entirely (per-entry conditioning split —
+  exactly one entry active per sampler step, same percent→sigma path as stock
+  `ConditioningSetTimestepRange`). Defaults (0, 1) are byte-identical to the
+  ungated path. Ships neutral by design: the gate is the instrument for
+  locating where the reference bites, not a baked-in band.
+- **`attach_to_negative` toggle on both audio IC-LoRA guides.** Default `True`
+  (today's attach-to-both behavior, a no-op at CFG=1). Off keeps the negative
+  conditioning ref-free, making the CFG-analog reference-fidelity dial
+  expressible on the full base — `(with-ref, without-ref)` into a `CFGGuider`
+  (`docs/reference/cfg_analog_amplification.md`).
 - **`Keyframe Fill Length` node (`KeyframeFillLength`).** Computes the
   `EmptyLTXVLatentVideo` length (PIXEL frames) a time-spaced keyframe batch
   needs, snapped UP to the `(length - 1) % 8 == 0` grid. Wire its `length`
@@ -38,6 +51,12 @@ This project uses [Semantic Versioning](https://semver.org/).
   returns as a Compose-editor property. Not referenced by any shipped workflow.
 
 ### Changed
+- **Audio IC-LoRA loader strengths default to 0.5** (was 1.0) on
+  `LTXAudioICLoRALoader.strength_model` and
+  `LTXAudioICLoRALoaderPerStream.audio_strength` / `.bridge_strength`, with the
+  working band (~0.3–0.75 for the released identity checkpoints; garbles above)
+  in the tooltips. Saved workflows are unaffected (widget values serialize);
+  only newly added nodes pick up the new default.
 - **Retired the false latent-volume "artifact ceiling"; rebased to an
   informational VRAM advisory.** LTX-2 reference research confirmed there is no
   hard model-side latent-volume/token ceiling — the only hard rules are grid

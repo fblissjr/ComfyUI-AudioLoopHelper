@@ -1,4 +1,4 @@
-Last updated: 2026-06-02
+Last updated: 2026-06-04
 
 # Audio-Only-Context IC-LoRA (voice -> identity / mannerism)
 
@@ -48,11 +48,15 @@ strength, not CFG, is the only inference amplifier):
   keeping the audio modules in band. An audio-only LoRA has no bridge keys, so `bridge_strength` is then
   a no-op. Same zero-bind trust gate as the debug loader.
 - **`LTXAddAudioICLoRAGuideAdvanced`**: the basic guide plus `reference_window_sec` (trim the reference;
-  ~3.5 s matches training) and `reference_scale` (scale the encoded reference latent magnitude). Both
-  default to the basic behavior. The parity-locked bits (negative-RoPE offset, patchify layout) are
-  untouched. There is deliberately **no** reference-strength / attention-strength knob: the model reads
-  the reference tokens with no scalar applied, so such a knob would be a silent no-op without a
-  model-side change.
+  ~3.5 s matches training), `reference_scale` (scale the encoded reference latent magnitude),
+  `attach_to_negative` (off = keep the negative conditioning ref-free, the arm the CFG-analog
+  amplification trick needs on the full base; a no-op at CFG=1), and `reference_start_percent` /
+  `reference_end_percent` (gate the reference to a band of the denoise schedule — outside the band the
+  ref tokens vanish from the model call entirely, via a per-entry timestep split; on the 8-step
+  distilled sampler the band resolves to ~12.5% increments). All default to the basic behavior. The
+  parity-locked bits (negative-RoPE offset, patchify layout) are untouched. There is deliberately
+  **no** reference-strength / attention-strength knob: the model reads the reference tokens with no
+  scalar applied, so such a knob would be a silent no-op without a model-side change.
 - **`LTXLoadComposeReferenceAudio`** ("Compose Reference Audio"): the reference loader (replaces
   Load Audio). A visual waveform editor for picking one or more (non-contiguous) slices of the
   reference clip, plus an **Auto-find hook** button that drops a slice on the loudest sustained

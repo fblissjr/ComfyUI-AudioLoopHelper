@@ -153,12 +153,52 @@ def trim_reference_waveform(waveform: torch.Tensor, sample_rate: int, seconds: f
     return waveform[..., start:end]
 
 
-def _encode_and_attach_reference(positive, negative, audio_vae, waveform, sr, reference_scale: float = 1.0, log_tag: str = "GUIDE"):
+def split_conditioning_for_reference_band(cond, ref_audio, start_percent: float, end_percent: float):
+    """Per-entry timestep-range split: for each incoming `[tensor, options]` entry emit (i) a copy
+    WITH `ref_audio` gated to `[start_percent, end_percent]` and (ii) bare complement copies covering
+    `[0, start]` and `[end, 1]` (zero-width segments skipped). comfy's sampler activates exactly one
+    of these per step (`get_area_and_mult` skips entries whose timestep range excludes the step;
+    percents convert to sigmas downstream, same path as stock ConditioningSetTimestepRange), so the
+    ref tokens vanish from the model call outside the band — no averaging dilution from a coexisting
+    ungated entry. A step landing exactly on a boundary sigma activates both sides for that one step;
+    benign (predictions average), deliberately not engineered around.
+
+    An empty band (start >= end) emits no ref entry at all — complements tile [0, 1] and the render
+    is ref-free. Complements drop any pre-existing `ref_audio` (chained guides) so a stale ref can't
+    defeat the gate. Copies share the entry TENSOR and copy only the options dict, mirroring
+    node_helpers.conditioning_set_values. Caller contract: feed UNGATED conditioning — pre-existing
+    start/end_percent values are overwritten, not intersected."""
+    end_percent = max(end_percent, start_percent)
+    out = []
+    for tensor, opts in cond:
+        if end_percent > start_percent:
+            band = dict(opts)
+            band["ref_audio"] = ref_audio
+            band["start_percent"] = start_percent
+            band["end_percent"] = end_percent
+            out.append([tensor, band])
+        for seg_start, seg_end in ((0.0, start_percent), (end_percent, 1.0)):
+            if seg_end <= seg_start:
+                continue
+            bare = dict(opts)
+            bare.pop("ref_audio", None)
+            bare["start_percent"] = seg_start
+            bare["end_percent"] = seg_end
+            out.append([tensor, bare])
+    return out
+
+
+def _encode_and_attach_reference(positive, negative, audio_vae, waveform, sr, reference_scale: float = 1.0, log_tag: str = "GUIDE", attach_to_negative: bool = True, band_start_percent: float = 0.0, band_end_percent: float = 1.0):
     """Shared body for the audio IC-LoRA guide nodes: widen mono->stereo, resample to the VAE's
     sample rate, encode channels-last, optionally scale the latent magnitude, patchify, and attach as
     `ref_audio` tokens on pos+neg. The stereo -> resample -> movedim(1,-1) sequence mirrors stock
     VAEEncodeAudio EXACTLY (the train/inference parity that makes the trained LoRA read the reference);
-    it lives here once so the basic and advanced guides can't drift. The caller does any trimming."""
+    it lives here once so the basic and advanced guides can't drift. The caller does any trimming.
+    attach_to_negative=False returns the negative untouched — the ref-free arm the CFG-analog
+    amplification trick needs (docs/reference/cfg_analog_amplification.md); a no-op at CFG=1.
+    A strict-subrange band (band_start/end_percent != 0/1) routes through
+    split_conditioning_for_reference_band instead of the plain attach; (0, 1) is byte-identical
+    to the ungated path (no splitting, no timestep stamps)."""
     import torchaudio
 
     stereo = ensure_stereo(waveform)
@@ -173,9 +213,18 @@ def _encode_and_attach_reference(positive, negative, audio_vae, waveform, sr, re
         samples = samples * reference_scale
     _log(f"{log_tag}: encoded ref latent {tuple(samples.shape)} dtype {samples.dtype} (scale={reference_scale})")
     ref_audio = patchify_audio_latent(samples)
-    _log(f"{log_tag}: patchified ref tokens {tuple(ref_audio['tokens'].shape)} (b,t,c*f) -> attach to pos+neg")
-    positive = node_helpers.conditioning_set_values(positive, {"ref_audio": ref_audio})
-    negative = node_helpers.conditioning_set_values(negative, {"ref_audio": ref_audio})
+    targets = "pos+neg" if attach_to_negative else "pos only"
+    gated = (band_start_percent, band_end_percent) != (0.0, 1.0)
+    band = f" gated to [{band_start_percent}, {band_end_percent}]" if gated else ""
+    _log(f"{log_tag}: patchified ref tokens {tuple(ref_audio['tokens'].shape)} (b,t,c*f) -> attach to {targets}{band}")
+    if gated:
+        positive = split_conditioning_for_reference_band(positive, ref_audio, band_start_percent, band_end_percent)
+        if attach_to_negative:
+            negative = split_conditioning_for_reference_band(negative, ref_audio, band_start_percent, band_end_percent)
+    else:
+        positive = node_helpers.conditioning_set_values(positive, {"ref_audio": ref_audio})
+        if attach_to_negative:
+            negative = node_helpers.conditioning_set_values(negative, {"ref_audio": ref_audio})
     return io.NodeOutput(positive, negative)
 
 
@@ -214,6 +263,13 @@ class LTXAddAudioICLoRAGuide(io.ComfyNode):
                     tooltip="Raw reference audio (e.g. a pitch tone, or a voice sample). "
                     "Mono is fine — it is widened to stereo for the VAE.",
                 ),
+                io.Boolean.Input(
+                    "attach_to_negative", default=True,
+                    tooltip="Also attach the reference to the NEGATIVE conditioning (today's "
+                    "behavior; a no-op at CFG=1). Turn off to keep the negative ref-free — "
+                    "feeding (with-ref, without-ref) into a CFGGuider on the full base turns "
+                    "CFG into a reference-fidelity dial (CFG-analog amplification).",
+                ),
             ],
             outputs=[
                 io.Conditioning.Output(
@@ -226,11 +282,12 @@ class LTXAddAudioICLoRAGuide(io.ComfyNode):
         )
 
     @classmethod
-    def execute(cls, positive, negative, audio_vae, reference_audio) -> io.NodeOutput:
+    def execute(cls, positive, negative, audio_vae, reference_audio, attach_to_negative=True) -> io.NodeOutput:
         # Encode the raw reference + attach as ref_audio tokens (the model places them at negative
         # RoPE positions as out-of-timeline context). Shared encode path -> _encode_and_attach_reference.
         return _encode_and_attach_reference(
-            positive, negative, audio_vae, reference_audio["waveform"], reference_audio["sample_rate"]
+            positive, negative, audio_vae, reference_audio["waveform"], reference_audio["sample_rate"],
+            attach_to_negative=attach_to_negative,
         )
 
 
@@ -281,7 +338,12 @@ class LTXAudioICLoRALoader(io.ComfyNode):
             inputs=[
                 io.Model.Input("model"),
                 io.Combo.Input("lora_name", options=_folder_paths().get_filename_list("loras")),
-                io.Float.Input("strength_model", default=1.0, min=-100.0, max=100.0, step=0.01),
+                io.Float.Input(
+                    "strength_model", default=0.5, min=-100.0, max=100.0, step=0.01,
+                    tooltip="LoRA strength for all modules. Working band ~0.3-0.75 for the "
+                    "released identity checkpoints; garbles above. The ceiling depends on the "
+                    "reference, so sweep within the band.",
+                ),
             ],
             outputs=[io.Model.Output("model")],
         )
@@ -422,14 +484,17 @@ class LTXAudioICLoRALoaderPerStream(io.ComfyNode):
                 io.Model.Input("model"),
                 io.Combo.Input("lora_name", options=_folder_paths().get_filename_list("loras")),
                 io.Float.Input(
-                    "audio_strength", default=1.0, min=-100.0, max=100.0, step=0.01,
-                    tooltip="Strength for the audio-only modules (audio_attn1/2, audio_ff).",
+                    "audio_strength", default=0.5, min=-100.0, max=100.0, step=0.01,
+                    tooltip="Strength for the audio-only modules (audio_attn1/2, audio_ff). "
+                    "Working band ~0.3-0.75 for the released identity checkpoints; garbles "
+                    "above; ceiling depends on the reference.",
                 ),
                 io.Float.Input(
-                    "bridge_strength", default=1.0, min=-100.0, max=100.0, step=0.01,
+                    "bridge_strength", default=0.5, min=-100.0, max=100.0, step=0.01,
                     tooltip="Strength for the cross-modal bridge (audio_to_video_attn / "
                     "video_to_audio_attn) -- the voice->face path. Push above audio_strength to "
-                    "amplify identity transfer. No-op for an audio-only LoRA (no bridge keys).",
+                    "amplify identity transfer (band ~0.3-0.75, same garble ceiling). No-op for "
+                    "an audio-only LoRA (no bridge keys).",
                 ),
             ],
             outputs=[io.Model.Output("model")],
@@ -487,13 +552,15 @@ class LTXAudioICLoRALoaderPerStream(io.ComfyNode):
 
 
 class LTXAddAudioICLoRAGuideAdvanced(io.ComfyNode):
-    """Advanced audio IC-LoRA guide: the basic guide plus two REAL reference knobs that work on a
+    """Advanced audio IC-LoRA guide: the basic guide plus REAL reference knobs that work on a
     CFG=1 distilled base. reference_window_sec trims the reference to its first N seconds (fewer ref
     tokens; ~3.5s matches training); reference_scale multiplies the encoded reference latent
-    magnitude. Both default to a no-op (full clip, scale 1.0) == the basic guide. No CFG /
-    attention-strength knob is exposed: the distilled base is CFG=1 and the model's ref_audio path is
-    always-clean, so those would be SILENT no-ops without a model-side change (see module docstring).
-    The parity-locked bits (patchify layout, the model's negative-RoPE offset) are untouched."""
+    magnitude; reference_start/end_percent gate the reference to a band of the denoise schedule
+    (per-entry timestep split — see split_conditioning_for_reference_band). All default to a no-op
+    (full clip, scale 1.0, full band) == the basic guide. No CFG / attention-strength knob is
+    exposed: the distilled base is CFG=1 and the model's ref_audio path is always-clean, so those
+    would be SILENT no-ops without a model-side change (see module docstring). The parity-locked
+    bits (patchify layout, the model's negative-RoPE offset) are untouched."""
 
     @classmethod
     def define_schema(cls):
@@ -503,12 +570,14 @@ class LTXAddAudioICLoRAGuideAdvanced(io.ComfyNode):
             category="Lightricks/IC-LoRA",
             description=(
                 "Audio in-context reference with extra knobs over the basic guide: trim the "
-                "reference to its first N seconds (reference_window_sec; ~3.5s matches training) "
-                "and scale the encoded reference latent magnitude (reference_scale). Both default "
-                "to the basic behavior (full clip, scale 1.0). Values far from the defaults push "
-                "the reference off the trained distribution (like strength >1.0), so sweep gently. "
-                "No CFG / attention-strength knob: the distilled base is CFG=1 and the ref_audio "
-                "path is always-clean, so those would do nothing without a model change."
+                "reference to its first N seconds (reference_window_sec; ~3.5s matches training), "
+                "scale the encoded reference latent magnitude (reference_scale), and gate the "
+                "reference to a band of the denoise schedule (reference_start/end_percent). All "
+                "default to the basic behavior (full clip, scale 1.0, full band). Values far from "
+                "the defaults push the reference off the trained distribution (like strength "
+                ">1.0), so sweep gently. No CFG / attention-strength knob: the distilled base is "
+                "CFG=1 and the ref_audio path is always-clean, so those would do nothing without "
+                "a model change."
             ),
             inputs=[
                 io.Conditioning.Input("positive", tooltip="Positive conditioning to attach the reference to."),
@@ -531,6 +600,28 @@ class LTXAddAudioICLoRAGuideAdvanced(io.ComfyNode):
                     "per-slice gain -- prefer that waveform-domain knob; both are experimental until the "
                     "windowing/gain eval validates them.",
                 ),
+                io.Boolean.Input(
+                    "attach_to_negative", default=True,
+                    tooltip="Also attach the reference to the NEGATIVE conditioning (today's "
+                    "behavior; a no-op at CFG=1). Turn off to keep the negative ref-free — "
+                    "feeding (with-ref, without-ref) into a CFGGuider on the full base turns "
+                    "CFG into a reference-fidelity dial (CFG-analog amplification).",
+                ),
+                io.Float.Input(
+                    "reference_start_percent", default=0.0, min=0.0, max=1.0, step=0.01,
+                    tooltip="Apply the reference only from this point of the denoise schedule "
+                    "(0 = max noise). (0, 1) = ungated, today's behavior. Percents map to sigmas "
+                    "(same as ConditioningSetTimestepRange), not step indices — on the 8-step "
+                    "distilled sampler the band resolves to ~12.5% increments. Feed UNGATED "
+                    "conditioning: pre-existing timestep ranges are overwritten, not intersected.",
+                ),
+                io.Float.Input(
+                    "reference_end_percent", default=1.0, min=0.0, max=1.0, step=0.01,
+                    tooltip="Apply the reference only up to this point of the denoise schedule "
+                    "(1 = fully denoised). Outside [start, end] the ref tokens vanish from the "
+                    "model call entirely (per-entry split, exactly one entry active per step). "
+                    "end <= start = empty band = ref-free render.",
+                ),
             ],
             outputs=[
                 io.Conditioning.Output(
@@ -544,13 +635,16 @@ class LTXAddAudioICLoRAGuideAdvanced(io.ComfyNode):
 
     @classmethod
     def execute(
-        cls, positive, negative, audio_vae, reference_audio, reference_window_sec, reference_scale
+        cls, positive, negative, audio_vae, reference_audio, reference_window_sec, reference_scale,
+        attach_to_negative=True, reference_start_percent=0.0, reference_end_percent=1.0,
     ) -> io.NodeOutput:
         # Trim (a real input change, or no-op at 0), then the shared encode+attach with the scale knob.
         sr = reference_audio["sample_rate"]
         waveform = trim_reference_waveform(reference_audio["waveform"], sr, reference_window_sec)
         return _encode_and_attach_reference(
-            positive, negative, audio_vae, waveform, sr, reference_scale=reference_scale, log_tag="GUIDE-ADV"
+            positive, negative, audio_vae, waveform, sr, reference_scale=reference_scale, log_tag="GUIDE-ADV",
+            attach_to_negative=attach_to_negative,
+            band_start_percent=reference_start_percent, band_end_percent=reference_end_percent,
         )
 
 

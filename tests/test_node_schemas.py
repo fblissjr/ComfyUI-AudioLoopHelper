@@ -250,6 +250,94 @@ def test_latent_temporal_mask_edge_taper_default_is_zero():
     )
 
 
+def test_audio_iclora_loader_strength_defaults_carry_working_band():
+    """Audio IC-LoRA loader strength widgets default to 0.5 with the working band
+    (~0.3-0.75) in the tooltip.
+
+    The released identity checkpoints garble above the band; a 1.0 default means
+    every fresh node starts at a garbling strength and the band lesson lives only
+    in README prose. Saved workflows are unaffected (widget values serialize into
+    the JSON); only newly added nodes pick up the default.
+    """
+    path = REPO_ROOT / "nodes_audio_iclora.py"
+    expectations = {
+        "LTXAudioICLoRALoader": {"strength_model"},
+        "LTXAudioICLoRALoaderPerStream": {"audio_strength", "bridge_strength"},
+    }
+    for cls_name, input_names in expectations.items():
+        found: dict[str, dict] = {}
+        for _lineno, name, kwargs in _scan_io_input_records_in_class(path, cls_name):
+            if name in input_names:
+                found[name] = kwargs
+        assert set(found) == input_names, (
+            f"{cls_name}: expected strength inputs {sorted(input_names)}, "
+            f"found {sorted(found)} — rename/removal breaks saved-workflow widget mapping."
+        )
+        for name, kwargs in found.items():
+            assert kwargs.get("default") == 0.5, (
+                f"{cls_name}.{name} default={kwargs.get('default')!r}; must be 0.5 "
+                f"(start of the working band for the released checkpoints)."
+            )
+            tooltip = kwargs.get("tooltip", "")
+            assert "0.3" in tooltip and "0.75" in tooltip, (
+                f"{cls_name}.{name} tooltip must carry the working band (~0.3-0.75); "
+                f"got: {tooltip!r}"
+            )
+
+
+def test_audio_iclora_guide_attach_to_negative_default_is_true():
+    """`attach_to_negative` must default to True on BOTH audio IC-LoRA guides.
+
+    Saved workflows that predate the input carry no widget value for it;
+    ComfyUI fills the slot from the schema default at load time. True =
+    today's attach-to-both behavior; a False default would silently flip
+    every existing workflow to positive-only on next reload.
+    """
+    path = REPO_ROOT / "nodes_audio_iclora.py"
+    for cls_name in ("LTXAddAudioICLoRAGuide", "LTXAddAudioICLoRAGuideAdvanced"):
+        matches = [
+            kwargs
+            for _lineno, name, kwargs in _scan_io_input_records_in_class(path, cls_name)
+            if name == "attach_to_negative"
+        ]
+        assert len(matches) == 1, (
+            f"{cls_name}: expected exactly one attach_to_negative input, found {len(matches)}"
+        )
+        assert matches[0].get("default") is True, (
+            f"{cls_name}.attach_to_negative default={matches[0].get('default')!r}; "
+            f"must be True (no-op for saved workflows)."
+        )
+
+
+def test_audio_iclora_reference_band_defaults_are_full_range():
+    """`reference_start_percent`/`reference_end_percent` on the Advanced guide must default
+    to (0.0, 1.0) — the full range, byte-identical to ungated behavior.
+
+    Saved workflows that predate the inputs get the defaults at load time; any
+    narrower default would silently gate the reference on every existing
+    workflow's next reload. The gate is opt-in via widget; it also ships
+    neutral deliberately — the band sweep, not a baked guess, locates where
+    the reference bites (LTX-2's sigma-resolved ref_gap data retired the
+    high-sigma intuition).
+    """
+    path = REPO_ROOT / "nodes_audio_iclora.py"
+    expected = {"reference_start_percent": 0.0, "reference_end_percent": 1.0}
+    found: dict[str, dict] = {}
+    for _lineno, name, kwargs in _scan_io_input_records_in_class(
+        path, "LTXAddAudioICLoRAGuideAdvanced"
+    ):
+        if name in expected:
+            found[name] = kwargs
+    assert set(found) == set(expected), (
+        f"Advanced guide: expected band inputs {sorted(expected)}, found {sorted(found)}"
+    )
+    for name, default in expected.items():
+        assert found[name].get("default") == default, (
+            f"LTXAddAudioICLoRAGuideAdvanced.{name} default="
+            f"{found[name].get('default')!r}; must be {default} (no-op full range)."
+        )
+
+
 def _scan_io_outputs_in_class(path: Path, class_name: str):
     """Yield (lineno, name) for every `io.<Type>.Output(...)` call inside `class class_name`.
 

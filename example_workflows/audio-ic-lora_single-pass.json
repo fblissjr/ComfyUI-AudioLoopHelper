@@ -1170,7 +1170,7 @@
       },
       "widgets_values": [
         "cross_modal_step_01000.safetensors",
-        0.9
+        0.5
       ]
     },
     {
@@ -1462,7 +1462,10 @@
       },
       "widgets_values": [
         3.5,
-        1
+        1,
+        true,
+        0.0,
+        1.0
       ]
     },
     {

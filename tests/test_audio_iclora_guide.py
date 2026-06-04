@@ -59,6 +59,46 @@ def test_patchify_parity_with_installed_ltxvideo_node():
     assert torch.equal(G.patchify_audio_latent(latent)["tokens"], stock(latent)["tokens"])
 
 
+def test_av_model_negative_rope_offset_tripwire():
+    """SOURCE TRIPWIRE on comfy core's negative-RoPE reference placement (av_model.py).
+
+    Three copies of the ref-position convention exist: the trainer, upstream lipdub
+    (cross-locked by the trainer's parity test), and ComfyUI's av_model.py — the leg that
+    updates underneath us with every ComfyUI release. Our nodes hand the model bare
+    `ref_audio` tokens and TRUST av_model to place them at negative temporal positions
+    (ref ends just before t=0, offset by end_of_last_token + one time-per-latent) and to
+    strip them from the output. If upstream changes that convention, every trained audio
+    IC-LoRA silently degrades — no error, just a reference that stops biting.
+
+    This pins the load-bearing source lines, not behavior (the placement math is inline in
+    forward(); there is no importable function to assert against without instantiating the
+    model). ON FAILURE: diff upstream av_model.py against the trainer's parity test
+    (LTX-2 fork, cross-parity RoPE test) before re-pinning — the change may be a rename
+    (re-pin) or a real convention change (escalate; do NOT just update the needles).
+    """
+    from pathlib import Path
+
+    import pytest
+
+    # parents[2] = custom_nodes, parents[3] = the ComfyUI root holding comfy/
+    av_model = Path(__file__).resolve().parents[3] / "comfy" / "ldm" / "lightricks" / "av_model.py"
+    if not av_model.is_file():
+        pytest.skip("comfy core not present (not running inside a ComfyUI tree)")
+    src = av_model.read_text()
+    needles = {
+        "conds wiring": 'ref_audio = kwargs.get("ref_audio", None)',
+        "offset anchor (ref ends just before t=0)": "time_offset = ref_end[-1].item() + tpl",
+        "offset applied to start positions": "ref_start = (ref_start - time_offset)",
+        "output strip keyed on this call's seq len": "ax = ax[:, ref_audio_seq_len:]",
+    }
+    missing = [f"{label}: {needle!r}" for label, needle in needles.items() if needle not in src]
+    assert not missing, (
+        "comfy core av_model.py no longer matches the pinned negative-RoPE reference "
+        "convention — upstream drift; re-verify train/inference parity before re-pinning:\n  "
+        + "\n  ".join(missing)
+    )
+
+
 def test_ensure_stereo_widens_mono():
     """Mono [b,1,n] -> [b,2,n] (duplicate). Matches core audio_vae's mono->2ch widen
     (waveform.expand(-1,2,...)) and the trainer's repeat_interleave — bit-identical for
@@ -143,6 +183,68 @@ def test_set_ref_tokens_attaches_patchified_to_both(monkeypatch):
         assert "ref_audio" in values, "did not set ref_audio on conditioning"
         assert torch.equal(values["ref_audio"]["tokens"], expected), "attached tokens are not the patchified latent"
     assert len(out) == 2, "must return (positive, negative)"
+
+
+def test_guide_attach_to_negative_false_leaves_negative_untouched(monkeypatch):
+    """attach_to_negative=False must attach ref_audio to the POSITIVE only and return the
+    negative unchanged. This is what makes the CFG-analog amplification trick expressible:
+    (positive_with_ref, positive_without_ref) into a CFGGuider needs a ref-free arm
+    (docs/reference/cfg_analog_amplification.md)."""
+    calls = []
+
+    def rec(cond, values):
+        calls.append((cond, values))
+        return cond
+
+    monkeypatch.setattr(G.node_helpers, "conditioning_set_values", rec)
+    vae = _RecordingVAE()
+    ref = {"waveform": torch.randn(1, 1, 16000), "sample_rate": 16000}
+    out = G.LTXAddAudioICLoRAGuide.execute(
+        positive="POS", negative="NEG", audio_vae=vae, reference_audio=ref,
+        attach_to_negative=False,
+    )
+    assert [c[0] for c in calls] == ["POS"], "must attach to positive ONLY when toggle is off"
+    assert out[1] == "NEG", "negative must be returned untouched (same object, no ref_audio)"
+
+
+def test_guide_attach_to_negative_default_attaches_both(monkeypatch):
+    """Calling execute WITHOUT the toggle (old call shape) must keep today's behavior:
+    ref_audio attached to positive AND negative. Locks the non-breaking default."""
+    calls = []
+
+    def rec(cond, values):
+        calls.append((cond, values))
+        return cond
+
+    monkeypatch.setattr(G.node_helpers, "conditioning_set_values", rec)
+    vae = _RecordingVAE()
+    ref = {"waveform": torch.randn(1, 1, 16000), "sample_rate": 16000}
+    G.LTXAddAudioICLoRAGuide.execute(
+        positive="POS", negative="NEG", audio_vae=vae, reference_audio=ref
+    )
+    assert [c[0] for c in calls] == ["POS", "NEG"], "default must attach to both (current behavior)"
+    for _cond, values in calls:
+        assert "ref_audio" in values
+
+
+def test_advanced_guide_attach_to_negative_false(monkeypatch):
+    """The Advanced guide exposes the same toggle and threads it through the shared
+    encode+attach path (the two guides must not drift)."""
+    calls = []
+
+    def rec(cond, values):
+        calls.append((cond, values))
+        return cond
+
+    monkeypatch.setattr(G.node_helpers, "conditioning_set_values", rec)
+    vae = _RecordingVAE()
+    ref = {"waveform": torch.randn(1, 1, 16000), "sample_rate": 16000}
+    out = G.LTXAddAudioICLoRAGuideAdvanced.execute(
+        positive="POS", negative="NEG", audio_vae=vae, reference_audio=ref,
+        reference_window_sec=0.0, reference_scale=1.0, attach_to_negative=False,
+    )
+    assert [c[0] for c in calls] == ["POS"]
+    assert out[1] == "NEG"
 
 
 def test_lora_grammar_accepts_valid_keys():
