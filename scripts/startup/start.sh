@@ -20,12 +20,12 @@
 #   ./start.sh -h | --help           # show this help
 #
 # Modes:
-#   default     LTX 2.3 / WAN2.1: perf flags + 0.5GB reserve + NO dynamic VRAM (node cache ON)
+#   default     LTX 2.3 / WAN2.1: perf flags + 0.5GB reserve, dynamic VRAM ON (node cache ON)
 #   safe        Fallback when default OOMs (lowvram, fp16-unet, fp32-vae, 4GB reserve)
 #   extreme     Maximum speed, may OOM (fp8_e4m3fn-unet, fp16-vae)
 #   minimal     Last resort, very slow (novram, cpu-vae, async-offload)
-#   nodynvram   BENCH ONLY (alias: bench) — default's flags + --cache-none +
-#               reserve 0 for clean repro (see comments in that case)
+#   nodynvram   BENCH ONLY (alias: bench) — perf flags + the no-dynvram kill
+#               switch + --cache-none + reserve 0 (see comments in that case)
 #   highvram    Keep models resident after use (may OOM with large models
 #               + heavy text encoder on a 24GB card)
 #
@@ -94,11 +94,15 @@ PERF_ARGS=(
     --mmap-torch-files
 )
 
-# Dynamic-VRAM kill switch shared by default + bench. OOM-instead-of-offload:
+# Dynamic-VRAM kill switch (bench mode only). OOM-instead-of-offload:
 #   --disable-dynamic-vram  : kills aimdo page-level offload during inference
 #   --disable-async-offload : kills async weight streams (the lower-level mechanism)
-# Bench's "default's no-dynvram flags" claim holds structurally because both
-# modes spread this same array.
+# DO NOT promote into default. Tried 2026-06-04, reverted same day: full-song
+# loop renders kernel-OOM at the FINAL full-video VAE decode — with paging
+# disabled the resident diffusion model is never evicted, the VideoVAE loads
+# with 0 MB usable, and the decode balloons system RAM until the kernel kills
+# the process (silently — see the exit-status line at the bottom). Dynamic
+# VRAM is required for the repo's primary workload (full-song loop renders).
 NODYNVRAM_ARGS=(
     --disable-dynamic-vram
     --disable-async-offload
@@ -108,17 +112,14 @@ CMD_ARGS=("${BASE_ARGS[@]}")
 
 case "$MODE" in
     default)
-        echo "[start.sh] mode=default — LTX 2.3 / WAN2.1, no dynamic VRAM (perf flags + 0.5GB reserve, node cache ON)"
-        # 2026-06-04: NODYNVRAM_ARGS promoted into default (previously
-        # nodynvram-only). Deliberate tradeoff: OOM-instead-of-offload-slowdown
-        # on oversized renders. If a render OOMs in default, the FIRST lever is
-        # removing NODYNVRAM_ARGS (or shrinking the render), not raising
-        # reserve. The node cache stays ON — NEVER add --cache-none here
+        echo "[start.sh] mode=default — LTX 2.3 / WAN2.1 (perf flags + 0.5GB reserve, dynamic VRAM + node cache ON)"
+        # Dynamic VRAM stays ON here — see the NODYNVRAM_ARGS comment above for
+        # why promoting the kill switch into default crashes full-song loop
+        # renders. The node cache stays ON too — NEVER add --cache-none here
         # (fatal for loop renders; see docs/reference/debug_tools.md).
         CMD_ARGS+=(
             "${PERF_ARGS[@]}"
             --reserve-vram 0.5
-            "${NODYNVRAM_ARGS[@]}"
         )
         ;;
 
@@ -217,5 +218,13 @@ fi
 echo "[start.sh] forwarding to main.py: ${CMD_ARGS[*]} $*"
 
 # Execute ComfyUI. The grep filter strips a noisy SSL warning that fires
-# during normal operation.
+# during normal operation. pipefail + the status echo make abnormal exits
+# visible: without them, the pipe reports grep's exit code and a SIGKILL
+# (e.g. the kernel OOM killer) drops you back to the prompt with no message.
+set +e
+set -o pipefail
 uv run --active python main.py "${CMD_ARGS[@]}" "$@" 2>&1 | grep -v "SSL connection is closed"
+status=$?
+echo "[start.sh] ComfyUI exited with status ${status}" \
+     "(137 = SIGKILL, usually the kernel OOM killer: journalctl -k | grep -i oom)"
+exit "$status"
