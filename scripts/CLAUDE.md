@@ -104,11 +104,12 @@ Exits 0 on all-green, 1 on any ERR. WARN-level findings don't fail the run (e.g.
 
 ## Workflow JSON discipline (recap from root CLAUDE.md)
 
-Three rules whose details belong here even though the rule itself is in root:
+Three rules whose details belong here even though the rule itself is in root, plus a fourth that lives only here:
 
 - **Workflow JSON references inputs by NAME, not slot index.** Each node's `inputs[]` entry stores `{"name": ..., "type": ..., "widget": {"name": ...}, "link": ...}`; ComfyUI matches the saved name to the schema's input list when reattaching wires. So a bare schema rename (e.g. `"seed"` → `"base_seed"`) without a paired migration script that rewrites `inputs[].name` and `widget.name` in every saved JSON will dangle every existing wire on the renamed input. Canonical migration: `scripts/apply_alc_seed_rename.py`.
 - **A schema rename is not enough — strip leftover widget values too.** When `apply_alc_seed_rename.py` renamed `seed`→`base_seed`, it updated `inputs[].name` but did NOT prune the leftover `'randomize'` string at `widgets_values[4]`. ComfyUI's backend pops widgets positionally; 6 saved values into 5 schema slots shifts `'randomize'` into the `fps` slot, INT-parse fails. Companion: `scripts/apply_strip_alc_control_after_generate.py`. Audit: `alc_widget_drift`.
 - **Don't ship two schema changes that touch the same iteration-state plane in one session.** When adding an auto-wire that closes a control loop, walk every existing edge between the involved nodes and confirm none of them produces a cycle. ComfyUI's prompt validator rejects with "Dependency cycle detected" before any node runs. Reference: `apply_planner_break_stride_cycle.py`. Audit: `planner_no_stride_input`.
+- **Structurally-valid JSON can still fail to OPEN in the frontend.** Litegraph's loader expects the canonical save shape per node: a widget-converted input carries `"widget": {"name": ...}` AND a placeholder slot in `widgets_values`; unlinked widget-inputs are OMITTED from `inputs[]` entirely. Hand-/agent-built nodes that violate any of these pass `test_workflow_integrity.py` + `audit_workflows.py` but won't load in the UI. Debug: diff the suspect node against a UI-saved node of the same class. No lint covers this yet (candidate future F-pair).
 
 ## Bypass + dead-node detection
 
