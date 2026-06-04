@@ -4948,11 +4948,16 @@
           "type": "BOOLEAN",
           "widget": {
             "name": "keep_proportion"
-          }
+          },
+          "link": null
         },
         {
           "name": "crop_position",
-          "type": "COMBO"
+          "type": "COMBO",
+          "widget": {
+            "name": "crop_position"
+          },
+          "link": null
         }
       ],
       "outputs": [
@@ -5053,13 +5058,6 @@
           "link": 3276
         },
         {
-          "name": "schedule",
-          "type": "STRING",
-          "widget": {
-            "name": "schedule"
-          }
-        },
-        {
           "name": "stride_seconds",
           "type": "FLOAT",
           "widget": {
@@ -5074,13 +5072,6 @@
             "name": "audio_duration"
           },
           "link": 3278
-        },
-        {
-          "name": "snap_boundaries",
-          "type": "BOOLEAN",
-          "widget": {
-            "name": "snap_boundaries"
-          }
         }
       ],
       "outputs": [
@@ -5194,7 +5185,10 @@
         {
           "name": "current_iteration",
           "type": "INT",
-          "link": 3283
+          "link": 3283,
+          "widget": {
+            "name": "current_iteration"
+          }
         }
       ],
       "outputs": [
@@ -5211,7 +5205,9 @@
         "cnr_id": "comfyui-audioloophelper",
         "Node name for S&R": "LatentSelectByIteration"
       },
-      "widgets_values": [],
+      "widgets_values": [
+        0
+      ],
       "title": "Keyframe select — BASE anchor (window k)"
     },
     {
@@ -5237,7 +5233,10 @@
         {
           "name": "current_iteration",
           "type": "INT",
-          "link": 3284
+          "link": 3284,
+          "widget": {
+            "name": "current_iteration"
+          }
         }
       ],
       "outputs": [
@@ -5254,7 +5253,9 @@
         "cnr_id": "comfyui-audioloophelper",
         "Node name for S&R": "LatentSelectByIteration"
       },
-      "widgets_values": [],
+      "widgets_values": [
+        0
+      ],
       "title": "Keyframe select — END anchor (window k+1)"
     },
     {
@@ -5280,7 +5281,10 @@
         {
           "name": "current_iteration",
           "type": "INT",
-          "link": 3285
+          "link": 3285,
+          "widget": {
+            "name": "current_iteration"
+          }
         }
       ],
       "outputs": [
@@ -5297,7 +5301,9 @@
         "cnr_id": "comfyui-audioloophelper",
         "Node name for S&R": "LatentSelectByIteration"
       },
-      "widgets_values": [],
+      "widgets_values": [
+        0
+      ],
       "title": "Keyframe select — MID anchor (window k+1, bypassed)"
     }
   ],
