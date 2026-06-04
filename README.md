@@ -11,33 +11,22 @@ Drives loop timing from integer-latent counts, freezes audio via
 `noise_mask=0`, pre-encodes prompts once outside the loop. Originally built this repo as a few helper nodes for experimenting with
 [kijai's LTX 2.3 long-loop extension](https://github.com/kijai/ComfyUI-NativeLooping_testing/blob/main/ltx23_long_loop_extension_test.json) - thanks to Kijai for all his work, and for giving me some fun ideas to explore.
 
-> Power-user repo. Assumes you know ComfyUI. Architecture nuance lives in
-> `docs/architecture_overview.md`
+> Power-user repo. Assumes you know ComfyUI.
+> **Docs hub: [`docs/README.md`](docs/README.md)** — the task-first index ("I want to do X, which doc?").
+> Single-pass architecture walkthrough: [`docs/architecture_overview.md`](docs/architecture_overview.md).
 
 ## Quick start
 
 Open `example_workflows/audio-loop-music-video_latent.json` in ComfyUI.
-The workflow itself documents what to change via group titles, node titles,
-and Note nodes. Four things to set:
+The workflow documents itself via group titles, node titles, and Note nodes.
+Four things to set:
 
 1. **LoadAudio** — drop your song.
-2. **LoadImage** — drop the init image. Any size; auto-resized adaptively. Matches the first scene visually.
+2. **LoadImage** — drop the init image (any size; auto-resized adaptively; matches the first scene visually).
 3. **start_seed** — any int.
-4. **TimestampPromptScheduleBatchEncode** — paste the schedule. The initial-render prompt is read from the `0:00` entry (no separate node).
+4. **TimestampPromptScheduleBatchEncode** — paste the schedule. The initial-render prompt is read from the `0:00` entry.
 
-Optional knob: **`first_frame_guide_strength`** (`FloatConstant #1269`). Default `1.0` pins init image to every iter's last frame for max identity stability. Lower (`0.5`/`0.3`) for music-video expressivity at the cost of cross-iter identity drift.
-
-> **On prompt budget.** LTX 2.3's cross-attention has to share its
-> token budget across text, audio coherence, and (with i2v) image
-> coherence. Concise prompts usually win. Pick the verb that matches
-> the visible action you want — `is singing` for vocal performance,
-> `is dancing` for movement, `is playing <instrument>` for instrumental,
-> etc. Generic verbs (`performing`, `vocalizing`) dilute the signal.
-> Without an i2v init, text has to do more work and may need to be
-> longer. With i2v, text should be tight. Pick where to spend your
-> constraints.
-
-For (4), generate copy-paste-ready text from `scripts/analyze_audio_features.py`:
+Generate the schedule from your song:
 
 ```bash
 uv sync --group analysis
@@ -45,11 +34,13 @@ uv run --group analysis python scripts/analyze_audio_features.py your_song.wav \
   --subject "your scene description" --trim 5
 ```
 
-Run.
+Run. LoRAs + IC-LoRA scaffolding ship bypassed-by-default — un-bypass when you
+need them; knobs (like `first_frame_guide_strength`: 1.0 = max identity lock,
+lower for expressivity) are annotated in the workflow itself. For the rest:
 
-LoRAs and IC-LoRA scaffolding ship bypassed-by-default — un-bypass when
-you need them. Layout, defaults, and bypass-toggle annotations are all in
-the workflow itself.
+- Prompt authoring — verb choice, token budget, continuation framing: [`docs/guides/prompt_creation_guide.md`](docs/guides/prompt_creation_guide.md)
+- Audio analysis — all flags, scene-diversity tiers, JSON export: [`docs/guides/audio_analysis_guide.md`](docs/guides/audio_analysis_guide.md)
+- End-to-end LLM schedule workflow (init image → VLM → schedule): [`docs/guides/prompt_workflow_end_to_end.md`](docs/guides/prompt_workflow_end_to_end.md)
 
 ## Dependencies
 
@@ -59,111 +50,56 @@ the workflow itself.
 |---|---|
 | [ComfyUI-LTXVideo](https://github.com/Lightricks/ComfyUI-LTXVideo) | LTX 2.3 nodes (LTXVAddLatentGuide, LTXVCropGuides, LTXVPreprocess, IC-LoRA) |
 | [ComfyUI-NativeLooping_testing](https://github.com/kijai/ComfyUI-NativeLooping_testing) | TensorLoopOpen / TensorLoopClose |
-| [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes) | Set/Get nodes, LTX2_NAG, LTXVImgToVideoInplaceKJ, ImageResizeKJv2, GetImageRangeFromBatch, SimpleCalculatorKJ |
+| [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes) | Set/Get nodes, LTX2_NAG, LTXVImgToVideoInplaceKJ, ImageResizeKJv2, and more |
 | [ComfyUI-VideoHelperSuite](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite) | VHS_LoadVideo, VHS_VideoCombine |
 
-**Companion repos:**
+**Sage attention:** shipped workflows wire `AudioLoopHelperSageAttention` in
+`auto` mode, built for the sister fork
+[fblissjr/SageAttention-ada](https://github.com/fblissjr/SageAttention-ada)
+(recommended on Ada / RTX 40xx). No build, or incompatible hardware? Bypass the
+node (`mode=4`) or swap in KJNodes sage. Deep dive: [`docs/reference/sage_attention.md`](docs/reference/sage_attention.md).
 
-This project coordinates with two kinds of sister repos:
-
-| Repo | Bucket | Role |
-|---|---|---|
-| [fblissjr/SageAttention-ada](https://github.com/fblissjr/SageAttention-ada) | Sister fork | SageAttention fork with mask-aware routing tuned for LTX 2.3 cross-attention (active; recommended on Ada — RTX 4090) |
-| [fblissjr/comfy-workbench](https://github.com/fblissjr/comfy-workbench) | Companion umbrella | Cross-workload meta-harness: shared Claude Code conventions, agents, skills, templates, apply-script + audit-pair protocol, CLAUDE.md governance, cross-repo memo channels (bootstrap phase) |
-
-The split is by upstream lineage: **forks** patch an upstream library's internals (small surface, rebase tax accepted); **umbrellas** build *on top of* upstream libraries (no lineage, free to grow modularly).
-
-**SageAttention-ada specifics:** the shipped workflows wire `AudioLoopHelperSageAttention` in `auto` mode (the default since 2026-05-15; the mask-aware path gives ~1.22× e2e speedup on the production iclora workload) which expects this build. **No build, or incompatible hardware?** Bypass `AudioLoopHelperSageAttention` (set `mode=4`) and either run with default attention or use KJNodes sage in its place.
-
-**Optional:**
-
-[ComfyUI-MelBandRoFormer](https://github.com/DrJKL/ComfyUI-MelBandRoFormer)
-— vocal separation. Bypassed by default in shipped workflows. Tons of different model variations out on HF for this depending on your use case.
+**Optional:** [ComfyUI-MelBandRoFormer](https://github.com/DrJKL/ComfyUI-MelBandRoFormer)
+for vocal separation (bypassed by default). Companion repo:
+[fblissjr/comfy-workbench](https://github.com/fblissjr/comfy-workbench)
+(shared tooling + conventions across my ComfyUI work).
 
 ## Workflow variants
 
-Shipped (top-level `example_workflows/`) — what each does and when to reach for it:
+Shipped at top-level `example_workflows/`:
 
-| File | What it does / when to use |
-|---|---|
-| `audio-loop-music-video_latent.json` | **Default — start here. Full-length music video.** i2v init image + your full audio track frozen (`noise_mask=0`); loops over overlapping windows so the video tracks the song end-to-end. IC-LoRA scaffolding + two LoRA loaders ship bypassed; 9-group Note-annotated layout. Un-bypass IC-LoRA for visual reference adapters; un-bypass the distill LoRA to run base ltx-2.3. |
-| `audio-loop-music-video_latent_av_inversion.json` | **Video → audio (dialogue replacement / voice-clone dub).** The inverse of the default: the video is held from a source clip + a short audio seed (`AudioTemporalMask`) + a dialogue prompt → LTX clones the voice and generates new audio over the footage. Single-window. New words won't match the original lips — pair with the keyframe variant to regenerate lip-synced video. Full step-by-step: [`docs/guides/dialogue_replacement_guide.md`](docs/guides/dialogue_replacement_guide.md). Author the prompt with the `/ltx-dialogue-prompt` skill. |
-| `audio-loop-music-video_latent_keyframe.json` | **Per-section keyframe re-anchoring.** Pin different reference images to different loop iterations (combats DiT drift on long renders; drives scene changes synced to song structure) via `LTXIterKeyframeSchedule`. `target_iters` ships pre-filled to `1,2,3` (keyframes fire on the first three iters) — re-spread per row across your song's iter count for long renders. Clearing a row back to empty makes that keyframe silently fall back to the init image. |
-| `audio-loop-music-video_retake.json` | **Regenerate one section.** Re-roll a `[start, end]` window of an existing render while holding the rest as fixed context (`LatentTemporalMask`). |
-| `audio_reactive_loop.json` | **Audio-driven motion.** Init image animated so its motion tracks the (frozen) audio via LTX 2.3's joint cross-attention. Full-length loop; tune the look on the single-shot rig first. Writeup: [`docs/experimental/audio_reactive_workflows.md`](docs/experimental/audio_reactive_workflows.md). |
-| `audio-ic-lora_single-pass.json` | **Audio-reference IC-LoRA (single-pass).** Drive a single render from a reference-audio adapter — load + window a reference clip with the Compose Reference Audio node, attach it via the audio IC-LoRA guide chain. No loop. Background: [`docs/audio_iclora/index.md`](docs/audio_iclora/index.md). |
+| File | What it does | Detail |
+|---|---|---|
+| `audio-loop-music-video_latent.json` | **Default — start here.** Full-length music video: i2v init + your full audio track frozen; loops overlapping windows so the video tracks the song end-to-end. | [`docs/architecture_overview.md`](docs/architecture_overview.md) |
+| `audio-loop-music-video_latent_av_inversion.json` | **Video → audio.** Dialogue replacement / voice-clone dub over held footage. | [`docs/guides/dialogue_replacement_guide.md`](docs/guides/dialogue_replacement_guide.md) |
+| `audio-loop-music-video_latent_keyframe.json` | **Per-section keyframe re-anchoring** — combats drift on long renders; scene changes synced to song structure. | [`example_workflows/working_docs/keyframe_iter_anchor_design.md`](example_workflows/working_docs/keyframe_iter_anchor_design.md) |
+| `audio-loop-music-video_retake.json` | **Regenerate one section** — re-roll a `[start, end]` window, rest held as fixed context. | [`docs/guides/retake_guide.md`](docs/guides/retake_guide.md) |
+| `audio_reactive_loop.json` | **Audio-driven motion** — init image animated so its motion tracks the (frozen) audio. | [`docs/experimental/audio_reactive_workflows.md`](docs/experimental/audio_reactive_workflows.md) |
+| `audio-ic-lora_single-pass.json` | **Audio-reference IC-LoRA (single pass)** — steer a render from a reference audio clip. Pairs with our trained adapter: [Audio-Only-Context on Hugging Face](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context). | [`docs/audio_iclora/index.md`](docs/audio_iclora/index.md) |
 
-**Experimental** (`example_workflows/experimental/`, paired with `docs/experiments/` run logs; graduate to top-level on a render gate). The dialogue-replacement family in progress: `_av_voiceref` (clone the voice via `LTXVReferenceAudio` conditioning — *no* original words in the output, vs the mask-seed inversion), `_av_extension` (audio-continuation probe), `_keyframe_autoextract` (keyframes auto-sampled from a loaded clip via `EvenlySpacedKeyframes` — no hand-loading). Plus older forks (`_window15s`/`_window19_88s`, `_promptrelay`, `fml2v`, amplification/spectrogram POCs).
-
-**Archive** (`example_workflows/archive/`) — retired variants, kept for reference, not maintained or audited: `_stg` (Spatial-Temporal Guidance A/B), `_validator` (`LoopConfigValidator` + `PreviewAny`), `_image_adain_perstep` (per-step AdaIN), and the `cfgpp`/`inspect`/`refine` diagnostic forks.
-
-## Audio feature analysis
-
-`scripts/analyze_audio_features.py` extracts BPM, key, structure, F0, and
-emits an LTX-2.3-ready timestamp-prompt schedule. Paste the whole schedule
-into `TimestampPromptScheduleBatchEncode`; the initial-render prompt comes
-from its `0:00+` entry automatically.
-
-Common invocations:
-
-```bash
-# Subject-driven schedule generation
-uv run --group analysis python scripts/analyze_audio_features.py song.wav \
-  --subject "a woman in her 30s with dark hair singing in a basement workshop" --trim 5
-
-# Pick an ambition tier (default 2a). All tiers in audio_analysis_guide.md.
-uv run --group analysis python scripts/analyze_audio_features.py song.wav \
-  --subject "..." --scene-diversity 3b
-
-# JSON export for LLM-assisted schedule generation
-uv run --group analysis python scripts/analyze_audio_features.py song.wav \
-  --subject "..." -j analysis.json
-```
-
-Full reference: [`docs/guides/audio_analysis_guide.md`](docs/guides/audio_analysis_guide.md).
-End-to-end LLM workflow: [`docs/guides/prompt_workflow_end_to_end.md`](docs/guides/prompt_workflow_end_to_end.md).
-Prompt-authoring rules: [`docs/guides/prompt_creation_guide.md`](docs/guides/prompt_creation_guide.md).
+More variants in `example_workflows/experimental/` (paired with run logs in
+`docs/experiments/`; inventory in [`docs/experimental/README.md`](docs/experimental/README.md));
+retired ones in `example_workflows/archive/`. Design notes for the shipped
+variants live in [`example_workflows/working_docs/`](example_workflows/working_docs/).
 
 ## Validation + debugging
 
-When a workflow fails to validate or produces wrong output:
-
 ```bash
-# Audit shipped workflows (named topology checks + generic invariants)
+# topology checks + generic invariants across shipped workflows
 uv run --group dev python scripts/audit_workflows.py
-
-# Audit one file
-uv run --group dev python scripts/audit_workflows.py example_workflows/audio-loop-music-video_latent.json
-
-# DAG topo-sort if audit is clean but it still fails
-uv run --group dev python scripts/analyze_workflow_dag.py \
-  example_workflows/audio-loop-music-video_latent.json --format ascii
 ```
 
-Or invoke `/diagnose-workflow` for the canonical first-pass.
-
-Full reference: [`docs/reference/debug_tools.md`](docs/reference/debug_tools.md).
+`/diagnose-workflow` is the canonical first-pass when something won't run.
+Tooling reference: [`docs/reference/debug_tools.md`](docs/reference/debug_tools.md).
 Symptom-first quality troubleshooting: [`docs/guides/debugging_guide.md`](docs/guides/debugging_guide.md).
 
 ## Local logging + profiling (off by default)
 
-These are local-only debugging instruments that **this plugin** ships. Both
-default to off, both write only to plain JSONL files on your own disk
-(under gitignored `data/runs/${RUN_ID}/` when launched via
-`start_experiment.sh`; under gitignored `internal/analysis/runs/` as a
-legacy fallback when `RUN_ID` is unset), and **none of this code makes
-any network call or sends data anywhere**. There is no telemetry endpoint,
-no analytics service, no "anonymous usage data." It's local file I/O for
-your own profiling and bench-analysis. Anything ComfyUI itself does at
-runtime is upstream behavior unrelated to this plugin.
-
-Two opt-in instruments + one offline aggregator:
-
-- `AUDIOLOOPHELPER_SAGE_TRACE` — our writer in `nodes_sage.py`. Per-attention-call JSONL when set.
-- `COMFYUI_EXEC_LOG` — **our** monkey-patch on ComfyUI's `execute()` (defined in `exec_logger.py`); installs only when the env var is set, no-op otherwise. The env var name has the `COMFYUI_` prefix because it controls our patch on a ComfyUI internal — the patch itself is plugin code.
-- `scripts/sage_telemetry_summary.py` — offline aggregator. Reads JSONL files; never writes anything; runs outside ComfyUI.
-
-All three off when env vars are unset. What gets captured + the privacy posture: [`docs/reference/telemetry_and_tracing.md`](docs/reference/telemetry_and_tracing.md).
+Two opt-in, env-var-gated instruments (`AUDIOLOOPHELPER_SAGE_TRACE`,
+`COMFYUI_EXEC_LOG`) plus an offline aggregator. All write plain JSONL to your
+own disk only — **no network calls, no telemetry endpoint, no "anonymous usage
+data"; it's local file I/O for your own profiling.** What gets captured + the
+full privacy posture: [`docs/reference/telemetry_and_tracing.md`](docs/reference/telemetry_and_tracing.md).
 
 ## Layout
 
@@ -171,12 +107,11 @@ All three off when env vars are unset. What gets captured + the privacy posture:
 nodes*.py             runtime nodes (entry: comfy_entrypoint() in nodes.py)
 scripts/              apply scripts + audit + analysis utilities
 docs/                 public docs — task-first nav at docs/README.md
-example_workflows/    shipped workflow variants
+example_workflows/    shipped workflow variants (+ working_docs/ design notes)
 internal/             gitignored design + analysis + experiment notes
 .claude/              shared Claude Code harness (subagents, skills, hooks)
 ```
 
-Architecture overview: [`docs/architecture_overview.md`](docs/architecture_overview.md).
 Per-node API + wiring: each runtime class's docstring + [`docs/reference/ltx23_model_reference.md`](docs/reference/ltx23_model_reference.md).
 Project conventions for editing this repo: [`CLAUDE.md`](CLAUDE.md).
 

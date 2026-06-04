@@ -1,4 +1,4 @@
-Last updated: 2026-05-31
+Last updated: 2026-06-03
 
 # Audio-only IC-LoRA
 
@@ -12,7 +12,8 @@ jointly-generated audio+video. No image or video reference. Two models so far, b
 - **[`audio_only_context.md`](./audio_only_context.md)**: the current **Audio-Only-Context** model
   (voice -> identity / mannerism), the two checkpoints (audio-only vs cross-modal), the granular-strength
   nodes (per-stream loader + advanced guide), and the honest measurement note (why the reference-attribution
-  gap reads ~0 for an identity task and why generation-from-noise is the real test). Released on HF.
+  gap reads ~0 for an identity task and why generation-from-noise is the real test). Released:
+  [fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context).
 - **[`audio_only_ic_lora.md`](./audio_only_ic_lora.md)**: the pitch ("helium") predecessor and the shared
   node mechanics — how the custom nodes work, the observed **inference behavior** (no reference-length clamp,
   the strength band, audio→identity coupling, why pure tones produce no speech), how to run it in ComfyUI,
