@@ -11,9 +11,11 @@ Drives loop timing from integer-latent counts, freezes audio via
 `noise_mask=0`, pre-encodes prompts once outside the loop. Originally built this repo as a few helper nodes for experimenting with
 [kijai's LTX 2.3 long-loop extension](https://github.com/kijai/ComfyUI-NativeLooping_testing/blob/main/ltx23_long_loop_extension_test.json) - thanks to Kijai for all his work, and for giving me some fun ideas to explore.
 
-> Power-user repo. Assumes you know ComfyUI.
-> **Docs hub: [`docs/README.md`](docs/README.md)** — the task-first index ("I want to do X, which doc?").
-> Single-pass architecture walkthrough: [`docs/architecture_overview.md`](docs/architecture_overview.md).
+**Three ways in:**
+
+- **"Just show me."** The [model-card examples](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context#examples) are short generated clips from the audio-steering side. The core music-video loop: open the default workflow ([Quick start](#quick-start)), drop a song + an image, run.
+- **"I want to use it."** Quick start below, then the **docs hub: [`docs/README.md`](docs/README.md)** — the task-first index ("I want to do X, which doc?"). Power-user repo; assumes you know ComfyUI.
+- **"I want to verify, reproduce, or extend it."** Architecture walkthrough: [`docs/architecture_overview.md`](docs/architecture_overview.md), then per-node docstrings + [`docs/reference/`](docs/reference/). The audio IC-LoRA training story: [`docs/audio_iclora/index.md`](docs/audio_iclora/index.md) + the [trained adapters](#trained-adapters-audio-reference-ic-lora) below (data recipe + config + train fork). Invariants are enforced as code — the pytest suite and the workflow-topology audit (`scripts/audit_workflows.py`) run in CI.
 
 ## Quick start
 
@@ -75,12 +77,35 @@ Shipped at top-level `example_workflows/`:
 | `audio-loop-music-video_latent_keyframe.json` | **Per-section keyframe re-anchoring** — combats drift on long renders; scene changes synced to song structure. | [`example_workflows/working_docs/keyframe_iter_anchor_design.md`](example_workflows/working_docs/keyframe_iter_anchor_design.md) |
 | `audio-loop-music-video_retake.json` | **Regenerate one section** — re-roll a `[start, end]` window, rest held as fixed context. | [`docs/guides/retake_guide.md`](docs/guides/retake_guide.md) |
 | `audio_reactive_loop.json` | **Audio-driven motion** — init image animated so its motion tracks the (frozen) audio. | [`docs/experimental/audio_reactive_workflows.md`](docs/experimental/audio_reactive_workflows.md) |
-| `audio-ic-lora_single-pass.json` | **Audio-reference IC-LoRA (single pass)** — steer a render from a reference audio clip. Pairs with our trained adapter: [Audio-Only-Context on Hugging Face](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context). | [`docs/audio_iclora/index.md`](docs/audio_iclora/index.md) |
+| `audio-ic-lora_single-pass.json` | **Audio-reference IC-LoRA (single pass)** — steer a render from a reference audio clip, using the [trained adapters](#trained-adapters-audio-reference-ic-lora) below. | [`docs/audio_iclora/index.md`](docs/audio_iclora/index.md) |
 
 More variants in `example_workflows/experimental/` (paired with run logs in
 `docs/experiments/`; inventory in [`docs/experimental/README.md`](docs/experimental/README.md));
 retired ones in `example_workflows/archive/`. Design notes for the shipped
 variants live in [`example_workflows/working_docs/`](example_workflows/working_docs/).
+
+## Trained adapters (audio-reference IC-LoRA)
+
+Two cuts of the same 1000-step experiment, released as
+[**LTX-2.3-22b-IC-LoRA-Audio-Only-Context**](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context)
+— an IC-LoRA where the in-context reference is *only audio* (no image, no
+video). Load either with the audio IC-LoRA nodes via the single-pass workflow
+above; background + node mechanics: [`docs/audio_iclora/index.md`](docs/audio_iclora/index.md).
+
+| Adapter | What it's supposed to do (in theory) | Suggested start |
+|---|---|---|
+| [`cross_modal_step_01000`](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context/blob/main/cross_modal_step_01000.safetensors) | Adapts the audio stack **and** the cross-modal bridges — gives the audio reference a direct path into the video stream. Default pick if you want the audio to move the picture (mannerisms, energy, expression timing). | Strength ~0.5 (working band ~0.3–0.75, reference-dependent). With the per-stream loader, push `bridge_strength` above `audio_strength` to amplify the audio→video coupling. |
+| [`audio_only_step_01000`](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context/blob/main/audio_only_step_01000.safetensors) | Adapts the audio stack only — the reference shapes the generated **audio**; the video follows via the frozen base coupling. Subtler, more emergent video effect; perturbs the base video path least. | Strength ~0.5 (same band). No bridge keys, so `bridge_strength` is inert. |
+
+Both are early proof-of-concepts: many variables influence the end result
+(reference level/quality/content, prompt, seed), each cut has its own strengths,
+weaknesses, and tradeoffs, and both may behave differently when retrained on a
+better dataset. Reproduce or extend:
+[data recipe](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context/blob/main/data_recipe.md) ·
+[training config](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context/blob/main/train_config.yaml) ·
+[LTX-2 train fork (audio-only IC-LoRA strategy)](https://github.com/fblissjr/LTX-2/tree/audio-guidance-iclora-vtv).
+
+<sub>First proof-of-concept run (the pitch "Helium" probe): [LTX-2.3-22b-IC-LoRA-Helium](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Helium).</sub>
 
 ## Validation + debugging
 
@@ -93,13 +118,11 @@ uv run --group dev python scripts/audit_workflows.py
 Tooling reference: [`docs/reference/debug_tools.md`](docs/reference/debug_tools.md).
 Symptom-first quality troubleshooting: [`docs/guides/debugging_guide.md`](docs/guides/debugging_guide.md).
 
-## Local logging + profiling (off by default)
+## Local profiling (off by default)
 
-Two opt-in, env-var-gated instruments (`AUDIOLOOPHELPER_SAGE_TRACE`,
-`COMFYUI_EXEC_LOG`) plus an offline aggregator. All write plain JSONL to your
-own disk only — **no network calls, no telemetry endpoint, no "anonymous usage
-data"; it's local file I/O for your own profiling.** What gets captured + the
-full privacy posture: [`docs/reference/telemetry_and_tracing.md`](docs/reference/telemetry_and_tracing.md).
+Opt-in, env-var-gated JSONL instruments for your own performance debugging
+(attention trace, exec log, offline summarizer). Local files only.
+Details: [`docs/reference/telemetry_and_tracing.md`](docs/reference/telemetry_and_tracing.md).
 
 ## Layout
 

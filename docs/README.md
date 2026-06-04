@@ -64,6 +64,7 @@ linking out (parallel-scrubbed-copy convention retired 2026-04-25).
 
 ### "I want to TRAIN an audio→video IC-LoRA (or fork the attempt)"
 - Experiment hub + method notes (process, candid about confounds; single-pass steers qualitatively, F0 gate pending): [`audio_iclora/index.md`](audio_iclora/index.md)
+- The current released model (two cuts, granular-strength nodes, measurement notes): [`audio_iclora/audio_only_context.md`](audio_iclora/audio_only_context.md) — adapters + data recipe + training config on [the model card](https://huggingface.co/fbjr/LTX-2.3-22b-IC-LoRA-Audio-Only-Context)
 - Audio-reference IC-LoRA inference behavior (no reference-length clamp, 0.3–0.5 strength band, audio→identity, tone→speech): [`audio_iclora/audio_only_ic_lora.md`](audio_iclora/audio_only_ic_lora.md)
 
 ### "I want to turn a folder of renders into a dataset"
