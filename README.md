@@ -23,6 +23,22 @@ loop. Workflow: [`audio_reactive_loop.json`](example_workflows/audio_reactive_lo
 [writeup](docs/experimental/audio_reactive_workflows.md)</sub>
 
 <details>
+<summary><b>▶ One 5-second audio clip, four takes — a sketch line drives the whole scene</b></summary>
+
+https://github.com/user-attachments/assets/5464d767-85ba-4827-b448-5e93a2fd8871
+
+https://github.com/user-attachments/assets/c3149832-b830-4013-8701-d562ee91eceb
+
+https://github.com/user-attachments/assets/a96cc95c-3268-4d95-a45d-6e3c0d17dcbb
+
+https://github.com/user-attachments/assets/e198faa1-4fbf-4e88-996d-7af7634e8144
+
+<sub>Four generations from the **same ~5s comedy-sketch audio + one init image** —
+the audio alone sets the performance: timing, delivery, gesture.</sub>
+
+</details>
+
+<details>
 <summary><b>▶ Full-length music video — the default workflow</b></summary>
 
 https://github.com/user-attachments/assets/51d96aaf-c938-4ae4-8c58-34524e8fe79d
@@ -45,22 +61,6 @@ https://github.com/user-attachments/assets/e3920e6b-9540-461b-9b65-0c1e7424c0d6
 <sub>Three full renders through the default workflow from the **same single init
 image**; the first two share essentially the same prompt (the astronaut run
 differs). The audio is the change — and it redraws pacing, motion, and mood.</sub>
-
-</details>
-
-<details>
-<summary><b>▶ One 5-second audio clip, four takes — a sketch line drives the whole scene</b></summary>
-
-https://github.com/user-attachments/assets/5464d767-85ba-4827-b448-5e93a2fd8871
-
-https://github.com/user-attachments/assets/c3149832-b830-4013-8701-d562ee91eceb
-
-https://github.com/user-attachments/assets/a96cc95c-3268-4d95-a45d-6e3c0d17dcbb
-
-https://github.com/user-attachments/assets/e198faa1-4fbf-4e88-996d-7af7634e8144
-
-<sub>Four generations from the **same ~5s comedy-sketch audio + one init image** —
-the audio alone sets the performance: timing, delivery, gesture.</sub>
 
 </details>
 
