@@ -16,6 +16,7 @@ Handles the three link representations that must stay in sync:
 """
 
 import os
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -757,6 +758,60 @@ class WorkflowEditor:
             node["title"] = title
         sg["nodes"].append(node)
         return nid
+
+    def add_subgraph_input(
+        self,
+        name: str,
+        dtype: str,
+        label: str | None = None,
+        pos: list | None = None,
+        sg_index: int = 0,
+    ) -> int:
+        """Append a boundary input to a subgraph AND mirror it on the invoker.
+
+        APPEND-ONLY: never reorders or removes existing inputs. Subgraph slot
+        indices bake at save time (a removal shifts every higher slot and
+        forces a UI re-add), so the new slot always lands at the end and the
+        returned index equals the prior `len(sg["inputs"])` — that's the
+        `src_slot` to use when wiring the distributor (-10) inside the
+        subgraph, and the invoker `tgt_slot` for the top-level feed wire.
+
+        The boundary `id` is DETERMINISTIC: `uuid5(NAMESPACE_OID, name)`.
+        Re-running a generator script therefore stays byte-stable (md5 regen
+        discipline, scripts/CLAUDE.md "Byte-identical refactor validation")
+        instead of churning a fresh uuid4 on every run.
+
+        `label` defaults to `name`; `pos` defaults to `[0, 0]`. Raises
+        ValueError when the subgraph or its invoker node is missing.
+        """
+        sg = self.get_subgraph(sg_index)
+        if sg is None:
+            raise ValueError(f"Subgraph {sg_index} not found")
+        invoker = self.find_subgraph_invoker(sg_index)
+        if invoker is None:
+            raise ValueError(f"Subgraph {sg_index} has no invoker node")
+
+        if label is None:
+            label = name
+        if pos is None:
+            pos = [0, 0]
+
+        sg_inputs = sg.setdefault("inputs", [])
+        slot = len(sg_inputs)
+        sg_inputs.append({
+            "id": str(uuid.uuid5(uuid.NAMESPACE_OID, name)),
+            "name": name,
+            "type": dtype,
+            "linkIds": [],
+            "localized_name": name,
+            "label": label,
+            "pos": pos,
+        })
+        # Mirror on the invoker (same order; link filled by the top-level wire).
+        invoker.setdefault("inputs", []).append(
+            {"label": label, "name": name, "type": dtype, "link": None}
+        )
+        return slot
 
     def rewire_subgraph_input(
         self, tgt_node: int, tgt_slot: int,

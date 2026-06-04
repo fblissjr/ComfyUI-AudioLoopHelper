@@ -147,7 +147,6 @@ from __future__ import annotations
 import argparse
 import shutil
 import sys
-import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -272,39 +271,6 @@ def _make_selector(ed: WorkflowEditor, title: str, pos: list, mode: int) -> int:
     return nid
 
 
-def _new_sg_input(name: str, label: str, pos: list) -> dict:
-    """Build a subgraph boundary input slot dict (appended to sg['inputs'])."""
-    return {
-        # uuid5 keyed on the input name: deterministic across regenerations,
-        # so re-running the generator stays byte-stable (md5 regen discipline,
-        # scripts/CLAUDE.md "Byte-identical refactor validation").
-        "id": str(uuid.uuid5(uuid.NAMESPACE_OID, name)),
-        "name": name,
-        "type": "LATENT",
-        "linkIds": [],
-        "localized_name": name,
-        "label": label,
-        "pos": pos,
-    }
-
-
-def _add_subgraph_input(ed: WorkflowEditor, name: str, label: str, pos: list) -> int:
-    """Append a new LATENT input to the subgraph boundary AND mirror it on the
-    invoker node. Returns the new slot index (== distributor src_slot).
-
-    APPEND-ONLY: never reorder/remove existing inputs (slot indices bake at
-    save time; removal shifts higher slots). The new slot lands at the end.
-    """
-    sg = ed.get_subgraph(0)
-    assert sg is not None, "subgraph[0] validated by _assert_required_nodes_present"
-    slot = len(sg["inputs"])
-    sg["inputs"].append(_new_sg_input(name, label, pos))
-    # Mirror on the invoker node (same order; link filled by the top-level wire).
-    inv = ed.find_node(SUBGRAPH_INVOKER)
-    inv["inputs"].append({"label": label, "name": name, "type": "LATENT", "link": None})
-    return slot
-
-
 def _add_inner_guide(
     ed: WorkflowEditor, title: str, pos: list, mode: int, latent_idx: int, strength: float
 ) -> int:
@@ -354,10 +320,10 @@ def _apply(ed: WorkflowEditor) -> None:
     assert sg is not None, "subgraph[0] validated by _assert_required_nodes_present"
 
     # 1. Two new subgraph inputs (APPENDED at the end -> slots 20, 21).
-    end_slot = _add_subgraph_input(ed, "end_guide_latent",
-                                   "end keyframe (one ahead)", [-3015, 3760])
-    mid_slot = _add_subgraph_input(ed, "mid_guide_latent",
-                                   "mid keyframe (one ahead)", [-3015, 3820])
+    end_slot = ed.add_subgraph_input("end_guide_latent", "LATENT",
+                                     "end keyframe (one ahead)", [-3015, 3760])
+    mid_slot = ed.add_subgraph_input("mid_guide_latent", "LATENT",
+                                     "mid keyframe (one ahead)", [-3015, 3820])
     assert end_slot == END_GUIDE_INPUT_SLOT, (end_slot, END_GUIDE_INPUT_SLOT)
     assert mid_slot == MID_GUIDE_INPUT_SLOT, (mid_slot, MID_GUIDE_INPUT_SLOT)
     print(f"  + subgraph input slot {end_slot}: end_guide_latent (LATENT)")
