@@ -114,16 +114,16 @@ def test_apply_does_not_mutate_source(tmp_paths):
 
 
 def _count_script_save_latents(ed) -> int:
-    # Count only THIS script's SaveLatent (by its filename prefix) — the
+    # Count by the apply script's OWN idempotence key (node title) so the
+    # test asserts the invariant the script actually maintains — the
     # canonical source workflow carries its own assembled-latent capture
     # SaveLatent from apply_run_id_layout.py (ACTIVE by default since
     # 2026-06-05, decode-crash insurance), which must not be counted
     # against the per-iter SaveLatent this apply script adds.
-    from apply_save_video_latent import DEFAULT_FILENAME_PREFIX
+    from apply_save_video_latent import NEW_NODE_TITLE
     return sum(
         1 for n in ed.wf["nodes"]
-        if n.get("type") == SAVE_LATENT_TYPE
-        and (n.get("widgets_values") or [""])[0] == DEFAULT_FILENAME_PREFIX
+        if n.get("type") == SAVE_LATENT_TYPE and n.get("title") == NEW_NODE_TITLE
     )
 
 

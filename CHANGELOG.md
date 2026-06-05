@@ -13,8 +13,11 @@ This project uses [Semantic Versioning](https://semver.org/).
   spike on top of page-locked staging + offloaded models; the sum can
   kernel-OOM the process at the last step after all sampling succeeded.
   Sampling no longer needs the models by decode time; dropping them removes
-  ~40-50GB from the decode profile. Wired into the canonical loop and the
-  endanchor variant (upstream of the audio trim); next prompt cold-reloads.
+  ~40-50GB from the decode profile. Applied across the full loop-workflow
+  family via `apply_pre_decode_cleanup.py` (audit pair:
+  `pre_decode_cleanup_present`, WARN); single-pass/short-clip workflows are
+  deliberately exempt — no spike to dodge, and battery renders would pay a
+  model cold-reload per prompt. Next prompt after a cleanup cold-reloads.
 - **`Evenly-Spaced Keyframes (from video)` node (`EvenlySpacedKeyframes`).**
   Picks N frames spread evenly across an IMAGE batch (endpoints always
   included) — auto keyframe sampling from a loaded video for the keyframe

@@ -1,8 +1,8 @@
 {
   "id": "3db70343-fd10-483b-8d66-6be2395b9681",
   "revision": 0,
-  "last_node_id": 2033,
-  "last_link_id": 3222,
+  "last_node_id": 2034,
+  "last_link_id": 3224,
   "nodes": [
     {
       "id": 252,
@@ -2043,7 +2043,7 @@
           "type": "LATENT",
           "links": [
             2993,
-            3220
+            3224
           ]
         }
       ],
@@ -4526,7 +4526,7 @@
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 3220
+          "link": 3223
         },
         {
           "name": "audio",
@@ -4800,6 +4800,46 @@
         "format": "LTXV"
       },
       "title": "AV Inversion: full clip (video frozen + audio seed)"
+    },
+    {
+      "id": 2034,
+      "type": "PreDecodeCleanup",
+      "pos": [
+        3910,
+        1518
+      ],
+      "size": [
+        270,
+        82
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "latent",
+          "name": "latent",
+          "type": "LATENT",
+          "link": 3224
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "links": [
+            3223
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreDecodeCleanup",
+        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper"
+      },
+      "widgets_values": [
+        "always"
+      ],
+      "title": "Pre-Decode Cleanup (unload models)"
     }
   ],
   "links": [
@@ -5908,14 +5948,6 @@
       "INT"
     ],
     [
-      3220,
-      381,
-      2,
-      2028,
-      0,
-      "LATENT"
-    ],
-    [
       3221,
       2033,
       0,
@@ -5930,6 +5962,22 @@
       567,
       0,
       "AUDIO"
+    ],
+    [
+      3223,
+      2034,
+      0,
+      2028,
+      0,
+      "LATENT"
+    ],
+    [
+      3224,
+      381,
+      2,
+      2034,
+      0,
+      "LATENT"
     ]
   ],
   "groups": [

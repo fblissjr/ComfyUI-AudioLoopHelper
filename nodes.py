@@ -4346,31 +4346,54 @@ class IterationCleanup(io.ComfyNode):
         return io.NodeOutput(latent)
 
 
+_FREE_ALL_PINS_BYTES = 1 << 62  # byte budget large enough to release every pin
+
+
+def _unload_models_for_decode() -> None:
+    """Free pinned staging + unload all models + flush allocators, never
+    raising into the workflow — this runs at the LAST step of a long render,
+    and an error here must not kill it (same defensive shape as
+    ``_purge_stale_loaded_models``).
+
+    Call order is load-bearing: ``free_pins`` walks comfy's
+    ``current_loaded_models``, which ``unload_all_models`` EMPTIES — pins
+    must be released first or the call silently frees nothing.
+    ``evict_active=True`` because the just-used diffusion model's staging
+    pins count as active. No-op when ``comfy.model_management`` isn't
+    importable (tests, headless harness).
+    """
+    try:
+        import comfy.model_management as mm
+    except ImportError:
+        return  # expected under pytest/headless harness
+    try:
+        mm.free_pins(_FREE_ALL_PINS_BYTES, evict_active=True)
+    except Exception as e:
+        warnings.warn(f"PreDecodeCleanup: free_pins failed: {e!r}", stacklevel=2)
+    try:
+        mm.unload_all_models()
+    except Exception as e:
+        warnings.warn(f"PreDecodeCleanup: unload_all_models failed: {e!r}", stacklevel=2)
+    gc.collect()
+    try:
+        mm.soft_empty_cache()
+    except Exception as e:
+        warnings.warn(f"PreDecodeCleanup: soft_empty_cache failed: {e!r}", stacklevel=2)
+
+
 class PreDecodeCleanup(io.ComfyNode):
-    """LATENT passthrough that unloads ALL models and frees pinned staging —
-    wire immediately before the full-song final VAE decode.
+    """LATENT passthrough that frees pinned staging and unloads ALL models —
+    wire immediately before the full-song final VAE decode. Sampling no
+    longer needs the models by then, and the decode's single-node RAM spike
+    on top of them can kernel-OOM the process at the last step (mechanism +
+    sizing: docs/reference/benchmarking_memory_pressure.md).
 
-    Why: the final decode of a full-song loop render is a single-node RAM
-    spike (fp32 decode output is ~6GB per minute of 960x544 video) on top of
-    page-locked staging (~24GB, unswappable) + the offloaded diffusion model
-    + text encoder. The sum kernel-OOMs a 125GB box at the LAST step, after
-    all sampling succeeded. By decode time none of those models are needed —
-    dropping them removes ~40-50GB from the decode profile. Launch-flag
-    tuning cannot fix this (the spike happens inside one node, where the
-    RAM-pressure cache's per-node eviction never gets a turn; see
-    docs/reference/benchmarking_memory_pressure.md).
-
-    Call order is load-bearing: `free_pins` iterates comfy's
-    `current_loaded_models`, which `unload_all_models` EMPTIES — pins must be
-    released first or the call silently frees nothing. `evict_active=True`
-    because the just-used diffusion model's staging pins count as active.
-
-    Cost: the next prompt cold-reloads the models (~1 min). Cache caveat: a
-    memoized re-run skips this node's side effect — fine, because the decode
-    it protects is skipped too.
-
-    Sibling of `IterationCleanup` (allocator hygiene INSIDE the loop); this
-    one is the end-of-render teardown BEFORE the decode.
+    Cost: the next prompt cold-reloads (~1 min). Memoized re-runs skip the
+    side effect — fine, the decode they protect is skipped too. Sibling of
+    `IterationCleanup` (in-loop allocator hygiene); this is the
+    end-of-render teardown. NOT for single-pass/short-clip workflows: no
+    spike to dodge, and back-to-back battery renders would pay the reload
+    on every prompt.
     """
 
     @classmethod
@@ -4406,14 +4429,7 @@ class PreDecodeCleanup(io.ComfyNode):
     def execute(cls, latent, mode: str) -> io.NodeOutput:
         with _profile_span("PreDecodeCleanup"):
             if mode == "always":
-                import comfy.model_management as mm
-
-                # Pins FIRST (free_pins walks current_loaded_models, which
-                # unload_all_models empties).
-                mm.free_pins(1 << 62, evict_active=True)
-                mm.unload_all_models()
-                gc.collect()
-                mm.soft_empty_cache()
+                _unload_models_for_decode()
         return io.NodeOutput(latent)
 
 

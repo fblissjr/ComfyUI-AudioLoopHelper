@@ -738,6 +738,7 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         _check_vhs_video_combine_frame_rate_parity(wf, by_type, record)
         _check_trim_image_batch_to_audio_present(wf, by_type, record)
         _check_trim_video_latent_to_audio_present(wf, by_type, record)
+        _check_pre_decode_cleanup_present(wf, by_type, record)
         _check_run_id_layout_present(wf, by_type, record)
         # F17 — loop-body CFGGuider input traceability (subgraph-scoped).
         _check_cfg_guider_inputs_traced_to_source(wf, by_type, by_id, record)
@@ -1740,6 +1741,48 @@ def _check_trim_video_latent_to_audio_present(wf, by_type, record) -> None:
                 "TrimVideoLatentToAudio). Saved mp4 will end with silence "
                 "(video > audio by up to window-stride seconds). Run "
                 "scripts/apply_trim_video_latent_to_audio.py.",
+            )
+
+
+def _check_pre_decode_cleanup_present(wf, by_type, record) -> None:
+    """WARN if a full-song LOOP workflow's TrimVideoLatentToAudio.latent is
+    not fed by PreDecodeCleanup.
+
+    The full-song final decode is a single-node RAM spike on top of
+    page-locked staging + offloaded models; without the pre-decode teardown
+    the kernel can OOM-kill the process at the LAST step, after all sampling
+    succeeded (mechanism: docs/reference/benchmarking_memory_pressure.md).
+    WARN-level: a robustness aid, not a correctness invariant.
+
+    Scope: workflows with an ACTIVE TensorLoopOpen only. Single-pass /
+    short-clip workflows are deliberately exempt — no spike to dodge, and
+    battery renders would pay a model cold-reload per prompt.
+
+    Remediation: ``scripts/apply_pre_decode_cleanup.py``.
+    """
+    del wf
+    if not any(n.get("mode", 0) == 0 for n in by_type.get("TensorLoopOpen", [])):
+        return
+    for trim in by_type.get("TrimVideoLatentToAudio", []):
+        if trim.get("mode", 0) != 0:
+            continue
+        latent_link = _input_slot_link(trim, "latent")
+        if latent_link is None:
+            continue
+        src_type = _link_source_type(by_type, latent_link)
+        tid = trim.get("id")
+        if src_type == "PreDecodeCleanup":
+            record(
+                "OK", "pre_decode_cleanup_present",
+                f"TrimVideoLatentToAudio(#{tid}).latent <- PreDecodeCleanup",
+            )
+        else:
+            record(
+                "WARN", "pre_decode_cleanup_present",
+                f"TrimVideoLatentToAudio(#{tid}).latent <- {src_type or '?'} "
+                "(no PreDecodeCleanup): the full-song final decode can "
+                "kernel-OOM the process at the last step. Run "
+                "scripts/apply_pre_decode_cleanup.py.",
             )
 
 

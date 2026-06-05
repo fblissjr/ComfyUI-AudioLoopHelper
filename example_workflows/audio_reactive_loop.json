@@ -1,8 +1,8 @@
 {
   "id": "3db70343-fd10-483b-8d66-6be2395b9681",
   "revision": 0,
-  "last_node_id": 2030,
-  "last_link_id": 3212,
+  "last_node_id": 2031,
+  "last_link_id": 3214,
   "nodes": [
     {
       "id": 252,
@@ -3277,7 +3277,7 @@
           "type": "LATENT",
           "links": [
             3202,
-            3205
+            3214
           ]
         }
       ],
@@ -4679,7 +4679,7 @@
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 3205
+          "link": 3213
         },
         {
           "name": "audio",
@@ -4786,6 +4786,46 @@
         "AUDIO-REACTIVE LOOP VARIANT (full-length render)\n\nRenders the WHOLE track — the loop auto-tracks audio length.\nUse the single-shot fork to preview the look fast, then render here.\n\nKnobs (all --flag-overridable in apply_audioreactive_loop.py):\n  - #1523 audio_to_video_scale=2.5: how hard audio drives video.\n  - #508 NAG nag_scale=5 (+#507 negative): softened from freeze-prone 11.\n  - #1269 first_frame_guide_strength=0.7: the DRIFT vs MOTION dial.\n    Higher = holds the (painterly) init harder, less motion;\n    lower = more motion, more cross-iter style drift. A/B this.\n  - #1615 prompt: a single 0:00+: entry by default. To evolve per\n    section, add more 'M:SS+: ...' entries ('In a [shot]' framing,\n    NOT 'Cut to'); keep the beat verb (pulses/beats).\n\nTo run: #444 init image, #565 full track. Output trims to audio.\nLong renders: render per-track, use the SaveLatent -> upscale path."
       ],
       "title": "Audio-reactive loop — read me"
+    },
+    {
+      "id": 2031,
+      "type": "PreDecodeCleanup",
+      "pos": [
+        3910,
+        1518
+      ],
+      "size": [
+        270,
+        82
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "latent",
+          "name": "latent",
+          "type": "LATENT",
+          "link": 3214
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "links": [
+            3213
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreDecodeCleanup",
+        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper"
+      },
+      "widgets_values": [
+        "always"
+      ],
+      "title": "Pre-Decode Cleanup (unload models)"
     }
   ],
   "links": [
@@ -5846,14 +5886,6 @@
       "LATENT"
     ],
     [
-      3205,
-      1605,
-      0,
-      2028,
-      0,
-      "LATENT"
-    ],
-    [
       3206,
       604,
       0,
@@ -5900,6 +5932,22 @@
       2029,
       2,
       "INT"
+    ],
+    [
+      3213,
+      2031,
+      0,
+      2028,
+      0,
+      "LATENT"
+    ],
+    [
+      3214,
+      1605,
+      0,
+      2031,
+      0,
+      "LATENT"
     ]
   ],
   "groups": [

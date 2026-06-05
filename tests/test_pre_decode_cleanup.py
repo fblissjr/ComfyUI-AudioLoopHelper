@@ -92,6 +92,21 @@ class TestPreDecodeCleanup:
         assert out[0] is lat
         assert fake_mm.calls == []
 
+    def test_mm_errors_warn_but_do_not_kill_the_render(self, fake_mm, recwarn):
+        """This node runs at the LAST step of a long render — a comfy-internals
+        error in the cleanup must warn and pass the latent through, never raise
+        (same defensive contract as _purge_stale_loaded_models)."""
+        from nodes import PreDecodeCleanup
+
+        def boom():
+            raise RuntimeError("comfy internals")
+
+        fake_mm.unload_all_models = boom
+        lat = _latent()
+        out = PreDecodeCleanup.execute(latent=lat, mode="always")
+        assert out[0] is lat
+        assert any("unload_all_models" in str(w.message) for w in recwarn.list)
+
 
 def test_pre_decode_cleanup_registered():
     from _node_registry import assert_node_registered
