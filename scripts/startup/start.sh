@@ -112,14 +112,24 @@ CMD_ARGS=("${BASE_ARGS[@]}")
 
 case "$MODE" in
     default)
-        echo "[start.sh] mode=default — LTX 2.3 / WAN2.1 (perf flags + 0.5GB reserve, dynamic VRAM + node cache ON)"
+        echo "[start.sh] mode=default — LTX 2.3 / WAN2.1 (perf flags + 0.5GB reserve, dynamic VRAM + node cache ON, 48GB RAM headroom)"
         # Dynamic VRAM stays ON here — see the NODYNVRAM_ARGS comment above for
         # why promoting the kill switch into default crashes full-song loop
         # renders. The node cache stays ON too — NEVER add --cache-none here
         # (fatal for loop renders; see docs/reference/debug_tools.md).
+        #
+        # --cache-ram 48 raises the RAM-pressure cache's per-node free-RAM
+        # floor (ComfyUI default: ~10GB). The full-song final VAE decode
+        # allocates tens of GB inside ONE node where no eviction can run —
+        # with only the default floor, the kernel OOM-kills the process at
+        # the last step. 48GB guarantees the spike fits; the executor frees
+        # pinned staging before evicting cache entries. If loop iterations
+        # start re-encoding upstream (text encoder / audio VAE per iter),
+        # the floor is too aggressive for that workload — lower toward 32.
         CMD_ARGS+=(
             "${PERF_ARGS[@]}"
             --reserve-vram 0.5
+            --cache-ram 48
         )
         ;;
 
