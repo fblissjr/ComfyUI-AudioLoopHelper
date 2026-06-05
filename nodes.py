@@ -3622,6 +3622,68 @@ class LatentSelectByIteration(io.ComfyNode):
         return io.NodeOutput(latent_list[idx])
 
 
+def _kf_spatial_dims(latent) -> tuple[int, int] | None:
+    """(H, W) of a latent dict's samples, or None when there is no usable
+    tensor shape (unit-test stand-ins, exotic latent types) — callers skip."""
+    try:
+        shape = latent["samples"].shape
+        if len(shape) < 2:
+            return None
+        return int(shape[-2]), int(shape[-1])
+    except (KeyError, TypeError, AttributeError, IndexError):
+        return None
+
+
+def _kf_validate_dims(rows, fallback_latent) -> tuple[list[str], list[str]]:
+    """Cross-check keyframe latent spatial dims against the fallback's.
+
+    The fallback is the reference: canonical workflows wire it from the
+    planner-sized init-image encode, so its H/W equal the window latent's.
+    A keyframe whose dims don't divide the reference fails core
+    LTXVAddGuide's integer-ratio assertion MID-RENDER at the first iteration
+    its target_iters fires — typically a hand-copied keyframe branch whose
+    resize node lost its planner width/height wires (pasted copies drop
+    incoming links). Surfacing it here turns a 5-iterations-in core
+    AssertionError into an immediate error naming the slot.
+
+    Returns (errors, warnings): errors for rows that can fire (non-empty
+    targets) and would crash; warnings for integer-ratio mismatches (core
+    accepts a low-res guide) and for mis-sized rows that cannot fire (empty
+    targets — still a landmine for the next target re-spread).
+    """
+    ref = _kf_spatial_dims(fallback_latent)
+    if ref is None:
+        return [], []
+    errors: list[str] = []
+    warnings: list[str] = []
+    for label, iters, lat in rows:
+        dims = _kf_spatial_dims(lat)
+        if dims is None or dims == ref:
+            continue
+        desc = (
+            f"keyframe_latent_{label} is {dims[1]}x{dims[0]} (latent WxH) but the "
+            f"fallback/init latent is {ref[1]}x{ref[0]}"
+        )
+        if dims[0] and dims[1] and ref[0] % dims[0] == 0 and ref[1] % dims[1] == 0:
+            warnings.append(
+                desc + " — integer ratio, core accepts a low-res guide, but mixed "
+                "keyframe resolutions usually mean a lost resize wire."
+            )
+        elif iters:
+            errors.append(
+                desc + f"; core LTXVAddGuide will assert mid-render at iters "
+                f"{sorted(iters)}. Likely cause: the resize feeding this keyframe "
+                "lost its planner width/height wires (pasted node copies drop "
+                "incoming links) — rewire width + height from LTXFramePlanner."
+            )
+        else:
+            warnings.append(
+                desc + " (target_iters empty so it can never fire — fix the "
+                "resize before re-spreading targets)."
+            )
+    return errors, warnings
+
+
 def _kf_select(rows, fallback_latent, current_iteration: int):
     """Pick the keyframe latent for the current iter and describe the choice.
 
@@ -3751,6 +3813,17 @@ class LTXIterKeyframeSchedule(io.ComfyNode):
             )
             for lat_key in latent_keys
         ]
+        # Fail FAST on mis-sized keyframe latents (the lost-resize-wire
+        # footgun) instead of letting core assert cryptically mid-render.
+        errors, dim_warnings = _kf_validate_dims(rows, fallback_latent)
+        log = logging.getLogger(__name__)
+        for w in dim_warnings:
+            log.warning("[LTXIterKeyframeSchedule] %s", w)
+        if errors:
+            raise ValueError(
+                "[LTXIterKeyframeSchedule] mis-sized keyframe latent(s):\n"
+                + "\n".join(errors)
+            )
         chosen, msg, _matched = _kf_select(rows, fallback_latent, current_iteration)
         # Report what we actually used, by default — a render should make plain
         # which keyframe (or the init fallback) anchored each iter, and flag the

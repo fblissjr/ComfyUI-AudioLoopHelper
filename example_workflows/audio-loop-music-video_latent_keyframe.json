@@ -1,7 +1,7 @@
 {
   "id": "3db70343-fd10-483b-8d66-6be2395b9681",
   "revision": 0,
-  "last_node_id": 2042,
+  "last_node_id": 2043,
   "last_link_id": 3236,
   "nodes": [
     {
@@ -5483,6 +5483,30 @@
         "3"
       ],
       "title": "LTX Iter Keyframe Schedule (per-iter keyframe anchor)"
+    },
+    {
+      "id": 2043,
+      "type": "MarkdownNote",
+      "pos": [
+        -1720,
+        6680
+      ],
+      "size": [
+        460,
+        280
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "MarkdownNote"
+      },
+      "widgets_values": [
+        "## Adding more keyframes (4+)\n\nBump **Number of Keyframes** on the schedule node, then copy a LoadImage -> LTXSmartImageResize -> VAEEncode branch.\n\n**Pasted copies DROP incoming wires.** Re-wire the new resize node's width + height from LTXFramePlanner (same wires keyframes 1-3 use). If you skip this, the copy falls back to its stale widget resolution, the keyframe encodes at the wrong latent size, and the render dies at the first iteration that selects it ('ratio of the height and width... must be an integer'). The schedule node now validates this up front and names the bad slot.\n\ntarget_iters are 1-based; overlapping targets resolve to the LOWEST keyframe index."
+      ],
+      "title": "Keyframe branches — copy recipe"
     }
   ],
   "links": [

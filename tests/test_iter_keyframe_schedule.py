@@ -15,12 +15,20 @@ Covers:
 - Passthrough to fallback when no row matches current_iteration.
 - Selection of the matching row's keyframe latent.
 - Lowest-index row wins when an iteration appears in multiple rows.
+- Spatial-dims guard: a keyframe latent whose H/W don't match the
+  fallback's fails FAST with the slot named (instead of core
+  LTXVAddGuide asserting mid-render at the first iteration that selects
+  it — the lost-resize-wire footgun on hand-copied keyframe branches).
 """
 
 from __future__ import annotations
 
 import ast
+import logging
 from pathlib import Path
+
+import pytest
+import torch
 
 from _node_registry import assert_node_registered
 
@@ -157,6 +165,72 @@ def test_key_ordering_is_numeric_not_lexical():
     }
     out = LTXIterKeyframeSchedule.execute(fallback, 7, num_keyframes)
     assert out[0] is kf10
+
+
+# --- Spatial-dims guard (fail fast on mis-sized keyframe latents) ---
+
+
+def _lat(h: int, w: int) -> dict:
+    """A real-tensor latent stand-in with LTX video latent rank [B,C,T,H,W]."""
+    return {"samples": torch.zeros(1, 4, 3, h, w)}
+
+
+def test_mismatched_keyframe_dims_raise_with_slot_named():
+    """448x832 keyframe (14x26 latent) into a 544x960 render (17x30 latent):
+    core would assert at iter 5; the selector must raise at iter 1, naming
+    the slot and the likely cause (lost resize wires on a pasted copy)."""
+    from nodes import LTXIterKeyframeSchedule
+    fallback = _lat(17, 30)
+    num_keyframes = {
+        "keyframe_latent_1": _lat(17, 30), "target_iters_1": "1",
+        "keyframe_latent_2": _lat(14, 26), "target_iters_2": "5",
+    }
+    with pytest.raises(ValueError, match="keyframe_latent_2"):
+        LTXIterKeyframeSchedule.execute(fallback, 1, num_keyframes)
+
+
+def test_matching_dims_do_not_raise():
+    from nodes import LTXIterKeyframeSchedule
+    fallback = _lat(17, 30)
+    kf1 = _lat(17, 30)
+    num_keyframes = {"keyframe_latent_1": kf1, "target_iters_1": "1"}
+    out = LTXIterKeyframeSchedule.execute(fallback, 1, num_keyframes)
+    assert out[0] is kf1
+
+
+def test_mismatched_dims_with_empty_targets_warns_not_raises(caplog):
+    """A mis-sized row that can never fire (empty target_iters) must not
+    block the render — but it IS a landmine for the next target re-spread,
+    so it warns."""
+    from nodes import LTXIterKeyframeSchedule
+    fallback = _lat(17, 30)
+    num_keyframes = {"keyframe_latent_1": _lat(14, 26), "target_iters_1": ""}
+    with caplog.at_level(logging.WARNING):
+        out = LTXIterKeyframeSchedule.execute(fallback, 1, num_keyframes)
+    assert out[0] is fallback
+    assert any("keyframe_latent_1" in r.message for r in caplog.records)
+
+
+def test_integer_ratio_mismatch_warns_not_raises(caplog):
+    """Half-res guide (core accepts integer ratios) — legal, so warn only."""
+    from nodes import LTXIterKeyframeSchedule
+    fallback = _lat(16, 32)
+    kf1 = _lat(8, 16)
+    num_keyframes = {"keyframe_latent_1": kf1, "target_iters_1": "1"}
+    with caplog.at_level(logging.WARNING):
+        out = LTXIterKeyframeSchedule.execute(fallback, 1, num_keyframes)
+    assert out[0] is kf1
+    assert any("keyframe_latent_1" in r.message for r in caplog.records)
+
+
+def test_non_tensor_latents_skip_the_guard():
+    """Opaque stand-ins (and exotic latent types) have no usable shape —
+    the guard must skip them, not crash."""
+    from nodes import LTXIterKeyframeSchedule
+    fallback = _kf("fallback")
+    num_keyframes = {"keyframe_latent_1": _kf("kf1"), "target_iters_1": "5"}
+    out = LTXIterKeyframeSchedule.execute(fallback, 1, num_keyframes)
+    assert out[0] is fallback
 
 
 # --- Decision message (what the node reports it actually used) ---
