@@ -183,6 +183,32 @@ class TestKeyframeLatentScheduleBatchEncode:
         tag = latent_list[0]["samples"][0, 0, 0, 0, 0].item()
         assert tag == 0.0
 
+    def test_out_of_bounds_clamp_warns(self, caplog):
+        """The clamp must not be silent: iterations that clamp to the same
+        last keyframe anchor start==end to one still -> frozen-window risk."""
+        import logging
+
+        vae = FakeVAE()
+        images = _make_images(3)
+        schedule = "0:00-0:20: 0\n0:20+: 99\n"
+        with caplog.at_level(logging.WARNING):
+            self._execute(
+                vae=vae, images=images, stride_seconds=10.0, audio_duration=40.0,
+                schedule=schedule,
+            )
+        assert any("clamp" in r.message.lower() for r in caplog.records)
+
+    def test_in_range_schedule_no_clamp_warn(self, caplog):
+        import logging
+
+        vae = FakeVAE()
+        images = _make_images(3)
+        with caplog.at_level(logging.WARNING):
+            self._execute(
+                vae=vae, images=images, stride_seconds=20.0, audio_duration=60.0,
+            )
+        assert not [r for r in caplog.records if "clamp" in r.message.lower()]
+
     def test_empty_schedule_uses_index_zero(self):
         """Missing schedule defaults to first image."""
         vae = FakeVAE()

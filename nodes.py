@@ -2986,6 +2986,12 @@ def _conditioning_frame_rate(cond) -> float | None:
         return None
 
 
+# Mean-abs-pixel-diff (0-1 image scale) below which two consecutive keyframes
+# are flagged as near-duplicates. Adjacent frames of slow footage sit well
+# under this; a real composition change sits well above.
+_KEYFRAME_SIMILARITY_WARN_MAD = 0.01
+
+
 class EvenlySpacedKeyframes(io.ComfyNode):
     """Pick `count` frames spread evenly across an IMAGE batch — auto keyframe sampling.
 
@@ -3015,8 +3021,12 @@ class EvenlySpacedKeyframes(io.ComfyNode):
             inputs=[
                 io.Image.Input("images", tooltip="IMAGE batch to sample from (e.g. VHS_LoadVideo frames)."),
                 io.Int.Input(
-                    "count", default=3, min=1, max=20,
-                    tooltip="Number of evenly-spaced frames to pick. Clamped to the batch size; count=1 = first frame.",
+                    "count", default=3, min=1, max=100,
+                    tooltip=(
+                        "Number of evenly-spaced frames to pick. Clamped to the batch "
+                        "size; count=1 = first frame. Wire from AudioLoopPlanner."
+                        "total_iterations (+1) to track the song length."
+                    ),
                 ),
             ],
             outputs=[
@@ -3026,16 +3036,42 @@ class EvenlySpacedKeyframes(io.ComfyNode):
 
     @classmethod
     def execute(cls, images, count: int) -> io.NodeOutput:
+        log = logging.getLogger(__name__)
         with _profile_span("EvenlySpacedKeyframes"):
             total = int(images.shape[0])
             if total == 0:
                 return io.NodeOutput(images)  # empty batch — nothing to sample, don't IndexError
             n = max(1, min(int(count), total))
+            if int(count) > total:
+                log.warning(
+                    "[EvenlySpacedKeyframes] count=%d clamped to %d — the batch has "
+                    "only %d frames. The selected keyframes are now closer together "
+                    "in the source; if they anchor loop windows, check they are "
+                    "visually distinct (or feed a longer source video).",
+                    int(count), n, total,
+                )
             if n == 1:
                 idx = torch.tensor([0], device=images.device)
             else:
                 idx = torch.linspace(0, total - 1, n, device=images.device).round().long()
-        return io.NodeOutput(images[idx])
+            selected = images[idx]
+            # Near-duplicate guard: a loop window anchored between two nearly
+            # identical stills (START anchor = keyframe k, END anchor =
+            # keyframe k+1) has almost no motion freedom — the cheapest
+            # denoising path is a static morph. Advisory only.
+            if n >= 2:
+                pair_mad = (selected[1:] - selected[:-1]).abs().mean(dim=(1, 2, 3))
+                n_dup = int((pair_mad < _KEYFRAME_SIMILARITY_WARN_MAD).sum().item())
+                if n_dup:
+                    log.warning(
+                        "[EvenlySpacedKeyframes] %d/%d consecutive keyframe pairs are "
+                        "nearly identical (mean abs pixel diff < %.3f). Loop windows "
+                        "anchored between near-identical keyframes can render frozen — "
+                        "use a source video with more visual variation, fewer "
+                        "keyframes, or lower the END anchor strength.",
+                        n_dup, n - 1, _KEYFRAME_SIMILARITY_WARN_MAD,
+                    )
+        return io.NodeOutput(selected)
 
 
 class KeyframeGuidesTimeSpaced(io.ComfyNode):
@@ -3481,10 +3517,21 @@ class KeyframeLatentScheduleBatchEncode(io.ComfyNode):
 
         # Schedule emits per-iteration image INDICES; clamp to batch range.
         batch_size = int(images.shape[0])
-        per_iter_indices = [
-            max(0, min(_match_schedule_generic(entries, i * stride_seconds, 0), batch_size - 1))
+        raw_indices = [
+            _match_schedule_generic(entries, i * stride_seconds, 0)
             for i in range(iteration_count)
         ]
+        per_iter_indices = [max(0, min(r, batch_size - 1)) for r in raw_indices]
+        oob = sorted({r for r in raw_indices if not (0 <= r < batch_size)})
+        if oob:
+            logging.getLogger(__name__).warning(
+                "[KeyframeLatentScheduleBatchEncode] schedule references image "
+                "indices %s but the batch has %d images — clamped into range. "
+                "Iterations sharing a clamped index anchor to the SAME keyframe "
+                "(start == end anchor -> frozen-window risk). Align the keyframe "
+                "count with the schedule.",
+                oob, batch_size,
+            )
 
         # Dedup preserves insertion order. Encode each unique index once;
         # all iterations sharing that index reference the SAME LATENT

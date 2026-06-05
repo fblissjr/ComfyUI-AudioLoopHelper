@@ -6,7 +6,15 @@ chain. KJNodes has GetImagesFromBatchIndexed (explicit indices) but nothing that
 N evenly-spaced indices from the batch length, hence this node.
 
 ComfyUI IMAGE batch is [B, H, W, C]; selection is along the batch axis (dim 0).
+
+Warn surfaces (advisory only, selection behavior unchanged):
+- count clamped to batch size (count=15 on a 9-frame video silently became 9 — the
+  user has no signal their keyframes are now closer together in the source).
+- near-duplicate consecutive selections (a loop window anchored between two
+  nearly identical stills has almost no motion freedom and renders frozen).
 """
+
+import logging
 
 import torch
 
@@ -87,6 +95,49 @@ class TestEvenlySpacedKeyframes:
         assert torch.equal(out[0], imgs[0])
         assert torch.equal(out[1], imgs[6])
         assert torch.equal(out[2], imgs[11])
+
+
+class TestEvenlySpacedKeyframesWarnings:
+    def test_count_clamp_warns(self, caplog):
+        """count=20 on a 4-frame batch clamps to 4 — must say so out loud."""
+        from nodes import EvenlySpacedKeyframes
+
+        with caplog.at_level(logging.WARNING):
+            EvenlySpacedKeyframes.execute(images=_frames(4), count=20)
+        assert any("clamp" in r.message.lower() for r in caplog.records)
+
+    def test_no_clamp_warn_when_count_fits(self, caplog):
+        from nodes import EvenlySpacedKeyframes
+
+        with caplog.at_level(logging.WARNING):
+            EvenlySpacedKeyframes.execute(images=_frames(9), count=3)
+        assert not [r for r in caplog.records if "clamp" in r.message.lower()]
+
+    def test_near_duplicate_keyframes_warn(self, caplog):
+        """All-identical frames -> every consecutive pair is a near-duplicate
+        anchor pair -> warn (the frozen-window footgun)."""
+        from nodes import EvenlySpacedKeyframes
+
+        with caplog.at_level(logging.WARNING):
+            EvenlySpacedKeyframes.execute(images=torch.zeros(9, 2, 2, 3), count=5)
+        assert any("identical" in r.message.lower() for r in caplog.records)
+
+    def test_distinct_keyframes_no_similarity_warn(self, caplog):
+        """_frames() gives consecutive frames a full-pixel value delta of 1.0 —
+        far above any near-duplicate threshold."""
+        from nodes import EvenlySpacedKeyframes
+
+        with caplog.at_level(logging.WARNING):
+            EvenlySpacedKeyframes.execute(images=_frames(9), count=5)
+        assert not [r for r in caplog.records if "identical" in r.message.lower()]
+
+    def test_single_keyframe_no_similarity_warn(self, caplog):
+        """count=1 has no consecutive pairs — no similarity warn possible."""
+        from nodes import EvenlySpacedKeyframes
+
+        with caplog.at_level(logging.WARNING):
+            EvenlySpacedKeyframes.execute(images=torch.zeros(5, 2, 2, 3), count=1)
+        assert not [r for r in caplog.records if "identical" in r.message.lower()]
 
 
 def test_evenly_spaced_keyframes_registered():
