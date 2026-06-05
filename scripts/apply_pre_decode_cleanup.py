@@ -146,7 +146,8 @@ def apply(revert: bool, dry_run: bool) -> int:
             print(f"  {wf_path.relative_to(REPO_ROOT)}: {status}")
             if status.startswith("load error"):
                 fail += 1
-    return fail
+    # Family exit-code contract: 1 on any failure, 0 otherwise.
+    return 1 if fail else 0
 
 
 def main() -> int:
