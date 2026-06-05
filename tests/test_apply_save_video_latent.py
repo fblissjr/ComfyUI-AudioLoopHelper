@@ -113,29 +113,31 @@ def test_apply_does_not_mutate_source(tmp_paths):
     assert before == after, "source workflow was mutated"
 
 
+def _count_script_save_latents(ed) -> int:
+    # Count only THIS script's SaveLatent (by its filename prefix) — the
+    # canonical source workflow carries its own assembled-latent capture
+    # SaveLatent from apply_run_id_layout.py (ACTIVE by default since
+    # 2026-06-05, decode-crash insurance), which must not be counted
+    # against the per-iter SaveLatent this apply script adds.
+    from apply_save_video_latent import DEFAULT_FILENAME_PREFIX
+    return sum(
+        1 for n in ed.wf["nodes"]
+        if n.get("type") == SAVE_LATENT_TYPE
+        and (n.get("widgets_values") or [""])[0] == DEFAULT_FILENAME_PREFIX
+    )
+
+
 def test_apply_is_idempotent(tmp_paths):
     in_path, out_path = tmp_paths
     r1 = _apply(in_path, out_path)
     assert r1.returncode == 0
-    ed1 = WorkflowEditor(out_path)
-    # Count only ACTIVE (mode=0) SaveLatents — the canonical source workflow
-    # carries a bypassed SaveLatent toggle from apply_run_id_layout.py
-    # (the assembled-latent capture point), which we must not double-count
-    # against the per-iter SaveLatent this apply script adds.
-    n_save = sum(
-        1 for n in ed1.wf["nodes"]
-        if n.get("type") == SAVE_LATENT_TYPE and n.get("mode", 0) == 0
-    )
-    assert n_save == 1
+    assert _count_script_save_latents(WorkflowEditor(out_path)) == 1
 
     r2 = _apply(in_path, out_path)
     assert r2.returncode == 0
-    ed2 = WorkflowEditor(out_path)
-    n_save_2 = sum(
-        1 for n in ed2.wf["nodes"]
-        if n.get("type") == SAVE_LATENT_TYPE and n.get("mode", 0) == 0
+    assert _count_script_save_latents(WorkflowEditor(out_path)) == 1, (
+        "second apply added a duplicate SaveLatent"
     )
-    assert n_save_2 == 1, "second apply added a duplicate SaveLatent"
 
 
 def test_dry_run_does_not_write_draft(tmp_paths):

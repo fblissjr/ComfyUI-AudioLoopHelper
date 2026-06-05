@@ -1,8 +1,8 @@
 {
   "id": "3db70343-fd10-483b-8d66-6be2395b9681",
   "revision": 0,
-  "last_node_id": 2029,
-  "last_link_id": 3212,
+  "last_node_id": 2030,
+  "last_link_id": 3214,
   "nodes": [
     {
       "id": 252,
@@ -3277,7 +3277,7 @@
           "type": "LATENT",
           "links": [
             3202,
-            3205
+            3213
           ]
         }
       ],
@@ -4679,7 +4679,7 @@
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 3205
+          "link": 3214
         },
         {
           "name": "audio",
@@ -4762,6 +4762,46 @@
         25
       ],
       "title": "Trim to audio"
+    },
+    {
+      "id": 2030,
+      "type": "PreDecodeCleanup",
+      "pos": [
+        4210,
+        1520
+      ],
+      "size": [
+        270,
+        82
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "latent",
+          "name": "latent",
+          "type": "LATENT",
+          "link": 3213
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "links": [
+            3214
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreDecodeCleanup",
+        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper"
+      },
+      "widgets_values": [
+        "always"
+      ],
+      "title": "Pre-Decode Cleanup (unload models)"
     }
   ],
   "links": [
@@ -5822,14 +5862,6 @@
       "LATENT"
     ],
     [
-      3205,
-      1605,
-      0,
-      2028,
-      0,
-      "LATENT"
-    ],
-    [
       3206,
       604,
       0,
@@ -5876,6 +5908,22 @@
       2029,
       2,
       "INT"
+    ],
+    [
+      3213,
+      1605,
+      0,
+      2030,
+      0,
+      "LATENT"
+    ],
+    [
+      3214,
+      2030,
+      0,
+      2028,
+      0,
+      "LATENT"
     ]
   ],
   "groups": [

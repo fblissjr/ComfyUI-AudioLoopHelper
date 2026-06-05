@@ -4346,6 +4346,77 @@ class IterationCleanup(io.ComfyNode):
         return io.NodeOutput(latent)
 
 
+class PreDecodeCleanup(io.ComfyNode):
+    """LATENT passthrough that unloads ALL models and frees pinned staging —
+    wire immediately before the full-song final VAE decode.
+
+    Why: the final decode of a full-song loop render is a single-node RAM
+    spike (fp32 decode output is ~6GB per minute of 960x544 video) on top of
+    page-locked staging (~24GB, unswappable) + the offloaded diffusion model
+    + text encoder. The sum kernel-OOMs a 125GB box at the LAST step, after
+    all sampling succeeded. By decode time none of those models are needed —
+    dropping them removes ~40-50GB from the decode profile. Launch-flag
+    tuning cannot fix this (the spike happens inside one node, where the
+    RAM-pressure cache's per-node eviction never gets a turn; see
+    docs/reference/benchmarking_memory_pressure.md).
+
+    Call order is load-bearing: `free_pins` iterates comfy's
+    `current_loaded_models`, which `unload_all_models` EMPTIES — pins must be
+    released first or the call silently frees nothing. `evict_active=True`
+    because the just-used diffusion model's staging pins count as active.
+
+    Cost: the next prompt cold-reloads the models (~1 min). Cache caveat: a
+    memoized re-run skips this node's side effect — fine, because the decode
+    it protects is skipped too.
+
+    Sibling of `IterationCleanup` (allocator hygiene INSIDE the loop); this
+    one is the end-of-render teardown BEFORE the decode.
+    """
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="PreDecodeCleanup",
+            display_name="Pre-Decode Cleanup (unload models)",
+            category="looping/audio",
+            description=(
+                "LATENT passthrough that unloads all models and frees pinned "
+                "staging. Wire right before the full-song final VAE decode so "
+                "the decode's RAM spike fits — sampling is done by then. Next "
+                "prompt cold-reloads (~1 min)."
+            ),
+            inputs=[
+                io.Latent.Input("latent", tooltip="Latent to pass through unchanged."),
+                io.Combo.Input(
+                    "mode",
+                    options=["always", "never"],
+                    default="always",
+                    tooltip=(
+                        "always: free pinned staging + unload all models + "
+                        "empty caches. never: passthrough (disables the cleanup)."
+                    ),
+                ),
+            ],
+            outputs=[
+                io.Latent.Output("latent"),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, latent, mode: str) -> io.NodeOutput:
+        with _profile_span("PreDecodeCleanup"):
+            if mode == "always":
+                import comfy.model_management as mm
+
+                # Pins FIRST (free_pins walks current_loaded_models, which
+                # unload_all_models empties).
+                mm.free_pins(1 << 62, evict_active=True)
+                mm.unload_all_models()
+                gc.collect()
+                mm.soft_empty_cache()
+        return io.NodeOutput(latent)
+
+
 class LoopIterationStamp(io.ComfyNode):
     """MODEL passthrough that stamps `transformer_options["iteration"]`.
 
@@ -4920,6 +4991,7 @@ class AudioLoopHelperExtension(ComfyExtension):
             LTXSmartImageResize,
             CachedTextEncode,
             IterationCleanup,
+            PreDecodeCleanup,
             LoopIterationStamp,
             IterPatchInspector,
             AudioLoopHelperSageAttention,

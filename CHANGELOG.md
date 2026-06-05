@@ -7,6 +7,14 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **`Pre-Decode Cleanup (unload models)` node (`PreDecodeCleanup`).** LATENT
+  passthrough that frees pinned staging and unloads all models — wire right
+  before the full-song final VAE decode. The decode is a single-node RAM
+  spike on top of page-locked staging + offloaded models; the sum can
+  kernel-OOM the process at the last step after all sampling succeeded.
+  Sampling no longer needs the models by decode time; dropping them removes
+  ~40-50GB from the decode profile. Wired into the canonical loop and the
+  endanchor variant (upstream of the audio trim); next prompt cold-reloads.
 - **`Evenly-Spaced Keyframes (from video)` node (`EvenlySpacedKeyframes`).**
   Picks N frames spread evenly across an IMAGE batch (endpoints always
   included) — auto keyframe sampling from a loaded video for the keyframe
