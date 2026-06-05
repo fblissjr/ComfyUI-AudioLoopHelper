@@ -170,6 +170,17 @@ def test_key_ordering_is_numeric_not_lexical():
 # --- Spatial-dims guard (fail fast on mis-sized keyframe latents) ---
 
 
+@pytest.fixture(autouse=True)
+def _clear_warned_keys():
+    """The dims-guard warnings dedup through the process-lifetime
+    _WARNED_KEYS registry; clear between tests so each test sees a fresh
+    warn (the id()-keyed-cache autouse-clear discipline, same reason)."""
+    import nodes
+    nodes._WARNED_KEYS.clear()
+    yield
+    nodes._WARNED_KEYS.clear()
+
+
 def _lat(h: int, w: int) -> dict:
     """A real-tensor latent stand-in with LTX video latent rank [B,C,T,H,W]."""
     return {"samples": torch.zeros(1, 4, 3, h, w)}
@@ -221,6 +232,21 @@ def test_integer_ratio_mismatch_warns_not_raises(caplog):
         out = LTXIterKeyframeSchedule.execute(fallback, 1, num_keyframes)
     assert out[0] is kf1
     assert any("keyframe_latent_1" in r.message for r in caplog.records)
+
+
+def test_dim_warning_logs_once_across_iterations(caplog):
+    """The selector re-executes EVERY loop iteration; an identical dims
+    warning must not spam the console 10-30x per render. Dedup via the
+    shared _WARNED_KEYS registry (content-keyed, so a changed misconfig
+    still re-warns)."""
+    from nodes import LTXIterKeyframeSchedule
+    fallback = _lat(17, 30)
+    num_keyframes = {"keyframe_latent_1": _lat(14, 26), "target_iters_1": ""}
+    with caplog.at_level(logging.WARNING):
+        LTXIterKeyframeSchedule.execute(fallback, 1, num_keyframes)
+        LTXIterKeyframeSchedule.execute(fallback, 2, num_keyframes)
+    hits = [r for r in caplog.records if "keyframe_latent_1" in r.message]
+    assert len(hits) == 1
 
 
 def test_non_tensor_latents_skip_the_guard():

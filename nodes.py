@@ -3650,6 +3650,9 @@ def _kf_validate_dims(rows, fallback_latent) -> tuple[list[str], list[str]]:
     targets) and would crash; warnings for integer-ratio mismatches (core
     accepts a low-res guide) and for mis-sized rows that cannot fire (empty
     targets — still a landmine for the next target re-spread).
+
+    A mis-wired fallback (not planner-sized) defeats the check — no better
+    reference is visible to this node; `ref is None` fails open.
     """
     ref = _kf_spatial_dims(fallback_latent)
     if ref is None:
@@ -3658,13 +3661,13 @@ def _kf_validate_dims(rows, fallback_latent) -> tuple[list[str], list[str]]:
     warnings: list[str] = []
     for label, iters, lat in rows:
         dims = _kf_spatial_dims(lat)
-        if dims is None or dims == ref:
+        if dims is None or dims == ref or 0 in dims:
             continue
         desc = (
             f"keyframe_latent_{label} is {dims[1]}x{dims[0]} (latent WxH) but the "
             f"fallback/init latent is {ref[1]}x{ref[0]}"
         )
-        if dims[0] and dims[1] and ref[0] % dims[0] == 0 and ref[1] % dims[1] == 0:
+        if ref[0] % dims[0] == 0 and ref[1] % dims[1] == 0:
             warnings.append(
                 desc + " — integer ratio, core accepts a low-res guide, but mixed "
                 "keyframe resolutions usually mean a lost resize wire."
@@ -3817,8 +3820,11 @@ class LTXIterKeyframeSchedule(io.ComfyNode):
         # footgun) instead of letting core assert cryptically mid-render.
         errors, dim_warnings = _kf_validate_dims(rows, fallback_latent)
         log = logging.getLogger(__name__)
-        for w in dim_warnings:
-            log.warning("[LTXIterKeyframeSchedule] %s", w)
+        warned = _get_warned_keys()  # this node re-executes EVERY iteration;
+        for w in dim_warnings:       # warn once per distinct message, not 10-30x
+            if w not in warned:
+                warned.add(w)
+                log.warning("[LTXIterKeyframeSchedule] %s", w)
         if errors:
             raise ValueError(
                 "[LTXIterKeyframeSchedule] mis-sized keyframe latent(s):\n"
