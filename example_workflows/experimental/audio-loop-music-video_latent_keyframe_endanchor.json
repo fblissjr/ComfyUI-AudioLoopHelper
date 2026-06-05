@@ -4654,7 +4654,7 @@
       ],
       "flags": {},
       "order": 0,
-      "mode": 4,
+      "mode": 0,
       "inputs": [
         {
           "name": "samples",
