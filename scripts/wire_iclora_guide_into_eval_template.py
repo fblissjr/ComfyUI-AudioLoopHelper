@@ -16,7 +16,7 @@ CFGGuider, so the conditioning chain becomes:
         → LTXAddVideoICLoRAGuideAdvanced (NEW)        ← reference video tokens added here
         → CFGGuider (#153)
 
-VHS_LoadVideo loads /mnt/hub/ai/img/input/audio_iclora_eval_ref.mp4 (the
+VHS_LoadVideo loads audio_iclora_eval_ref.mp4 from ComfyUI's input dir (the
 100-BPM neutral reference video generated for E1.1 eval). The guide's
 latent comes from EmptyLTXVLatentVideo (#344); vae from the video VAE
 loader (#1537).
