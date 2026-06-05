@@ -7,6 +7,12 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **`decode-latent-to-video.json` crash-recovery workflow.** Loop workflows
+  persist the assembled latent (`SaveLatent`, active by default) before the
+  final decode; this 8-node workflow decodes a saved `.latent` to the
+  finished video with the same trim chain as a normal render (latent trim ->
+  tiled decode -> image trim -> VHS). Run on a fresh server: with no
+  diffusion model resident the decode fits easily.
 - **`Pre-Decode Cleanup (unload models)` node (`PreDecodeCleanup`).** LATENT
   passthrough that frees pinned staging and unloads all models — wire right
   before the full-song final VAE decode. The decode is a single-node RAM
@@ -18,6 +24,8 @@ This project uses [Semantic Versioning](https://semver.org/).
   `pre_decode_cleanup_present`, WARN); single-pass/short-clip workflows are
   deliberately exempt — no spike to dodge, and battery renders would pay a
   model cold-reload per prompt. Next prompt after a cleanup cold-reloads.
+  The node logs what it freed (pinned-staging GB, loaded-model delta,
+  free-RAM delta) so decode-stage failures are diagnosable from the log.
 - **`Evenly-Spaced Keyframes (from video)` node (`EvenlySpacedKeyframes`).**
   Picks N frames spread evenly across an IMAGE batch (endpoints always
   included) — auto keyframe sampling from a loaded video for the keyframe
@@ -69,6 +77,16 @@ This project uses [Semantic Versioning](https://semver.org/).
   returns as a Compose-editor property. Not referenced by any shipped workflow.
 
 ### Changed
+- **Full-song decode kernel-OOM root-caused and fixed: `LTXVTiledVAEDecode`
+  device/dtype.** The decoder pre-allocates full-video output+weights buffers
+  at the latents' device/dtype; with the previous `"auto","auto"` widgets
+  that meant ~16 bytes/pixel-frame of fp32 — ~60GB+ in one allocation for a
+  ~5-minute 960x544 render — killing the process at the last step of long
+  renders. All shipped workflows now pin the decode to
+  `working_device="cpu"`, `working_dtype="float16"` (half the bytes,
+  swappable RAM, no visible precision cost at 8-bit output). Roughly doubles
+  the survivable song length; mechanism + history in
+  `docs/reference/benchmarking_memory_pressure.md`.
 - **`KeyframeLatentScheduleBatchEncode` warns on schedule-index clamping.**
   Out-of-range image indices were already clamped into the batch at runtime;
   the clamp is now reported (iterations sharing a clamped index anchor to the

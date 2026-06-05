@@ -1,4 +1,4 @@
-Last updated: 2026-05-26
+Last updated: 2026-06-05
 
 # Debugging Guide: Quality Problems in the Audio-Loop Pipeline
 
@@ -42,6 +42,7 @@ often reveals the next one. That's not a regression — it's progress.
 
 | What you see | First suspect | Jump to |
 |---|---|---|
+| Render dies at the FINAL decode — terminal shows `exited with status 137`, no Python traceback | Kernel OOM killer: decode-stage RAM spike on top of pinned staging + offloaded models (`journalctl -k \| grep -i oom` confirms) | The sampling is saved: decode the banked latent via `example_workflows/decode-latent-to-video.json` (copy the `.latent` from the run's output folder into ComfyUI's input dir, fresh server). Mechanism: [`benchmarking_memory_pressure.md`](../reference/benchmarking_memory_pressure.md) |
 | Fine-grained pulsing / jitter every ~2-3 s (all the way through) | VAEDecodeTiled temporal tiles too small | [Decode-tile seams](#decode-tile-seams) |
 | Visible cut / identity jump every ~18 s | Iteration-boundary hand-off, `overlap_seconds` too low | [Iteration-boundary seams](#iteration-boundary-seams) |
 | One "weird" iteration between two normal ones | Mid-iteration mixed conditioning | [Mid-iteration mix](#mid-iteration-mix) |

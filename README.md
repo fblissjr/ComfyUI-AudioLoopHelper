@@ -4,7 +4,7 @@
   <img src="assets/hero.webp" alt="ComfyUI-AudioLoopHelper" width="500">
 </p>
 
-Last updated: 2026-06-04
+Last updated: 2026-06-05
 
 > [!NOTE]
 > **Experimental repo — it moves fast and changes often.** Treat these as
@@ -173,6 +173,7 @@ Shipped at top-level `example_workflows/`:
 | `audio-loop-music-video_retake.json` | **Regenerate one section** — re-roll a `[start, end]` window, rest held as fixed context. | [`docs/guides/retake_guide.md`](docs/guides/retake_guide.md) |
 | `audio_reactive_loop.json` | **Audio-driven motion** — init image animated so its motion tracks the (frozen) audio. | [`docs/experimental/audio_reactive_workflows.md`](docs/experimental/audio_reactive_workflows.md) |
 | `audio-ic-lora_single-pass.json` | **Audio-reference IC-LoRA (single pass)** — steer a render from a reference audio clip, using the [trained adapters](#trained-adapters-audio-reference-ic-lora) above. | [`docs/audio_iclora/index.md`](docs/audio_iclora/index.md) |
+| `decode-latent-to-video.json` | **Crash recovery** — loop workflows save the assembled latent before the final decode; if a render dies there, this decodes the saved `.latent` to the finished video (copy it into ComfyUI's input dir first). | [`docs/reference/benchmarking_memory_pressure.md`](docs/reference/benchmarking_memory_pressure.md) |
 
 More variants in `example_workflows/experimental/` (paired with run logs in
 `docs/experiments/`; inventory in [`docs/experimental/README.md`](docs/experimental/README.md));

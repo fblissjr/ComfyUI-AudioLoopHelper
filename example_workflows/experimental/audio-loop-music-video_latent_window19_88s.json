@@ -1,8 +1,8 @@
 {
   "id": "3db70343-fd10-483b-8d66-6be2395b9681",
   "revision": 0,
-  "last_node_id": 2030,
-  "last_link_id": 3214,
+  "last_node_id": 2031,
+  "last_link_id": 3217,
   "nodes": [
     {
       "id": 252,
@@ -3241,8 +3241,8 @@
         1,
         1,
         true,
-        "auto",
-        "auto"
+        "cpu",
+        "float16"
       ]
     },
     {
@@ -3277,7 +3277,7 @@
           "type": "LATENT",
           "links": [
             3202,
-            3214
+            3217
           ]
         }
       ],
@@ -4679,7 +4679,7 @@
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 3213
+          "link": 3216
         },
         {
           "name": "audio",
@@ -4764,7 +4764,7 @@
       "title": "Trim to audio"
     },
     {
-      "id": 2030,
+      "id": 2031,
       "type": "PreDecodeCleanup",
       "pos": [
         3910,
@@ -4782,7 +4782,7 @@
           "localized_name": "latent",
           "name": "latent",
           "type": "LATENT",
-          "link": 3214
+          "link": 3217
         }
       ],
       "outputs": [
@@ -4790,7 +4790,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            3213
+            3216
           ]
         }
       ],
@@ -5910,18 +5910,18 @@
       "INT"
     ],
     [
-      3213,
-      2030,
+      3216,
+      2031,
       0,
       2028,
       0,
       "LATENT"
     ],
     [
-      3214,
+      3217,
       1605,
       0,
-      2030,
+      2031,
       0,
       "LATENT"
     ]

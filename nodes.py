@@ -4366,8 +4366,19 @@ def _unload_models_for_decode() -> None:
         import comfy.model_management as mm
     except ImportError:
         return  # expected under pytest/headless harness
+    log = logging.getLogger(__name__)
+    # Log-visible by design: three identical decode-stage kernel kills were
+    # undiagnosable because nothing recorded whether the cleanup ran or
+    # what it freed. Report pins freed + loaded-model delta + free-RAM delta.
     try:
-        mm.free_pins(_FREE_ALL_PINS_BYTES, evict_active=True)
+        import psutil
+        ram_before = psutil.virtual_memory().available
+    except Exception:
+        ram_before = None
+    models_before = len(getattr(mm, "current_loaded_models", []) or [])
+    pins_freed = 0
+    try:
+        pins_freed = mm.free_pins(_FREE_ALL_PINS_BYTES, evict_active=True) or 0
     except Exception as e:
         warnings.warn(f"PreDecodeCleanup: free_pins failed: {e!r}", stacklevel=2)
     try:
@@ -4379,6 +4390,20 @@ def _unload_models_for_decode() -> None:
         mm.soft_empty_cache()
     except Exception as e:
         warnings.warn(f"PreDecodeCleanup: soft_empty_cache failed: {e!r}", stacklevel=2)
+    models_after = len(getattr(mm, "current_loaded_models", []) or [])
+    if ram_before is not None:
+        try:
+            import psutil
+            ram_delta = (psutil.virtual_memory().available - ram_before) / (1024 ** 3)
+            ram_note = f", free RAM {ram_delta:+.1f}GB"
+        except Exception:
+            ram_note = ""
+    else:
+        ram_note = ""
+    log.info(
+        "[PreDecodeCleanup] freed %.1fGB of pinned staging; loaded models %d -> %d%s",
+        pins_freed / (1024 ** 3), models_before, models_after, ram_note,
+    )
 
 
 class PreDecodeCleanup(io.ComfyNode):

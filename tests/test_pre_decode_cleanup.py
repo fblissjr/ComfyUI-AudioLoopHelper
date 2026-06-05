@@ -92,6 +92,19 @@ class TestPreDecodeCleanup:
         assert out[0] is lat
         assert fake_mm.calls == []
 
+    def test_cleanup_logs_what_it_freed(self, fake_mm, caplog):
+        """The node must be log-visible: three kills in a row were
+        undiagnosable because nothing recorded whether the cleanup ran or
+        what it actually freed."""
+        import logging
+
+        with caplog.at_level(logging.INFO):
+            from nodes import PreDecodeCleanup
+
+            PreDecodeCleanup.execute(latent=_latent(), mode="always")
+        msgs = [r.message for r in caplog.records if "PreDecodeCleanup" in r.message]
+        assert any("freed" in m for m in msgs)
+
     def test_mm_errors_warn_but_do_not_kill_the_render(self, fake_mm, recwarn):
         """This node runs at the LAST step of a long render — a comfy-internals
         error in the cleanup must warn and pass the latent through, never raise

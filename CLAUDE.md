@@ -74,7 +74,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 ### Sampler + sigma chain
 
 - **Distilled 8-step path.** `ManualSigmas "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"` + `KSamplerSelect euler` + `CFGGuider cfg=1`. **No flow-matching shift node** (no `ModelSamplingSD3`). **No `euler_ancestral*`.** Full walkthrough + Lightricks evidence: `docs/reference/sampler_reference.md`. Migration: `scripts/apply_canonical_sigmas.py`, `scripts/apply_strip_sd3_shift_node.py`.
-- **VAE decode**: `LTXVTiledVAEDecode [1,1,1,true,"auto","auto"]` on **24GB+** (single-tile, ~3× faster cold-pass than [2,2,1]); fall back to [2,2,1] on ≤16GB. Apply: `scripts/apply_no_tile_vae_decode.py`. Empirical timings + audit details in `docs/reference/sampler_reference.md`.
+- **VAE decode**: `LTXVTiledVAEDecode [1,1,1,true,"cpu","float16"]` on **24GB+** (single-tile, ~3× faster cold-pass than [2,2,1]); fall back to [2,2,1] on ≤16GB. The last two widgets are LOAD-BEARING for full songs: the node pre-allocates full-video output+weights buffers at the latents' device/dtype — `"auto","auto"` = fp32 (~16B/pixel-frame, ~60GB+ for a 5-min song) and kernel-OOMs the process at the final decode. `"cpu","float16"` halves it and keeps it in swappable RAM. Mechanism: `docs/reference/benchmarking_memory_pressure.md`. Apply: `scripts/apply_no_tile_vae_decode.py`.
 - **Don't copy upstream's 15-step sampling** from `LTX-2.3_T2V_I2V_Single_Stage_Distilled_Full.json`. Authoritative distilled path: 8 fixed sigmas.
 
 ### Conditioning + prompts

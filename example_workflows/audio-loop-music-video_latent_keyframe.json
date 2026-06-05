@@ -1,8 +1,8 @@
 {
   "id": "3db70343-fd10-483b-8d66-6be2395b9681",
   "revision": 0,
-  "last_node_id": 2044,
-  "last_link_id": 3238,
+  "last_node_id": 2045,
+  "last_link_id": 3241,
   "nodes": [
     {
       "id": 252,
@@ -3245,8 +3245,8 @@
         1,
         1,
         true,
-        "auto",
-        "auto"
+        "cpu",
+        "float16"
       ]
     },
     {
@@ -3281,7 +3281,7 @@
           "type": "LATENT",
           "links": [
             3202,
-            3238
+            3241
           ]
         }
       ],
@@ -4689,7 +4689,7 @@
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 3237
+          "link": 3240
         },
         {
           "name": "audio",
@@ -5509,7 +5509,7 @@
       "title": "Keyframe branches — copy recipe"
     },
     {
-      "id": 2044,
+      "id": 2045,
       "type": "PreDecodeCleanup",
       "pos": [
         3910,
@@ -5527,7 +5527,7 @@
           "localized_name": "latent",
           "name": "latent",
           "type": "LATENT",
-          "link": 3238
+          "link": 3241
         }
       ],
       "outputs": [
@@ -5535,7 +5535,7 @@
           "name": "latent",
           "type": "LATENT",
           "links": [
-            3237
+            3240
           ]
         }
       ],
@@ -6839,18 +6839,18 @@
       "LATENT"
     ],
     [
-      3237,
-      2044,
+      3240,
+      2045,
       0,
       2028,
       0,
       "LATENT"
     ],
     [
-      3238,
+      3241,
       1605,
       0,
-      2044,
+      2045,
       0,
       "LATENT"
     ]

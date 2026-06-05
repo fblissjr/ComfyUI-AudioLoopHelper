@@ -4642,8 +4642,8 @@
         1,
         1,
         true,
-        "auto",
-        "auto"
+        "cpu",
+        "float16"
       ]
     },
     {

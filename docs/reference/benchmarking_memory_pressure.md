@@ -89,9 +89,47 @@ characterized; the predicted over-raising symptom is loop iterations
 re-encoding upstream every iteration because current-generation cache
 entries get evicted). The mechanism above stands (read from source); any
 re-attempt at cache-floor tuning needs the failure characterized first and
-a pre-registered prediction. Until then the operational mitigations for the
-full-song decode OOM are: one full song per server session, free the node
-cache between renders, or add swap headroom.
+a pre-registered prediction.
+
+## Decode-stage OOM: root cause + fix (resolved 2026-06-05)
+
+Five identical kernel kills (~128.8GB anon-rss on a 125GB box) at the final
+full-song decode were traced — after several falsified theories (launcher
+flags, cross-render cache accumulation, cache floor, leftover models) — to
+`LTXVTiledVAEDecode` itself: the node PRE-ALLOCATES full-video `output` +
+`weights` buffers sized `[frames, H, W, 3]` + `[frames, H, W, 1]` at the
+LATENTS' device/dtype (`working_device="auto"`, `working_dtype="auto"`).
+Loop latents are fp32, so a full song allocates ~16 bytes/pixel-frame —
+~60GB+ for a ~5-minute 960x544 render — in one shot inside a single node,
+where no cache eviction can intervene. Song length is the trigger
+threshold, which is why short renders survived.
+
+Fix (applied across all shipped workflows): `working_device="cpu"` +
+`working_dtype="float16"` — half the bytes, plain swappable RAM, and fp16's
+1024 steps per 0-1 range exceeds 8-bit output precision. Roughly doubles
+the survivable song length; beyond that the structural need is temporal
+chunking, which the node does not offer (it tiles spatially only).
+
+What did NOT fix it (kept for their residual value):
+
+1. **Banked latent + decode-only recovery** (`SaveLatent` active by
+   default + `example_workflows/decode-latent-to-video.json`): still the
+   guaranteed recovery for any decode-stage death — sampling is never
+   lost.
+2. **`PreDecodeCleanup`**: FALSIFIED as the decode-OOM fix — proven in
+   both crashed graphs via the latent files' embedded prompt metadata
+   (the node executed; the kill happened anyway, because the buffer
+   allocation dominates). Retained as VRAM-side hygiene: it frees the
+   diffusion model + pinned staging so the decode's compute has the GPU
+   to itself. Its log line (`[PreDecodeCleanup] freed N GB ...`) remains
+   the way to verify it ran.
+3. Cache-floor tuning (`--cache-ram`): see above — the cache was never
+   the dominant holder.
+
+Diagnostic technique worth keeping: ComfyUI embeds the executed prompt
+graph in saved `.latent` metadata (`safetensors` header) — when "was node X
+actually in the run?" is the question, read it from the artifact instead of
+guessing about canvas reload timing.
 
 ## Removing the offload safety valve
 
