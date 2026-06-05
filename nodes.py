@@ -3021,7 +3021,7 @@ class EvenlySpacedKeyframes(io.ComfyNode):
             inputs=[
                 io.Image.Input("images", tooltip="IMAGE batch to sample from (e.g. VHS_LoadVideo frames)."),
                 io.Int.Input(
-                    "count", default=3, min=1, max=100,
+                    "count", default=3, min=1, max=10_000,
                     tooltip=(
                         "Number of evenly-spaced frames to pick. Clamped to the batch "
                         "size; count=1 = first frame. Wire from AudioLoopPlanner."
@@ -3031,6 +3031,15 @@ class EvenlySpacedKeyframes(io.ComfyNode):
             ],
             outputs=[
                 io.Image.Output(tooltip="The `count` selected frames, in clip order."),
+                io.String.Output(
+                    display_name="placement_info",
+                    tooltip=(
+                        "Human-readable 'selected N/M frames' summary — names count "
+                        "clamping and near-identical consecutive picks (the frozen-"
+                        "window footgun). Wire to a preview, or read the WARN in the "
+                        "console."
+                    ),
+                ),
             ],
         )
 
@@ -3040,14 +3049,15 @@ class EvenlySpacedKeyframes(io.ComfyNode):
         with _profile_span("EvenlySpacedKeyframes"):
             total = int(images.shape[0])
             if total == 0:
-                return io.NodeOutput(images)  # empty batch — nothing to sample, don't IndexError
+                # Empty batch (bad video path) — don't IndexError here.
+                return io.NodeOutput(images, "selected 0 frames (empty input batch)")
             n = max(1, min(int(count), total))
+            info = f"selected {n}/{total} frames"
             if int(count) > total:
+                info += f" (count={int(count)} clamped to the batch size)"
                 log.warning(
                     "[EvenlySpacedKeyframes] count=%d clamped to %d — the batch has "
-                    "only %d frames. The selected keyframes are now closer together "
-                    "in the source; if they anchor loop windows, check they are "
-                    "visually distinct (or feed a longer source video).",
+                    "only %d frames, so the picks are closer together in the source.",
                     int(count), n, total,
                 )
             if n == 1:
@@ -3055,23 +3065,23 @@ class EvenlySpacedKeyframes(io.ComfyNode):
             else:
                 idx = torch.linspace(0, total - 1, n, device=images.device).round().long()
             selected = images[idx]
-            # Near-duplicate guard: a loop window anchored between two nearly
-            # identical stills (START anchor = keyframe k, END anchor =
-            # keyframe k+1) has almost no motion freedom — the cheapest
-            # denoising path is a static morph. Advisory only.
             if n >= 2:
-                pair_mad = (selected[1:] - selected[:-1]).abs().mean(dim=(1, 2, 3))
+                # Near-duplicate guard (advisory): compare on a spatially
+                # subsampled view — full resolution buys nothing at this
+                # threshold and would allocate ~the whole batch again.
+                sub = selected[:, ::8, ::8, :]
+                pair_mad = (sub[1:] - sub[:-1]).abs().mean(dim=(1, 2, 3))
                 n_dup = int((pair_mad < _KEYFRAME_SIMILARITY_WARN_MAD).sum().item())
                 if n_dup:
+                    info += f"; {n_dup}/{n - 1} consecutive pairs nearly identical"
                     log.warning(
                         "[EvenlySpacedKeyframes] %d/%d consecutive keyframe pairs are "
-                        "nearly identical (mean abs pixel diff < %.3f). Loop windows "
-                        "anchored between near-identical keyframes can render frozen — "
-                        "use a source video with more visual variation, fewer "
-                        "keyframes, or lower the END anchor strength.",
+                        "nearly identical (mean abs pixel diff < %.3f) — loop windows "
+                        "anchored between them can render frozen. Use a more varied "
+                        "source, fewer keyframes, or a lower END anchor strength.",
                         n_dup, n - 1, _KEYFRAME_SIMILARITY_WARN_MAD,
                     )
-        return io.NodeOutput(selected)
+        return io.NodeOutput(selected, info)
 
 
 class KeyframeGuidesTimeSpaced(io.ComfyNode):

@@ -1,6 +1,6 @@
 # audio-loop keyframe variant — per-iter keyframe re-anchoring
 
-Last updated: 2026-05-25
+Last updated: 2026-06-05
 
 > **STATUS:** Generated + audit-clean (47 OK / 1 WARN pre-existing
 > latent_volume / 0 ERR). Render-gate pending before relying on it.
@@ -142,3 +142,7 @@ VHS_LoadVideo (clip) → EvenlySpacedKeyframes(count=3) → frame batch ─┬�
 - **Render gate**: structurally sound + audit-clean, not yet render-verified. Gate before promoting in docs as production.
 - **Hard-lock escalation**: strength=1.0 via `LTXVAddLatentGuide` is a tail anchor, not a frame-0 `noise_mask=0` write. If keyframes still don't hold on very long renders, the escalation is an in-subgraph writer (needs the schema change avoided here).
 - **Timestamp variant**: `KeyframeLatentScheduleBatchEncode + LatentSelectByIteration` (shipped) offers song-time scheduling instead of iter-index, with no DynamicCombo. Consider if iter-index proves unintuitive.
+- **Endanchor sibling**: start/mid/end window-boundary anchoring with video
+  auto-extract builds on this spine — design + the frozen-window footgun
+  (anchor *similarity* is each window's motion budget) at
+  `keyframe_endanchor_design.md`.

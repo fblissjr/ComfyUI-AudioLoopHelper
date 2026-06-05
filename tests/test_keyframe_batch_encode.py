@@ -20,6 +20,8 @@ Why mirror byte-for-byte:
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 import torch
 
@@ -186,8 +188,6 @@ class TestKeyframeLatentScheduleBatchEncode:
     def test_out_of_bounds_clamp_warns(self, caplog):
         """The clamp must not be silent: iterations that clamp to the same
         last keyframe anchor start==end to one still -> frozen-window risk."""
-        import logging
-
         vae = FakeVAE()
         images = _make_images(3)
         schedule = "0:00-0:20: 0\n0:20+: 99\n"
@@ -199,8 +199,6 @@ class TestKeyframeLatentScheduleBatchEncode:
         assert any("clamp" in r.message.lower() for r in caplog.records)
 
     def test_in_range_schedule_no_clamp_warn(self, caplog):
-        import logging
-
         vae = FakeVAE()
         images = _make_images(3)
         with caplog.at_level(logging.WARNING):

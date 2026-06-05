@@ -140,6 +140,36 @@ class TestEvenlySpacedKeyframesWarnings:
         assert not [r for r in caplog.records if "identical" in r.message.lower()]
 
 
+class TestPlacementInfo:
+    """STRING summary output — the node-family convention (KeyframeGuidesTimeSpaced
+    does the same): graph-visible surface for decisions the console WARN can scroll
+    past. Selected images stay at out[0]; info is out[1]."""
+
+    def test_reports_selection(self):
+        from nodes import EvenlySpacedKeyframes
+
+        out = EvenlySpacedKeyframes.execute(images=_frames(9), count=3)
+        assert "3" in out[1] and "9" in out[1]
+
+    def test_reports_clamp(self):
+        from nodes import EvenlySpacedKeyframes
+
+        out = EvenlySpacedKeyframes.execute(images=_frames(4), count=20)
+        assert "clamp" in out[1].lower()
+
+    def test_reports_near_duplicates(self):
+        from nodes import EvenlySpacedKeyframes
+
+        out = EvenlySpacedKeyframes.execute(images=torch.zeros(9, 2, 2, 3), count=5)
+        assert "identical" in out[1].lower()
+
+    def test_clean_selection_reports_no_issues(self):
+        from nodes import EvenlySpacedKeyframes
+
+        out = EvenlySpacedKeyframes.execute(images=_frames(9), count=3)
+        assert "clamp" not in out[1].lower() and "identical" not in out[1].lower()
+
+
 def test_evenly_spaced_keyframes_registered():
     from _node_registry import assert_node_registered
 
