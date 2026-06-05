@@ -67,6 +67,30 @@ Goal: compare sage routing modes (e.g. `auto` vs `auto_mask_aware`) under identi
 
 8. **Diff the VRAM residency curves** between `aimdo_A.ndjson` and `aimdo_B.ndjson` (no canned tool yet — load both as pandas or jq the `loaded_size / total_size` per model over `elapsed_s`).
 
+## RAM-pressure cache: the per-node floor
+
+ComfyUI's default cache ("Using RAM pressure cache" at startup) does its
+housekeeping at NODE BOUNDARIES (`execution.py` post-node block): evict
+old-generation entries to the inactive target (default 96GB free), then —
+only when free RAM < the ACTIVE floor — free pinned staging and finally
+evict current-generation entries (biggest tensors first, old ModelPatchers
+before anything else; `comfy_execution/caching.py::RAMPressureCache`). The
+active floor defaults to `min(10GB, 10% of system RAM)`, so a render legally
+runs with ~10GB free — and a single node that allocates tens of GB (the
+full-song tiled VAE decode) cannot be interrupted mid-allocation. Result:
+kernel OOM kill (SIGKILL / exit 137) at the LAST step of a long render, no
+Python traceback. Diagnose via `journalctl -k | grep -i oom` (the
+Killed-process line reports anon-rss).
+
+`--cache-ram <active_GB> [<inactive_GB>]` raises the floor. `start.sh`
+default passes `--cache-ram 48` so the decode spike lands in guaranteed
+headroom (fp32 decode output is ~6GB per minute of 960x544 video; the 48GB
+sizing + validation status live inline at the flag in
+`scripts/startup/start.sh`). Symptom of over-raising the floor: loop
+iterations start re-encoding upstream every iteration (text encoder /
+audio VAE) because current-generation cache entries are being evicted —
+lower toward 32.
+
 ## Removing the offload safety valve
 
 `start.sh` `default` mode keeps dynamic VRAM ON (the no-dynvram flags were briefly promoted into default on 2026-06-04 and reverted the same day: full-song loop renders kernel-OOM at the final full-video VAE decode when the resident model can't be paged — rationale inline at `NODYNVRAM_ARGS` in `scripts/startup/start.sh`). For bench runs, pass the flag manually:
