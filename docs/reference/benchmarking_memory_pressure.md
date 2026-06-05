@@ -1,6 +1,6 @@
 # Benchmarking memory pressure on ComfyUI + LTX 2.3
 
-Last updated: 2026-06-04
+Last updated: 2026-06-05
 
 ## Role
 
@@ -69,7 +69,7 @@ Goal: compare sage routing modes (e.g. `auto` vs `auto_mask_aware`) under identi
 
 ## Removing the offload safety valve
 
-As of 2026-06-04, `start.sh` `default` mode already passes `--disable-dynamic-vram --disable-async-offload` (node cache kept) — the manual flag below is only needed on launchers predating that change:
+`start.sh` `default` mode keeps dynamic VRAM ON (the no-dynvram flags were briefly promoted into default on 2026-06-04 and reverted the same day: full-song loop renders kernel-OOM at the final full-video VAE decode when the resident model can't be paged — rationale inline at `NODYNVRAM_ARGS` in `scripts/startup/start.sh`). For bench runs, pass the flag manually:
 
 ```bash
 bash start_experiment.sh default --disable-dynamic-vram

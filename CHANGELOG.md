@@ -7,6 +7,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **`Evenly-Spaced Keyframes (from video)` node (`EvenlySpacedKeyframes`).**
+  Picks N frames spread evenly across an IMAGE batch (endpoints always
+  included) — auto keyframe sampling from a loaded video for the keyframe
+  encode chain, replacing hand-loaded stills. Surfaces a `placement_info`
+  STRING output plus WARNs (never silently) when `count` clamps to the batch
+  size or when consecutive picks are duplicates/static frames. `count` can be
+  wired from `AudioLoopPlanner.total_iterations` so it tracks the song.
 - **Timestep-range gate on the Advanced audio IC-LoRA guide.**
   `reference_start_percent` / `reference_end_percent` apply the in-context
   reference only over a band of the denoise schedule; outside the band the ref
@@ -51,6 +58,14 @@ This project uses [Semantic Versioning](https://semver.org/).
   returns as a Compose-editor property. Not referenced by any shipped workflow.
 
 ### Changed
+- **`KeyframeLatentScheduleBatchEncode` warns on schedule-index clamping.**
+  Out-of-range image indices were already clamped into the batch at runtime;
+  the clamp is now reported (iterations sharing a clamped index anchor to the
+  same keyframe, a frozen-window risk in anchored loop variants).
+- **`start.sh` surfaces the ComfyUI exit status.** The SSL-filter pipe
+  previously reported grep's exit code, so a SIGKILL (e.g. the kernel OOM
+  killer at status 137) dropped back to the prompt with no message; the
+  launcher now prints the real status after the pipeline.
 - **Audio IC-LoRA loader strengths default to 0.5** (was 1.0) on
   `LTXAudioICLoRALoader.strength_model` and
   `LTXAudioICLoRALoaderPerStream.audio_strength` / `.bridge_strength`, with the

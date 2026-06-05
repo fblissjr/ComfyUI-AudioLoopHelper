@@ -52,28 +52,39 @@ keyframe k+1). The widget value is a dead placeholder.
 Symptom: initial render dynamic, every later window progressively less
 dynamic, effectively frozen by the third window.
 
-Cause chain — none of it image strength, all of it anchor *similarity*:
+Cause chain — none of it image strength, all of it the anchors' *motion
+budget*:
 
 1. A short source clip sliced into many keyframes yields consecutive
-   keyframes that are nearly identical (the shipped 9s test clip at
-   `force_rate=1` gives 9 frames ~1s apart; `count=15` silently clamped
-   to 9).
-2. Window k is then pinned START (1.0) to still A and END (0.7) to still
-   B ≈ A. The cheapest denoising path between two near-identical stills
-   is a static morph. The initial render has no END anchor — which is why
-   only iterations 2+ freeze.
+   keyframes only ~1 s of source motion apart (the shipped 9s test clip at
+   `force_rate=1` gives 9-10 frames; `count=15` silently clamped).
+2. Window k is then pinned START (1.0) to frame t and END (0.7) to frame
+   t+1s — about one second of narrative change stretched over a ~20 s
+   window: **~20x forced slow-motion**, which reads as frozen. The initial
+   render has no END anchor — which is why only iterations 2+ damp.
 3. Late in the song the selectors clamp to the LAST keyframe, so START
-   and END become the *same* image — maximally frozen.
+   and END become the *same* image — genuinely static.
 
 Keyframe COUNT does not add anchors per window (always exactly one START +
-one END); count ÷ source-length sets the visual delta between consecutive
-anchors, and that delta is each window's motion budget.
+one END); count ÷ source-length sets the source-time spacing between
+consecutive anchors, and `spacing / window_stride` is each window's
+slow-motion factor.
+
+**Measured (2026-06-05):** the shipped clip's consecutive 1 s frames score
+mean-abs-pixel-diff 0.09-0.27 — far ABOVE the node's 0.01 near-duplicate
+threshold. Pixel difference conflates camera/texture change with narrative
+change, so the content-based guard catches only the degenerate case
+(duplicate/static frames, and the late-song same-anchor clamp). The
+reliable discriminator for the slow-motion trap is STRUCTURAL — source
+spacing vs window stride — which the selection node can't see; that check
+belongs in `LoopConfigValidator` (open item below).
 
 ### Fixes shipped (2026-06-05)
 
-- `EvenlySpacedKeyframes` WARNs on count clamp and on near-identical
-  consecutive picks (mean abs pixel diff < 0.01 on a subsampled view), and
-  emits a `placement_info` STRING output (node-family convention, mirrors
+- `EvenlySpacedKeyframes` WARNs on count clamp and on duplicate/static
+  consecutive picks (mean abs pixel diff < 0.01 on a subsampled view —
+  degenerate-case guard only, see Measured above), and emits a
+  `placement_info` STRING output (node-family convention, mirrors
   `KeyframeGuidesTimeSpaced`).
 - `KeyframeLatentScheduleBatchEncode` WARNs when schedule indices clamp to
   the batch range.
@@ -108,5 +119,9 @@ Pre-registered in the validation predictions doc; in order:
 - If the variant proves out: promote out of experimental/ with an
   apply-script + audit F-pair (the live JSON has drifted from the original
   generator script; rebuild required at promotion).
-- Possible follow-up: pre-render count-vs-source check in
-  `LoopConfigValidator` (runtime WARN is the current backstop).
+- **Slow-motion ratio check in `LoopConfigValidator`** — source keyframe
+  spacing vs window stride is the structural discriminator the content
+  threshold can't provide (see Measured). Also fold in count-vs-source.
+- Schedule text carries 15 entries (last open-ended at `4:38.32+`); songs
+  longer than ~15 windows anchor everything past that to keyframe 14. Fine
+  for current material; regenerate the schedule for longer songs.
