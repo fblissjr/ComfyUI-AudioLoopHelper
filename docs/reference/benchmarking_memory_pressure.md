@@ -82,14 +82,16 @@ kernel OOM kill (SIGKILL / exit 137) at the LAST step of a long render, no
 Python traceback. Diagnose via `journalctl -k | grep -i oom` (the
 Killed-process line reports anon-rss).
 
-`--cache-ram <active_GB> [<inactive_GB>]` raises the floor. `start.sh`
-default passes `--cache-ram 48` so the decode spike lands in guaranteed
-headroom (fp32 decode output is ~6GB per minute of 960x544 video; the 48GB
-sizing + validation status live inline at the flag in
-`scripts/startup/start.sh`). Symptom of over-raising the floor: loop
-iterations start re-encoding upstream every iteration (text encoder /
-audio VAE) because current-generation cache entries are being evicted —
-lower toward 32.
+`--cache-ram <active_GB> [<inactive_GB>]` raises the floor — but raising
+it is NOT a validated fix: `--cache-ram 48` was tried in `start.sh` default
+on 2026-06-05 and regressed real renders the same day (failure mode not yet
+characterized; the predicted over-raising symptom is loop iterations
+re-encoding upstream every iteration because current-generation cache
+entries get evicted). The mechanism above stands (read from source); any
+re-attempt at cache-floor tuning needs the failure characterized first and
+a pre-registered prediction. Until then the operational mitigations for the
+full-song decode OOM are: one full song per server session, free the node
+cache between renders, or add swap headroom.
 
 ## Removing the offload safety valve
 
