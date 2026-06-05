@@ -155,27 +155,27 @@
     },
     {
       "id": 5,
-      "type": "LTXVTiledVAEDecode",
+      "type": "VAEDecodeTiled",
       "pos": [
         820,
         260
       ],
       "size": [
         320,
-        198
+        150
       ],
       "order": 5,
       "mode": 0,
       "inputs": [
         {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 4
+        },
+        {
           "name": "vae",
           "type": "VAE",
           "link": 3
-        },
-        {
-          "name": "latents",
-          "type": "LATENT",
-          "link": 4
         }
       ],
       "outputs": [
@@ -187,19 +187,16 @@
           ]
         }
       ],
-      "title": "Final VAE Decode (once)",
+      "title": "Tiled decode (temporal chunks — bounds RAM for long songs)",
       "properties": {
-        "cnr_id": "ComfyUI-LTXVideo",
-        "ver": "2acf7af8991f33b5cc06ec26753cb6e88e057d04",
-        "Node name for S&R": "LTXVTiledVAEDecode"
+        "Node name for S&R": "VAEDecodeTiled",
+        "cnr_id": "comfy-core"
       },
       "widgets_values": [
-        1,
-        1,
-        1,
-        true,
-        "cpu",
-        "float16"
+        1024,
+        64,
+        256,
+        16
       ],
       "flags": {}
     },
@@ -369,7 +366,7 @@
       3,
       0,
       5,
-      0,
+      1,
       "VAE"
     ],
     [
@@ -377,7 +374,7 @@
       4,
       0,
       5,
-      1,
+      0,
       "LATENT"
     ],
     [
