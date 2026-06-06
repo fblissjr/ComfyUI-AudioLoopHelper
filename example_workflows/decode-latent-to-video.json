@@ -195,7 +195,7 @@
       "widgets_values": [
         1024,
         64,
-        256,
+        512,
         16
       ],
       "flags": {}
@@ -338,7 +338,7 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "## Decode a saved latent to video (crash recovery)\n\nThe loop workflows save the assembled latent (SaveLatent, `latents/segment_*.latent` under the run's output folder) BEFORE the final decode. If a render dies at the decode, nothing is lost:\n\n1. Copy the `.latent` file into ComfyUI's INPUT directory.\n2. Pick it in LoadLatent; load the same song in LoadAudio.\n3. Run on a FRESH server (no diffusion model resident -> the decode fits easily).\n\nTrims mirror the canonical chain (latent trim -> decode -> image trim) so A/V sync matches a normal render. fps widgets assume 25."
+        "## Decode a saved latent to video (crash recovery)\n\nThe loop workflows save the assembled latent (SaveLatent, `latents/segment_*.latent` under the run's output folder) BEFORE the final decode. If a render dies at the decode, nothing is lost:\n\n1. Copy the `.latent` file into ComfyUI's INPUT directory.\n2. Pick it in LoadLatent; load the same song in LoadAudio.\n3. Run on a FRESH server (no diffusion model resident -> the decode fits easily).\n\nTrims mirror the canonical chain (latent trim -> decode -> image trim) so A/V sync matches a normal render. fps widgets assume 25. The decoder's temporal tiling is STRIDE-ALIGNED: (temporal_size-temporal_overlap)/25 = 19.84s ~= the 19.88s loop stride, so chunk seams coincide with iteration boundaries. If your render used a different stride, retune: temporal_size = round(stride*25 + temporal_overlap) to the nearest 4."
       ],
       "color": "#432",
       "bgcolor": "#653"
