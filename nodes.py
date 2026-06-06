@@ -3527,10 +3527,8 @@ class KeyframeLatentScheduleBatchEncode(io.ComfyNode):
 
         batch_size = int(images.shape[0])
         if schedule.strip().lower() == "auto":
-            # Stride-aligned identity mapping: iteration i covers
-            # [i*stride, (i+1)*stride), so window i anchors keyframe i. No
-            # schedule text to hand-author per song — pairs with the
-            # planner-driven EvenlySpacedKeyframes count (= iterations + 1).
+            # Identity index map; the schedule tooltip documents the
+            # stride alignment + planner-count pairing.
             raw_indices = list(range(iteration_count))
         else:
             entries = _parse_image_schedule(schedule)
@@ -4377,18 +4375,24 @@ def _unload_models_for_decode() -> None:
     except ImportError:
         return  # expected under pytest/headless harness
     log = logging.getLogger(__name__)
+
     # Log-visible by design: three identical decode-stage kernel kills were
     # undiagnosable because nothing recorded whether the cleanup ran or
     # what it freed. Report pins freed + loaded-model delta + free-RAM delta.
-    try:
-        import psutil
-        ram_before = psutil.virtual_memory().available
-    except Exception:
-        ram_before = None
-    models_before = len(getattr(mm, "current_loaded_models", []) or [])
+    # psutil is intentionally NOT in requirements.txt (ComfyUI ships it);
+    # the closure degrades the RAM note to nothing on a bare harness.
+    def _free_gb() -> float | None:
+        try:
+            import psutil
+            return psutil.virtual_memory().available / (1024 ** 3)
+        except Exception:
+            return None
+
+    free_before = _free_gb()
+    models_before = len(getattr(mm, "current_loaded_models", []))
     pins_freed = 0
     try:
-        pins_freed = mm.free_pins(_FREE_ALL_PINS_BYTES, evict_active=True) or 0
+        pins_freed = mm.free_pins(_FREE_ALL_PINS_BYTES, evict_active=True)
     except Exception as e:
         warnings.warn(f"PreDecodeCleanup: free_pins failed: {e!r}", stacklevel=2)
     try:
@@ -4400,16 +4404,12 @@ def _unload_models_for_decode() -> None:
         mm.soft_empty_cache()
     except Exception as e:
         warnings.warn(f"PreDecodeCleanup: soft_empty_cache failed: {e!r}", stacklevel=2)
-    models_after = len(getattr(mm, "current_loaded_models", []) or [])
-    if ram_before is not None:
-        try:
-            import psutil
-            ram_delta = (psutil.virtual_memory().available - ram_before) / (1024 ** 3)
-            ram_note = f", free RAM {ram_delta:+.1f}GB"
-        except Exception:
-            ram_note = ""
-    else:
-        ram_note = ""
+    models_after = len(getattr(mm, "current_loaded_models", []))
+    free_after = _free_gb()
+    ram_note = (
+        f", free RAM {free_after - free_before:+.1f}GB"
+        if free_before is not None and free_after is not None else ""
+    )
     log.info(
         "[PreDecodeCleanup] freed %.1fGB of pinned staging; loaded models %d -> %d%s",
         pins_freed / (1024 ** 3), models_before, models_after, ram_note,

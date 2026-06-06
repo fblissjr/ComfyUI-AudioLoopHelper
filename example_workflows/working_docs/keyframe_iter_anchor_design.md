@@ -1,6 +1,6 @@
 # audio-loop keyframe variant — per-iter keyframe re-anchoring
 
-Last updated: 2026-06-05
+Last updated: 2026-06-06
 
 > **STATUS:** Generated + audit-clean (47 OK / 1 WARN pre-existing
 > latent_volume / 0 ERR). Render-gate pending before relying on it.
@@ -146,3 +146,8 @@ VHS_LoadVideo (clip) → EvenlySpacedKeyframes(count=3) → frame batch ─┬�
   auto-extract builds on this spine — design + the frozen-window footgun
   (anchor *similarity* is each window's motion budget) at
   `keyframe_endanchor_design.md`.
+- **Identity-auto gap**: the batch-encode selector now accepts a `schedule`
+  of `auto` (stride-aligned identity, fully planner-driven); this node's
+  `target_iters` strings remain hand-authored per song — identity-auto
+  candidate on the DynamicCombo schema, not yet built (would need its own
+  F-pair).

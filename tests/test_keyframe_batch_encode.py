@@ -67,6 +67,12 @@ def _make_images(n: int) -> torch.Tensor:
     return images
 
 
+def _tag(latent: dict) -> float:
+    """Read the FakeVAE content tag (the [0,0,0,0,0] cell encodes the source
+    image index — see FakeVAE.encode). Single home for the 5-zero index."""
+    return latent["samples"][0, 0, 0, 0, 0].item()
+
+
 def _schedule_text_three_sections() -> str:
     return (
         "0:00-0:20: 0\n"
@@ -134,7 +140,7 @@ class TestKeyframeLatentScheduleBatchEncode:
         # → 1:00 → idx 2 (open-end entry).
         expected_indices = [0, 1, 2, 2]
         for i, expected in enumerate(expected_indices):
-            tag = latent_list[i]["samples"][0, 0, 0, 0, 0].item()
+            tag = _tag(latent_list[i])
             assert tag == float(expected), (
                 f"iter {i}: expected image idx {expected}, got tag {tag}"
             )
@@ -170,7 +176,7 @@ class TestKeyframeLatentScheduleBatchEncode:
             schedule=schedule,
         )
         # iter 2 is at 0:20 → schedule says 99, clamp to 2 (batch_size-1).
-        tag = latent_list[2]["samples"][0, 0, 0, 0, 0].item()
+        tag = _tag(latent_list[2])
         assert tag == 2.0
 
     def test_negative_index_clamps_to_zero(self):
@@ -182,7 +188,7 @@ class TestKeyframeLatentScheduleBatchEncode:
             vae=vae, images=images, stride_seconds=10.0, audio_duration=20.0,
             schedule=schedule,
         )
-        tag = latent_list[0]["samples"][0, 0, 0, 0, 0].item()
+        tag = _tag(latent_list[0])
         assert tag == 0.0
 
     def test_auto_schedule_is_identity_mapping(self):
@@ -198,7 +204,7 @@ class TestKeyframeLatentScheduleBatchEncode:
         )
         # 60/20 = 3 iterations + 1 headroom = 4 entries, indices 0..3.
         assert n == 4
-        tags = [latent_list[i]["samples"][0, 0, 0, 0, 0].item() for i in range(n)]
+        tags = [_tag(latent_list[i]) for i in range(n)]
         assert tags == [0.0, 1.0, 2.0, 3.0]
 
     def test_auto_schedule_clamps_when_batch_short(self, caplog):
@@ -211,7 +217,7 @@ class TestKeyframeLatentScheduleBatchEncode:
                 vae=vae, images=images, stride_seconds=10.0, audio_duration=40.0,
                 schedule="auto",
             )
-        tags = [latent_list[i]["samples"][0, 0, 0, 0, 0].item() for i in range(n)]
+        tags = [_tag(latent_list[i]) for i in range(n)]
         assert tags == [0.0, 1.0, 1.0, 1.0, 1.0]
         assert any("clamp" in r.message.lower() for r in caplog.records)
 
@@ -222,7 +228,7 @@ class TestKeyframeLatentScheduleBatchEncode:
             vae=vae, images=images, stride_seconds=20.0, audio_duration=40.0,
             schedule="  AUTO \n",
         )
-        tags = [latent_list[i]["samples"][0, 0, 0, 0, 0].item() for i in range(3)]
+        tags = [_tag(latent_list[i]) for i in range(3)]
         assert tags == [0.0, 1.0, 2.0]
 
     def test_empty_schedule_behavior_unchanged(self):
@@ -234,7 +240,7 @@ class TestKeyframeLatentScheduleBatchEncode:
             vae=vae, images=images, stride_seconds=20.0, audio_duration=40.0,
             schedule="",
         )
-        tags = [latent_list[i]["samples"][0, 0, 0, 0, 0].item() for i in range(n)]
+        tags = [_tag(latent_list[i]) for i in range(n)]
         assert all(t == 0.0 for t in tags)
 
     def test_out_of_bounds_clamp_warns(self, caplog):
@@ -316,18 +322,18 @@ class TestLatentSelectByIteration:
         latent_list = self._fake_latents(3)
         for i in range(3):
             got = self._execute(latent_list=latent_list, current_iteration=i)
-            assert got["samples"][0, 0, 0, 0, 0].item() == float(i)
+            assert _tag(got) == float(i)
 
     def test_clamps_beyond_list_to_last(self):
         """Overshoot returns last entry (absorbs batch encoder's +1 headroom)."""
         latent_list = self._fake_latents(2)
         got = self._execute(latent_list=latent_list, current_iteration=99)
-        assert got["samples"][0, 0, 0, 0, 0].item() == 1.0
+        assert _tag(got) == 1.0
 
     def test_clamps_negative_index_to_zero(self):
         latent_list = self._fake_latents(2)
         got = self._execute(latent_list=latent_list, current_iteration=-5)
-        assert got["samples"][0, 0, 0, 0, 0].item() == 0.0
+        assert _tag(got) == 0.0
 
     def test_empty_list_raises(self):
         """Empty batch is a wiring bug; fail loudly."""
@@ -456,7 +462,7 @@ class TestIntegrationWithKeyframeImageSchedule:
             new_latent = LatentSelectByIteration.execute(
                 latent_list=latent_list, current_iteration=i,
             )[0]
-            new_tag = int(new_latent["samples"][0, 0, 0, 0, 0].item())
+            new_tag = int(_tag(new_latent))
 
             assert new_tag == legacy_image_index, (
                 f"iter {i}: legacy KeyframeImageSchedule selected idx "
