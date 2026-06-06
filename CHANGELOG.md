@@ -7,6 +7,14 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **`auto` schedule on `KeyframeLatentScheduleBatchEncode`.** The schedule
+  widget accepts the single word `auto`: stride-aligned identity mapping
+  (window i anchors keyframe i), computed from the stride/duration inputs
+  the node already receives from the planner — no hand-authored schedule
+  text per song. Pairs with `EvenlySpacedKeyframes.count` wired from
+  `AudioLoopPlanner.total_iterations + 1` for a fully automated keyframe
+  chain; the endanchor variant ships with it. Text schedules and the empty
+  string keep their existing behavior.
 - **`decode-latent-to-video.json` crash-recovery workflow.** Loop workflows
   persist the assembled latent (`SaveLatent`, active by default) before the
   final decode; this 8-node workflow decodes a saved `.latent` to the

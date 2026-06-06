@@ -1,6 +1,6 @@
 # audio-loop endanchor variant — start/mid/end window anchoring
 
-Last updated: 2026-06-05
+Last updated: 2026-06-06
 
 > **STATUS:** Experimental; first full-song render surfaced the
 > frozen-window footgun documented below (fixed at the node + workflow
@@ -122,6 +122,7 @@ Pre-registered in the validation predictions doc; in order:
 - **Slow-motion ratio check in `LoopConfigValidator`** — source keyframe
   spacing vs window stride is the structural discriminator the content
   threshold can't provide (see Measured). Also fold in count-vs-source.
-- Schedule text carries 15 entries (last open-ended at `4:38.32+`); songs
-  longer than ~15 windows anchor everything past that to keyframe 14. Fine
-  for current material; regenerate the schedule for longer songs.
+- RESOLVED 2026-06-06: the schedule widget is now the `auto` sentinel —
+  stride-aligned identity mapping (window i anchors keyframe i) computed
+  from the planner-fed stride/duration the encoder already receives. The
+  keyframe chain is fully automated (count + mapping); no per-song text.

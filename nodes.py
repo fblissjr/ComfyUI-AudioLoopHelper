@@ -3433,7 +3433,11 @@ class KeyframeLatentScheduleBatchEncode(io.ComfyNode):
                         "  0:00-0:38: 0\n"
                         "  0:38-1:15: 1\n"
                         "  1:15+: 2\n"
-                        "Values are 0-based image indices into the batch."
+                        "Values are 0-based image indices into the batch.\n"
+                        "Or the single word `auto`: stride-aligned identity "
+                        "mapping (window i anchors keyframe i) — no per-song "
+                        "text; pair with EvenlySpacedKeyframes.count wired "
+                        "from AudioLoopPlanner.total_iterations + 1."
                     ),
                 ),
                 io.Float.Input(
@@ -3518,19 +3522,25 @@ class KeyframeLatentScheduleBatchEncode(io.ComfyNode):
             _KEYFRAME_LATENT_CACHE.move_to_end(cache_key)
             return io.NodeOutput(*cached)
 
-        entries = _parse_image_schedule(schedule)
-        if snap_boundaries and entries:
-            entries = _snap_schedule_to_iterations(entries, stride_seconds)
-
         safe_stride = max(stride_seconds, _SAFE_STRIDE_EPSILON)
         iteration_count = max(1, math.ceil(audio_duration / safe_stride) + 1)
 
-        # Schedule emits per-iteration image INDICES; clamp to batch range.
         batch_size = int(images.shape[0])
-        raw_indices = [
-            _match_schedule_generic(entries, i * stride_seconds, 0)
-            for i in range(iteration_count)
-        ]
+        if schedule.strip().lower() == "auto":
+            # Stride-aligned identity mapping: iteration i covers
+            # [i*stride, (i+1)*stride), so window i anchors keyframe i. No
+            # schedule text to hand-author per song — pairs with the
+            # planner-driven EvenlySpacedKeyframes count (= iterations + 1).
+            raw_indices = list(range(iteration_count))
+        else:
+            entries = _parse_image_schedule(schedule)
+            if snap_boundaries and entries:
+                entries = _snap_schedule_to_iterations(entries, stride_seconds)
+            # Schedule emits per-iteration image INDICES; clamp to batch range.
+            raw_indices = [
+                _match_schedule_generic(entries, i * stride_seconds, 0)
+                for i in range(iteration_count)
+            ]
         per_iter_indices = [max(0, min(r, batch_size - 1)) for r in raw_indices]
         oob = sorted({r for r in raw_indices if not (0 <= r < batch_size)})
         if oob:

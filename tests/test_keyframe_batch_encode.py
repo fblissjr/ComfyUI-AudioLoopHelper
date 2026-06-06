@@ -185,6 +185,58 @@ class TestKeyframeLatentScheduleBatchEncode:
         tag = latent_list[0]["samples"][0, 0, 0, 0, 0].item()
         assert tag == 0.0
 
+    def test_auto_schedule_is_identity_mapping(self):
+        """schedule="auto" -> window i anchors keyframe i, stride-aligned by
+        construction (iteration i covers [i*stride, (i+1)*stride)). No schedule
+        text to hand-author per song; pairs with the planner-driven
+        EvenlySpacedKeyframes count (= iterations + 1)."""
+        vae = FakeVAE()
+        images = _make_images(5)
+        latent_list, n = self._execute(
+            vae=vae, images=images, stride_seconds=20.0, audio_duration=60.0,
+            schedule="auto",
+        )
+        # 60/20 = 3 iterations + 1 headroom = 4 entries, indices 0..3.
+        assert n == 4
+        tags = [latent_list[i]["samples"][0, 0, 0, 0, 0].item() for i in range(n)]
+        assert tags == [0.0, 1.0, 2.0, 3.0]
+
+    def test_auto_schedule_clamps_when_batch_short(self, caplog):
+        """auto with fewer keyframes than iterations clamps to the last image
+        (and the existing clamp WARN fires) — same fallback as text schedules."""
+        vae = FakeVAE()
+        images = _make_images(2)
+        with caplog.at_level(logging.WARNING):
+            latent_list, n = self._execute(
+                vae=vae, images=images, stride_seconds=10.0, audio_duration=40.0,
+                schedule="auto",
+            )
+        tags = [latent_list[i]["samples"][0, 0, 0, 0, 0].item() for i in range(n)]
+        assert tags == [0.0, 1.0, 1.0, 1.0, 1.0]
+        assert any("clamp" in r.message.lower() for r in caplog.records)
+
+    def test_auto_schedule_case_and_whitespace_tolerant(self):
+        vae = FakeVAE()
+        images = _make_images(3)
+        latent_list, _ = self._execute(
+            vae=vae, images=images, stride_seconds=20.0, audio_duration=40.0,
+            schedule="  AUTO \n",
+        )
+        tags = [latent_list[i]["samples"][0, 0, 0, 0, 0].item() for i in range(3)]
+        assert tags == [0.0, 1.0, 2.0]
+
+    def test_empty_schedule_behavior_unchanged(self):
+        """Empty schedule keeps its historical meaning (no entries -> default
+        index 0 everywhere) — only the explicit "auto" sentinel opts in."""
+        vae = FakeVAE()
+        images = _make_images(3)
+        latent_list, n = self._execute(
+            vae=vae, images=images, stride_seconds=20.0, audio_duration=40.0,
+            schedule="",
+        )
+        tags = [latent_list[i]["samples"][0, 0, 0, 0, 0].item() for i in range(n)]
+        assert all(t == 0.0 for t in tags)
+
     def test_out_of_bounds_clamp_warns(self, caplog):
         """The clamp must not be silent: iterations that clamp to the same
         last keyframe anchor start==end to one still -> frozen-window risk."""
