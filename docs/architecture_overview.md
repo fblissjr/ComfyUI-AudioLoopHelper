@@ -153,8 +153,10 @@ Per-iteration inputs from outside the subgraph:
 
 Loop collects outputs via `LatentConcat(1605)`: outer-render slice
 prepended, then all loop-body slices appended. Final
-`LTXVTiledVAEDecode(1604, [1,1,1,True,'auto','auto'])` (single-tile, 24GB+ default; [2,2,1] is the ≤16GB fallback) + audio →
-`VHS_VideoCombine(617)`.
+`LTXVSpatioTemporalTiledVAEDecode(1604, [1,1,63,7,True,'cpu','float16'])`
+(stride-aligned temporal chunks — 56 latents = 17.92s per chunk advance,
+matching the iteration stride; bounds decode RAM at any song length) +
+audio → `VHS_VideoCombine(617)`.
 
 **Deeper:** `docs/reference/pipeline_flow_latent.md` for the long-form
 node-by-node trace. Live inspection via
@@ -418,7 +420,7 @@ What it ships that we use:
 | `LTXVAddLatentGuide` | Inject image as guide frame | inside subgraph (id 1519) |
 | `LTXVCropGuides` | Strip guide frames | 381 (outer), 655 (inside) |
 | `LTXVPreprocess` | H.264-compression noise on init | 446 |
-| `LTXVTiledVAEDecode` | Spatial-only tiled VAE decode | 1604 |
+| `LTXVSpatioTemporalTiledVAEDecode` | Spatio-temporal tiled VAE decode (stride-aligned chunks) | 1604 |
 | `MultimodalGuider` + `GuiderParameters` | Joint AV guidance | not wired in `_latent.json`; available in the archived `_latent_stg.json` A/B variant (`example_workflows/archive/`) |
 | `EmptyLTXVLatentVideo` | Blank latent | 344 |
 

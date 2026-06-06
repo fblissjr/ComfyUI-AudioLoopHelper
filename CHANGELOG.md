@@ -6,6 +6,29 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **Loop-family final decode is now `LTXVSpatioTemporalTiledVAEDecode` with
+  stride-aligned temporal chunks** (`apply_ltx_decoder.py --spatiotemporal`,
+  15 decoder nodes across 14 loop workflows + the crash-recovery workflow).
+  Chunk stride (`temporal_tile_length − temporal_overlap`, in latent frames)
+  derives from the controller's own stride math
+  (`nodes._compute_loop_geometry`), so decode-chunk seams land exactly on
+  iteration boundaries — `[1,1,63,7,true,"cpu","float16"]` at the canonical
+  window/overlap. Per-chunk inner decode + an fp16/cpu full-video
+  accumulator bound decode RAM at any song length, removing the >=4-min
+  monolithic-decode OOM ceiling. Single-pass/short-clip workflows stay on
+  spatial-only `LTXVTiledVAEDecode`.
+- **`validate_workflow_decoder.py` now runs in CI and traces links.** The
+  controller's `window_seconds`/`overlap_seconds` widgets are stale
+  placeholders in every shipped workflow (the real values are linked from
+  `LTXFramePlanner.actual_seconds` — including its frame snap — and a
+  `FloatConstant`); the validator previously read the widgets and
+  mis-derived the stride for every non-default variant. It now follows the
+  links, validates all three decoder states (spatio-temporal chunk-stride
+  equality in latent frames, spatial-only pass-through with a length-ceiling
+  note, core `VAEDecodeTiled` stride within 0.1s), and sweeps the whole loop
+  family by default instead of a filename glob.
+
 ### Added
 - **`auto` schedule on `KeyframeLatentScheduleBatchEncode`.** The schedule
   widget accepts the single word `auto`: stride-aligned identity mapping
@@ -19,9 +42,10 @@ This project uses [Semantic Versioning](https://semver.org/).
   persist the assembled latent (`SaveLatent`, active by default) before the
   final decode; this 8-node workflow decodes a saved `.latent` to the
   finished video with the same trim chain as a normal render (latent trim ->
-  tiled decode -> image trim -> VHS), decoding in TEMPORAL CHUNKS via core
-  `VAEDecodeTiled` — peak RAM stays bounded at any song length (a monolithic
-  decode of a long render dies even on a fresh server).
+  tiled decode -> image trim -> VHS), decoding in TEMPORAL CHUNKS via
+  `LTXVSpatioTemporalTiledVAEDecode` stride-aligned with the canonical loop
+  — peak RAM stays bounded at any song length (a monolithic decode of a
+  long render dies even on a fresh server).
 - **`Pre-Decode Cleanup (unload models)` node (`PreDecodeCleanup`).** LATENT
   passthrough that frees pinned staging and unloads all models — wire right
   before the full-song final VAE decode. The decode is a single-node RAM

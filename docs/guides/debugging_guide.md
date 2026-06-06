@@ -81,28 +81,38 @@ With widgets `[tile_size, overlap, temporal_size, temporal_overlap]`:
 
 Current workflow default is `[512, 64, 64, 8]` → `(64-8)/25 = 2.24s` per tile → a seam approximately every 2.24s. That's the symptom.
 
-**Fix (production, shipped in default workflows)**: node 1604 (and
-node 1597) are now `LTXVTiledVAEDecode` (from `ComfyUI-LTXVideo`)
-across all example workflows — **spatial-only tiling, no temporal
-tiling at all**. No temporal tile boundaries exist, so there are no
-mid-video decoder seams of any stride. This eliminates the class of
-problem structurally.
+**Fix (production, shipped in default workflows since 2026-06-06)**:
+the loop family's final decode (node 1604) is
+`LTXVSpatioTemporalTiledVAEDecode` (from `ComfyUI-LTXVideo`) with
+temporal chunking **stride-aligned to the loop**: widgets
+`[1, 1, 63, 7, true, "cpu", "float16"]` at the canonical
+window=19.88/overlap=2, where `temporal_tile_length − temporal_overlap`
+(in LATENT frames; 1 latent = 8 pixel frames) equals the iteration
+stride exactly (56 latents = 17.92s). Chunk seams therefore land ON
+iteration boundaries — where window transitions already exist — instead
+of mid-iteration. The cpu/float16 accumulator bounds decode RAM at any
+song length (auto/auto = full-video fp32 buffer; kernel-OOMs ≥4-min
+songs — `docs/reference/benchmarking_memory_pressure.md`).
 
-Widgets on the LTX decoder: `[horizontal_tiles=2, vertical_tiles=2,
-overlap=1, last_frame_fix=true, working_device="auto", working_dtype="auto"]`.
+Single-pass / short-clip workflows keep `LTXVTiledVAEDecode`
+(spatial-only, no temporal tiling, no song-length exposure):
+`[1, 1, 1, true, "cpu", "float16"]`.
 
-To apply or revert the swap against any workflow:
+To move any workflow between the three decoder states:
 
 ```bash
-# Apply: VAEDecodeTiled → LTXVTiledVAEDecode
+# Loop family: stride-aligned temporal chunks (per-workflow widgets)
+uv run python scripts/apply_ltx_decoder.py --spatiotemporal
+
+# Spatial-only LTXVTiledVAEDecode (short renders)
 uv run python scripts/apply_ltx_decoder.py
 
-# Revert: restore VAEDecodeTiled with stride-aligned widgets
+# Restore core VAEDecodeTiled with stride-aligned widgets
 uv run python scripts/apply_ltx_decoder.py --revert
 ```
 
-Both directions are idempotent (re-run is a no-op). Round-trip is
-byte-identical.
+All directions are idempotent; `--spatiotemporal` also re-derives
+widgets on already-swapped nodes when window/overlap changed.
 
 To check any workflow's decoder configuration:
 
@@ -110,8 +120,9 @@ To check any workflow's decoder configuration:
 uv run python scripts/validate_workflow_decoder.py
 ```
 
-Warns on misaligned VAEDecodeTiled widgets; emits OK for
-LTXVTiledVAEDecode regardless of overlap_seconds.
+Runs in CI. Link-traces the controller's real window/overlap (the
+controller's own widget values are stale placeholders in every shipped
+workflow) and checks chunk stride == iteration stride in latent frames.
 
 ### Fallback: staying on generic VAEDecodeTiled
 
@@ -141,8 +152,10 @@ iteration strides drift apart over the video — ~1s per iteration per
 over time. Use `scripts/validate_workflow_decoder.py` to catch drift
 early.
 
-**The `LTXVTiledVAEDecode` swap eliminates this whole concern.** Prefer
-the structural path unless VRAM forces the fallback.
+**The `--spatiotemporal` swap eliminates this whole concern** — its
+widgets derive from the controller's own stride math
+(`nodes._compute_loop_geometry`), so they can't drift from the loop.
+Prefer the structural path unless something forces the fallback.
 
 If `[512, 64, 512, 64]` OOMs: step down to `[512, 64, 256, 32]`
 (tile stride 8.96s — one mid-iteration seam per iteration; still

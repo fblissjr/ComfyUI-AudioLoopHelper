@@ -104,8 +104,15 @@ decomposed into THREE mechanisms:
    PLUS a one-shot fp32 multiply temporary ~35GB ≈ **~105GB** for a 4-min
    960x544 decode. The `"cpu","float16"` widgets (applied across all shipped
    workflows) are NECESSARY hygiene but NOT sufficient — **>=4-min songs
-   still OOM on a monolithic decode**. The real bound is TEMPORAL CHUNKING
-   (core `VAEDecodeTiled`, see below); the LTXV node tiles spatially only.
+   still OOM on a monolithic decode**. The real bound is TEMPORAL CHUNKING;
+   `LTXVTiledVAEDecode` tiles spatially only. FIXED in-graph 2026-06-06:
+   the loop family now ships `LTXVSpatioTemporalTiledVAEDecode
+   [1,1,63,7,true,"cpu","float16"]` — per-chunk inner decode (~3GB) + one
+   fp16/cpu full-video accumulator (~4.4GB per minute at 960x544), chunk
+   stride bit-exact with the iteration stride (56 latents = 17.92s at
+   canonical 19.88/2; seams land on iteration boundaries). Apply:
+   `scripts/apply_ltx_decoder.py --spatiotemporal`; CI gate:
+   `scripts/validate_workflow_decoder.py`.
 2. **Substrate baseline raise** — upstream `e154da83` (2026-05-31) removed
    the hard pin cap ("let the active model load past the pin limit"),
    raising the resident pinned baseline; `#14252` + aimdo 0.4.9 fix only the
@@ -120,11 +127,12 @@ What did NOT fix it (kept for their residual value):
 1. **Banked latent + temporal-chunked recovery** (`SaveLatent` active by
    default + `example_workflows/decode-latent-to-video.json`): the
    guaranteed recovery for any decode-stage death — sampling is never
-   lost, and the recovery decodes in TEMPORAL CHUNKS via core
-   `VAEDecodeTiled [1024, 64, 256, 16]` (~9.6s stride, well above the
-   small-tile pulsing threshold), bounding peak RAM at any song length.
-   The chunking is the load-bearing part — a monolithic decode of a
-   >=4-min song dies even on a fresh server.
+   lost, and the recovery decodes in TEMPORAL CHUNKS via
+   `LTXVSpatioTemporalTiledVAEDecode [1,1,63,7,true,"cpu","float16"]`
+   (stride-aligned with the canonical loop; retune temporal_tile_length
+   for variants per the workflow's note), bounding peak RAM at any song
+   length. The chunking is the load-bearing part — a monolithic decode
+   of a >=4-min song dies even on a fresh server.
 2. **`PreDecodeCleanup`**: FALSIFIED as the decode-OOM fix — proven in
    both crashed graphs via the latent files' embedded prompt metadata
    (the node executed; the kill happened anyway, because the buffer

@@ -44,3 +44,94 @@ class TestExpectedStrideWidgets:
     def test_minimum_overlap_floor(self):
         _, to = _expected_stride_widgets(0.5)
         assert to >= 8
+
+
+class TestSpatiotemporalWidgets:
+    """apply_ltx_decoder._spatiotemporal_widgets — per-workflow widget
+    derivation for the LTXVSpatioTemporalTiledVAEDecode swap. Units are
+    LATENT frames (8 px frames each at LTX temporal scale). Derivation goes
+    through nodes._compute_loop_geometry so chunk stride is BIT-EXACT with
+    the controller's runtime stride (no re-rounding of pre-rounded seconds)."""
+
+    def test_canonical_geometry(self):
+        # window=19.88, overlap=2 @ 25fps -> 63/7 latents, stride 56.
+        from apply_ltx_decoder import _spatiotemporal_widgets
+        w = _spatiotemporal_widgets(19.88, 2.0)
+        spatial, s_overlap, t_len, t_overlap, lff, dev, dt = w
+        assert (spatial, s_overlap) == (1, 1)          # single spatial tile
+        assert (t_len, t_overlap) == (63, 7)           # window/overlap latents
+        assert t_len - t_overlap == 56                  # 56 latents = 17.92s stride
+        assert lff is True
+        assert (dev, dt) == ("cpu", "float16")          # bounded accumulator
+
+    def test_window15s_variant_geometry(self):
+        # Planner snaps target 15s -> 14.76s (369 frames); window_latents=47,
+        # overlap_latents=7, stride 40 latents = 12.8s.
+        from apply_ltx_decoder import _spatiotemporal_widgets
+        w = _spatiotemporal_widgets(14.76, 2.0)
+        assert (w[2], w[3]) == (47, 7)
+
+    def test_overlap_capped_at_node_max(self):
+        # overlap=3s -> overlap_latents=10 > node max 8; cap the chunk
+        # overlap but preserve the stride (t_len - t_overlap == new_latents).
+        from apply_ltx_decoder import _spatiotemporal_widgets
+        from nodes import _compute_loop_geometry
+        w = _spatiotemporal_widgets(19.88, 3.0)
+        g = _compute_loop_geometry(19.88, 3.0, 25)
+        assert w[3] <= 8
+        assert w[2] - w[3] == g.new_latent_frames
+
+    def test_chunk_length_exceeds_overlap(self):
+        # Node raises when temporal_tile_length < temporal_overlap + 1.
+        from apply_ltx_decoder import _spatiotemporal_widgets
+        for window, overlap in ((0.5, 0.0), (5.0, 2.0), (14.76, 2.0),
+                                (19.88, 2.0), (30.0, 5.0)):
+            w = _spatiotemporal_widgets(window, overlap)
+            assert w[2] >= w[3] + 2, f"{window=} {overlap=}: {w[2]=} {w[3]=}"
+
+
+class TestGetWindowAndOverlap:
+    """_get_window_and_overlap must trace LINKS, not trust local widgets.
+
+    AudioLoopController's window_seconds/overlap_seconds are widget-inputs
+    LINKED from LTXFramePlanner.actual_seconds and a FloatConstant in every
+    shipped loop workflow; the controller's own widgets_values are stale
+    placeholders (all variants carry the canonical 19.88/2 there). Reading
+    widgets mis-derives the stride for every non-default variant."""
+
+    @staticmethod
+    def _load(rel):
+        from pathlib import Path
+        from validate_workflow_decoder import REPO_ROOT
+        from workflow_utils import WorkflowEditor
+        return WorkflowEditor(REPO_ROOT / rel)
+
+    def test_canonical_traces_planner(self):
+        from validate_workflow_decoder import _get_window_and_overlap
+        ed = self._load("example_workflows/audio-loop-music-video_latent.json")
+        w, o = _get_window_and_overlap(ed)
+        assert abs(w - 19.88) < 1e-6   # planner target 19.88 -> snap-stable
+        assert abs(o - 2.0) < 1e-6     # FloatConstant #2013
+
+    def test_window15s_traces_planner_snapped(self):
+        # Planner widget says target 15s; _snap_frames gives 369 frames
+        # = 14.76s actual. The controller's stale widgets say 19.88 — the
+        # link-traced value MUST win.
+        from validate_workflow_decoder import _get_window_and_overlap
+        ed = self._load(
+            "example_workflows/experimental/audio-loop-music-video_latent_window15s.json"
+        )
+        w, o = _get_window_and_overlap(ed)
+        assert abs(w - 14.76) < 1e-6
+        assert abs(o - 2.0) < 1e-6
+
+    def test_unlinked_falls_back_to_widget(self):
+        # fml2v variant: window_seconds is unlinked (widget-driven).
+        from validate_workflow_decoder import _get_window_and_overlap
+        ed = self._load(
+            "example_workflows/experimental/fml2v_var_d_audio_loop.json"
+        )
+        result = _get_window_and_overlap(ed)
+        assert result is not None
+        w, o = result
+        assert 5.0 <= w <= 60.0 and 0.0 <= o < w

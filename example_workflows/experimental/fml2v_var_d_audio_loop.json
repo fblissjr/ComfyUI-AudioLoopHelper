@@ -4589,7 +4589,7 @@
     },
     {
       "id": 149,
-      "type": "LTXVTiledVAEDecode",
+      "type": "LTXVSpatioTemporalTiledVAEDecode",
       "pos": [
         4182.351110238023,
         3593.1982853865484
@@ -4628,7 +4628,7 @@
       "properties": {
         "cnr_id": "ComfyUI-LTXVideo",
         "ver": "0.7.0",
-        "Node name for S&R": "LTXVTiledVAEDecode",
+        "Node name for S&R": "LTXVSpatioTemporalTiledVAEDecode",
         "enableTabs": false,
         "tabWidth": 65,
         "tabXOffset": 10,
@@ -4640,7 +4640,8 @@
       "widgets_values": [
         1,
         1,
-        1,
+        63,
+        7,
         true,
         "cpu",
         "float16"

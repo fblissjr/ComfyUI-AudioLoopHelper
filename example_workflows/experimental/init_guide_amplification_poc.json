@@ -2483,7 +2483,7 @@
     },
     {
       "id": 1318,
-      "type": "LTXVTiledVAEDecode",
+      "type": "LTXVSpatioTemporalTiledVAEDecode",
       "pos": [
         1678.3910857117328,
         4130.358701678818
@@ -2517,14 +2517,15 @@
         }
       ],
       "properties": {
-        "cnr_id": "comfyui-ltxvideo",
+        "cnr_id": "ComfyUI-LTXVideo",
         "ver": "0.16.4",
-        "Node name for S&R": "LTXVTiledVAEDecode"
+        "Node name for S&R": "LTXVSpatioTemporalTiledVAEDecode"
       },
       "widgets_values": [
-        2,
-        2,
         1,
+        1,
+        63,
+        7,
         true,
         "cpu",
         "float16"
@@ -3889,7 +3890,7 @@
     },
     {
       "id": 1604,
-      "type": "LTXVTiledVAEDecode",
+      "type": "LTXVSpatioTemporalTiledVAEDecode",
       "pos": [
         3800,
         4500
@@ -3925,12 +3926,13 @@
       "title": "Final VAE Decode (once)",
       "properties": {
         "cnr_id": "ComfyUI-LTXVideo",
-        "Node name for S&R": "LTXVTiledVAEDecode"
+        "Node name for S&R": "LTXVSpatioTemporalTiledVAEDecode"
       },
       "widgets_values": [
-        2,
-        2,
         1,
+        1,
+        63,
+        7,
         true,
         "cpu",
         "float16"

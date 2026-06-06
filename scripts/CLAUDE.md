@@ -176,7 +176,7 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 |---|---|
 | `analyze_workflow_dag.py` | Static DAG + execution-order view · README, `apply_keyframe_batch_encode.py` |
 | `trace_node_source.py` | Show node Python source from a workflow + node_id · `analyze_workflow_dag.py`, `debug_tools.md` |
-| `validate_workflow_decoder.py` | Decoder-config check across example workflows · `debugging_guide.md`, `ltx-constraints-auditor` agent, `tests/test_decoder_validator.py` |
+| `validate_workflow_decoder.py` | Decoder-config check across the loop family — link-traces the controller's window/overlap (its widgets are stale placeholders) and checks chunk stride == iteration stride in latent frames via `nodes._compute_loop_geometry` · CI, `debugging_guide.md`, `ltx-constraints-auditor` agent, `tests/test_decoder_validator.py`, `apply_ltx_decoder.py` (imports `_get_window_and_overlap` + `_loop_family`) |
 | `validate_workflow_resolution.py` | LTX-2.3 resolution-compliance check · `debugging_guide.md`, `ltx-constraints-auditor` agent |
 | `extract_workflow_from_png.py` | Dump embedded workflow JSON from PNG · `debugging_guide.md` |
 | `diagnose_overlap_seams.py` | Detect seam-zone artifacts in assembled loop output · `build_seam_refinement_workflow.py` |
@@ -203,7 +203,7 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 | `apply_canonical_sigmas.py` | Replace `BasicScheduler` w/ `ManualSigmas` (canonical 8-step distilled values) · root CLAUDE.md, `audit_workflows.py`, `sampler_reference.md` |
 | `apply_strip_sd3_shift_node.py` | Strip dead `ModelSamplingSD3` (orphaned post-sigma-migration) · root CLAUDE.md, `debug_tools.md`, `audit_workflows.py` |
 | `apply_no_tile_vae_decode.py` | Set `LTXVTiledVAEDecode` to `[1,1,1]` (24GB+ optimization) · root CLAUDE.md, `audit_workflows.py` |
-| `apply_ltx_decoder.py` | Swap generic `VAEDecodeTiled` → `LTXVTiledVAEDecode` · `validate_workflow_decoder.py`, `debugging_guide.md` |
+| `apply_ltx_decoder.py` | Three-state decoder swap: `--spatiotemporal` → `LTXVSpatioTemporalTiledVAEDecode` with per-workflow stride-aligned temporal chunks (loop-family default; removes the song-length decode ceiling); default → `LTXVTiledVAEDecode` (spatial-only); `--revert` → core `VAEDecodeTiled` · `validate_workflow_decoder.py` (CI gate), `debugging_guide.md` |
 
 ### Apply scripts — audio + planner topology (9)
 

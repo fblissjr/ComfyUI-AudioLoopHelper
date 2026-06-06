@@ -30,9 +30,17 @@ Migration: `scripts/apply_canonical_sigmas.py`.
 node** (stripped from all distilled workflows 2026-05-01 via
 `scripts/apply_strip_sd3_shift_node.py`; the canonical path feeds the
 fixed sigmas directly — see CLAUDE.md "No flow-matching shift node"),
-decoder `LTXVTiledVAEDecode [1,1,1,true,"cpu","float16"]` on 24GB+ (the device/dtype pair trims the node's OWN buffers — necessary, not sufficient: the inner `vae.decode` buffer stays fp32 regardless, so >=4-min songs need a temporal-chunked decode; see `benchmarking_memory_pressure.md`)
-(single-tile, ~3× faster cold-pass than [2,2,1]); fall back to
-[2,2,1] on ≤16GB. Migration: `scripts/apply_no_tile_vae_decode.py`.
+decoder `LTXVSpatioTemporalTiledVAEDecode [1,1,63,7,true,"cpu","float16"]`
+for the loop family — stride-aligned temporal chunks (56 latents = 17.92s
+per chunk advance, matching the iteration stride so chunk seams land on
+iteration boundaries) bound decode RAM at any song length; the cpu/float16
+accumulator pair is load-bearing (auto/auto = full-video fp32 buffer; see
+`benchmarking_memory_pressure.md`). Single-pass/short-clip workflows stay
+on `LTXVTiledVAEDecode [1,1,1,true,"cpu","float16"]` (spatial-only,
+single-tile, ~3× faster cold-pass than [2,2,1]; fall back to [2,2,1] on
+≤16GB — `scripts/apply_no_tile_vae_decode.py`). Migration + CI gate:
+`scripts/apply_ltx_decoder.py --spatiotemporal` +
+`scripts/validate_workflow_decoder.py`.
 
 All code references are to `ComfyUI/comfy/k_diffusion/sampling.py`
 (comfy-core) and `ComfyUI-LTXVideo/guiders/multimodal_guider.py`

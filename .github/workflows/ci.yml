@@ -40,5 +40,8 @@ jobs:
       - name: Workflow integrity audit
         run: uv run --group dev python scripts/audit_workflows.py
 
+      - name: Decoder stride alignment
+        run: uv run --group dev --group analysis python scripts/validate_workflow_decoder.py
+
       - name: Docs consistency (stale-phrase scan)
         run: uv run --group dev --group analysis python -m pytest tests/test_docs_consistency.py --rootdir=. -v
