@@ -1,4 +1,4 @@
-Last updated: 2026-05-10
+Last updated: 2026-06-06
 
 # Upscale guide
 
@@ -39,36 +39,28 @@ no decode → re-encode VAE round-trip, so no detail loss in the hand-off.
 
 ### 1. Apply the run-id layout (one-time, per workflow you use)
 
-Adds a per-render output folder + a bypassed `SaveLatent` toggle to
-every loop workflow.
+Adds the per-render output folder layout to every loop workflow.
 
 ```bash
 uv run --group dev python scripts/apply_run_id_layout.py
 ```
 
-Re-running is a no-op (idempotent). Use `--revert` to remove. After
-this, your loop workflow has a node titled **"Save assembled latent
-(toggle)"** that's currently bypassed.
+Re-running is a no-op (idempotent). Use `--revert` to remove.
 
-### 2. Enable the SaveLatent toggle, then render your loop
+### 2. Render your loop — the latent banks automatically
 
-In the ComfyUI UI:
-
-- Find the **"Save assembled latent (toggle)"** node (greyed-out by
-  default).
-- Right-click → **Set Mode → Always** (or `Ctrl+M` with the node
-  selected). The greyed look goes away.
-- Queue your normal loop render.
-
-The render writes the usual mp4 outputs PLUS the assembled video latent
-under:
+Shipped loop workflows checkpoint the assembled latent on the
+**Pre-Decode Cleanup** node (`checkpoint_keep=2`, rotated — the newest
+2 checkpoints survive; older ones are deleted automatically). The render
+writes the usual mp4 outputs PLUS the assembled video latent under:
 
 ```
-<output>/audio-loop-music-video_latent/<timestamp>/latents/segment_00001_.latent
+<output>/latents/checkpoints/audio-loop-music-video_latent_00001_.latent
 ```
 
-Toggle the node back to **Bypass** (`Ctrl+M` again) once you have the
-`.latent` — you don't need to keep saving it on every subsequent loop run.
+Set `checkpoint_keep` to `0` on the node if you want no latent banking
+at all (saves a little disk I/O per render, loses decode-crash recovery
+and this upscale ingress).
 
 ### 3. Move the `.latent` into ComfyUI's input directory
 
@@ -76,8 +68,9 @@ Toggle the node back to **Bypass** (`Ctrl+M` again) once you have the
 where your loop wrote.
 
 Use the helper script — it finds the most recent `.latent` for the
-named workflow and copies under a deterministic filename so the
-upscale workflow's `LoadLatent` widget always picks up the same name:
+named workflow (checkpoints first, legacy `SaveLatent` per-render
+folders too) and copies under a deterministic filename so the upscale
+workflow's `LoadLatent` widget always picks up the same name:
 
 ```bash
 # Set both dirs once per shell (or pass --output-dir / --input-dir)
@@ -85,7 +78,7 @@ export COMFYUI_OUTPUT_DIR=/path/to/comfy/output
 export COMFYUI_INPUT_DIR=/path/to/comfy/input
 
 uv run --group dev python scripts/promote_latent_for_upscale.py audio-loop-music-video_latent
-# → copies <output>/audio-loop-music-video_latent/<latest_timestamp>/latents/segment_00001_.latent
+# → copies <output>/latents/checkpoints/audio-loop-music-video_latent_<newest>_.latent
 #   to <input>/assembled_latent.latent
 ```
 
@@ -94,7 +87,7 @@ to override the destination filename. Manual `cp` works fine too if
 you'd rather:
 
 ```bash
-cp <output>/audio-loop-music-video_latent/<timestamp>/latents/segment_00001_.latent \
+cp <output>/latents/checkpoints/audio-loop-music-video_latent_00001_.latent \
    <comfyui_input_dir>/assembled_latent.latent
 ```
 
@@ -141,7 +134,7 @@ exactly. If video exceeds audio, the `TrimVideoLatentToAudio` node
 ## Topology summary
 
 ```
-LoadLatent (assembled video latent from loop's toggled SaveLatent)
+LoadLatent (assembled video latent from the loop's Pre-Decode Cleanup checkpoint)
   ↓
 LTXVLatentUpsampler (×2 spatial: 104×60 → 208×120 latent)
   ↓
@@ -198,5 +191,6 @@ Drop step count by editing `ManualSigmas #19`'s widget.
 - `internal/analysis/loop_audio_overshoot_analysis.md` — silence-at-end postmortem (the F14 latent-trim that backstops this guide; migrated 2026-05-10 from image-space)
 - `internal/analysis/i2v_v5_workflow_assessment.md` — `LTXVImgToVideoConditionOnly` trap (don't re-introduce)
 - `scripts/build_upscale_workflow.py` — re-generates the draft from constants
-- `scripts/apply_run_id_layout.py` — installs the per-render folder layout + SaveLatent toggle
+- `scripts/apply_run_id_layout.py` — installs the per-render folder layout
+- `scripts/apply_latent_checkpoint.py` — moves latent banking onto PreDecodeCleanup's rotated checkpoints
 - `scripts/apply_trim_video_latent_to_audio.py` — F14 audit pair

@@ -4416,6 +4416,81 @@ def _unload_models_for_decode() -> None:
     )
 
 
+def _save_latent_checkpoint(
+    latent: dict,
+    filename_prefix: str,
+    keep: int,
+    prompt=None,
+    extra_pnginfo=None,
+) -> str | None:
+    """Save `latent` in core-SaveLatent-compatible format, then rotate.
+
+    Writes ``<output>/<filename_prefix>_NNNNN_.latent`` (safetensors with
+    ``latent_tensor`` + the ``latent_format_version_0`` marker core
+    LoadLatent keys its multiplier on, prompt/extra_pnginfo embedded as
+    JSON metadata — the embedded prompt is load-bearing crash forensics),
+    then deletes all but the newest ``keep`` files sharing this prefix's
+    ``<filename>_NNNNN_.latent`` shape in the same folder. Files with a
+    different stem are never touched.
+
+    Defensive like ``_unload_models_for_decode``: runs at the LAST step of
+    a long render, so every failure warns and returns None instead of
+    raising. Returns the saved path on success.
+    """
+    if keep <= 0:
+        return None
+    try:
+        import folder_paths
+        import safetensors.torch
+    except ImportError as e:
+        warnings.warn(f"PreDecodeCleanup: checkpoint skipped ({e!r})", stacklevel=2)
+        return None
+    # stdlib json, not orjson: parity with core SaveLatent's metadata
+    # encoding (and Python emits NaN literals orjson refuses to read back).
+    import json
+
+    log = logging.getLogger(__name__)
+    try:
+        full_output_folder, filename, counter, _subfolder, _ = (
+            folder_paths.get_save_image_path(
+                filename_prefix, folder_paths.get_output_directory()
+            )
+        )
+        metadata = {}
+        if prompt is not None:
+            metadata["prompt"] = json.dumps(prompt)
+        if extra_pnginfo is not None:
+            for key, value in extra_pnginfo.items():
+                metadata[key] = json.dumps(value)
+        path = os.path.join(full_output_folder, f"{filename}_{counter:05}_.latent")
+        payload = {
+            "latent_tensor": latent["samples"].contiguous().detach().cpu(),
+            "latent_format_version_0": torch.tensor([]),
+        }
+        safetensors.torch.save_file(payload, path, metadata=metadata or None)
+    except Exception as e:
+        warnings.warn(f"PreDecodeCleanup: checkpoint save failed: {e!r}", stacklevel=2)
+        return None
+    removed = 0
+    try:
+        pattern = re.compile(re.escape(filename) + r"_(\d+)_\.latent$")
+        entries = sorted(
+            (int(m.group(1)), name)
+            for name in os.listdir(full_output_folder)
+            if (m := pattern.match(name))
+        )
+        for _, name in entries[:-keep]:
+            os.remove(os.path.join(full_output_folder, name))
+            removed += 1
+    except Exception as e:
+        warnings.warn(f"PreDecodeCleanup: checkpoint rotation failed: {e!r}", stacklevel=2)
+    log.info(
+        "[PreDecodeCleanup] checkpoint saved %s (keep=%d, rotated out %d)",
+        path, keep, removed,
+    )
+    return path
+
+
 class PreDecodeCleanup(io.ComfyNode):
     """LATENT passthrough that frees pinned staging and unloads ALL models —
     wire immediately before the full-song final VAE decode. Sampling no
@@ -4424,6 +4499,13 @@ class PreDecodeCleanup(io.ComfyNode):
     decode buffer-stack OOM reproduced with this node proven in-graph; the
     actual bound is a temporal-chunked decode (mechanism + allocation map:
     docs/reference/benchmarking_memory_pressure.md).
+
+    Optional latent checkpointing (`checkpoint_keep` > 0): saves the
+    incoming latent before the cleanup (core-SaveLatent-compatible, so the
+    `decode-latent-to-video.json` recovery workflow can load it) and keeps
+    only the newest N checkpoints for the prefix — crash insurance without
+    the standalone always-on SaveLatent's unbounded per-render .latent
+    accumulation. Independent of `mode`.
 
     Cost: the next prompt cold-reloads (~1 min). Memoized re-runs skip the
     side effect — fine, the decode they protect is skipped too. Sibling of
@@ -4456,15 +4538,57 @@ class PreDecodeCleanup(io.ComfyNode):
                         "empty caches. never: passthrough (disables the cleanup)."
                     ),
                 ),
+                # New inputs go AFTER mode: saved workflows carry ["always"]
+                # and ComfyUI pops widget values positionally.
+                io.Int.Input(
+                    "checkpoint_keep", default=0, min=0, max=100,
+                    tooltip=(
+                        "0 (default): no checkpoint. N>0: save the incoming "
+                        "latent to <output>/<checkpoint_prefix>_NNNNN_.latent "
+                        "(loadable by the decode-latent-to-video recovery "
+                        "workflow, prompt metadata embedded) before the "
+                        "cleanup, then delete all but the newest N checkpoints "
+                        "sharing the prefix. Crash insurance for the final "
+                        "decode without unbounded .latent accumulation. "
+                        "Independent of `mode`."
+                    ),
+                ),
+                io.String.Input(
+                    "checkpoint_prefix", default="latents/checkpoints/audio_loop",
+                    tooltip=(
+                        "Folder/name prefix for checkpoint files, relative to "
+                        "ComfyUI's output directory. Keep it STABLE (not "
+                        "per-run/timestamped) so rotation sees prior renders' "
+                        "files; use one prefix per workflow to keep rotation "
+                        "scopes separate."
+                    ),
+                ),
             ],
             outputs=[
                 io.Latent.Output("latent"),
             ],
+            hidden=[io.Hidden.prompt, io.Hidden.extra_pnginfo],
         )
 
     @classmethod
-    def execute(cls, latent, mode: str) -> io.NodeOutput:
+    def execute(
+        cls,
+        latent,
+        mode: str,
+        checkpoint_keep: int = 0,
+        checkpoint_prefix: str = "latents/checkpoints/audio_loop",
+    ) -> io.NodeOutput:
         with _profile_span("PreDecodeCleanup"):
+            if checkpoint_keep > 0:
+                # Checkpoint BEFORE the unload so the file exists no matter
+                # what the cleanup or the decode after it does. cls.hidden is
+                # absent under the pytest _IOStub — degrade to no metadata.
+                hidden = getattr(cls, "hidden", None)
+                _save_latent_checkpoint(
+                    latent, checkpoint_prefix, checkpoint_keep,
+                    prompt=getattr(hidden, "prompt", None),
+                    extra_pnginfo=getattr(hidden, "extra_pnginfo", None),
+                )
             if mode == "always":
                 _unload_models_for_decode()
         return io.NodeOutput(latent)

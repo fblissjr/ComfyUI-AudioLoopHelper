@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 1629,
-  "last_link_id": 3097,
+  "last_node_id": 1630,
+  "last_link_id": 3099,
   "nodes": [
     {
       "id": 252,
@@ -3974,7 +3974,6 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            3084,
             3097
           ]
         }
@@ -4309,9 +4308,7 @@
         {
           "name": "latent_prefix",
           "type": "STRING",
-          "links": [
-            3085
-          ]
+          "links": []
         }
       ],
       "properties": {
@@ -4322,44 +4319,6 @@
         "%Y%m%d_%H%M%S"
       ],
       "title": "Run ID Prefix"
-    },
-    {
-      "id": 1625,
-      "type": "SaveLatent",
-      "pos": [
-        1700,
-        -200
-      ],
-      "size": [
-        320,
-        80
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 4,
-      "inputs": [
-        {
-          "name": "samples",
-          "type": "LATENT",
-          "link": 3084
-        },
-        {
-          "name": "filename_prefix",
-          "type": "STRING",
-          "widget": {
-            "name": "filename_prefix"
-          },
-          "link": 3085
-        }
-      ],
-      "outputs": [],
-      "properties": {
-        "Node name for S&R": "SaveLatent"
-      },
-      "widgets_values": [
-        "latents/segment"
-      ],
-      "title": "Save assembled latent (toggle)"
     },
     {
       "id": 1626,
@@ -4497,7 +4456,9 @@
         "aux_id": "fblissjr/ComfyUI-AudioLoopHelper"
       },
       "widgets_values": [
-        "always"
+        "always",
+        2,
+        "latents/checkpoints/init_guide_amplification_poc"
       ],
       "title": "Pre-Decode Cleanup (unload models)"
     }
@@ -5389,22 +5350,6 @@
       0,
       617,
       4,
-      "STRING"
-    ],
-    [
-      3084,
-      1605,
-      0,
-      1625,
-      0,
-      "LATENT"
-    ],
-    [
-      3085,
-      1624,
-      1,
-      1625,
-      1,
       "STRING"
     ],
     [

@@ -739,6 +739,7 @@ def _audit_one(wf_path: Path) -> list[Finding]:
         _check_trim_image_batch_to_audio_present(wf, by_type, record)
         _check_trim_video_latent_to_audio_present(wf, by_type, record)
         _check_pre_decode_cleanup_present(wf, by_type, record)
+        _check_latent_checkpoint(wf, by_type, record)
         _check_run_id_layout_present(wf, by_type, record)
         # F17 — loop-body CFGGuider input traceability (subgraph-scoped).
         _check_cfg_guider_inputs_traced_to_source(wf, by_type, by_id, record)
@@ -1784,6 +1785,54 @@ def _check_pre_decode_cleanup_present(wf, by_type, record) -> None:
                 "resident models/pins — RAM hygiene only, not OOM-prevention. "
                 "Run scripts/apply_pre_decode_cleanup.py.",
             )
+
+
+def _check_latent_checkpoint(wf, by_type, record) -> None:
+    """WARN when a loop workflow's decode-crash latent banking is missing
+    or doubled.
+
+    Banking lives on PreDecodeCleanup's checkpoint widgets
+    ``[mode, checkpoint_keep, checkpoint_prefix]`` (keep > 0 = save +
+    rotate, keeping the newest N). Two WARN states:
+
+      - keep == 0 AND no active SaveLatent: nothing banks the assembled
+        latent — a decode-stage death loses the whole render's sampling.
+      - keep > 0 AND an active SaveLatent: double-saving — the unrotated
+        SaveLatent re-introduces the unbounded per-render .latent
+        accumulation the checkpoint replaced.
+
+    Scope: workflows with an ACTIVE TensorLoopOpen + active
+    PreDecodeCleanup (single-pass workflows have no full-song decode to
+    bank for). Remediation: ``scripts/apply_latent_checkpoint.py``.
+    """
+    del wf
+    if not any(is_active(n) for n in by_type.get("TensorLoopOpen", [])):
+        return
+    cleanups = [n for n in by_type.get("PreDecodeCleanup", []) if is_active(n)]
+    if not cleanups:
+        return  # pre_decode_cleanup_present already covers the missing node
+    widgets = cleanups[0].get("widgets_values") or []
+    keep = widgets[1] if len(widgets) >= 2 and isinstance(widgets[1], int) else 0
+    cid = cleanups[0].get("id")
+    active_saves = [n for n in by_type.get("SaveLatent", []) if is_active(n)]
+    if keep > 0 and active_saves:
+        record(
+            "WARN", "latent_checkpoint",
+            f"PreDecodeCleanup(#{cid}) checkpoint_keep={keep} AND active "
+            f"SaveLatent{[n['id'] for n in active_saves]} — double-saving the "
+            "assembled latent (unbounded accumulation). "
+            "Run scripts/apply_latent_checkpoint.py.",
+        )
+    elif keep == 0 and not active_saves:
+        record(
+            "WARN", "latent_checkpoint",
+            f"PreDecodeCleanup(#{cid}) checkpoint_keep=0 and no active "
+            "SaveLatent — assembled latent is not banked; a decode-stage "
+            "death loses the render. Run scripts/apply_latent_checkpoint.py.",
+        )
+    else:
+        via = f"checkpoint_keep={keep}" if keep > 0 else "standalone SaveLatent"
+        record("OK", "latent_checkpoint", f"latent banked via {via}")
 
 
 def _check_run_id_layout_present(wf, by_type, record) -> None:

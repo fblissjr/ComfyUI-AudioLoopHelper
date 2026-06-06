@@ -1,15 +1,18 @@
 """promote_latent_for_upscale.
 
-Last updated: 2026-05-10
+Last updated: 2026-06-06
 
-Find the most recent assembled video latent saved by a loop workflow's
-bypassed-SaveLatent toggle (added by ``scripts/apply_run_id_layout.py``)
-and copy it to ComfyUI's input directory under a deterministic name
-so the upscale workflow's ``LoadLatent`` widget can pick it up.
+Find the most recent assembled video latent saved by a loop workflow and
+copy it to ComfyUI's input directory under a deterministic name so the
+upscale workflow's ``LoadLatent`` widget can pick it up.
 
-Saves the user from manually walking
-``<output>/<workflow_name>/<timestamp>/latents/segment_NNNNN_.latent``
-on every render iteration.
+Searches both banking layouts, newest file wins across them:
+  - PreDecodeCleanup checkpoints (current; rotated, keep-newest-N):
+    ``<output>/latents/checkpoints/<workflow_name>_NNNNN_.latent``
+  - legacy standalone-SaveLatent per-render folders:
+    ``<output>/<workflow_name>/<timestamp>/latents/segment_NNNNN_.latent``
+
+Saves the user from manually walking the output tree on every render.
 
 Usage:
     # Most common — uses env vars or interactive prompts for paths
@@ -43,29 +46,32 @@ import sys
 from pathlib import Path
 
 LATENT_GLOB = "segment_*.latent"
+CHECKPOINT_DIR = "latents/checkpoints"
 
 
 def find_latest_assembled_latent(output_dir: Path, workflow_name: str) -> Path:
-    """Return the path of the newest ``segment_*.latent`` under
-    ``<output_dir>/<workflow_name>/*/latents/``.
+    """Return the newest banked latent for ``workflow_name``.
 
-    Raises ``FileNotFoundError`` with a useful message when the
-    workflow folder is missing or when no matching latent files exist
-    under any of its per-render sub-folders.
+    Looks at PreDecodeCleanup checkpoints
+    (``<output_dir>/latents/checkpoints/<workflow_name>_NNNNN_.latent``)
+    AND the legacy per-render SaveLatent layout
+    (``<output_dir>/<workflow_name>/*/latents/segment_NNNNN_.latent``);
+    the newest file by mtime wins across both. Raises
+    ``FileNotFoundError`` with a useful message when neither yields a
+    candidate.
     """
+    candidates = list(
+        (output_dir / CHECKPOINT_DIR).glob(f"{workflow_name}_*_.latent")
+    )
     workflow_root = output_dir / workflow_name
-    if not workflow_root.is_dir():
-        raise FileNotFoundError(
-            f"no output folder for workflow {workflow_name!r} under {output_dir} "
-            f"(expected {workflow_root}). Did you run "
-            "scripts/apply_run_id_layout.py and toggle the SaveLatent node?"
-        )
-    candidates = list(workflow_root.glob(f"*/latents/{LATENT_GLOB}"))
+    if workflow_root.is_dir():
+        candidates += workflow_root.glob(f"*/latents/{LATENT_GLOB}")
     if not candidates:
         raise FileNotFoundError(
-            f"no {LATENT_GLOB} files under {workflow_root}/*/latents/. "
-            "Toggle the 'Save assembled latent (toggle)' node to mode=0 in "
-            "the workflow UI and re-render."
+            f"no banked .latent for {workflow_name!r} under "
+            f"{output_dir / CHECKPOINT_DIR} or {workflow_root}/*/latents/. "
+            "Set PreDecodeCleanup.checkpoint_keep > 0 in the workflow UI "
+            "(default in shipped loop workflows) and re-render."
         )
     return max(candidates, key=lambda p: p.stat().st_mtime)
 

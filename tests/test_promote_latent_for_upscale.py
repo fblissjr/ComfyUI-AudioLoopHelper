@@ -1,17 +1,16 @@
 """Behavioral tests for scripts/promote_latent_for_upscale.py.
 
-Last updated: 2026-05-10
+Last updated: 2026-06-06
 
 Pins the file-discovery contract: given a workflow name and an output
-dir, return the most recent ``segment_*.latent`` file written by the
-loop's bypassed-SaveLatent toggle (added by
-``scripts/apply_run_id_layout.py``).
+dir, return the most recent banked ``.latent`` across BOTH layouts —
 
-Output layout produced by RunIdPrefix (``<workflow_name>/<timestamp>/latents/segment_NNNNN_.latent``):
+  - PreDecodeCleanup checkpoints (current; rotated):
+    ``<output>/latents/checkpoints/<workflow_name>_NNNNN_.latent``
+  - legacy standalone-SaveLatent per-render folders:
+    ``<output>/<workflow_name>/<timestamp>/latents/segment_NNNNN_.latent``
 
-    <output>/audio-loop-music-video_latent/
-      20260510_120000/latents/segment_00001_.latent       ← older
-      20260510_143022/latents/segment_00001_.latent       ← newer
+newest mtime wins across the union.
 """
 
 from __future__ import annotations
@@ -25,7 +24,7 @@ from promote_latent_for_upscale import find_latest_assembled_latent
 
 
 def _make_layout(root: Path, workflow_name: str, timestamps: list[str]) -> dict[str, Path]:
-    """Create the per-render output tree for a workflow + return the
+    """Create the legacy per-render output tree for a workflow + return the
     map of {timestamp -> .latent path} for assertions."""
     paths: dict[str, Path] = {}
     for ts in timestamps:
@@ -37,6 +36,14 @@ def _make_layout(root: Path, workflow_name: str, timestamps: list[str]) -> dict[
     return paths
 
 
+def _make_checkpoint(root: Path, workflow_name: str, counter: int) -> Path:
+    ckpt_dir = root / "latents" / "checkpoints"
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
+    p = ckpt_dir / f"{workflow_name}_{counter:05}_.latent"
+    p.write_bytes(b"")
+    return p
+
+
 def test_returns_most_recently_modified_latent(tmp_path: Path):
     paths = _make_layout(
         tmp_path, "audio-loop-music-video_latent",
@@ -44,22 +51,50 @@ def test_returns_most_recently_modified_latent(tmp_path: Path):
     )
     # Pin mtimes so the test doesn't depend on filesystem timestamp resolution
     base = time.time()
-    Path(paths["20260510_100000"]).touch(); _set_mtime(paths["20260510_100000"], base - 100)
-    Path(paths["20260510_120000"]).touch(); _set_mtime(paths["20260510_120000"], base - 50)
-    Path(paths["20260510_143022"]).touch(); _set_mtime(paths["20260510_143022"], base)
+    _set_mtime(paths["20260510_100000"], base - 100)
+    _set_mtime(paths["20260510_120000"], base - 50)
+    _set_mtime(paths["20260510_143022"], base)
 
     found = find_latest_assembled_latent(tmp_path, "audio-loop-music-video_latent")
     assert found == paths["20260510_143022"]
 
 
+def test_checkpoint_layout_found(tmp_path: Path):
+    ckpt = _make_checkpoint(tmp_path, "audio-loop-music-video_latent", 3)
+    found = find_latest_assembled_latent(tmp_path, "audio-loop-music-video_latent")
+    assert found == ckpt
+
+
+def test_newest_wins_across_layouts(tmp_path: Path):
+    """A fresh checkpoint must beat a stale legacy SaveLatent file and
+    vice versa — discovery is mtime across the union, not layout priority."""
+    legacy = _make_layout(
+        tmp_path, "audio-loop-music-video_latent", ["20260510_120000"],
+    )["20260510_120000"]
+    ckpt = _make_checkpoint(tmp_path, "audio-loop-music-video_latent", 1)
+    base = time.time()
+    _set_mtime(legacy, base - 100)
+    _set_mtime(ckpt, base)
+    assert find_latest_assembled_latent(tmp_path, "audio-loop-music-video_latent") == ckpt
+    _set_mtime(legacy, base + 100)
+    assert find_latest_assembled_latent(tmp_path, "audio-loop-music-video_latent") == legacy
+
+
+def test_checkpoints_scoped_per_workflow(tmp_path: Path):
+    """Another workflow's checkpoint in the shared folder must not match."""
+    _make_checkpoint(tmp_path, "other_workflow", 1)
+    with pytest.raises(FileNotFoundError, match="no banked .latent"):
+        find_latest_assembled_latent(tmp_path, "audio-loop-music-video_latent")
+
+
 def test_workflow_with_no_renders_raises(tmp_path: Path):
     (tmp_path / "audio-loop-music-video_latent").mkdir()
-    with pytest.raises(FileNotFoundError, match=r"no segment_\*\.latent files"):
+    with pytest.raises(FileNotFoundError, match="no banked .latent"):
         find_latest_assembled_latent(tmp_path, "audio-loop-music-video_latent")
 
 
 def test_unknown_workflow_raises(tmp_path: Path):
-    with pytest.raises(FileNotFoundError, match="no output folder"):
+    with pytest.raises(FileNotFoundError, match="no banked .latent"):
         find_latest_assembled_latent(tmp_path, "missing_workflow")
 
 

@@ -250,6 +250,38 @@ def test_latent_temporal_mask_edge_taper_default_is_zero():
     )
 
 
+def test_pre_decode_cleanup_checkpoint_keep_default_is_zero():
+    """`PreDecodeCleanup.checkpoint_keep` must default to 0 (checkpoint off).
+
+    Companion to `test_latent_temporal_mask_edge_taper_default_is_zero`:
+    every saved loop workflow predating the checkpoint inputs gets the
+    widgets filled from schema defaults at load time. A non-zero default
+    would silently start writing (and ROTATING — deleting!) .latent files
+    for every existing workflow on next reload. Saving + rotation must be
+    opt-in via the widget.
+    """
+    matches: list[tuple[str, int, dict]] = []
+    for module in _NODE_FILES:
+        path = REPO_ROOT / module
+        if not path.exists():
+            continue
+        for lineno, name, kwargs in _scan_io_input_records_in_class(path, "PreDecodeCleanup"):
+            if name == "checkpoint_keep":
+                matches.append((module, lineno, kwargs))
+    assert len(matches) == 1, (
+        f"Expected exactly one io.Int.Input('checkpoint_keep', ...) inside "
+        f"PreDecodeCleanup; found {len(matches)}: {matches}"
+    )
+    module, lineno, kwargs = matches[0]
+    default = kwargs.get("default")
+    assert default == 0, (
+        f"{module}:{lineno} -> io.Int.Input('checkpoint_keep', "
+        f"default={default!r}, ...) — default must be 0 (saved workflows "
+        f"that lack the widget value would silently start saving AND "
+        f"rotating checkpoint files)."
+    )
+
+
 def test_audio_iclora_loader_strength_defaults_carry_working_band():
     """Audio IC-LoRA loader strength widgets default to 0.5 with the working band
     (~0.3-0.75) in the tooltip.

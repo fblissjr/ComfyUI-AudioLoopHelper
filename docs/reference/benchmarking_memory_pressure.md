@@ -124,10 +124,16 @@ decomposed into THREE mechanisms:
 
 What did NOT fix it (kept for their residual value):
 
-1. **Banked latent + temporal-chunked recovery** (`SaveLatent` active by
-   default + `example_workflows/decode-latent-to-video.json`): the
-   guaranteed recovery for any decode-stage death — sampling is never
-   lost, and the recovery decodes in TEMPORAL CHUNKS via
+1. **Banked latent + temporal-chunked recovery** (PreDecodeCleanup
+   `checkpoint_keep=2` in shipped loop workflows +
+   `example_workflows/decode-latent-to-video.json`): the guaranteed
+   recovery for any decode-stage death — sampling is never lost. The
+   checkpoint writes a core-SaveLatent-compatible file to
+   `latents/checkpoints/<workflow>_NNNNN_.latent` and rotates (newest N
+   kept — replaced the standalone always-on SaveLatent whose per-render
+   timestamped folders accumulated GB-scale files with no cleanup;
+   `scripts/apply_latent_checkpoint.py`, audit `latent_checkpoint`).
+   The recovery decodes in TEMPORAL CHUNKS via
    `LTXVSpatioTemporalTiledVAEDecode [1,1,63,7,true,"cpu","float16"]`
    (stride-aligned with the canonical loop; retune temporal_tile_length
    for variants per the workflow's note), bounding peak RAM at any song

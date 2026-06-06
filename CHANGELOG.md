@@ -7,6 +7,21 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- **Latent banking moved onto `PreDecodeCleanup` with rotation** (new
+  `checkpoint_keep` / `checkpoint_prefix` inputs; defaults 0 / no-op so
+  existing saved workflows are unaffected on reload). With keep > 0 the
+  node saves the incoming latent before the cleanup — core-SaveLatent-
+  compatible safetensors with embedded prompt metadata, loadable by the
+  crash-recovery workflow — then deletes all but the newest N checkpoints
+  for the prefix. Shipped loop workflows set keep=2 with a stable
+  per-workflow prefix (`latents/checkpoints/<workflow>`), replacing the
+  standalone always-on `SaveLatent` whose per-render timestamped folders
+  accumulated GB-scale `.latent` files with no cleanup. Migration:
+  `scripts/apply_latent_checkpoint.py` (audit pair: `latent_checkpoint`,
+  WARN — flags both no-banking and double-saving states).
+  `promote_latent_for_upscale.py` searches the checkpoint dir first;
+  `apply_run_id_layout.py` no longer re-adds a SaveLatent toggle when
+  checkpointing is configured.
 - **Loop-family final decode is now `LTXVSpatioTemporalTiledVAEDecode` with
   stride-aligned temporal chunks** (`apply_ltx_decoder.py --spatiotemporal`,
   15 decoder nodes across 14 loop workflows + the crash-recovery workflow).

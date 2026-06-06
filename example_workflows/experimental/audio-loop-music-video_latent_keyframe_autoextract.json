@@ -1,8 +1,8 @@
 {
   "id": "3db70343-fd10-483b-8d66-6be2395b9681",
   "revision": 0,
-  "last_node_id": 2049,
-  "last_link_id": 3248,
+  "last_node_id": 2050,
+  "last_link_id": 3250,
   "nodes": [
     {
       "id": 252,
@@ -3281,7 +3281,6 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            3202,
             3248
           ]
         }
@@ -4620,9 +4619,7 @@
         {
           "name": "latent_prefix",
           "type": "STRING",
-          "links": [
-            3203
-          ]
+          "links": []
         }
       ],
       "properties": {
@@ -4633,44 +4630,6 @@
         "%Y%m%d_%H%M%S"
       ],
       "title": "Run ID Prefix"
-    },
-    {
-      "id": 2027,
-      "type": "SaveLatent",
-      "pos": [
-        1700,
-        -200
-      ],
-      "size": [
-        320,
-        80
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 4,
-      "inputs": [
-        {
-          "name": "samples",
-          "type": "LATENT",
-          "link": 3202
-        },
-        {
-          "name": "filename_prefix",
-          "type": "STRING",
-          "widget": {
-            "name": "filename_prefix"
-          },
-          "link": 3203
-        }
-      ],
-      "outputs": [],
-      "properties": {
-        "Node name for S&R": "SaveLatent"
-      },
-      "widgets_values": [
-        "latents/segment"
-      ],
-      "title": "Save assembled latent (toggle)"
     },
     {
       "id": 2028,
@@ -5644,7 +5603,9 @@
         "aux_id": "fblissjr/ComfyUI-AudioLoopHelper"
       },
       "widgets_values": [
-        "always"
+        "always",
+        2,
+        "latents/checkpoints/audio-loop-music-video_latent_keyframe_autoextract"
       ],
       "title": "Pre-Decode Cleanup (unload models)"
     }
@@ -6672,22 +6633,6 @@
       0,
       617,
       4,
-      "STRING"
-    ],
-    [
-      3202,
-      1605,
-      0,
-      2027,
-      0,
-      "LATENT"
-    ],
-    [
-      3203,
-      2026,
-      1,
-      2027,
-      1,
       "STRING"
     ],
     [
