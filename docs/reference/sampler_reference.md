@@ -30,7 +30,7 @@ Migration: `scripts/apply_canonical_sigmas.py`.
 node** (stripped from all distilled workflows 2026-05-01 via
 `scripts/apply_strip_sd3_shift_node.py`; the canonical path feeds the
 fixed sigmas directly — see CLAUDE.md "No flow-matching shift node"),
-decoder `LTXVTiledVAEDecode [1,1,1,true,"cpu","float16"]` on 24GB+ (the device/dtype pair is load-bearing for full songs — `"auto","auto"` pre-allocates full-video fp32 buffers and kernel-OOMs the final decode; see `benchmarking_memory_pressure.md`)
+decoder `LTXVTiledVAEDecode [1,1,1,true,"cpu","float16"]` on 24GB+ (the device/dtype pair trims the node's OWN buffers — necessary, not sufficient: the inner `vae.decode` buffer stays fp32 regardless, so >=4-min songs need a temporal-chunked decode; see `benchmarking_memory_pressure.md`)
 (single-tile, ~3× faster cold-pass than [2,2,1]); fall back to
 [2,2,1] on ≤16GB. Migration: `scripts/apply_no_tile_vae_decode.py`.
 

@@ -97,12 +97,12 @@ PERF_ARGS=(
 # Dynamic-VRAM kill switch (bench mode only). OOM-instead-of-offload:
 #   --disable-dynamic-vram  : kills aimdo page-level offload during inference
 #   --disable-async-offload : kills async weight streams (the lower-level mechanism)
-# DO NOT promote into default. Tried 2026-06-04, reverted same day: full-song
-# loop renders kernel-OOM at the FINAL full-video VAE decode — with paging
-# disabled the resident diffusion model is never evicted, the VideoVAE loads
-# with 0 MB usable, and the decode balloons system RAM until the kernel kills
-# the process (silently — see the exit-status line at the bottom). Dynamic
-# VRAM is required for the repo's primary workload (full-song loop renders).
+# DO NOT promote into default. Tried 2026-06-04, reverted same day. The
+# decode-stage kernel-OOM it was blamed for turned out to be decode BUFFER
+# STACKING (independent of paging; see benchmarking_memory_pressure.md) —
+# but the outcome stands: dynamic VRAM provides the offload headroom the
+# repo's primary workload (full-song loop renders) relies on. Keep the kill
+# switch bench-only.
 NODYNVRAM_ARGS=(
     --disable-dynamic-vram
     --disable-async-offload

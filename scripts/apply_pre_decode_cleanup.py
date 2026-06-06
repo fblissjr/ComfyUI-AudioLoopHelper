@@ -6,11 +6,11 @@ Splices ``PreDecodeCleanup`` (free pinned staging + unload all models)
 immediately upstream of ``TrimVideoLatentToAudio`` on the final-output decode
 path of every full-song LOOP workflow.
 
-Why: the full-song final VAE decode is a single-node RAM spike on top of
-page-locked staging + offloaded models — a sum that can kernel-OOM the
-process at the LAST step, after all sampling succeeded, regardless of launch
-flags. By decode time the models are no longer needed; the cleanup removes
-them from the decode profile. Mechanism + sizing:
+Why: by decode time the models/pins are no longer needed; the cleanup
+frees them (~40-50GB of RAM/VRAM pressure) before the final decode. This is
+HYGIENE, not the decode-OOM fix — the decode OOM is buffer stacking inside
+the decode path and was reproduced with this node in-graph; the actual
+bound is a temporal-chunked decode. Mechanism + allocation map:
 ``docs/reference/benchmarking_memory_pressure.md``.
 
 Scope rules (explicit, not implicit-by-omission):

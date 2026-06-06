@@ -1,14 +1,12 @@
 """Tests for PreDecodeCleanup — LATENT passthrough that unloads models and
 frees pinned staging right before the full-song final decode.
 
-Why this node exists: the decode stage of a full-song loop render is a
-single-node RAM spike (~37GB fp32 output at 960x544/200s) on top of ~24GB
-page-locked staging + offloaded model + text encoder — the sum kernel-OOMs a
-125GB box at the LAST step, after all sampling succeeded. By decode time the
-diffusion model is no longer needed; dropping it + the pins removes ~40-50GB
-from the profile. Launch-flag tuning cannot fix this (page-locked memory is
-unswappable; the spike happens inside one node where cache eviction can't
-run).
+Why this node exists: by decode time the diffusion model + pinned staging
+are no longer needed; dropping them removes ~40-50GB of RAM/VRAM pressure
+before the full-song final decode. This is HYGIENE, not the decode-OOM fix —
+the decode buffer-stack OOM reproduced with this node proven in-graph; the
+bound is a temporal-chunked decode. (Launch-flag/cache tuning can't help
+either: the big tensors are node-live, invisible to cache eviction.)
 
 Call-order contract: free_pins MUST run before unload_all_models —
 free_pins iterates comfy's current_loaded_models, which unload_all_models

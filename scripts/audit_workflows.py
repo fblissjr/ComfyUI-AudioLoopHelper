@@ -1748,10 +1748,10 @@ def _check_pre_decode_cleanup_present(wf, by_type, record) -> None:
     """WARN if a full-song LOOP workflow's TrimVideoLatentToAudio.latent is
     not fed by PreDecodeCleanup.
 
-    The full-song final decode is a single-node RAM spike on top of
-    page-locked staging + offloaded models; without the pre-decode teardown
-    the kernel can OOM-kill the process at the LAST step, after all sampling
-    succeeded (mechanism: docs/reference/benchmarking_memory_pressure.md).
+    Without it the final decode runs with models/pins still resident
+    (~40-50GB of avoidable RAM/VRAM pressure). This is HYGIENE — it does
+    NOT prevent the decode buffer-stack OOM, which needs a temporal-chunked
+    decode (mechanism: docs/reference/benchmarking_memory_pressure.md).
     WARN-level: a robustness aid, not a correctness invariant.
 
     Scope: workflows with an ACTIVE TensorLoopOpen only. Single-pass /
@@ -1780,9 +1780,9 @@ def _check_pre_decode_cleanup_present(wf, by_type, record) -> None:
             record(
                 "WARN", "pre_decode_cleanup_present",
                 f"TrimVideoLatentToAudio(#{tid}).latent <- {src_type or '?'} "
-                "(no PreDecodeCleanup): the full-song final decode can "
-                "kernel-OOM the process at the last step. Run "
-                "scripts/apply_pre_decode_cleanup.py.",
+                "(no PreDecodeCleanup): final decode runs without freeing "
+                "resident models/pins — RAM hygiene only, not OOM-prevention. "
+                "Run scripts/apply_pre_decode_cleanup.py.",
             )
 
 

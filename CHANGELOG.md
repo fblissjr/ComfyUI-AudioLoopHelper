@@ -11,16 +11,19 @@ This project uses [Semantic Versioning](https://semver.org/).
   persist the assembled latent (`SaveLatent`, active by default) before the
   final decode; this 8-node workflow decodes a saved `.latent` to the
   finished video with the same trim chain as a normal render (latent trim ->
-  tiled decode -> image trim -> VHS). Run on a fresh server: with no
-  diffusion model resident the decode fits easily.
+  tiled decode -> image trim -> VHS), decoding in TEMPORAL CHUNKS via core
+  `VAEDecodeTiled` — peak RAM stays bounded at any song length (a monolithic
+  decode of a long render dies even on a fresh server).
 - **`Pre-Decode Cleanup (unload models)` node (`PreDecodeCleanup`).** LATENT
   passthrough that frees pinned staging and unloads all models — wire right
   before the full-song final VAE decode. The decode is a single-node RAM
   spike on top of page-locked staging + offloaded models; the sum can
   kernel-OOM the process at the last step after all sampling succeeded.
   Sampling no longer needs the models by decode time; dropping them removes
-  ~40-50GB from the decode profile. Applied across the full loop-workflow
-  family via `apply_pre_decode_cleanup.py` (audit pair:
+  ~40-50GB of RAM/VRAM pressure — hygiene, not the decode-OOM fix (the
+  decode buffer stack dominates and reproduced with this node in-graph).
+  Applied across the full loop-workflow family via
+  `apply_pre_decode_cleanup.py` (audit pair:
   `pre_decode_cleanup_present`, WARN); single-pass/short-clip workflows are
   deliberately exempt — no spike to dodge, and battery renders would pay a
   model cold-reload per prompt. Next prompt after a cleanup cold-reloads.
@@ -77,15 +80,17 @@ This project uses [Semantic Versioning](https://semver.org/).
   returns as a Compose-editor property. Not referenced by any shipped workflow.
 
 ### Changed
-- **Full-song decode kernel-OOM root-caused and fixed: `LTXVTiledVAEDecode`
+- **Full-song decode kernel-OOM mitigated (partial): `LTXVTiledVAEDecode`
   device/dtype.** The decoder pre-allocates full-video output+weights buffers
   at the latents' device/dtype; with the previous `"auto","auto"` widgets
   that meant ~16 bytes/pixel-frame of fp32 — ~60GB+ in one allocation for a
   ~5-minute 960x544 render — killing the process at the last step of long
   renders. All shipped workflows now pin the decode to
-  `working_device="cpu"`, `working_dtype="float16"` (half the bytes,
-  swappable RAM, no visible precision cost at 8-bit output). Roughly doubles
-  the survivable song length; mechanism + history in
+  `working_device="cpu"`, `working_dtype="float16"` (half the bytes on the
+  node's OWN buffers, swappable RAM, no visible precision cost at 8-bit
+  output). Necessary but NOT sufficient: the inner `vae.decode` buffer stays
+  fp32 regardless of these widgets, so long renders still need the
+  temporal-chunked recovery decode; mechanism + allocation map in
   `docs/reference/benchmarking_memory_pressure.md`.
 - **`KeyframeLatentScheduleBatchEncode` warns on schedule-index clamping.**
   Out-of-range image indices were already clamped into the batch at runtime;

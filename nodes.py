@@ -4409,9 +4409,11 @@ def _unload_models_for_decode() -> None:
 class PreDecodeCleanup(io.ComfyNode):
     """LATENT passthrough that frees pinned staging and unloads ALL models —
     wire immediately before the full-song final VAE decode. Sampling no
-    longer needs the models by then, and the decode's single-node RAM spike
-    on top of them can kernel-OOM the process at the last step (mechanism +
-    sizing: docs/reference/benchmarking_memory_pressure.md).
+    longer needs the models by then; freeing them reclaims ~40-50GB of
+    RAM/VRAM pressure. NOTE: this is HYGIENE, not the decode-OOM fix — the
+    decode buffer-stack OOM reproduced with this node proven in-graph; the
+    actual bound is a temporal-chunked decode (mechanism + allocation map:
+    docs/reference/benchmarking_memory_pressure.md).
 
     Cost: the next prompt cold-reloads (~1 min). Memoized re-runs skip the
     side effect — fine, the decode they protect is skipped too. Sibling of

@@ -1,6 +1,6 @@
 # Benchmarking memory pressure on ComfyUI + LTX 2.3
 
-Last updated: 2026-06-05
+Last updated: 2026-06-06
 
 ## Role
 
@@ -91,31 +91,40 @@ entries get evicted). The mechanism above stands (read from source); any
 re-attempt at cache-floor tuning needs the failure characterized first and
 a pre-registered prediction.
 
-## Decode-stage OOM: root cause + fix (resolved 2026-06-05)
+## Decode-stage OOM: three stacked mechanisms (final, 2026-06-06)
 
-Five identical kernel kills (~128.8GB anon-rss on a 125GB box) at the final
-full-song decode were traced — after several falsified theories (launcher
-flags, cross-render cache accumulation, cache floor, leftover models) — to
-`LTXVTiledVAEDecode` itself: the node PRE-ALLOCATES full-video `output` +
-`weights` buffers sized `[frames, H, W, 3]` + `[frames, H, W, 1]` at the
-LATENTS' device/dtype (`working_device="auto"`, `working_dtype="auto"`).
-Loop latents are fp32, so a full song allocates ~16 bytes/pixel-frame —
-~60GB+ for a ~5-minute 960x544 render — in one shot inside a single node,
-where no cache eviction can intervene. Song length is the trigger
-threshold, which is why short renders survived.
+Nine kernel kills (~128.4-129.3GB anon-rss on a 125GB box) over three days
+decomposed into THREE mechanisms:
 
-Fix (applied across all shipped workflows): `working_device="cpu"` +
-`working_dtype="float16"` — half the bytes, plain swappable RAM, and fp16's
-1024 steps per 0-1 range exceeds 8-bit output precision. Roughly doubles
-the survivable song length; beyond that the structural need is temporal
-chunking, which the node does not offer (it tiles spatially only).
+1. **Decode buffer STACKING** — full-video CPU buffers stack across layers:
+   the LTXV node's `output`+`weights` buffers (fp16 after the widget fix,
+   ~23GB at 4 min) PLUS comfy's inner `vae.decode` `pixel_samples`, which is
+   **fp32 REGARDLESS of the node's working_dtype** (`vae_output_dtype()`
+   ignores it; only the experimental `--fp16-intermediates` changes it) ~35GB,
+   PLUS a one-shot fp32 multiply temporary ~35GB ≈ **~105GB** for a 4-min
+   960x544 decode. The `"cpu","float16"` widgets (applied across all shipped
+   workflows) are NECESSARY hygiene but NOT sufficient — **>=4-min songs
+   still OOM on a monolithic decode**. The real bound is TEMPORAL CHUNKING
+   (core `VAEDecodeTiled`, see below); the LTXV node tiles spatially only.
+2. **Substrate baseline raise** — upstream `e154da83` (2026-05-31) removed
+   the hard pin cap ("let the active model load past the pin limit"),
+   raising the resident pinned baseline; `#14252` + aimdo 0.4.9 fix only the
+   external-pinner interop facet. Contributor, not sole cause.
+3. **Source-video load** — a keyframe-source `VHS_LoadVideo` at
+   `force_rate=25` with no `frame_load_cap` materializes ~25x duration
+   frames of fp32 in one silent allocation (~106GB for a 3-min 1080p
+   source). Fixed: `force_rate=1` + `frame_load_cap` on the loaders.
 
 What did NOT fix it (kept for their residual value):
 
-1. **Banked latent + decode-only recovery** (`SaveLatent` active by
-   default + `example_workflows/decode-latent-to-video.json`): still the
+1. **Banked latent + temporal-chunked recovery** (`SaveLatent` active by
+   default + `example_workflows/decode-latent-to-video.json`): the
    guaranteed recovery for any decode-stage death — sampling is never
-   lost.
+   lost, and the recovery decodes in TEMPORAL CHUNKS via core
+   `VAEDecodeTiled [1024, 64, 256, 16]` (~9.6s stride, well above the
+   small-tile pulsing threshold), bounding peak RAM at any song length.
+   The chunking is the load-bearing part — a monolithic decode of a
+   >=4-min song dies even on a fresh server.
 2. **`PreDecodeCleanup`**: FALSIFIED as the decode-OOM fix — proven in
    both crashed graphs via the latent files' embedded prompt metadata
    (the node executed; the kill happened anyway, because the buffer
