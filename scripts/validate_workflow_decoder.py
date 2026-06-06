@@ -53,7 +53,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from workflow_utils import WorkflowEditor
+from workflow_utils import WorkflowEditor, is_active
 from nodes import LoopGeometry, _compute_loop_geometry, _snap_frames  # noqa: E402
 
 # AudioLoopController node ID in our example workflows.
@@ -84,7 +84,7 @@ def _loop_family() -> list[Path]:
                 ed = WorkflowEditor(path)
             except Exception:
                 continue
-            if any(n.get("type") == "TensorLoopOpen" and n.get("mode", 0) == 0
+            if any(n.get("type") == "TensorLoopOpen" and is_active(n)
                    for n in ed.wf["nodes"]):
                 out.append(path)
     return out

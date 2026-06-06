@@ -29,15 +29,10 @@ import argparse
 from pathlib import Path
 
 from workflow_utils import WorkflowEditor
-from validate_workflow_decoder import _get_window_and_overlap, _loop_family
-from nodes import _compute_loop_geometry
+from validate_workflow_decoder import _FPS, _get_window_and_overlap, _loop_family
+from nodes import LTX_TEMPORAL_SCALE, _compute_loop_geometry
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-
-# Full loop family (anything with an active TensorLoop) — the historical
-# audio-loop-music-video_* glob missed audio_reactive_loop + experimental
-# variants, which share the same decode tail and OOM exposure.
-WORKFLOWS = _loop_family()
 
 # Schema: [horizontal_tiles, vertical_tiles, overlap, last_frame_fix,
 # working_device, working_dtype]. last_frame_fix works around an LTX
@@ -55,10 +50,6 @@ _GENERIC_CNR = "comfy-core"
 _LTX_CNR = "ComfyUI-LTXVideo"
 
 _ST_TYPE = "LTXVSpatioTemporalTiledVAEDecode"
-
-# LTX temporal scale: 1 latent frame = 8 pixel frames.
-_PX_PER_LATENT = 8
-_FPS = 25
 
 
 def _spatiotemporal_widgets(window_seconds: float, overlap_seconds: float,
@@ -223,7 +214,7 @@ def patch_workflow(path: Path, revert: bool = False,
                     if _swap_ltx_to_spatiotemporal(node, widgets))
         if count:
             ed.save()
-            stride_s = (widgets[2] - widgets[3]) * _PX_PER_LATENT / _FPS
+            stride_s = (widgets[2] - widgets[3]) * LTX_TEMPORAL_SCALE / _FPS
             print(f"  swapped/re-stamped {count} node(s) in {path.name} "
                   f"(stride {stride_s:.2f}s -> temporal [{widgets[2]}, {widgets[3]}] latents)")
         else:
@@ -263,7 +254,11 @@ def main() -> None:
     if args.revert and args.spatiotemporal:
         parser.error("--revert and --spatiotemporal are mutually exclusive")
 
-    if not WORKFLOWS:
+    # Full loop family (anything with an active TensorLoop) — the historical
+    # audio-loop-music-video_* glob missed audio_reactive_loop + experimental
+    # variants, which share the same decode tail and OOM exposure.
+    workflows = _loop_family()
+    if not workflows:
         print(f"No workflows found under {REPO_ROOT / 'example_workflows'}")
         return
 
@@ -275,7 +270,7 @@ def main() -> None:
         direction = f"{_GENERIC_TYPE} → {_LTX_TYPE}"
     print(f"Applying: {direction}")
     total = 0
-    for path in WORKFLOWS:
+    for path in workflows:
         total += patch_workflow(path, revert=args.revert,
                                 spatiotemporal=args.spatiotemporal)
     print(f"Total nodes modified: {total}")
