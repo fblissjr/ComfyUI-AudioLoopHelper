@@ -117,3 +117,43 @@ def test_preserves_extra_keys_in_latent_dict():
 def test_node_is_registered_in_extension():
     from _node_registry import assert_node_registered
     assert_node_registered("TrimVideoLatentToAudio")
+
+
+class TestFindLatentDecoder:
+    """apply_trim_video_latent_to_audio._find_latent_decoder — the shared
+    decoder-discovery walk (also used by apply_pre_decode_cleanup). Must
+    step through OUR OWN IMAGE pass-throughs, not just the F14 image trim:
+    the fml2v variant interposes LTXHeadTrim between decoder and trim, and
+    the walk's give-up-on-unknown conservatism silently skipped the whole
+    workflow (no cleanup splice, no checkpoint stamp)."""
+
+    @staticmethod
+    def _editor(rel):
+        import sys
+        from pathlib import Path
+
+        sys.path.insert(0, "scripts")
+        from workflow_utils import WorkflowEditor
+
+        repo = Path(__file__).resolve().parent.parent
+        return WorkflowEditor(repo / rel)
+
+    def test_finds_decoder_through_head_trim(self):
+        # fml2v: VHS <- TrimImageBatchToAudio <- LTXHeadTrim <- decoder
+        from apply_trim_video_latent_to_audio import _find_latent_decoder
+
+        ed = self._editor(
+            "example_workflows/experimental/fml2v_var_d_audio_loop.json"
+        )
+        decoder = _find_latent_decoder(ed)
+        assert decoder is not None
+        assert decoder["type"] == "LTXVSpatioTemporalTiledVAEDecode"
+
+    def test_finds_decoder_in_canonical(self):
+        # canonical: VHS <- TrimImageBatchToAudio <- decoder (no head trim)
+        from apply_trim_video_latent_to_audio import _find_latent_decoder
+
+        ed = self._editor("example_workflows/audio-loop-music-video_latent.json")
+        decoder = _find_latent_decoder(ed)
+        assert decoder is not None
+        assert decoder["type"] == "LTXVSpatioTemporalTiledVAEDecode"

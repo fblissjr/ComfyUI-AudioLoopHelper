@@ -35,7 +35,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from workflow_utils import DECODER_TYPES, WorkflowEditor, iter_all_workflows
+from workflow_utils import (
+    DECODER_TYPES,
+    IMAGE_PASSTHROUGH_TYPES,
+    WorkflowEditor,
+    iter_all_workflows,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -47,7 +52,8 @@ SKIP_FILES = {
 
 def _find_latent_decoder(ed: WorkflowEditor) -> dict | None:
     """Pick the active LATENT-decoder whose output reaches an active
-    VHS_VideoCombine.images (possibly via TrimImageBatchToAudio)."""
+    VHS_VideoCombine.images (possibly via IMAGE pass-throughs — the F14
+    image trim, the fml2v variant's LTXHeadTrim)."""
     combines = [
         n for n in ed.wf["nodes"]
         if n.get("type") == "VHS_VideoCombine" and n.get("mode", 0) == 0
@@ -67,9 +73,9 @@ def _find_latent_decoder(ed: WorkflowEditor) -> dict | None:
         ntype = node.get("type")
         if ntype in DECODER_TYPES:
             return node
-        # Step backwards through pass-throughs that take IMAGE in / out.
-        # F14 sits between decoder and combine.
-        if ntype == "TrimImageBatchToAudio":
+        # Step backwards through pass-throughs that take IMAGE in / out
+        # (explicit allowlist; slot 0 is the IMAGE input on each).
+        if ntype in IMAGE_PASSTHROUGH_TYPES:
             link = ed.find_link_to_slot(cur_id, 0)
             if link is None:
                 return None

@@ -54,7 +54,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from workflow_utils import WorkflowEditor, has_active_tensor_loop
-from nodes import LoopGeometry, _compute_loop_geometry, _snap_frames  # noqa: E402
+from loop_geometry import LoopGeometry, _compute_loop_geometry, _snap_frames  # noqa: E402
 
 # AudioLoopController node ID in our example workflows.
 _LOOP_CONTROLLER_ID = 1582

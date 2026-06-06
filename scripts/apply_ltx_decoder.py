@@ -30,7 +30,7 @@ from pathlib import Path
 
 from workflow_utils import WorkflowEditor
 from validate_workflow_decoder import _FPS, _get_window_and_overlap, _loop_family
-from nodes import LTX_TEMPORAL_SCALE, _compute_loop_geometry
+from loop_geometry import LTX_TEMPORAL_SCALE, _compute_loop_geometry
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

@@ -1,8 +1,8 @@
 {
   "id": "0775f0bd-e4f2-40cc-85b7-45217564af17",
   "revision": 0,
-  "last_node_id": 2374,
-  "last_link_id": 4304,
+  "last_node_id": 2375,
+  "last_link_id": 4306,
   "nodes": [
     {
       "id": 92,
@@ -9528,7 +9528,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            4287
+            4306
           ]
         }
       ],
@@ -9560,7 +9560,7 @@
         {
           "name": "latent",
           "type": "LATENT",
-          "link": 4287
+          "link": 4305
         },
         {
           "name": "audio",
@@ -9873,6 +9873,48 @@
         0
       ],
       "title": "LoopConfigValidator"
+    },
+    {
+      "id": 2375,
+      "type": "PreDecodeCleanup",
+      "pos": [
+        2300,
+        1980
+      ],
+      "size": [
+        270,
+        82
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "latent",
+          "name": "latent",
+          "type": "LATENT",
+          "link": 4306
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "links": [
+            4305
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreDecodeCleanup",
+        "aux_id": "fblissjr/ComfyUI-AudioLoopHelper"
+      },
+      "widgets_values": [
+        "always",
+        2,
+        "latents/checkpoints/fml2v_var_d_audio_loop"
+      ],
+      "title": "Pre-Decode Cleanup (unload models)"
     }
   ],
   "links": [
@@ -11669,14 +11711,6 @@
       "LATENT"
     ],
     [
-      4287,
-      2369,
-      0,
-      2370,
-      0,
-      "LATENT"
-    ],
-    [
       4288,
       2308,
       0,
@@ -11811,6 +11845,22 @@
       2374,
       4,
       "INT"
+    ],
+    [
+      4305,
+      2375,
+      0,
+      2370,
+      0,
+      "LATENT"
+    ],
+    [
+      4306,
+      2369,
+      0,
+      2375,
+      0,
+      "LATENT"
     ]
   ],
   "groups": [

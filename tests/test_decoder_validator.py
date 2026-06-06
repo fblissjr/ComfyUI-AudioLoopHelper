@@ -90,6 +90,28 @@ class TestSpatiotemporalWidgets:
             assert w[2] >= w[3] + 2, f"{window=} {overlap=}: {w[2]=} {w[3]=}"
 
 
+class TestDecoderTypeAllowlists:
+    """The shared graph-walk allowlist (workflow_utils.DECODER_TYPES) must
+    cover every decoder type the validator handles. The 2026-06 decoder
+    swap added LTXVSpatioTemporalTiledVAEDecode to the validator but not
+    to DECODER_TYPES — which silently no-opped the ERR-level F14 audit
+    (trim_video_latent_to_audio_present walks VHS.images back to "a
+    decoder" and found none) and broke decoder discovery in
+    apply_trim_video_latent_to_audio / apply_pre_decode_cleanup."""
+
+    def test_validator_types_subset_of_shared_allowlist(self):
+        from validate_workflow_decoder import _DECODER_TYPES
+        from workflow_utils import DECODER_TYPES
+
+        missing = set(_DECODER_TYPES) - DECODER_TYPES
+        assert not missing, (
+            f"{missing} handled by the validator but absent from "
+            f"workflow_utils.DECODER_TYPES — graph walks (F14 audit, "
+            f"apply_trim_video_latent_to_audio, apply_pre_decode_cleanup) "
+            f"will not recognize these nodes as decoders."
+        )
+
+
 class TestGetWindowAndOverlap:
     """_get_window_and_overlap must trace LINKS, not trust local widgets.
 
