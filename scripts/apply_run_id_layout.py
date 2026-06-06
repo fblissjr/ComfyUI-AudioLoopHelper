@@ -147,14 +147,16 @@ def _apply_one(wf_path: Path, revert: bool, dry_run: bool) -> str:
     # Latent banking moved to PreDecodeCleanup's checkpoint widgets
     # (apply_latent_checkpoint.py); don't re-add a SaveLatent toggle when
     # the checkpoint is configured (widgets [mode, checkpoint_keep, prefix]).
-    checkpoint_active = any(
-        n.get("mode", 0) == 0
-        and len(n.get("widgets_values") or []) >= 2
-        and isinstance((n.get("widgets_values") or [None, 0])[1], int)
-        and (n.get("widgets_values") or [None, 0])[1] > 0
-        for n in nodes_by_type.get("PreDecodeCleanup", [])
-    )
-    if checkpoint_active:
+    def _checkpoint_enabled(node: dict) -> bool:
+        widgets = node.get("widgets_values") or []
+        return (
+            node.get("mode", 0) == 0
+            and len(widgets) >= 2
+            and isinstance(widgets[1], int)
+            and widgets[1] > 0
+        )
+
+    if any(_checkpoint_enabled(n) for n in nodes_by_type.get("PreDecodeCleanup", [])):
         latent_concat = None
     existing_save_latents = [
         n for n in nodes_by_type.get("SaveLatent", []) if n.get("mode", 0) == 0

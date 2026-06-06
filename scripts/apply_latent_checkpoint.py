@@ -44,7 +44,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from workflow_utils import WorkflowEditor, is_active  # noqa: E402
+from workflow_utils import WorkflowEditor, has_active_tensor_loop, is_active  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -61,13 +61,6 @@ KEEP = 2
 DEFAULT_PREFIX = "latents/checkpoints/audio_loop"
 
 
-def _has_active_tensor_loop(ed: WorkflowEditor) -> bool:
-    return any(
-        n.get("type") == "TensorLoopOpen" and is_active(n)
-        for n in ed.wf["nodes"]
-    )
-
-
 def _checkpoint_widgets(node: dict, keep: int, prefix: str) -> list:
     """Full widget array for PreDecodeCleanup, preserving the mode value."""
     widgets = node.get("widgets_values") or []
@@ -81,7 +74,7 @@ def _apply_one(wf_path: Path, revert: bool, dry_run: bool) -> str:
     except Exception as e:  # noqa: BLE001
         return f"load error: {e}"
 
-    if not _has_active_tensor_loop(ed):
+    if not has_active_tensor_loop(ed):
         return "skip (no active TensorLoop — single-pass/short decode, deliberately exempt)"
     cleanups = [n for n in ed.find_nodes_by_type(CLEANUP_TYPE) if is_active(n)]
     if not cleanups:
@@ -91,10 +84,10 @@ def _apply_one(wf_path: Path, revert: bool, dry_run: bool) -> str:
 
     if revert:
         widgets = cleanup.get("widgets_values") or []
-        already = (
+        is_reverted_state = (
             len(widgets) >= 2 and widgets[1] == 0 and save_latents
         )
-        if already:
+        if is_reverted_state:
             return "already reverted"
         if dry_run:
             return "would revert (checkpoint widgets -> no-op; re-add SaveLatent)"

@@ -43,7 +43,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from workflow_utils import WorkflowEditor  # noqa: E402
+from workflow_utils import WorkflowEditor, has_active_tensor_loop  # noqa: E402
 from apply_trim_video_latent_to_audio import (  # noqa: E402
     _find_latent_decoder,
     _find_latent_input_slot,
@@ -59,20 +59,13 @@ TARGET_GLOBS = (
 CLEANUP_TYPE = "PreDecodeCleanup"
 
 
-def _has_active_tensor_loop(ed: WorkflowEditor) -> bool:
-    return any(
-        n.get("type") == "TensorLoopOpen" and n.get("mode", 0) == 0
-        for n in ed.wf["nodes"]
-    )
-
-
 def _apply_one(wf_path: Path, revert: bool, dry_run: bool) -> str:
     try:
         ed = WorkflowEditor(wf_path)
     except Exception as e:  # noqa: BLE001
         return f"load error: {e}"
 
-    if not _has_active_tensor_loop(ed):
+    if not has_active_tensor_loop(ed):
         return "skip (no active TensorLoop — single-pass/short decode, deliberately exempt)"
 
     decoder = _find_latent_decoder(ed)

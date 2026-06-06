@@ -240,6 +240,16 @@ def is_active(node: dict) -> bool:
     return node.get("mode", 0) != 4
 
 
+def has_active_tensor_loop(editor) -> bool:
+    """True iff the workflow contains an active TensorLoopOpen — the
+    loop-family membership test (full-song renders with the decode-tail
+    OOM exposure). `editor` is a WorkflowEditor."""
+    return any(
+        n.get("type") == "TensorLoopOpen" and is_active(n)
+        for n in editor.wf["nodes"]
+    )
+
+
 def resolve_repo_path(p: str | Path) -> Path:
     """Resolve a CLI-supplied path: absolute paths kept as-is, relative
     paths re-rooted at the repo root. Used by every apply_*.py for its
