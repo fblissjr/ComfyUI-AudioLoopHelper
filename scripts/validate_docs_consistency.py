@@ -62,6 +62,20 @@ STALE_PATTERNS: dict[str, str] = {
         )
         for old, overlap, new in _STRIDE_FIXES
     },
+    # 2026-06-06 decoder swap: the loop family's final decode (node 1604)
+    # is LTXVSpatioTemporalTiledVAEDecode with stride-aligned temporal
+    # chunks. Claims that 1604 is the core VAEDecodeTiled are stale.
+    r"1604\s+VAEDecodeTiled|VAEDecodeTiled\s*\(typically node 1604\)": (
+        "node 1604 is LTXVSpatioTemporalTiledVAEDecode since 2026-06-06 "
+        "(apply_ltx_decoder.py --spatiotemporal)"
+    ),
+    # 2026-06-06 checkpoint rotation: latent banking lives on
+    # PreDecodeCleanup.checkpoint_keep; the standalone SaveLatent toggle
+    # UX is retired (apply_latent_checkpoint.py).
+    r"SaveLatent toggle|toggled SaveLatent|Save assembled latent \(toggle\)": (
+        "latent banking moved to PreDecodeCleanup.checkpoint_keep "
+        "(rotated; scripts/apply_latent_checkpoint.py)"
+    ),
 }
 
 # Substrings that flag a line as a historical callout — all stale

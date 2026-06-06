@@ -1703,6 +1703,7 @@ def _check_trim_video_latent_to_audio_present(wf, by_type, record) -> None:
     # workflows have 0-1 IMAGE-typed pass-through nodes (e.g. legacy
     # F14 image-trim), so 8 is a generous safety bound.
     MAX_WALK_DEPTH = 8
+    decoder_reached = False
     for combine in combines:
         # Walk back from combine.images through any IMAGE pass-through
         # until we hit a decoder. Side-preview decoders that don't feed
@@ -1725,6 +1726,7 @@ def _check_trim_video_latent_to_audio_present(wf, by_type, record) -> None:
                 break
         if decoder is None:
             continue
+        decoder_reached = True
         did = decoder.get("id")
         latent_link = _input_slot_link(decoder, "latents") or _input_slot_link(decoder, "samples")
         if latent_link is None:
@@ -1743,6 +1745,23 @@ def _check_trim_video_latent_to_audio_present(wf, by_type, record) -> None:
                 "(video > audio by up to window-stride seconds). Run "
                 "scripts/apply_trim_video_latent_to_audio.py.",
             )
+    if not decoder_reached:
+        # A loop-family workflow MUST have a recognized decoder behind its
+        # final VHS_VideoCombine. Reaching here means every backward walk
+        # died on an unrecognized node — historically this meant a decoder
+        # type missing from workflow_utils.DECODER_TYPES or an IMAGE
+        # pass-through missing from IMAGE_PASSTHROUGH_TYPES recognition,
+        # which silently MUTED this audit on every migrated workflow
+        # (2026-06 decoder swap). Loud, not skipped.
+        record(
+            "WARN", "trim_video_latent_to_audio_present",
+            "no recognized decoder found walking back from any active "
+            "VHS_VideoCombine.images — the F14 trim audit was SKIPPED, not "
+            "passed. If a new decoder or IMAGE pass-through node type was "
+            "introduced, add it to workflow_utils.DECODER_TYPES / "
+            "IMAGE_PASSTHROUGH_TYPES (guard: tests/test_decoder_validator.py"
+            "::TestDecoderTypeAllowlists).",
+        )
 
 
 def _check_pre_decode_cleanup_present(wf, by_type, record) -> None:

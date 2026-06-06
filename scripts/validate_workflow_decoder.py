@@ -33,7 +33,7 @@ window_seconds/overlap_seconds input links to their sources
 (LTXFramePlanner.actual_seconds / FloatConstant) — the controller's own
 widgets_values are stale placeholders in every shipped workflow and
 read 19.88/2 regardless of variant. Stride math goes through
-nodes._compute_loop_geometry so it is bit-exact with the runtime.
+loop_geometry._compute_loop_geometry so it is bit-exact with the runtime.
 
 Check-only — never writes to any file.
 

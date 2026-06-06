@@ -37,7 +37,7 @@ Add `--group experiments` for autoresearch contract tests (`tests/test_autoresea
 
 ## Architecture
 
-Runtime node modules: `nodes.py` (core loop), `nodes_analysis.py` (torchaudio audio analysis), `nodes_sage.py` (sage attention), `nodes_validation.py` (config validator), `nodes_audio_iclora.py` (audio-reference IC-LoRA: loaders + guides + Compose Reference Audio), `nodes_audio_latent_slice.py`, `nodes_easycache.py`, `nodes_ffn.py`, `nodes_regional_compile.py`. `audio_reference_shaping.py` is the reference-windowing engine backing `nodes_audio_iclora` (no node class). Entry point: `comfy_entrypoint()` in `nodes.py`.
+Runtime node modules: `nodes.py` (core loop), `nodes_analysis.py` (torchaudio audio analysis), `nodes_sage.py` (sage attention), `nodes_validation.py` (config validator), `nodes_audio_iclora.py` (audio-reference IC-LoRA: loaders + guides + Compose Reference Audio), `nodes_audio_latent_slice.py`, `nodes_easycache.py`, `nodes_ffn.py`, `nodes_regional_compile.py`. `audio_reference_shaping.py` is the reference-windowing engine backing `nodes_audio_iclora` (no node class); `loop_geometry.py` holds the stride/snap math (stdlib-only; `nodes.py` re-exports). Entry point: `comfy_entrypoint()` in `nodes.py`.
 
 Core nodes (per-node role + wiring in each class's docstring; full reference at `docs/reference/ltx23_model_reference.md`):
 
@@ -74,7 +74,7 @@ Analysis (`nodes_analysis.py`, torchaudio only): `AudioPitchDetect` → F0 + voc
 ### Sampler + sigma chain
 
 - **Distilled 8-step path.** `ManualSigmas "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"` + `KSamplerSelect euler` + `CFGGuider cfg=1`. **No flow-matching shift node** (no `ModelSamplingSD3`). **No `euler_ancestral*`.** Full walkthrough + Lightricks evidence: `docs/reference/sampler_reference.md`. Migration: `scripts/apply_canonical_sigmas.py`, `scripts/apply_strip_sd3_shift_node.py`.
-- **VAE decode — loop family**: `LTXVSpatioTemporalTiledVAEDecode [1,1,63,7,true,"cpu","float16"]` — temporal chunk stride (LATENT frames) bit-exact with the iteration stride via `nodes._compute_loop_geometry`, so chunk seams land on iteration boundaries and decode RAM is bounded at any song length. `"cpu","float16"` accumulator is LOAD-BEARING (auto/auto = full-video fp32, kernel-OOMs ≥4-min songs). Apply: `scripts/apply_ltx_decoder.py --spatiotemporal`; CI gate: `scripts/validate_workflow_decoder.py`. Single-pass stays `LTXVTiledVAEDecode [1,1,1,true,"cpu","float16"]`. Mechanism: `docs/reference/benchmarking_memory_pressure.md`.
+- **VAE decode — loop family**: `LTXVSpatioTemporalTiledVAEDecode [1,1,63,7,true,"cpu","float16"]` — temporal chunk stride (LATENT frames) bit-exact with the iteration stride via `loop_geometry._compute_loop_geometry`, so chunk seams land on iteration boundaries and decode RAM is bounded at any song length. `"cpu","float16"` accumulator is LOAD-BEARING (auto/auto = full-video fp32, kernel-OOMs ≥4-min songs). Apply: `scripts/apply_ltx_decoder.py --spatiotemporal`; CI gate: `scripts/validate_workflow_decoder.py`. Single-pass stays `LTXVTiledVAEDecode [1,1,1,true,"cpu","float16"]`. Mechanism: `docs/reference/benchmarking_memory_pressure.md`.
 - **Don't copy upstream's 15-step sampling** from `LTX-2.3_T2V_I2V_Single_Stage_Distilled_Full.json`. Authoritative distilled path: 8 fixed sigmas.
 
 ### Conditioning + prompts

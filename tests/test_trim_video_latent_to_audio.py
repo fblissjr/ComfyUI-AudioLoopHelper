@@ -129,10 +129,9 @@ class TestFindLatentDecoder:
 
     @staticmethod
     def _editor(rel):
-        import sys
+        # conftest.py puts scripts/ on sys.path
         from pathlib import Path
 
-        sys.path.insert(0, "scripts")
         from workflow_utils import WorkflowEditor
 
         repo = Path(__file__).resolve().parent.parent

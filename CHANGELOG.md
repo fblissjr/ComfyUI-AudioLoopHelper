@@ -6,7 +6,27 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **Decoder-discovery walks recognize the spatio-temporal decoder.**
+  `workflow_utils.DECODER_TYPES` was missing
+  `LTXVSpatioTemporalTiledVAEDecode` after the decoder swap, which
+  silently no-opped the ERR-level `trim_video_latent_to_audio_present`
+  audit (its walk from `VHS_VideoCombine.images` found "no decoder" and
+  skipped) and decoder discovery in `apply_trim_video_latent_to_audio.py`
+  / `apply_pre_decode_cleanup.py`. The walk also steps through the new
+  shared `IMAGE_PASSTHROUGH_TYPES` (F14 image trim + `LTXHeadTrim`) — the
+  fml2v variant interposes `LTXHeadTrim` and had been silently skipped by
+  the whole cleanup/checkpoint chain; it now carries `PreDecodeCleanup` +
+  checkpoint widgets like the rest of the family. Guard test: validator
+  decoder types must be a subset of the shared allowlist.
+
 ### Changed
+- **Loop-geometry math extracted to a stdlib-only `loop_geometry` module**
+  (`LTX_TEMPORAL_SCALE`, `LoopGeometry`, `_compute_loop_geometry`,
+  `_compute_tile_count`, `_snap_frames`); `nodes.py` re-exports for all
+  existing consumers. The decoder validator + apply script import the
+  light module directly instead of paying `nodes.py`'s torch import (~3s)
+  for pure arithmetic.
 - **Latent banking moved onto `PreDecodeCleanup` with rotation** (new
   `checkpoint_keep` / `checkpoint_prefix` inputs; defaults 0 / no-op so
   existing saved workflows are unaffected on reload). With keep > 0 the

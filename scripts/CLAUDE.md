@@ -116,6 +116,8 @@ Three rules whose details belong here even though the rule itself is in root, pl
 - `"mode": 0` = active, `"mode": 4` = bypassed. **Bypass passes inputs to outputs of same TYPE only**; inputs with no matching-type output dead-end silently.
 - **`workflow_utils.is_active(node)`** is the canonical bypass check (`mode != 4`). Use it instead of inline `node.get("mode", 0) != 4` — 5 call sites across `audit_workflows.py`, `apply_no_tile_vae_decode.py`, `apply_melband_default_off.py`. The bare integer obscures that `4` means bypass.
 - **Dead-node detection requires a live-consumer check, not a link-count check.** A node with output links can still be runtime-dead if every consumer is `mode=4`. Pattern: walk consumer ids, return True only if at least one consumer satisfies `is_active`. See `apply_no_tile_vae_decode.py::_has_live_consumer`.
+- **`workflow_utils.has_active_tensor_loop(ed)`** is the canonical loop-family membership test (3 call sites: `apply_pre_decode_cleanup.py`, `apply_latent_checkpoint.py`, `validate_workflow_decoder.py::_loop_family`).
+- **Graph-walk allowlists live in `workflow_utils`: `DECODER_TYPES` + `IMAGE_PASSTHROUGH_TYPES`.** When a workflow migration introduces a NEW node type on an allowlisted plane (a new decoder, a new IMAGE pass-through between decoder and `VHS_VideoCombine`), the allowlist must gain it in the same change — otherwise every walk-based audit/apply silently no-ops on the migrated workflows (the 2026-06 decoder swap muted the ERR-level F14 audit this way). Guard: `tests/test_decoder_validator.py::TestDecoderTypeAllowlists`.
 
 ## Audio analysis scripts
 
@@ -176,7 +178,7 @@ with original purpose + reason archived: `scripts/archive/CLAUDE.md`.**
 |---|---|
 | `analyze_workflow_dag.py` | Static DAG + execution-order view · README, `apply_keyframe_batch_encode.py` |
 | `trace_node_source.py` | Show node Python source from a workflow + node_id · `analyze_workflow_dag.py`, `debug_tools.md` |
-| `validate_workflow_decoder.py` | Decoder-config check across the loop family — link-traces the controller's window/overlap (its widgets are stale placeholders) and checks chunk stride == iteration stride in latent frames via `nodes._compute_loop_geometry` · CI, `debugging_guide.md`, `ltx-constraints-auditor` agent, `tests/test_decoder_validator.py`, `apply_ltx_decoder.py` (imports `_get_window_and_overlap` + `_loop_family`) |
+| `validate_workflow_decoder.py` | Decoder-config check across the loop family — link-traces the controller's window/overlap (its widgets are stale placeholders) and checks chunk stride == iteration stride in latent frames via `loop_geometry._compute_loop_geometry` (stdlib-only — no torch import) · CI, `debugging_guide.md`, `ltx-constraints-auditor` agent, `tests/test_decoder_validator.py`, `apply_ltx_decoder.py` (imports `_get_window_and_overlap` + `_loop_family`) |
 | `validate_workflow_resolution.py` | LTX-2.3 resolution-compliance check · `debugging_guide.md`, `ltx-constraints-auditor` agent |
 | `extract_workflow_from_png.py` | Dump embedded workflow JSON from PNG · `debugging_guide.md` |
 | `diagnose_overlap_seams.py` | Detect seam-zone artifacts in assembled loop output · `build_seam_refinement_workflow.py` |

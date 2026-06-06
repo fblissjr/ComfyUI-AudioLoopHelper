@@ -109,7 +109,7 @@ Tests: `tests/test_audio_loop_controller.py` (stride math, clamping, boundary), 
 
 ## References
 
-- `nodes.py::AudioLoopController`, `nodes.py::_compute_loop_geometry` — implementation
+- `nodes.py::AudioLoopController`, `loop_geometry.py::_compute_loop_geometry` (stdlib-only; re-exported by `nodes.py`) — implementation
 - `tests/test_audio_loop_controller.py` — stride + clamping + boundary tests
 - `docs/reference/frame_planner_reference.md` — dimension feed (window_seconds, fps source)
 - `docs/reference/pipeline_flow_latent.md` — where ALC sits in the full loop

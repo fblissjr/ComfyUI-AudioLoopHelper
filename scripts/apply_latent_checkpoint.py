@@ -21,10 +21,12 @@ Per eligible workflow (active TensorLoopOpen + active PreDecodeCleanup):
      superseded by the checkpoint widgets. RunIdPrefix keeps feeding
      VHS_VideoCombine; its latent_prefix output simply goes unconsumed.
 
-``--revert`` restores the standalone shape: checkpoint widgets back to the
-no-op defaults ``[mode, 0, latents/checkpoints/audio_loop]`` and an ACTIVE
-SaveLatent re-added, wired from PreDecodeCleanup's latent source +
-RunIdPrefix.latent_prefix when present.
+``--revert`` restores the standalone SHAPE, not bytes: checkpoint widgets
+back to the no-op defaults ``[mode, 0, latents/checkpoints/audio_loop]``
+and an ACTIVE SaveLatent re-added, wired from PreDecodeCleanup's latent
+source + RunIdPrefix.latent_prefix when present — the re-added node gets a
+fresh id and position, so a revert->apply round-trip is functionally (not
+byte-) identical to the pre-revert state.
 
 Audit pair: ``latent_checkpoint`` (WARN) in ``scripts/audit_workflows.py``.
 

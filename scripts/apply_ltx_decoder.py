@@ -58,7 +58,7 @@ def _spatiotemporal_widgets(window_seconds: float, overlap_seconds: float,
 
     [spatial_tiles, spatial_overlap, temporal_tile_length, temporal_overlap,
      last_frame_fix, working_device, working_dtype] — temporal units are
-    LATENT frames. Derives via nodes._compute_loop_geometry (the
+    LATENT frames. Derives via loop_geometry._compute_loop_geometry (the
     controller's own stride math) so chunk stride (tile_length - overlap)
     is BIT-EXACT with the iteration stride and decode-chunk seams coincide
     with iteration boundaries (where window transitions already exist).

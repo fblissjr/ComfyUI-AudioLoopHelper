@@ -1,4 +1,4 @@
-Last updated: 2026-06-03 (canonical `LTXVConditioning.frame_rate=25` per `docs/reference/ltx23_model_reference.md` § "`frame_rate`: canonical inference value is 25"; `fps=25` is live in all shipped workflows. Sampling chain is `ManualSigmas` — the `ModelSamplingSD3` shift node and `BasicScheduler` were stripped 2026-05-01. Widget snapshots below reflect the canonical `fps=25` and `497`-frame values.)
+Last updated: 2026-06-06 (decode tail re-traced: stride-aligned `LTXVSpatioTemporalTiledVAEDecode` + F14 trims + PreDecodeCleanup checkpointing. Earlier: canonical `LTXVConditioning.frame_rate=25` per `docs/reference/ltx23_model_reference.md` § "`frame_rate`: canonical inference value is 25"; `fps=25` is live in all shipped workflows. Sampling chain is `ManualSigmas` — the `ModelSamplingSD3` shift node and `BasicScheduler` were stripped 2026-05-01. Widget snapshots below reflect the canonical `fps=25` and `497`-frame values.)
 
 # Pipeline Flow: LATENT-Based Music Video Workflow
 
@@ -49,7 +49,8 @@ Extension Subgraph #843 internals:
   -> output (extended_latent)
 
 Output Assembly:
-  LatentConcat(initial + loop_output) -> VAEDecodeTiled -> VHS_VideoCombine
+  LatentConcat(initial + loop_output) -> PreDecodeCleanup -> TrimVideoLatentToAudio
+  -> LTXVSpatioTemporalTiledVAEDecode -> TrimImageBatchToAudio -> VHS_VideoCombine
 ```
 
 ---
@@ -581,13 +582,14 @@ Output Assembly:
 - **Outputs**:
   | Output | Type | Connected To |
   |--------|------|-------------|
-  | video_latent | LATENT | #381 LTXVCropGuides (slot 2), #1318 LTXVTiledVAEDecode (slot 1), #1539 TensorLoopOpen initial_value (slot 0) |
+  | video_latent | LATENT | #381 LTXVCropGuides (slot 2), #843 extension subgraph, #1539 TensorLoopOpen initial_value (slot 0) |
   | audio_latent | LATENT | unwired -- discarded; loop re-encodes audio each iteration |
 
 **Critical path split**: The video_latent from #245 goes to THREE places:
 1. **#1539 TensorLoopOpen** -- full latent (WITH guides) as loop initial value
 2. **#381 LTXVCropGuides** -- strips guides for prepending to final output
-3. **#1318 LTXVTiledVAEDecode** -- preview of initial render (upgraded from generic `VAEDecode` on 2026-04-23 for OOM safety at higher resolutions)
+3. **#843 extension subgraph** -- loop-body input (the initial-render preview
+   decoder that used to sit here, #1318, has been removed from the canonical)
 
 ### Node 381 -- LTXVCropGuides (Initial)
 - **Type**: `LTXVCropGuides` (ComfyUI core: `comfy_extras/nodes_lt.py`)
@@ -1015,25 +1017,34 @@ The noise_mask is the mechanism by which the sampler knows which latent frames t
 - **Outputs**:
   | Output | Type | Connected To |
   |--------|------|-------------|
-  | LATENT | LATENT | #1604 VAEDecodeTiled samples (slot 0) |
+  | LATENT | LATENT | #2031 PreDecodeCleanup -> #2028 TrimVideoLatentToAudio -> #1604 latents (slot 1) |
 
 ### Node 1598 -- Get_video_vae (Final Decode)
 - **Type**: `GetNode` (KJNodes) -- retrieves `video_vae`
-- **Outputs**: VAE -> #1604 (final decode), #1318 (initial-render preview decode), new top-level `VAEEncode` (guide latent). `#1590`/`#1591`/`#1597` (upscale skeleton) removed 2026-04-23.
+- **Outputs**: VAE -> #1604 (final decode), top-level `VAEEncode` (guide latent). `#1590`/`#1591`/`#1597` (upscale skeleton) removed 2026-04-23; the #1318 initial-render preview decode is also gone.
 
-### Node 1604 -- VAEDecodeTiled ("Final VAE Decode (once)")
-- **Type**: `VAEDecodeTiled` (ComfyUI core)
-- **What**: Decodes the full concatenated latent to pixel space. Uses tiled decoding to handle the potentially very long video without OOM. This is the ONLY VAE decode in the main pipeline (latent-space loop advantage).
+### Node 1604 -- LTXVSpatioTemporalTiledVAEDecode ("Final VAE Decode (once)")
+- **Type**: `LTXVSpatioTemporalTiledVAEDecode` (ComfyUI-LTXVideo)
+- **What**: Decodes the full concatenated latent to pixel space in
+  stride-aligned TEMPORAL CHUNKS: chunk stride (`temporal_tile_length -
+  temporal_overlap`, in latent frames) equals the loop iteration stride, so
+  chunk-blend boundaries land on iteration boundaries; the cpu/float16
+  accumulator bounds decode RAM at any song length
+  (`docs/reference/benchmarking_memory_pressure.md`). This is the ONLY VAE
+  decode in the main pipeline (latent-space loop advantage).
 - **Inputs**:
   | Input | Type | Source |
   |-------|------|--------|
-  | samples | LATENT | #1605 LatentConcat (slot 0) |
   | vae | VAE | #1598 Get_video_vae (slot 0) |
-- **Widgets**: `tile_size`: `320`, `overlap`: `240`, `temporal_size`: `32`, `temporal_overlap`: `16`
+  | latents | LATENT | #2028 TrimVideoLatentToAudio (F14 latent trim; fed by #2031 PreDecodeCleanup <- #1605 LatentConcat) |
+- **Widgets**: `[1, 1, 63, 7, true, "cpu", "float16"]` -- single spatial tile;
+  63 - 7 = 56-latent chunk stride = 17.92 s at the canonical window=19.88 /
+  overlap=2 (derived per-workflow by `scripts/apply_ltx_decoder.py
+  --spatiotemporal`; CI-gated by `scripts/validate_workflow_decoder.py`)
 - **Outputs**:
   | Output | Type | Connected To |
   |--------|------|-------------|
-  | IMAGE | IMAGE | #617 VHS_VideoCombine images (slot 0) |
+  | IMAGE | IMAGE | #2029 TrimImageBatchToAudio (F14 image trim) -> #617 VHS_VideoCombine images |
 
 ### Node 604 -- Get_orig_audio
 - **Type**: `GetNode` (KJNodes) -- retrieves `orig_audio` (full unseparated audio)
@@ -1045,8 +1056,9 @@ The noise_mask is the mechanism by which the sampler knows which latent frames t
 - **Inputs**:
   | Input | Type | Source |
   |-------|------|--------|
-  | images | IMAGE | #1604 VAEDecodeTiled (slot 0) |
+  | images | IMAGE | #2029 TrimImageBatchToAudio (slot 0; F14 -- clips iter overshoot to exact audio length) |
   | audio | AUDIO | #604 Get_orig_audio (slot 0) |
+  | filename_prefix | STRING | #2026 RunIdPrefix (F15 -- per-render folder clustering) |
   | meta_batch | VHS_BatchManager | unwired |
   | vae | VAE | unwired |
 - **Widgets**: `frame_rate`: `25`, `loop_count`: `0`, `filename_prefix`: `LTX-2`, `format`: `video/h264-mp4`, `pix_fmt`: `yuv420p`, `crf`: `19`, `save_metadata`: `true`, `trim_to_audio`: `true`, `pingpong`: `false`, `save_output`: `true`
@@ -1171,10 +1183,10 @@ The upscale chain is bypassed because per-loop VAE round-trip quality loss and V
 | `frame_rate` | #617 VHS_VideoCombine | `25` | Output video frame rate | 1+ |
 | `crf` | #617 VHS_VideoCombine | `19` | H.264 quality (lower = better quality, larger file) | 0-51 |
 | `trim_to_audio` | #617 VHS_VideoCombine | `true` | Trim video to match audio duration | true/false |
-| `tile_size` | #1604 VAEDecodeTiled | `320` | Spatial tile size for VAE decode | 64+ |
-| `overlap` (tile) | #1604 VAEDecodeTiled | `240` | Spatial tile overlap | 0+ |
-| `temporal_size` | #1604 VAEDecodeTiled | `32` | Temporal tile size for VAE decode | 1+ |
-| `temporal_overlap` | #1604 VAEDecodeTiled | `16` | Temporal tile overlap | 0+ |
+| `spatial_tiles` x2 | #1604 LTXVSpatioTemporalTiledVAEDecode | `1, 1` | Single spatial tile (no spatial seams) | 1+ |
+| `temporal_tile_length` | #1604 LTXVSpatioTemporalTiledVAEDecode | `63` | Chunk length in LATENT frames (incl. overlap) | overlap+2 |
+| `temporal_overlap` | #1604 LTXVSpatioTemporalTiledVAEDecode | `7` | Chunk blend overlap in LATENT frames | 1-8 |
+| `working_device/dtype` | #1604 LTXVSpatioTemporalTiledVAEDecode | `cpu, float16` | Accumulator placement -- LOAD-BEARING (auto/auto = full-video fp32 buffer, OOM) | -- |
 
 ---
 
@@ -1274,5 +1286,5 @@ Paths are given relative to your ComfyUI install root (`<comfyui>`).
 | 85 | 843 | extension subgraph | Extension Subgraph | Loop Body |
 | 86 | 1540 | TensorLoopClose | TensorLoopClose | Loop Close |
 | 88 | 617 | VHS_VideoCombine | VHS_VideoCombine (final) | Output |
-| 95 | 1604 | VAEDecodeTiled | Final VAE Decode (once) | Output |
+| 95 | 1604 | LTXVSpatioTemporalTiledVAEDecode | Final VAE Decode (once) | Output |
 | 96 | 1605 | LatentConcat | Prepend Initial Render | Output |

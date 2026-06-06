@@ -69,17 +69,20 @@ often reveals the next one. That's not a regression — it's progress.
 
 **What it looks like**: periodic pulse / micro-flicker / micro-color-shift every ~2-3 seconds all the way through the video. Uniform rhythm, starts from near the beginning (t ≈ 2, 4, 6, 8, ...).
 
-**Root cause**: `VAEDecodeTiled` (typically node 1604) decodes the
-video latent in temporal tiles. Tile boundaries produce subtle seams
-because the decoder doesn't perfectly reconstruct identical content
-at the boundaries of adjacent tiles.
+**Root cause**: a temporal-tiled decoder whose chunk stride is NOT
+aligned with the loop iteration stride. Tile boundaries produce subtle
+seams because the decoder doesn't perfectly reconstruct identical
+content at the boundaries of adjacent chunks; when the chunk stride is
+small (the historical `VAEDecodeTiled [512, 64, 64, 8]` default =
+`(64-8)/25 = 2.24s`), a seam lands every couple of seconds.
 
-With widgets `[tile_size, overlap, temporal_size, temporal_overlap]`:
-- Tile stride (pixel frames) = `temporal_size − temporal_overlap`
-- At the canonical 25 fps, tile stride in seconds = `(temporal_size − temporal_overlap) / 25`
-- A seam lands at every multiple of that stride.
-
-Current workflow default is `[512, 64, 64, 8]` → `(64-8)/25 = 2.24s` per tile → a seam approximately every 2.24s. That's the symptom.
+Two ways to reach this state today:
+- the core `VAEDecodeTiled` fallback with misaligned
+  `temporal_size/temporal_overlap` (see the fallback section below), or
+- the shipped `LTXVSpatioTemporalTiledVAEDecode` with hand-edited
+  temporal widgets whose stride (in LATENT frames) no longer equals the
+  iteration stride — `scripts/validate_workflow_decoder.py` (CI) flags
+  exactly this.
 
 **Fix (production, shipped in default workflows since 2026-06-06)**:
 the loop family's final decode (node 1604) is
@@ -154,7 +157,7 @@ early.
 
 **The `--spatiotemporal` swap eliminates this whole concern** — its
 widgets derive from the controller's own stride math
-(`nodes._compute_loop_geometry`), so they can't drift from the loop.
+(`loop_geometry._compute_loop_geometry`), so they can't drift from the loop.
 Prefer the structural path unless something forces the fallback.
 
 If `[512, 64, 512, 64]` OOMs: step down to `[512, 64, 256, 32]`
@@ -673,10 +676,13 @@ runs at the same seed so differences are attributable.
 
 ### E1: Is it decoder tiles? (isolates decode layer)
 
-Run with `VAEDecodeTiled` = `[512, 64, 2048, 128]` (effectively no
-temporal tiling, or only 2-3 tiles over the whole video). Same seed,
-same everything else. If mid-iteration jitter disappears or changes
-position significantly, decoder tiles were the cause.
+Disable temporal chunking entirely: swap to the spatial-only decoder
+(`uv run python scripts/apply_ltx_decoder.py` — `LTXVTiledVAEDecode`,
+no temporal tiles; fine for short test clips, monolithic-decode RAM
+ceiling applies to full songs). Same seed, same everything else. If
+mid-iteration jitter disappears or changes position significantly,
+decoder chunking was the cause. Swap back with
+`apply_ltx_decoder.py --spatiotemporal`.
 
 ### E2: Is it model-intrinsic? (isolates noise sensitivity)
 
@@ -798,14 +804,13 @@ filename pattern doesn't match `LTX-2_${RUN_ID}_*.mp4`.
 | Widget | Node | Value |
 |---|---|---|
 | `sampler_name` | 154 KSamplerSelect | `euler` (not `euler_ancestral`) |
-| `shift` | 1513 ModelSamplingSD3 | `13` |
-| scheduler | 1421 BasicScheduler | `linear_quadratic, 8, 1` |
+| sigmas | 1421 ManualSigmas | `1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0` (no `ModelSamplingSD3` shift node — stripped 2026-05-01) |
 | CFG | 153 CFGGuider | `1.0` (distilled model) |
 | NAG scale/alpha/tau/inplace | 508 LTX2_NAG | `11, 0.25, 2.5, true` (dial `nag_scale` to 3-7 for distilled-1.1 — see `docs/reference/nag_technical_reference.md`) |
-| Sage attention mode | 268 AudioLoopHelperSageAttention | `auto_mask_aware` (default; routes masked cross-attn to triton) |
-| `window_seconds` | 688 FloatConstant | `19.88` |
-| `overlap_seconds` | AudioLoopController | `2.0` or `3.0` |
-| `temporal_size, temporal_overlap` | 1604 VAEDecodeTiled (widgets 3-4) | `512, 64` (not `64, 8`) |
+| Sage attention mode | 268 AudioLoopHelperSageAttention | `auto` (default since 2026-05-15) |
+| `target_seconds` (window) | 1634 LTXFramePlanner | `19.88` (its `actual_seconds` output feeds controller + planner) |
+| `overlap_seconds` | 2013 FloatConstant | `2.0` |
+| temporal chunking | 1604 LTXVSpatioTemporalTiledVAEDecode | `[1, 1, 63, 7, true, cpu, float16]` (chunk stride 56 latents == iteration stride) |
 | `snap_boundaries` | 1558 TimestampPromptSchedule | `true` |
 | `blend_seconds` | 1558 TimestampPromptSchedule | `0.0` |
 | `start` (outer trim) | 567 TrimAudioDuration | `0` (for pre-trimmed audio) |
@@ -818,18 +823,27 @@ Same as above except:
 - Negative prompt: music-tuned defaults (see `example_workflows/*.json`)
 - NAG settings: same defaults; dial `nag_scale` to 3-7 for distilled-1.1
 
-### Node 1604 VAEDecodeTiled — widget meaning
+### Node 1604 LTXVSpatioTemporalTiledVAEDecode — widget meaning
 
-Widgets are in **pixel frames** at the decoder output:
+`[spatial_tiles, spatial_overlap, temporal_tile_length, temporal_overlap,
+last_frame_fix, working_device, working_dtype]` — temporal units are
+**LATENT frames** (1 latent = 8 pixel frames):
 
-- `tile_size`: spatial tile dimension (pixels). Default 512.
-- `overlap`: spatial overlap (pixels). Default 64. Constraint: ≤ tile_size/4.
-- `temporal_size`: pixel frames per temporal tile. Only relevant if
-  you're on the generic `VAEDecodeTiled` fallback; LTX's decoder has
-  no temporal tiling. Current example workflows use `LTXVTiledVAEDecode`
-  by default.
-- `temporal_overlap`: pixel frames overlapped between adjacent temporal
-  tiles. Same caveat as above. Constraint: ≤ temporal_size/4.
+- `spatial_tiles` / `spatial_overlap`: per-axis spatial tiling. Shipped
+  `1, 1` = single tile, no spatial seams.
+- `temporal_tile_length`: latent frames per decode chunk INCLUDING the
+  overlap. Shipped `63` at the canonical window.
+- `temporal_overlap`: latent frames blended between adjacent chunks
+  (node max 8). Shipped `7`. Chunk stride = `temporal_tile_length −
+  temporal_overlap` and must equal the iteration stride in latents —
+  derived by `apply_ltx_decoder.py --spatiotemporal`, checked by
+  `validate_workflow_decoder.py` (CI).
+- `working_device` / `working_dtype`: full-video accumulator placement.
+  Shipped `cpu, float16` — LOAD-BEARING (`auto, auto` pre-allocates a
+  full-video fp32 buffer; kernel-OOMs ≥4-min songs).
+
+The generic `VAEDecodeTiled` fallback's widgets are **pixel frames**
+instead — see the fallback section under "Decode-tile seams" above.
 
 At the canonical LTX 2.3 inference `fps=25` (`docs/reference/ltx23_model_reference.md` § "`frame_rate`: canonical inference value is 25"), `temporal_size=512, temporal_overlap=64` gives tile stride
 = `(512-64)/25 = 17.92 s`. Re-derive the matching loop iteration stride from
@@ -908,7 +922,7 @@ render.
 
 **If it recurs across fresh sessions**: wire the `PurgeVRAM` node
 between `SamplerCustomAdvanced` output and the next model-using node
-(typically `LTXVTiledVAEDecode`). It prunes stale wrappers before
+(the final VAE decoder). It prunes stale wrappers before
 ComfyUI's own cleanup walks them. The node is registered as
 "Purge VRAM (defensive)" under `utility/` in the node picker.
 Pass-through LATENT — wire it inline; no parameters to set.
