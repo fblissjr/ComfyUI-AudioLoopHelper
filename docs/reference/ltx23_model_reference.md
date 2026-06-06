@@ -65,7 +65,7 @@ comfy_extras/nodes_lt.py (append_keyframe), comfy/ldm/lightricks/model.py
   Landscape and square work best.
 - **Two-stage approach is the recommended workaround**: generate at lower res (720p),
   then spatial latent upscale to 1080p+. This is what LTX-Desktop and native LTX-2
-  both do. The two-stage upscale chain has shipped — see `docs/guides/upscale_guide.md` (LoadLatent upscale chain + bypassed `SaveLatent` toggle via `scripts/apply_run_id_layout.py`).
+  both do. The two-stage upscale chain has shipped — see `docs/guides/upscale_guide.md` (LoadLatent upscale chain; the assembled latent is banked automatically by `PreDecodeCleanup.checkpoint_keep`).
 - For our loop workflow: each window is 497 frames at 960x544 (the shipped
   resolution = LTX-2's HQ stage-1 default). Changing resolution trades VRAM against
   per-window token count; there's no fixed ceiling to "stay under," just your GPU.

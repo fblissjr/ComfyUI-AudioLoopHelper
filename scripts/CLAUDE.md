@@ -1,6 +1,6 @@
 # scripts/ — apply scripts, audit, utilities
 
-Last updated: 2026-06-04
+Last updated: 2026-06-06
 
 This subtree holds workflow-mutation scripts (`apply_*.py`), workflow validators (`audit_workflows.py`, `validate_docs_consistency.py`, `analyze_workflow_dag.py`, `trace_node_source.py`), the canonical edit utility (`workflow_utils.py`), audio analysis tools, and templates. Loads only when Claude is operating inside `scripts/`. Root project rules: `../CLAUDE.md`. Governance policy: `../.claude/CLAUDE.md`.
 

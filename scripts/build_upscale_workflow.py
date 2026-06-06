@@ -142,11 +142,13 @@ def build(ed: WorkflowEditor) -> dict[str, int]:
     # Source loop output — load the SAVED assembled video latent directly,
     # NOT the pixel mp4. VHS_LoadVideo → VAEEncode at 4000+ frames OOMs on
     # 24GB before the upsampler runs (~16GB pixel batch). LoadLatent reads
-    # the assembled.latent file produced by scripts/apply_save_assembled_latent.py
-    # on the loop run. Memory: ~855MB for a 535-latent-frame song vs ~16GB.
-    # User pre-step: run loop with apply_save_assembled_latent applied,
-    # move the resulting <output>/seam_diag/assembled_latent_NNNNN_.latent
-    # into ComfyUI's input/ directory.
+    # the assembled latent banked by PreDecodeCleanup's checkpoint widgets
+    # (checkpoint_keep=2 in shipped loop workflows; files at
+    # <output>/latents/checkpoints/<workflow>_NNNNN_.latent).
+    # Memory: ~855MB for a 535-latent-frame song vs ~16GB.
+    # User pre-step: run the loop, then
+    # `scripts/promote_latent_for_upscale.py <workflow_name>` to copy the
+    # newest checkpoint into ComfyUI's input/ directory.
     # -----------------------------------------------------------------------
     ids["load_latent"] = ed.add_top_level_node(
         node_type="LoadLatent",

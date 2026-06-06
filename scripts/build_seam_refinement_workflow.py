@@ -106,9 +106,10 @@ def build(ed: WorkflowEditor) -> dict[str, int]:
 
     # Source: loaded assembled video latent + source audio. Avoids the
     # VHS_LoadVideo → VAEEncode pixel-batch OOM (~16GB at 4000+ frames).
-    # Pre-step: run loop with scripts/apply_save_assembled_latent.py applied,
-    # move <output>/seam_diag/assembled_latent_NNNNN_.latent into ComfyUI's
-    # input/ directory.
+    # Pre-step: run the loop (PreDecodeCleanup banks the assembled latent
+    # at <output>/latents/checkpoints/<workflow>_NNNNN_.latent), then
+    # `scripts/promote_latent_for_upscale.py <workflow_name>` to copy it
+    # into ComfyUI's input/ directory.
     ids["load_latent"] = ed.add_top_level_node(
         node_type="LoadLatent",
         pos=[-1900, 800], size=[460, 60],

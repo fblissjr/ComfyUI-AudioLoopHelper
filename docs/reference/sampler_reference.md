@@ -1,4 +1,4 @@
-Last updated: 2026-06-05
+Last updated: 2026-06-06
 
 # Sampler reference — `euler` vs `euler_ancestral` vs `euler_ancestral_cfg_pp`
 

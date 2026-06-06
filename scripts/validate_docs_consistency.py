@@ -71,10 +71,18 @@ STALE_PATTERNS: dict[str, str] = {
     ),
     # 2026-06-06 checkpoint rotation: latent banking lives on
     # PreDecodeCleanup.checkpoint_keep; the standalone SaveLatent toggle
-    # UX is retired (apply_latent_checkpoint.py).
-    r"SaveLatent toggle|toggled SaveLatent|Save assembled latent \(toggle\)": (
+    # UX is retired (apply_latent_checkpoint.py). `?` tolerates markdown
+    # backticks — "`SaveLatent` toggle" escaped the first version of this
+    # pattern.
+    r"`?SaveLatent`?\s+toggle|toggled\s+`?SaveLatent|Save assembled latent \(toggle\)": (
         "latent banking moved to PreDecodeCleanup.checkpoint_keep "
         "(rotated; scripts/apply_latent_checkpoint.py)"
+    ),
+    # Same era: the retired apply_save_assembled_latent migration (archived;
+    # superseded by the checkpoint widgets).
+    r"apply_save_assembled_latent": (
+        "archived; latent banking lives on PreDecodeCleanup.checkpoint_keep "
+        "(scripts/apply_latent_checkpoint.py)"
     ),
 }
 
