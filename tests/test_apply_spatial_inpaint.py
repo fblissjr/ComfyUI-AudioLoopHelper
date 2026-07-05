@@ -54,10 +54,10 @@ def _feeder(wf: dict, node_id: int, slot_name: str) -> tuple[int, int] | None:
     raise AssertionError(f"no slot {slot_name} on #{node_id}")
 
 
-@pytest.fixture
-def built(tmp_path):
-    """Build into a temp path so the repo copy is untouched."""
-    out = tmp_path / "spatial_inpaint.json"
+@pytest.fixture(scope="module")
+def built(tmp_path_factory):
+    """Build once into a temp path (the 4 consumers are read-only)."""
+    out = tmp_path_factory.mktemp("spatial_inpaint") / "wf.json"
     r = _run("--output", str(out))
     assert r.returncode == 0, r.stderr
     wf = orjson.loads(out.read_bytes())

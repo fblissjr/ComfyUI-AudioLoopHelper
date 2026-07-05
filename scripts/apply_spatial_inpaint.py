@@ -54,6 +54,7 @@ from _helpers._apply_helpers import (
     out as _out,
     remove_link_by_id as _remove_link_by_id,
     remove_node_and_links as _remove_node_and_links,
+    widget_in as _widget_socket,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -65,7 +66,8 @@ SOURCE_VIDEO_PLACEHOLDER = "REPLACE_WITH_PRIOR_GENERATION.mp4"
 MASK_VIDEO_PLACEHOLDER = "REPLACE_WITH_MASK_VIDEO.mp4"
 IN_OUTPAINTING_LORA = "ltxv/ltx2/ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors"
 
-# Retake nodes we read from / rewire.
+# Production anchors — hand-authored IDs copied unchanged from `_latent.json`
+# into `_retake.json`; stable across a retake regeneration.
 UNET_LOADER = 414             # UNETLoader (fp8 distilled)
 SAGE_ATTN = 268               # AudioLoopHelperSageAttention (head of model-patch chain)
 LTXV_CONDITIONING = 164       # LTXVConditioning (edit prompt)
@@ -73,21 +75,30 @@ CFG_GUIDER = 153              # CFGGuider
 LTXV_CROP_GUIDES = 381        # LTXVCropGuides
 SAMPLER = 161                 # SamplerCustomAdvanced
 GET_VIDEO_VAE = 413           # GetNode "video_vae"
-SRC_LOAD_VIDEO = 1619         # LoadVideo (source / prior generation)
-SRC_GET_COMP = 1620           # GetVideoComponents (source: image[0], audio[1], fps[2])
 LTXV_TILED_DECODE = 1604      # LTXVTiledVAEDecode (final)
-TRIM_IMAGE = 1628             # TrimImageBatchToAudio
 
-# Temporal-retake nodes replaced by the spatial IC-LoRA path.
-STRIP_IDS = {
-    1621,  # VAEEncode (encoded-source base — replaced by empty-latent base)
-    1622,  # LatentTemporalMask (temporal masking — replaced by spatial mask + IC-LoRA)
-}
+# Retake-SYNTHESIZED nodes (LoadVideo/GetVideoComponents/VAEEncode/
+# LatentTemporalMask/TrimImageBatchToAudio) carry `_next_id()` counter IDs
+# from the historical retake build — NOT stable if `_retake.json` is
+# regenerated. Each is unique-by-type in the freshly-loaded retake fork, so
+# resolve by type instead of hardcoding the counter output.
+SRC_GET_COMP_TYPE = "GetVideoComponents"   # source: image[0], audio[1], fps[2]
+STRIP_TYPES = (
+    "VAEEncode",         # encoded-source base — replaced by empty-latent base
+    "LatentTemporalMask",  # temporal masking — replaced by spatial mask + IC-LoRA
+)
+TRIM_IMAGE_TYPE = "TrimImageBatchToAudio"
 
 
-def _widget_socket(name: str, dtype: str) -> dict:
-    """A widget-converted input slot (carries the widget descriptor)."""
-    return {"name": name, "type": dtype, "widget": {"name": name}, "link": None}
+def _only_of_type(wf: dict, node_type: str) -> int:
+    """Return the id of the single node of `node_type` (fail loud otherwise)."""
+    ids = [n["id"] for n in wf["nodes"] if n["type"] == node_type]
+    if len(ids) != 1:
+        raise SystemExit(
+            f"Expected exactly one {node_type} in {SRC.name}, found {len(ids)}. "
+            "The retake fork's shape changed; update apply_spatial_inpaint.py."
+        )
+    return ids[0]
 
 
 def build(output_path: Path, dry_run: bool = False) -> None:
@@ -101,16 +112,28 @@ def build(output_path: Path, dry_run: bool = False) -> None:
     print(f"Loaded retake {SRC.name}: {len(wf['nodes'])} nodes, {len(wf['links'])} links")
 
     for nid in (UNET_LOADER, SAGE_ATTN, LTXV_CONDITIONING, CFG_GUIDER,
-                LTXV_CROP_GUIDES, SAMPLER, GET_VIDEO_VAE, SRC_GET_COMP,
-                LTXV_TILED_DECODE, TRIM_IMAGE):
+                LTXV_CROP_GUIDES, SAMPLER, GET_VIDEO_VAE, LTXV_TILED_DECODE):
         if _find_node(wf, nid) is None:
             raise SystemExit(f"Retake workflow missing expected node #{nid}")
 
+    # Resolve retake-synthesized nodes by type BEFORE any additions (the mask
+    # branch adds a second GetVideoComponents; resolve the source one first).
+    src_get_comp = _only_of_type(wf, SRC_GET_COMP_TYPE)
+    trim_image = _only_of_type(wf, TRIM_IMAGE_TYPE)
+    strip_ids = [_only_of_type(wf, t) for t in STRIP_TYPES]
+
+    def _rewire(tgt_id: int, slot_name: str, src_id: int, src_slot: int, dtype: str) -> None:
+        """Repoint tgt_id.slot_name to src_id[src_slot], dropping the old link."""
+        slot = _find_input_slot(_find_node(wf, tgt_id), slot_name)
+        existing = _find_link_to_slot(wf, tgt_id, slot)
+        if existing:
+            _remove_link_by_id(wf, existing[0])
+        _add_link(wf, src_id, src_slot, tgt_id, slot, dtype)
+
     # Strip the temporal-retake latent path.
-    for nid in list(STRIP_IDS):
-        if _find_node(wf, nid):
-            _remove_node_and_links(wf, nid)
-    print(f"  stripped temporal-mask path {sorted(STRIP_IDS)} -> "
+    for nid in strip_ids:
+        _remove_node_and_links(wf, nid)
+    print(f"  stripped temporal-mask path {sorted(strip_ids)} -> "
           f"{len(wf['nodes'])} nodes")
 
     # --- Model chain: insert LTXICLoRALoaderModelOnly between UNETLoader and Sage.
@@ -125,11 +148,8 @@ def build(output_path: Path, dry_run: bool = False) -> None:
         "widgets_values": [IN_OUTPAINTING_LORA, 1],
         "title": "In/Outpainting IC-LoRA",
     })
-    existing = _find_link_to_slot(wf, SAGE_ATTN, _find_input_slot(_find_node(wf, SAGE_ATTN), "model"))
-    if existing:
-        _remove_link_by_id(wf, existing[0])
     _add_link(wf, UNET_LOADER, 0, iclora, 0, "MODEL")
-    _add_link(wf, iclora, 0, SAGE_ATTN, _find_input_slot(_find_node(wf, SAGE_ATTN), "model"), "MODEL")
+    _rewire(SAGE_ATTN, "model", iclora, 0, "MODEL")
 
     # --- Mask branch: LoadVideo -> GetVideoComponents -> ImageToMask -> DilateVideoMask.
     mask_load = _next_id(wf)
@@ -189,7 +209,7 @@ def build(output_path: Path, dry_run: bool = False) -> None:
         "properties": {"Node name for S&R": "LTXVInpaintPreprocess"},
         "widgets_values": [],
     })
-    _add_link(wf, SRC_GET_COMP, 0, inpaint, 0, "IMAGE")   # source frames
+    _add_link(wf, src_get_comp, 0, inpaint, 0, "IMAGE")   # source frames
     _add_link(wf, dilate, 0, inpaint, 1, "MASK")
 
     # --- Empty base latent sized to the source (GetImageSize -> EmptyLTXVLatentVideo).
@@ -202,7 +222,7 @@ def build(output_path: Path, dry_run: bool = False) -> None:
         "properties": {"Node name for S&R": "GetImageSize"},
         "widgets_values": [],
     })
-    _add_link(wf, SRC_GET_COMP, 0, getsize, 0, "IMAGE")
+    _add_link(wf, src_get_comp, 0, getsize, 0, "IMAGE")
     empty_lat = _next_id(wf)
     wf["nodes"].append({
         "id": empty_lat, "type": "EmptyLTXVLatentVideo",
@@ -247,23 +267,12 @@ def build(output_path: Path, dry_run: bool = False) -> None:
     _add_link(wf, inpaint, 0, guide, 4, "IMAGE")
 
     # Rewire CFGGuider + CropGuides conditioning from LTXVConditioning -> guide.
-    for tgt, slot_name, guide_slot in (
-        (CFG_GUIDER, "positive", 0), (CFG_GUIDER, "negative", 1),
-        (LTXV_CROP_GUIDES, "positive", 0), (LTXV_CROP_GUIDES, "negative", 1),
-    ):
-        node = _find_node(wf, tgt)
-        s = _find_input_slot(node, slot_name)
-        existing = _find_link_to_slot(wf, tgt, s)
-        if existing:
-            _remove_link_by_id(wf, existing[0])
-        _add_link(wf, guide, guide_slot, tgt, s, "CONDITIONING")
-
+    _rewire(CFG_GUIDER, "positive", guide, 0, "CONDITIONING")
+    _rewire(CFG_GUIDER, "negative", guide, 1, "CONDITIONING")
+    _rewire(LTXV_CROP_GUIDES, "positive", guide, 0, "CONDITIONING")
+    _rewire(LTXV_CROP_GUIDES, "negative", guide, 1, "CONDITIONING")
     # Rewire sampler.latent_image: LatentTemporalMask (stripped) -> guide.latent.
-    s = _find_input_slot(_find_node(wf, SAMPLER), "latent_image")
-    existing = _find_link_to_slot(wf, SAMPLER, s)
-    if existing:
-        _remove_link_by_id(wf, existing[0])
-    _add_link(wf, guide, 2, SAMPLER, s, "LATENT")
+    _rewire(SAMPLER, "latent_image", guide, 2, "LATENT")
 
     # --- Laplacian blend: composite generated frames only inside the mask over clean source.
     blend = _next_id(wf)
@@ -280,15 +289,11 @@ def build(output_path: Path, dry_run: bool = False) -> None:
         "widgets_values": [True, 5],
         "title": "Blend edit into clean source",
     })
-    # image_a = decoded generated frames (was decode -> TrimImageBatchToAudio).
-    s = _find_input_slot(_find_node(wf, TRIM_IMAGE), "images")
-    existing = _find_link_to_slot(wf, TRIM_IMAGE, s)
-    if existing:
-        _remove_link_by_id(wf, existing[0])
-    _add_link(wf, LTXV_TILED_DECODE, 0, blend, 0, "IMAGE")
-    _add_link(wf, SRC_GET_COMP, 0, blend, 1, "IMAGE")   # clean source frames
+    _add_link(wf, LTXV_TILED_DECODE, 0, blend, 0, "IMAGE")   # generated frames
+    _add_link(wf, src_get_comp, 0, blend, 1, "IMAGE")        # clean source frames
     _add_link(wf, dilate, 0, blend, 2, "MASK")
-    _add_link(wf, blend, 0, TRIM_IMAGE, s, "IMAGE")
+    # Splice the blend before the image trim (was decode -> TrimImageBatchToAudio).
+    _rewire(trim_image, "images", blend, 0, "IMAGE")
 
     # --- Usage MarkdownNote (part of the build so re-runs preserve it).
     note = _next_id(wf)

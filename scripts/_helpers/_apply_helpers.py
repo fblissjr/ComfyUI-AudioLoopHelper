@@ -29,6 +29,15 @@ def out(name: str, dtype: str) -> dict:
     return {"name": name, "type": dtype, "links": []}
 
 
+def widget_in(name: str, dtype: str) -> dict:
+    """A widget-converted input slot (carries the widget descriptor).
+
+    Third member of the in_/out family; raw-helper style keeps the explicit
+    ``"link": None`` (unlike WorkflowEditor.io_in which omits it when unset).
+    """
+    return {"name": name, "type": dtype, "widget": {"name": name}, "link": None}
+
+
 def next_id(wf: dict, key: str = "last_node_id") -> int:
     nid = wf.get(key, 0) + 1
     wf[key] = nid
