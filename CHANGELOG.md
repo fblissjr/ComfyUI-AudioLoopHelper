@@ -6,6 +6,18 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Spatial-inpaint retake (experimental).** `scripts/apply_spatial_inpaint.py`
+  forks the retake workflow into
+  `example_workflows/experimental/audio-loop-music-video_spatial_inpaint.json`:
+  paint a B/W mask video over a region of a finished render and regenerate only
+  that region via the official Lightricks in-outpainting IC-LoRA, with the song
+  kept bit-identical (passthrough). Faithful single-stage port of
+  ComfyUI-LTXVideo's inpaint workflow adapted to our conventions (`euler`, fp8
+  distilled model, fps 25); unmasked regions are preserved by a final
+  `LTXVLaplacianPyramidBlend`. Render-unvalidated — see
+  `example_workflows/working_docs/spatial_inpaint_design.md` for the render gate.
+
 ### Fixed
 - **Decoder-discovery walks recognize the spatio-temporal decoder.**
   `workflow_utils.DECODER_TYPES` was missing
