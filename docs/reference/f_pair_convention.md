@@ -1,10 +1,10 @@
 # F-pair convention
 
-Last updated: 2026-05-04
+Last updated: 2026-07-05
 
 ## Role
 
-Every fix that changes workflow JSON ships as a pair: an `apply_*.py` migration script AND a matching audit check in `scripts/audit_workflows.py` that fires ERR (with a `Run scripts/apply_<X>.py` remediation pointer) when the invariant is violated. The pair prevents silent regression of fixes a sibling branch might revert. F-numbers (F2 through F13 currently) name *pairs*, not individual checks.
+Every fix that changes workflow JSON ships as a pair: an `apply_*.py` migration script AND a matching audit check in `scripts/audit_workflows.py` that fires ERR (with a `Run scripts/apply_<X>.py` remediation pointer) when the invariant is violated. The pair prevents silent regression of fixes a sibling branch might revert. F-numbers name *pairs*, not individual checks — live inventory in `docs/reference/debug_tools.md`.
 
 ## Disambiguation
 

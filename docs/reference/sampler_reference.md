@@ -1,4 +1,4 @@
-Last updated: 2026-06-06
+Last updated: 2026-07-05
 
 # Sampler reference — `euler` vs `euler_ancestral` vs `euler_ancestral_cfg_pp`
 
@@ -33,7 +33,8 @@ fixed sigmas directly — see CLAUDE.md "No flow-matching shift node"),
 decoder `LTXVSpatioTemporalTiledVAEDecode [1,1,63,7,true,"cpu","float16"]`
 for the loop family — stride-aligned temporal chunks (56 latents = 17.92s
 per chunk advance, matching the iteration stride so chunk seams land on
-iteration boundaries) bound decode RAM at any song length; the cpu/float16
+iteration boundaries) are designed to bound decode RAM at any song length
+(>=4-min validation render pending); the cpu/float16
 accumulator pair is load-bearing (auto/auto = full-video fp32 buffer; see
 `benchmarking_memory_pressure.md`). Single-pass/short-clip workflows stay
 on `LTXVTiledVAEDecode [1,1,1,true,"cpu","float16"]` (spatial-only,

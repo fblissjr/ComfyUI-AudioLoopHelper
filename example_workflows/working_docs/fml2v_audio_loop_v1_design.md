@@ -1,6 +1,6 @@
 # fml2v_var_d_audio_loop V1 — design
 
-Last updated: 2026-05-19
+Last updated: 2026-05-24
 
 > **V2 ARCHITECTURAL PIVOT (2026-05-19).** Live-render verification of
 > V1's two-pass-refine + spatial-upsample loop body produced yellow

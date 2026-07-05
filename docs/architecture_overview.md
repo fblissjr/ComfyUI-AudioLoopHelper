@@ -1,4 +1,4 @@
-Last updated: 2026-06-06
+Last updated: 2026-07-05
 
 # Architecture overview — ComfyUI-AudioLoopHelper
 
@@ -155,7 +155,8 @@ Loop collects outputs via `LatentConcat(1605)`: outer-render slice
 prepended, then all loop-body slices appended. Final
 `LTXVSpatioTemporalTiledVAEDecode(1604, [1,1,63,7,True,'cpu','float16'])`
 (stride-aligned temporal chunks — 56 latents = 17.92s per chunk advance,
-matching the iteration stride; bounds decode RAM at any song length) +
+matching the iteration stride; designed to bound decode RAM at any song
+length, >=4-min validation pending) +
 audio → `VHS_VideoCombine(617)`.
 
 **Deeper:** `docs/reference/pipeline_flow_latent.md` for the long-form
@@ -464,7 +465,7 @@ What we depend on:
 | `LTX2SamplingPreviewOverride` | Preview callback rate | only affects preview |
 | `LTXVImgToVideoInplaceKJ` | Inject image at latent frame 0 | `[num_images, strength, frame_idx]` |
 | `LTXVAddGuideMulti` | Multi-image guide (up to 20) | not in baseline |
-| `PathchSageAttentionKJ` | Sage attention kernel patch (KJNodes) | superseded in baseline by `AudioLoopHelperSageAttention` (mode `auto_mask_aware`); see `docs/reference/sage_attention.md` |
+| `PathchSageAttentionKJ` | Sage attention kernel patch (KJNodes) | superseded in baseline by `AudioLoopHelperSageAttention` (mode `auto`); see `docs/reference/sage_attention.md` |
 | `VAELoaderKJ` | VAE loader with dtype + device control | |
 | `Set*` / `Get*` | Variable-like wiring | used liberally |
 

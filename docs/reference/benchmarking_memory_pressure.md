@@ -1,6 +1,6 @@
 # Benchmarking memory pressure on ComfyUI + LTX 2.3
 
-Last updated: 2026-06-06
+Last updated: 2026-07-05
 
 ## Role
 
@@ -112,7 +112,8 @@ decomposed into THREE mechanisms:
    stride bit-exact with the iteration stride (56 latents = 17.92s at
    canonical 19.88/2; seams land on iteration boundaries). Apply:
    `scripts/apply_ltx_decoder.py --spatiotemporal`; CI gate:
-   `scripts/validate_workflow_decoder.py`.
+   `scripts/validate_workflow_decoder.py`. Empirical re-test at >=4 min
+   outstanding as of 2026-07-05.
 2. **Substrate baseline raise** — upstream `e154da83` (2026-05-31) removed
    the hard pin cap ("let the active model load past the pin limit"),
    raising the resident pinned baseline; `#14252` + aimdo 0.4.9 fix only the

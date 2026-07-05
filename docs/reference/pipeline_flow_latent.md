@@ -1,4 +1,4 @@
-Last updated: 2026-06-06 (decode tail re-traced: stride-aligned `LTXVSpatioTemporalTiledVAEDecode` + F14 trims + PreDecodeCleanup checkpointing. Earlier: canonical `LTXVConditioning.frame_rate=25` per `docs/reference/ltx23_model_reference.md` § "`frame_rate`: canonical inference value is 25"; `fps=25` is live in all shipped workflows. Sampling chain is `ManualSigmas` — the `ModelSamplingSD3` shift node and `BasicScheduler` were stripped 2026-05-01. Widget snapshots below reflect the canonical `fps=25` and `497`-frame values.)
+Last updated: 2026-07-05 (Node 268 sage mode corrected to shipped `auto`, since 2026-05-15. Earlier: decode tail re-traced: stride-aligned `LTXVSpatioTemporalTiledVAEDecode` + F14 trims + PreDecodeCleanup checkpointing. Earlier still: canonical `LTXVConditioning.frame_rate=25` per `docs/reference/ltx23_model_reference.md` § "`frame_rate`: canonical inference value is 25"; `fps=25` is live in all shipped workflows. Sampling chain is `ManualSigmas` — the `ModelSamplingSD3` shift node and `BasicScheduler` were stripped 2026-05-01. Widget snapshots below reflect the canonical `fps=25` and `497`-frame values.)
 
 # Pipeline Flow: LATENT-Based Music Video Workflow
 
@@ -70,12 +70,12 @@ Output Assembly:
 
 ### Node 268 -- AudioLoopHelperSageAttention
 - **Type**: `AudioLoopHelperSageAttention` (`nodes_sage.py`)
-- **What**: Patches ComfyUI's `optimized_attention` hook with sage kernels. Default mode `auto_mask_aware` routes masked cross-attn calls to `sageattn_qk_int8_pv_fp16_triton` (the one kernel clean on LTX cross-attn+mask) and unmasked self-attn calls to sage `auto`. See `docs/reference/sage_attention.md`.
+- **What**: Patches ComfyUI's `optimized_attention` hook with sage kernels. Shipped widget mode is `auto` (since 2026-05-15, `scripts/apply_sage_mode_auto.py`) — runtime-equivalent to the node's schema default `auto_mask_aware` on this workflow because LTX 2.3 cross-attn always passes `attention_mask=None`, so the masked-routing branch (which would route masked cross-attn calls to `sageattn_qk_int8_pv_fp16_triton` and unmasked self-attn to sage `auto`) never fires here. See `docs/reference/sage_attention.md`.
 - **Inputs**:
   | Input | Type | Source |
   |-------|------|--------|
   | model | MODEL | #414 UNETLoader (slot 0) |
-- **Widgets**: `mode`: `auto_mask_aware`, `fallback_on_error`: `true`
+- **Widgets**: `mode`: `auto`, `fallback_on_error`: `true`
 - **Outputs**:
   | Output | Type | Connected To |
   |--------|------|-------------|
@@ -1132,7 +1132,7 @@ The upscale chain is bypassed because per-loop VAE round-trip quality loss and V
 | `chunk_size` | #504 LTXVChunkFeedForward | `2` | Feed-forward chunking (lower = less VRAM, slower) | 1+ |
 | `dim` | #504 LTXVChunkFeedForward | `4096` | Feed-forward dimension | Model-dependent |
 | `preview_interval` | #503 LTX2SamplingPreviewOverride | `8` | Preview decode every N steps | 1+ |
-| `mode` | #268 AudioLoopHelperSageAttention | `auto_mask_aware` | Sage kernel routing (masked → triton, unmasked → auto) | disabled, auto_mask_aware, auto, per-arch kernel names |
+| `mode` | #268 AudioLoopHelperSageAttention | `auto` | Sage kernel dispatch (runtime-equivalent to `auto_mask_aware` here — masked routing never fires, LTX cross-attn passes no mask) | disabled, auto_mask_aware, auto, per-arch kernel names |
 | `fallback_on_error` | #268 AudioLoopHelperSageAttention | `true` | Fall back to pytorch SDPA on sage exception | true, false |
 
 ### Attention Tuning
@@ -1233,7 +1233,7 @@ Paths are given relative to your ComfyUI install root (`<comfyui>`).
 | 33 | 576 | SetNode | Set_sampler | Sampling Config |
 | 34 | 1271 | SetNode | Set_first_frame_guide_strength | Loop Setup |
 | 35 | 689 | SetNode | Set_window_size_seconds | Audio Prep |
-| 36 | 268 | AudioLoopHelperSageAttention | AudioLoopHelperSageAttention (auto_mask_aware) | Model Loading |
+| 36 | 268 | AudioLoopHelperSageAttention | AudioLoopHelperSageAttention (auto) | Model Loading |
 | 37 | 228 | SetNode | Set_video_vae | Model Loading |
 | 38 | 252 | SetNode | Set_audio_vae | Model Loading |
 | 39 | 169 | CLIPTextEncode | CLIPTextEncode (positive) | Text Encoding |

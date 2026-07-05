@@ -1,4 +1,4 @@
-Last updated: 2026-06-06
+Last updated: 2026-07-05
 
 # Debugging Guide: Quality Problems in the Audio-Loop Pipeline
 
@@ -42,7 +42,7 @@ often reveals the next one. That's not a regression — it's progress.
 
 | What you see | First suspect | Jump to |
 |---|---|---|
-| Render dies at the FINAL decode — terminal shows `exited with status 137`, no Python traceback | Kernel OOM killer: decode-stage RAM spike on top of pinned staging + offloaded models (`journalctl -k \| grep -i oom` confirms) | The sampling is saved: decode the banked latent via `example_workflows/decode-latent-to-video.json` — it decodes in temporal chunks (bounded RAM at any song length; copy the `.latent` from the run's output folder into ComfyUI's input dir first). Mechanism: [`benchmarking_memory_pressure.md`](../reference/benchmarking_memory_pressure.md) |
+| Render dies at the FINAL decode — terminal shows `exited with status 137`, no Python traceback | Kernel OOM killer: decode-stage RAM spike on top of pinned staging + offloaded models (`journalctl -k \| grep -i oom` confirms) | The sampling is saved: decode the banked latent via `example_workflows/decode-latent-to-video.json` — it decodes in temporal chunks (designed to bound RAM at any song length, >=4-min validation pending; copy the `.latent` from the run's output folder into ComfyUI's input dir first). Mechanism: [`benchmarking_memory_pressure.md`](../reference/benchmarking_memory_pressure.md) |
 | Fine-grained pulsing / jitter every ~2-3 s (all the way through) | VAEDecodeTiled temporal tiles too small | [Decode-tile seams](#decode-tile-seams) |
 | Visible cut / identity jump every ~18 s | Iteration-boundary hand-off, `overlap_seconds` too low | [Iteration-boundary seams](#iteration-boundary-seams) |
 | One "weird" iteration between two normal ones | Mid-iteration mixed conditioning | [Mid-iteration mix](#mid-iteration-mix) |
@@ -93,9 +93,10 @@ window=19.88/overlap=2, where `temporal_tile_length − temporal_overlap`
 (in LATENT frames; 1 latent = 8 pixel frames) equals the iteration
 stride exactly (56 latents = 17.92s). Chunk seams therefore land ON
 iteration boundaries — where window transitions already exist — instead
-of mid-iteration. The cpu/float16 accumulator bounds decode RAM at any
-song length (auto/auto = full-video fp32 buffer; kernel-OOMs ≥4-min
-songs — `docs/reference/benchmarking_memory_pressure.md`).
+of mid-iteration. The cpu/float16 accumulator is designed to bound decode
+RAM at any song length (>=4-min validation render pending; auto/auto =
+full-video fp32 buffer; kernel-OOMs ≥4-min songs —
+`docs/reference/benchmarking_memory_pressure.md`).
 
 Single-pass / short-clip workflows keep `LTXVTiledVAEDecode`
 (spatial-only, no temporal tiling, no song-length exposure):

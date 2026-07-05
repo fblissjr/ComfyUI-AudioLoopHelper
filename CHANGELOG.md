@@ -50,8 +50,8 @@ This project uses [Semantic Versioning](https://semver.org/).
   (`nodes._compute_loop_geometry`), so decode-chunk seams land exactly on
   iteration boundaries — `[1,1,63,7,true,"cpu","float16"]` at the canonical
   window/overlap. Per-chunk inner decode + an fp16/cpu full-video
-  accumulator bound decode RAM at any song length, removing the >=4-min
-  monolithic-decode OOM ceiling. Single-pass/short-clip workflows stay on
+  accumulator are designed to bound decode RAM at any song length (>=4-min
+  validation render pending). Single-pass/short-clip workflows stay on
   spatial-only `LTXVTiledVAEDecode`.
 - **`validate_workflow_decoder.py` now runs in CI and traces links.** The
   controller's `window_seconds`/`overlap_seconds` widgets are stale
@@ -79,8 +79,9 @@ This project uses [Semantic Versioning](https://semver.org/).
   finished video with the same trim chain as a normal render (latent trim ->
   tiled decode -> image trim -> VHS), decoding in TEMPORAL CHUNKS via
   `LTXVSpatioTemporalTiledVAEDecode` stride-aligned with the canonical loop
-  — peak RAM stays bounded at any song length (a monolithic decode of a
-  long render dies even on a fresh server).
+  — designed to keep peak RAM bounded at any song length (>=4-min
+  validation render pending; a monolithic decode of a long render dies
+  even on a fresh server).
 - **`Pre-Decode Cleanup (unload models)` node (`PreDecodeCleanup`).** LATENT
   passthrough that frees pinned staging and unloads all models — wire right
   before the full-song final VAE decode. The decode is a single-node RAM

@@ -1,4 +1,4 @@
-Last updated: 2026-04-23 (absorbed llm_prompt_generation_guide.md; dropped duplicated sections)
+Last updated: 2026-07-05 (R6 realigned with prompt_creation_guide.md §3.3's stricter vocal-delivery-ornament rule. Earlier: absorbed llm_prompt_generation_guide.md; dropped duplicated sections)
 
 # Prompt Workflow: End to End
 
@@ -360,8 +360,11 @@ the image which pool applies.
 6. **R6 — Audio direction.** Do NOT describe the song (voice surging,
    music swelling — the frozen audio latent already carries that).
    DO describe ambient/diegetic sounds not in the audio track (room
-   tone, fluorescent hum, rain). Vocal delivery qualifiers ("in a
-   low gravelly voice") are encouraged when relevant.
+   tone, fluorescent hum, rain). Vocal-delivery ornaments ("in a low
+   gravelly voice") double-signal a frozen audio performance — strip
+   them; keep only descriptions of **physical** performance facets the
+   audio doesn't carry (mouth shape, eyes, brow, head turn). Full rule
+   + examples: `docs/guides/prompt_creation_guide.md` §3.3.
 7. **R7 — Camera motion.** Default "static camera, locked off shot".
    Available: dolly in, dolly left/right, jib up/down, focus shift.
    AVOID dolly out (breaks limbs/faces) except for the final OUTRO.

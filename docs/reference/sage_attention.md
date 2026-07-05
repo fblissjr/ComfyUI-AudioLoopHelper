@@ -1,4 +1,4 @@
-Last updated: 2026-05-05
+Last updated: 2026-07-05
 
 # AudioLoopHelperSageAttention -- Reference
 
@@ -32,7 +32,13 @@ input model is never mutated.
 
 ### mode (Combo)
 
-Default: `"auto_mask_aware"`. The combo is **arch-filtered at
+Node schema default: `"auto_mask_aware"` (what a bare node shows when
+added fresh in the UI). Shipped workflow widgets are `"auto"` since
+2026-05-15 (`scripts/apply_sage_mode_auto.py`) — runtime-equivalent to
+`auto_mask_aware` on audio-loop workflows because LTX 2.3 cross-attn
+always calls with `attention_mask=None` (see "ComfyUI gotchas" in
+CLAUDE.md), so the masked-routing branch below never fires on this
+pipeline's graphs. The combo is **arch-filtered at
 node-import time** via `sageattention.core.get_cuda_arch_versions()` —
 you only see modes that can actually run on the detected GPU. No
 Blackwell-only options on Ada, no sm90 options on Ampere.
@@ -49,7 +55,7 @@ Arch mappings in `nodes_sage.py::_MODES_BY_ARCH`:
 
 Semantics:
 
-- **`auto_mask_aware`** (default) — per-call routing: masked paths
+- **`auto_mask_aware`** (node schema default) — per-call routing: masked paths
   (LTX cross-attn carries a text-padding mask) dispatch to
   `sageattn_qk_int8_pv_fp16_triton`; unmasked paths (self-attn) delegate
   to sage's `auto`. Correct default because sage's INT8-QK-FP8/FP16-PV
@@ -80,9 +86,12 @@ Semantics:
 - **`auto`** — calls `sageattention.sageattn()` and lets sage's own
   dispatch pick the best kernel. On sm89 + CUDA >= 12.8 this lands on
   `sageattn_qk_int8_pv_fp8_cuda` with `pv_accum_dtype="fp32+fp16"`
-  (SageAttention2++). **Not recommended for LTX workflows that hit
-  masked cross-attn** — use `auto_mask_aware` instead. Kept for
-  non-LTX workflows and for A/B comparison.
+  (SageAttention2++). **Shipped workflow default since 2026-05-15**
+  (`scripts/apply_sage_mode_auto.py`) — runtime-equivalent to
+  `auto_mask_aware` here because LTX 2.3 cross-attn never passes a
+  mask, so the masked-routing kernel swap above is never exercised on
+  these graphs. Reach for `auto_mask_aware` explicitly only for
+  non-LTX workflows that do hit masked cross-attn.
 - **`sageattn_qk_int8_pv_fp16_cuda`** — INT8 QK + FP16 PV, fp32
   accumulator. No mask support (silently dropped). Safe for self-attn
   only; do not feed masked cross-attn calls to this mode.
