@@ -18,6 +18,7 @@ from analyze_audio_features import (
     generate_schedule_suggestion,
     get_node_169_prompt,
     format_json_report,
+    _subdivide_long_sections,
 )
 
 
@@ -831,3 +832,98 @@ class TestFormatJsonReport:
         assert ctx["scene_diversity"] == "2a"
         assert ctx["scene_diversity_tier_name"] == "performance_dynamic"
         assert ctx["montage"] is False
+
+
+class TestBeatSnapping:
+    """Snapping subdivision boundaries to phrase-aligned beats.
+
+    `_subdivide_long_sections` splits long sections into ~target chunks.
+    When `beat_times` is passed, internal chunk boundaries snap to the
+    nearest phrase boundary (every `phrase_beats` beats) so prompt changes
+    land on musical phrase edges, not mid-phrase. Default (no beats) keeps
+    the exact uniform behavior.
+    """
+
+    _LONG = [{"start": 0.0, "end": 60.0, "label": "VERSE", "level": "medium"}]
+
+    # 120 BPM = 0.5s/beat, offset 0.3s so phrase boundaries (every 8 beats =
+    # 4.0s) land at 0.3, 4.3, 8.3, ... 20.3, ... 40.3 — deliberately off the
+    # uniform 20.0/40.0 split so a snap is observable.
+    _BEATS = [round(0.3 + 0.5 * i, 3) for i in range(130)]  # 0.3 .. 64.8s
+
+    def test_default_none_is_exact_uniform(self):
+        """No beats -> boundaries stay exactly uniform (byte-identical)."""
+        out = _subdivide_long_sections(self._LONG, target=20.0, split_above=30.0)
+        # 60 / 20 = 3 chunks: [0,20],[20,40],[40,60]
+        starts = [round(c["start"], 3) for c in out]
+        ends = [round(c["end"], 3) for c in out]
+        assert starts == [0.0, 20.0, 40.0]
+        assert ends == [20.0, 40.0, 60.0]
+
+    def test_internal_boundaries_snap_to_phrase(self):
+        """Internal boundaries snap to the nearest 8-beat phrase edge."""
+        out = _subdivide_long_sections(
+            self._LONG, target=20.0, split_above=30.0,
+            beat_times=self._BEATS, phrase_beats=8,
+        )
+        starts = [round(c["start"], 3) for c in out]
+        ends = [round(c["end"], 3) for c in out]
+        # 20.0 -> 20.3, 40.0 -> 40.3 (nearest phrase edges); section edges fixed.
+        assert starts == [0.0, 20.3, 40.3]
+        assert ends == [20.3, 40.3, 60.0]
+
+    def test_section_edges_never_move(self):
+        """The section's own start/end are fixed; only internal cuts snap."""
+        out = _subdivide_long_sections(
+            self._LONG, target=20.0, split_above=30.0,
+            beat_times=self._BEATS, phrase_beats=8,
+        )
+        assert out[0]["start"] == 0.0
+        assert out[-1]["end"] == 60.0
+
+    def test_chunks_stay_monotonic_and_nonempty(self):
+        """Every chunk keeps start < end after snapping."""
+        out = _subdivide_long_sections(
+            self._LONG, target=20.0, split_above=30.0,
+            beat_times=self._BEATS, phrase_beats=8,
+        )
+        for c in out:
+            assert c["end"] > c["start"]
+
+    def test_sparse_beats_fall_back_to_uniform(self):
+        """Too few beats to form a phrase edge near a boundary -> uniform."""
+        out = _subdivide_long_sections(
+            self._LONG, target=20.0, split_above=30.0,
+            beat_times=[0.3, 59.5], phrase_beats=8,
+        )
+        starts = [round(c["start"], 3) for c in out]
+        # No phrase edge near 20 or 40 -> boundaries unchanged.
+        assert starts == [0.0, 20.0, 40.0]
+
+    def test_short_section_unaffected_by_beats(self):
+        """A section below split_above passes through regardless of beats."""
+        short = [{"start": 0.0, "end": 20.0, "label": "INTRO", "level": "quiet"}]
+        out = _subdivide_long_sections(
+            short, target=20.0, split_above=30.0, beat_times=self._BEATS,
+        )
+        assert len(out) == 1
+        assert out[0]["start"] == 0.0 and out[0]["end"] == 20.0
+
+    def test_node_169_matches_schedule_first_entry_with_beats(self):
+        """The Node-169 == schedule[0] byte-exact invariant survives snapping."""
+        sections = [
+            {"start": 0.0, "end": 60.0, "label": "VERSE", "level": "medium"},
+        ]
+        subject = "a singer in a workshop"
+        schedule = generate_schedule_suggestion(
+            sections, subject=subject, beat_times=self._BEATS,
+        )
+        first_entry = schedule.strip().splitlines()[0]
+        node_169 = get_node_169_prompt(
+            sections, subject=subject, beat_times=self._BEATS,
+        )
+        # The schedule line is "MM:SS - <prompt>"; Node 169 is the bare prompt.
+        assert node_169 in first_entry, (
+            f"Node 169 must be the first schedule entry's prompt.\n"
+            f"  node_169: {node_169!r}\n  first:    {first_entry!r}"
+        )

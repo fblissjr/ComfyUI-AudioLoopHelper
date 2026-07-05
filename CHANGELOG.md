@@ -7,6 +7,14 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Beat-snapped schedule subdivision.** `analyze_audio_features._subdivide_long_sections`
+  now snaps internal chunk boundaries to phrase edges (every `phrase_beats`
+  beats, default 8) when `beat_times` are supplied, so generated
+  prompt-schedule cut points land on musical phrase boundaries instead of
+  uniform ~20s marks. Threaded through `generate_schedule_suggestion` +
+  `get_node_169_prompt` (default `None` = unchanged uniform behavior);
+  `format_markdown_report` wires the detected beats to both, preserving the
+  Node-169 == schedule[0] byte-exact invariant.
 - **Spatial-inpaint retake (experimental).** `scripts/apply_spatial_inpaint.py`
   forks the retake workflow into
   `example_workflows/experimental/audio-loop-music-video_spatial_inpaint.json`:

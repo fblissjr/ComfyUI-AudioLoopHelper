@@ -688,10 +688,26 @@ _MONTAGE_TARGET_SECONDS = 12.0
 _MONTAGE_SPLIT_THRESHOLD_SECONDS = 18.0
 
 
+def _snap_boundary(t: float, phrase_times: list[float], tol: float) -> float:
+    """Snap `t` to the nearest phrase-boundary time within `tol`, else `t`.
+
+    `tol` is set to half a chunk by the caller, which doubles as the
+    monotonicity guarantee (a boundary can't move past its chunk's midpoint,
+    so adjacent snapped boundaries can't cross) and the sparse-beats fallback
+    (no phrase edge within half a chunk → keep the uniform position).
+    """
+    if not phrase_times:
+        return t
+    nearest = min(phrase_times, key=lambda p: abs(p - t))
+    return nearest if abs(nearest - t) <= tol else t
+
+
 def _subdivide_long_sections(
     sections: list[dict],
     target: float = _SCHEDULE_TARGET_SECONDS,
     split_above: float = _SCHEDULE_SPLIT_THRESHOLD_SECONDS,
+    beat_times: list[float] | None = None,
+    phrase_beats: int = 8,
 ) -> list[dict]:
     """Split sections longer than `split_above` into ~target-sized chunks.
 
@@ -699,7 +715,13 @@ def _subdivide_long_sections(
     `variant=0`. Longer sections become N chunks where N is
     round(duration / target), each getting the same label/level and an
     incrementing variant index.
+
+    When `beat_times` is given, internal chunk boundaries snap to the nearest
+    phrase edge (every `phrase_beats` beats) so prompt changes land on musical
+    phrase boundaries. Section start/end are never moved. Without beats the
+    boundaries stay exactly uniform (unchanged behavior).
     """
+    phrase_times = beat_times[::phrase_beats] if beat_times else []
     result: list[dict] = []
     for s in sections:
         dur = s["end"] - s["start"]
@@ -708,10 +730,20 @@ def _subdivide_long_sections(
             continue
         n = max(2, int(round(dur / target)))
         chunk_dur = dur / n
+        # Compute the N-1 shared internal boundaries once, snapping each; the
+        # section's own edges (bounds[0], bounds[-1]) are fixed.
+        bounds = [s["start"]]
+        for i in range(1, n):
+            raw = s["start"] + i * chunk_dur
+            snapped = _snap_boundary(raw, phrase_times, chunk_dur / 2)
+            if snapped <= bounds[-1]:  # guard: keep strictly increasing
+                snapped = raw
+            bounds.append(snapped)
+        bounds.append(s["end"])
         for i in range(n):
             result.append({
-                "start": s["start"] + i * chunk_dur,
-                "end": s["start"] + (i + 1) * chunk_dur,
+                "start": bounds[i],
+                "end": bounds[i + 1],
                 "label": s["label"],
                 "level": s["level"],
                 "variant": i,
@@ -719,21 +751,25 @@ def _subdivide_long_sections(
     return result
 
 
-def _prepare_sections(sections: list[dict], montage: bool) -> list[dict]:
+def _prepare_sections(
+    sections: list[dict], montage: bool, beat_times: list[float] | None = None
+) -> list[dict]:
     """Apply subdivision with mode-appropriate dwell target.
 
     Shared between the schedule builder and get_node_169_prompt so the
     first chunk (Node 169) sees the SAME subdivision the schedule sees.
     That's the invariant documented in CLAUDE.md: Node 169 MUST equal the
-    first schedule entry byte-for-byte.
+    first schedule entry byte-for-byte — so `beat_times` must be passed
+    identically to both callers.
     """
     if montage:
         return _subdivide_long_sections(
             sections,
             target=_MONTAGE_TARGET_SECONDS,
             split_above=_MONTAGE_SPLIT_THRESHOLD_SECONDS,
+            beat_times=beat_times,
         )
-    return _subdivide_long_sections(sections)
+    return _subdivide_long_sections(sections, beat_times=beat_times)
 
 
 def generate_schedule_suggestion(
@@ -743,6 +779,7 @@ def generate_schedule_suggestion(
     diversity: str = _DEFAULT_DIVERSITY,
     montage: bool = False,
     style: str = _DEFAULT_STYLE,
+    beat_times: list[float] | None = None,
 ) -> str:
     """Generate a TimestampPromptSchedule text block from sections.
 
@@ -761,8 +798,10 @@ def generate_schedule_suggestion(
         trim_offset: seconds to subtract from timestamps.
         diversity: tier+sub-letter code (e.g., "3b"). Default "2a".
         montage: when True, cuts faster and adds emotional-arc language.
+        beat_times: detected beat timestamps; when given, subdivision
+            boundaries snap to phrase edges. Must match get_node_169_prompt.
     """
-    prepared = _prepare_sections(sections, montage)
+    prepared = _prepare_sections(sections, montage, beat_times)
     if not subject:
         return _generate_placeholder_schedule(prepared, trim_offset)
     return _generate_subject_schedule(
@@ -777,19 +816,21 @@ def get_node_169_prompt(
     diversity: str = _DEFAULT_DIVERSITY,
     montage: bool = False,
     style: str = _DEFAULT_STYLE,
+    beat_times: list[float] | None = None,
 ) -> str:
     """Extract the node 169 initial render prompt.
 
     Returns the prompt text for the first section (matching the 0:00
     schedule entry). Node 169 covers trimmed 0:00 to ~20s and must
-    match the schedule's first entry to avoid visual discontinuity.
+    match the schedule's first entry to avoid visual discontinuity — so
+    `beat_times` must match the value passed to generate_schedule_suggestion.
 
     Without subject: returns a placeholder.
     """
     if not sections:
         return ""
 
-    prepared = _prepare_sections(sections, montage)
+    prepared = _prepare_sections(sections, montage, beat_times)
 
     # Find the first prepared chunk that survives the trim offset.
     first_section = None
@@ -1315,10 +1356,13 @@ def format_markdown_report(
     lines.append("")
     lines.append("Paste this into node 169 (CLIPTextEncode). Covers the first ~20 seconds.")
     lines.append("")
+    # Same beats to both so Node 169 stays byte-identical to schedule[0].
+    beat_times = bpm_result.get("beat_times") or None
     lines.append("```")
     lines.append(get_node_169_prompt(
         sections, subject=subject, trim_offset=trim_offset,
         diversity=diversity, montage=montage, style=style,
+        beat_times=beat_times,
     ))
     lines.append("```")
     lines.append("")
@@ -1332,6 +1376,7 @@ def format_markdown_report(
     lines.append(generate_schedule_suggestion(
         sections, subject=subject, trim_offset=trim_offset,
         diversity=diversity, montage=montage, style=style,
+        beat_times=beat_times,
     ))
     lines.append("```")
     lines.append("")
