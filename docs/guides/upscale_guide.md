@@ -1,4 +1,4 @@
-Last updated: 2026-06-06
+Last updated: 2026-07-05
 
 # Upscale guide
 
@@ -25,6 +25,13 @@ F14 latent-trim back in.
 If you need to regenerate content (different prompts, different cuts),
 this is not the tool — use retake (`docs/guides/retake_guide.md`) or
 re-render the loop.
+
+**Alternative: official pixel-space upscaler IC-LoRA.** Lightricks
+shipped `ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9.safetensors`
+(HF, 2026-06-25) — pixel-space 4x + a full 8-sigma IC-LoRA-guided
+denoise, div-32 only (no two-stage div-64 constraint), with an official
+`LTX-2.3_ICLoRA_Pixel_Spatial_Upscaler_Distilled.json` workflow in
+ComfyUI-LTXVideo. Unevaluated in this repo as of 2026-07-05.
 
 ## Why the input is a `.latent` file, not your loop's mp4
 

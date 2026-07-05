@@ -1,4 +1,4 @@
-Last updated: 2026-06-03 (status banner added; research body unchanged from 2026-04-23)
+Last updated: 2026-07-05 (added ComfyUI v0.26 LTX2 Context Windows + upstream T2A node caveats; research body otherwise unchanged from 2026-04-23)
 
 # LTX 2.3 Gaps Analysis: ComfyUI-LTXVideo vs LTX-2 Native vs LTX-Desktop
 
@@ -30,7 +30,7 @@ exists where, what's missing, and what could be brought into ComfyUI workflows.
 |---|---|---|---|---|
 | Text-to-Video (T2V) | LTXVBaseSampler | TI2VidTwoStagesPipeline | Fast pipeline | All have it |
 | Image-to-Video (I2V) | LTXVBaseSampler + image guide | TI2VidTwoStagesPipeline + image cond | Fast pipeline + image | All have it |
-| Audio-to-Video (A2V) | Via LTXVConcatAVLatent (manual) | A2VidPipelineTwoStage (dedicated) | Distilled A2V pipeline (2-stage) | **ComfyUI has no dedicated A2V pipeline** |
+| Audio-to-Video (A2V) | Via LTXVConcatAVLatent (manual) | A2VidPipelineTwoStage (dedicated) | Distilled A2V pipeline (2-stage) | **ComfyUI has no dedicated A2V pipeline** (2026-06-17 upstream `LTXVAudioOnlyModel` + `LTXVAudioOnlyEmptyVideoLatent` add T2A generation — audio-only, not A2V — partially closing the adjacent audio-only gap; unevaluated here as of 2026-07-05) |
 | Two-stage generation | Manual chain (sampler → upscale → refine) | TI2VidTwoStagesPipeline (built-in) | A2V pipeline (automatic) | **ComfyUI requires manual setup** |
 | Distilled fast mode | Via distilled sigmas manually | DistilledPipeline (dedicated) | Fast pipeline (default) | ComfyUI works but no dedicated node |
 | Long video (looping) | LTXVLoopingSampler (ComfyUI invention) | NOT IN NATIVE | NOT IN DESKTOP | **Unique to ComfyUI** |
@@ -327,6 +327,12 @@ study). Not feasible in <1 week of focused effort.
 for video-only workflows. The two-stage upscale approach (generate at
 832x480, upscale separately) addresses the resolution limitation without
 requiring spatial tiling during AV generation.
+
+**2026-07-05 update:** ComfyUI v0.26 (2026-06) shipped official "LTX2
+Context Windows" in-sampler long-AV sampling (per-modality window
+mapping) upstream. Unevaluated against TensorLoop as of this date —
+comparative eval pending; this doc's analysis and recommendation are not
+yet re-run against it.
 
 ### Source files
 

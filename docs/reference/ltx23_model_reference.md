@@ -1,4 +1,4 @@
-Last updated: 2026-06-03
+Last updated: 2026-07-05
 
 # LTX 2.3 Model Reference
 
@@ -237,3 +237,19 @@ Getting this wrong silently misconfigures the node.
 - Model: `ltx-2.3-spatial-upscaler-x2-1.1.safetensors`
 - Refinement sigmas: [0.85, 0.725, 0.4219, 0.0] (3 steps).
 - Shipped: `docs/guides/upscale_guide.md` (build via `scripts/build_upscale_workflow.py`). Design doc: `internal/design/upscale_workflow_design.md` (private clone only).
+- Official alternative (unevaluated here as of 2026-07-05): pixel-space
+  IC-LoRA 4x upscaler — `docs/guides/upscale_guide.md`.
+
+## Upstream ComfyUI-LTXVideo nodes not yet used here (2026-06-17/29)
+
+- `LTXVAudioOnlyModel` — patches the model for T2A (audio-only)
+  generation via `transformer_options` (`run_vx`/`a2v_cross_attn`/
+  `v2a_cross_attn=False`).
+- `LTXVAudioOnlyEmptyVideoLatent` — blank video latent sized for a
+  T2A-only run, pairs with `LTXVAudioOnlyModel`.
+- `LTXAddVideoICLoRAGuideAdvanced` — advanced variant of the
+  video-reference IC-LoRA guide node (see F12 in `docs/reference/debug_tools.md`).
+- `LTXVInpaintPreprocess` — preprocessing for inpaint-style guide input.
+- `LTXVDilateVideoMask` — dilates a video mask (inpaint/guide use).
+- `LTXVLaplacianPyramidBlend` — Laplacian-pyramid blend, likely for
+  seam/boundary blending.

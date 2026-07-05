@@ -1,4 +1,4 @@
-Last updated: 2026-06-03 (trimmed + moved from docs/guides/latent_loop_build_guide.md — this workflow is video-only; we don't recommend building it for music video)
+Last updated: 2026-07-05 (added ComfyUI v0.26 LTX2 Context Windows caveat. Earlier: trimmed + moved from docs/guides/latent_loop_build_guide.md — this workflow is video-only; we don't recommend building it for music video)
 
 # LTXVLoopingSampler reference (video-only; not recommended for music video)
 
@@ -11,6 +11,11 @@ Last updated: 2026-06-03 (trimmed + moved from docs/guides/latent_loop_build_gui
 > The AV incompatibility is architectural; the reasoning is at
 > `docs/analysis/ltx23_gaps_analysis.md` (2 root blockers, 3
 > type-system cascades).
+>
+> **2026-07-05:** ComfyUI v0.26 (2026-06) shipped official "LTX2
+> Context Windows" in-sampler long-AV sampling (per-modality window
+> mapping) upstream — an alternative to both LTXVLoopingSampler and
+> TensorLoop. Unevaluated as of this date; comparative eval pending.
 
 This doc describes what an LTXVLoopingSampler-based workflow looks
 like, and when it's the right tool, for readers who are exploring
